@@ -3,3 +3,29 @@
 .env*.local
 node_modules
 .next
+
+.hermes-runtime/
+
+# next.js
+/out/
+/build
+/coverage
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+/src/generated/prisma
