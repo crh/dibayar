@@ -15,7 +15,7 @@ Verified from `STATE.md` and the repository planning documents:
 - Auth.js with Google OAuth
 - Vercel deployment target
 
-Current status: the repository contains planning and process documentation only; application source, package manifests, Prisma schema, and deployment configuration are not present yet. Treat those details as `TBD` until implemented and verified.
+Current status: the M0 application scaffold is present and locally verified. It contains the static coming-soon page, Tailwind styling, Prisma PostgreSQL configuration, Vitest tests, and security-header configuration. Authentication, user data models, application routes, Vercel linkage, and deployment remain out of scope or unverified until their milestones.
 
 ## Repository structure
 
@@ -29,19 +29,21 @@ Verified top-level documents:
 - `REVIEW_CHECKLIST.md` — pre-commit validation gates
 - `CLAUDE_TASK_TEMPLATE.md` — implementation-task delegation contract
 - `REPORT_RUBRIC.md` — reporting expectations
-- `DEPLOYMENT.md` — currently an empty placeholder; workflow is `TBD`
+- `DEPLOYMENT.md` — local verification and deployment approval boundaries
 - `BACKLOG.md` and `DAILY_LOG.md` — project work tracking
 
-Application directories: `TBD`.
+Application directories:
+
+- `src/app/` — Next.js App Router page, layout, global styles, and M0 tests
+- `prisma/` — PostgreSQL datasource and Prisma generator configuration
+- `src/generated/prisma/` — generated Prisma client output; ignored by Git
 
 ## Development commands
 
-No package manifest or executable application exists in the repository yet. Until the scaffold is added, development commands are `TBD`.
-
-Expected commands after the application scaffold exists, subject to verification from its package scripts:
+Verified local commands from `package.json`:
 
 - Install dependencies: `npm install`
-- Development server: `TBD`
+- Development server: `npm run dev`
 - Lint: `npm run lint`
 - Typecheck: `npm run typecheck`
 - Tests: `npm test`
@@ -51,7 +53,7 @@ Do not claim any command works until it has been run against the current reposit
 
 ## Testing commands
 
-Testing framework and test directory: `TBD`. Once package scripts exist, run the repository's actual test command plus relevant focused tests. Behavioral changes require added or updated tests.
+The M0 test foundation uses Vitest with jsdom and Testing Library. Tests live beside the App Router files under `src/app/*.test.tsx`. Behavioral changes require added or updated tests.
 
 ## Coding conventions
 
@@ -72,7 +74,7 @@ Planned database: PostgreSQL accessed through Prisma. Schema location, migration
 
 ## Deployment workflow
 
-Deployment target is Vercel, verified from `STATE.md`. The workflow, project linkage, environment-variable names, preview process, production release process, rollback procedure, and CI/CD configuration are currently `TBD`. Secrets belong in the deployment environment, never in source control.
+Deployment target is Vercel, verified from `STATE.md`. The repository is Vercel-compatible, but project linkage, environment variables, preview deployment, production release, rollback procedure, and CI/CD remain unverified. Follow `DEPLOYMENT.md`; secrets belong in the deployment environment, never in source control.
 
 ## Security requirements
 

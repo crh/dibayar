@@ -29,4 +29,5 @@
 - [ ] No payment processing / fund holding (out of scope; Chris approval gate)
 
 ## Known gaps (honest list, newest first)
-- (none logged yet)
+- 2026-07-13: M0 security headers are configured and verified against the local Next.js server, but Vercel deployment/HSTS behavior is not verified; the security-header control remains unchecked.
+- 2026-07-13: `npm audit` reports 5 moderate vulnerabilities in the Prisma development dependency chain and PostCSS; no high/critical findings were reported. Compatible remediation is pending and `npm audit fix --force` is not approved because it proposes breaking changes.
