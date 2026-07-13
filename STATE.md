@@ -20,6 +20,7 @@ last_deploy: none
 build_status: green
 latest_validation: 2026-07-13 local gates green; 6/6 tests; HTTP/security-header smoke; 390px accessibility snapshot; npm audit has 5 moderate findings
 stack: Next.js + TS + Tailwind + Postgres + Prisma + Auth.js (Google OAuth) + Vercel
+vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linked to github.com/crh/dibayar)
 
 ## now
 current_milestone: M0 — repo bootstrap (local implementation complete; deployment criteria incomplete)
@@ -32,7 +33,7 @@ today_tasks_max_3:
   - Finish M0 scaffold and independent review (local implementation complete)
   - Preserve validated work on the feature branch (commit 4f531d9 created)
   - Resolve the M0 deployment approval/access decision
-open_blockers: Roadmap M0 still requires Vercel project linkage and a deployed Bahasa page; no deployment attempted because unrestricted preview protection is unverified
+open_blockers: Roadmap M0 still requires a deployed Bahasa page; project/repo linkage is Chris-confirmed, but deployment and access protection are unverified
 
 ## recent_signal_findings
 - No external signal check recorded; this run was limited to the M0 bootstrap and validation scope.
@@ -56,6 +57,7 @@ feedback_logged: 0
 wtp_signals: 0
 
 ## latest_deployment_status
+project_linkage: confirmed by Chris; dashboard independently inaccessible in current browser session
 preview: none
 production: none
 smoke: local HTTP page and security headers passed

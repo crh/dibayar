@@ -4,7 +4,9 @@
 
 - Target: Vercel.
 - M0 local scaffold: verified.
-- Vercel project linkage: not verified.
+- Vercel project: `https://vercel.com/kenji-iwakura/dibayar`.
+- GitHub linkage: Chris-confirmed connection to `https://github.com/crh/dibayar`.
+- Dashboard inspection: not independently verified in the current browser session because Vercel required login.
 - Preview deployment: none.
 - Production deployment/domain: none.
 - Production launch and real-user access require Chris's explicit approval.
@@ -32,6 +34,10 @@ git check-ignore .env.local
 ```
 
 Never commit `.env.local`, real credentials, database URLs, OAuth secrets, or tokens. Vercel environment variables must be configured through the approved deployment environment, not source control.
+
+## Next deployment step
+
+The repository is already linked to Vercel. Push `hermes/day-001-m0-bootstrap`, then deploy that branch as a Preview. Do not deploy `main` yet because the application commits are currently only on the feature branch. Verify the resulting URL and access protection directly.
 
 ## Preview policy
 

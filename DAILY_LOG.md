@@ -27,3 +27,9 @@
 - Decision: continue M0; do not transition phase or pivot. Commit the validated local checkpoint, then obtain a separate deployment/access decision before deployment.
 - Blocker: unrestricted preview protection is unverified; production/public deployment requires Chris approval.
 - Rubric self-score: Evidence honesty 2/2; shipped completeness 1/2 (validated feature branch, M0 deployment gate incomplete); security discipline 1/2 (gates run and gaps logged, SECURITY.md controls remain intentionally unchecked); focus 2/2; deploy health 2/2 (green local build and justified no-deploy); report quality 2/2. Total 10/12.
+
+## Day 1 correction — 2026-07-13 — Vercel linkage already exists
+
+- Chris confirmed that the Vercel project already exists at `https://vercel.com/kenji-iwakura/dibayar` and is linked to `https://github.com/crh/dibayar`.
+- The current browser session redirected the project URL to Vercel login, so dashboard settings were not independently inspected.
+- Decision: remove project import/linkage from the remaining M0 work. Remaining deployment work is to push the feature branch, deploy a Bahasa Preview, verify access protection and live content, and obtain separate approval before any public/Production launch.
