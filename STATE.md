@@ -24,12 +24,13 @@ stack: Next.js + TS + Tailwind + Postgres + Prisma + Auth.js (Google OAuth) + Ve
 ## now
 current_milestone: M0 — repo bootstrap (local implementation complete; deployment criteria incomplete)
 active_branch: hermes/day-001-m0-bootstrap
+latest_commit: 4f531d9 feat(m0): bootstrap Dibayar foundation
 completed_milestones:
   - Phase 0 discovery closed
   - M0 local scaffold and validation checkpoint complete
 today_tasks_max_3:
   - Finish M0 scaffold and independent review (local implementation complete)
-  - Preserve validated work on the feature branch (commit pending)
+  - Preserve validated work on the feature branch (commit 4f531d9 created)
   - Resolve the M0 deployment approval/access decision
 open_blockers: Roadmap M0 still requires Vercel project linkage and a deployed Bahasa page; no deployment attempted because unrestricted preview protection is unverified
 
@@ -60,6 +61,6 @@ production: none
 smoke: local HTTP page and security headers passed
 
 ## next_3_tasks
-1. Commit the validated M0 checkpoint on the feature branch; do not push until separately approved.
-2. Decide whether Chris approves a confidential protected preview; verify the resulting deployment directly if approved.
+1. Decide whether Chris approves a confidential protected preview; verify the resulting deployment directly if approved.
+2. Push the validated private feature branch only after explicit push approval.
 3. After M0 deployment evidence, request Chris approval before Phase 2; otherwise continue M0 deployment preparation.

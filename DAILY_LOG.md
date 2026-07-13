@@ -17,6 +17,7 @@
 
 - Phase/milestone: Phase 1 — M0 Bootstrap.
 - Repository evidence: Git root `/home/kenji/code/dibayar`; branch `hermes/day-001-m0-bootstrap`; remote remained `git@github.com:crh/dibayar.git`; `main` was not changed.
+- Commit: `4f531d9 feat(m0): bootstrap Dibayar foundation`; commit was created locally after staged diff review. Push, merge, and deployment were not performed.
 - Delegation: `/home/kenji/.local/bin/run-dibayar-claude` ran with the exact `claude-sonnet-5` model. The first real task timed out after 600 seconds with recoverable scaffold changes; a correction task then reached the configured 30-turn limit. Hermes reviewed the resulting files independently.
 - Implemented local scope: Next.js/TypeScript/Tailwind/Prisma PostgreSQL scaffold; Bahasa Indonesia coming-soon page; mobile-first design tokens; Vitest/jsdom tests; security headers; synthetic `.env.example`; factual deployment and project instructions.
 - Mechanical evidence: `npm install` passed; `npm run lint` passed; `npm run typecheck` passed; `npm test` passed with 2 files and 6 tests; `npm run build` passed with static `/` and `/_not-found` routes.
