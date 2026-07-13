@@ -25,7 +25,8 @@ vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linke
 ## now
 current_milestone: M0 — repo bootstrap (local implementation complete; deployment criteria incomplete)
 active_branch: hermes/day-001-m0-bootstrap
-latest_feature_commit: 4f531d9 feat(m0): bootstrap Dibayar foundation
+latest_feature_commit: 12e8145 feat(m0): bootstrap Dibayar foundation
+remote_feature_branch: origin/hermes/day-001-m0-bootstrap at 854a702; local contains additional unpushed governance commits
 completed_milestones:
   - Phase 0 discovery closed
   - M0 local scaffold and validation checkpoint complete
@@ -59,7 +60,7 @@ wtp_signals: 0
 ## latest_deployment_status
 project_linkage: confirmed by Chris; dashboard independently inaccessible in current browser session
 preview: none
-production: URL reachable; Vercel Authentication redirect verified; app content not yet authenticated-smoke-tested
+production: URL reachable; Vercel Authentication redirect verified; app content not yet authenticated-smoke-tested; Vercel source-commit mapping unverified
 smoke: local HTTP page and security headers passed; production access protection verified
 
 ## next_3_tasks

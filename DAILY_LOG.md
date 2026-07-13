@@ -40,3 +40,4 @@
 - Direct verification: URL returned HTTP 302 to Vercel SSO; browser reached `Log in to Vercel`; Vercel Authentication protection is active.
 - Limitation: unauthenticated checks cannot verify the deployed Dibayar title or Bahasa content because the page is behind Vercel Authentication. No claim that the application content is smoke-tested yet.
 - Decision: retain protection; complete authenticated browser smoke and verify the deployment/branch mapping before considering M0 deployment evidence complete. Public access still requires Chris approval.
+- Repository follow-up: `origin/hermes/day-001-m0-bootstrap` exists at `854a702`; local branch is ahead by one documentation commit (`d6bccbd`); `main` remains unchanged. Vercel source-commit mapping is not independently visible without dashboard authentication.
