@@ -18,23 +18,23 @@ repo_url: git@github.com:crh/dibayar.git
 prod_url: https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/
 last_deploy: 2026-07-13 (Chris-provided production URL; protected-access response verified)
 build_status: green
-latest_validation: 2026-07-13 local gates green; 6/6 tests; HTTP/security-header smoke; 390px accessibility snapshot; npm audit has 5 moderate findings
+latest_validation: 2026-07-13 local gates green; 6/6 tests; protected production URL authenticated-smoke-tested by Chris; 390px accessibility snapshot; npm audit has 5 moderate findings
 stack: Next.js + TS + Tailwind + Postgres + Prisma + Auth.js (Google OAuth) + Vercel
 vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linked to github.com/crh/dibayar)
 
 ## now
-current_milestone: M0 — repo bootstrap (local implementation complete; deployment criteria incomplete)
+current_milestone: M1 — Auth + Deal Pipeline (ready; Chris approval pending)
 active_branch: hermes/day-001-m0-bootstrap
 latest_feature_commit: 12e8145 feat(m0): bootstrap Dibayar foundation
 remote_feature_branch: origin/hermes/day-001-m0-bootstrap at 854a702; local contains additional unpushed governance commits
 completed_milestones:
   - Phase 0 discovery closed
-  - M0 local scaffold and validation checkpoint complete
+  - M0 bootstrap and protected production deployment complete
 today_tasks_max_3:
-  - Finish M0 scaffold and independent review (local implementation complete)
-  - Preserve validated work on the feature branch (commit 4f531d9 created)
-  - Resolve the M0 deployment approval/access decision
-open_blockers: Production URL is reachable but Vercel Authentication blocks unauthenticated content verification; authenticated Bahasa-page smoke and public-access decision remain
+  - Record M0 completion evidence (complete)
+  - Preserve the validated feature branch and protected production URL
+  - Obtain approval to start M1 Auth + Deal Pipeline
+open_blockers: M1 start requires Chris approval; production remains Vercel-Authentication protected and public-access approval is still pending
 
 ## recent_signal_findings
 - No external signal check recorded; this run was limited to the M0 bootstrap and validation scope.
@@ -44,13 +44,13 @@ open_blockers: Production URL is reachable but Vercel Authentication blocks unau
 (empty)
 
 ## decisions_last_3_days
-- 2026-07-13: Continue Dibayar/M0; local scaffold is validated, but do not mark M0 complete without the Roadmap deployment evidence.
-- 2026-07-13: Keep the repository private and do not deploy publicly without Chris approval; no phase transition requested.
+- 2026-07-13: Chris confirmed authenticated production smoke; M0 Roadmap acceptance is complete.
+- 2026-07-13: Keep Vercel Authentication protection enabled; public launch and M1 start remain approval-gated.
 - 2026-07-12: Use exact claude-sonnet-5 through the repository wrapper; do not downgrade or claim completion without independent gates.
 
 ## approvals
-pending_from_chris: deployment approval/access decision for M0; no production launch requested
-granted_by_chris: local staging/commit review approval
+pending_from_chris: approval to start M1; decision whether the protected production URL should become public
+granted_by_chris: local staging/commit review and authenticated M0 production smoke confirmation
 
 ## metrics (phase 2+ only)
 users_shown: 0
@@ -60,10 +60,10 @@ wtp_signals: 0
 ## latest_deployment_status
 project_linkage: confirmed by Chris; dashboard independently inaccessible in current browser session
 preview: none
-production: URL reachable; Vercel Authentication redirect verified; app content not yet authenticated-smoke-tested; Vercel source-commit mapping unverified
-smoke: local HTTP page and security headers passed; production access protection verified
+production: URL reachable; Vercel Authentication protected; title, Bahasa content, default-template absence, and 390px layout authenticated-smoke-tested by Chris
+smoke: local HTTP page and security headers passed; protected production page confirmed by Chris; Vercel source-commit mapping unverified
 
 ## next_3_tasks
-1. Open the production URL while authenticated to Vercel and verify the Bahasa page/title/content.
-2. Run authenticated production smoke checks and record the deployment/branch mapping.
-3. Decide whether the URL should remain protected or receive explicit public-launch approval before Phase 2.
+1. Obtain Chris approval to start M1 Auth + Deal Pipeline.
+2. Keep the production URL protected while M1 authentication/session work is designed and implemented.
+3. Resolve Vercel source-commit mapping and decide whether public launch is needed before validation.

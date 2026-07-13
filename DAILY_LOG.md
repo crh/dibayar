@@ -41,3 +41,11 @@
 - Limitation: unauthenticated checks cannot verify the deployed Dibayar title or Bahasa content because the page is behind Vercel Authentication. No claim that the application content is smoke-tested yet.
 - Decision: retain protection; complete authenticated browser smoke and verify the deployment/branch mapping before considering M0 deployment evidence complete. Public access still requires Chris approval.
 - Repository follow-up: `origin/hermes/day-001-m0-bootstrap` exists at `854a702`; local branch is ahead by one documentation commit (`d6bccbd`); `main` remains unchanged. Vercel source-commit mapping is not independently visible without dashboard authentication.
+
+## Day 1 M0 acceptance — 2026-07-13 — authenticated production smoke confirmed
+
+- Chris confirmed the protected production page loads successfully after Vercel authentication.
+- Acceptance evidence: title `Dibayar — Segera Hadir`; Bahasa Indonesia coming-soon content; no default Next.js template; approximately 390px mobile layout verified.
+- Decision: mark all M0 Roadmap items complete. Keep Vercel Authentication enabled; do not treat this as public launch or silently start M1.
+- Next gate: Chris approval to start M1 Auth + Deal Pipeline and a separate decision on public access.
+- Rubric self-score: Evidence honesty 2/2; shipped completeness 1/2 (M0 complete but still scaffold/config scope); security discipline 1/2 (security gaps remain logged); focus 2/2; deploy health 2/2; report quality 2/2. Total 10/12.

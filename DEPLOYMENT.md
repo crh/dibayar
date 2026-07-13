@@ -9,6 +9,7 @@
 - Dashboard inspection: not independently verified in the current browser session because Vercel required login.
 - Production URL: `https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/`.
 - Production access: URL reachable, but Vercel Authentication redirects unauthenticated visitors to Vercel login.
+- Authenticated smoke: Chris confirmed the Dibayar title, Bahasa coming-soon content, absence of the default Next.js template, and approximately 390px mobile layout.
 - Preview deployment: not separately recorded.
 - Production launch and real-user access require Chris's explicit approval.
 
@@ -38,7 +39,7 @@ Never commit `.env.local`, real credentials, database URLs, OAuth secrets, or to
 
 ## Next deployment step
 
-The repository is already linked to Vercel and a production URL now exists. The next verification step is to open that URL in an authenticated Vercel session and confirm the deployed Bahasa page. Do not make it public without Chris's explicit approval.
+The repository is already linked to Vercel and the protected production page has passed authenticated smoke. Keep it protected; do not make it public without Chris's explicit approval.
 
 ## Preview policy
 

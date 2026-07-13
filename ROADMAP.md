@@ -4,10 +4,10 @@
      without logging a decision in STATE.md. -->
 
 ## M0 — Bootstrap (Day 1)
-- [ ] Private GitHub repo created, scaffold docs committed
-- [ ] Next.js + TS + Tailwind + Prisma app initialized, builds green
-- [ ] Vercel project linked, env vars configured (no secrets in code)
-- [ ] Deployed "coming soon" page in Bahasa Indonesia
+- [x] Private GitHub repo created, scaffold docs committed
+- [x] Next.js + TS + Tailwind + Prisma app initialized, builds green
+- [x] Vercel project linked; no M0 environment variables required (no secrets in code)
+- [x] Deployed "coming soon" page in Bahasa Indonesia; authenticated mobile smoke confirmed
 
 ## M1 — Auth + Deal Pipeline (vertical slice #1)
 - [ ] Google OAuth sign-in, secure sessions, rate-limited auth endpoints
