@@ -33,3 +33,10 @@
 - Chris confirmed that the Vercel project already exists at `https://vercel.com/kenji-iwakura/dibayar` and is linked to `https://github.com/crh/dibayar`.
 - The current browser session redirected the project URL to Vercel login, so dashboard settings were not independently inspected.
 - Decision: remove project import/linkage from the remaining M0 work. Remaining deployment work is to push the feature branch, deploy a Bahasa Preview, verify access protection and live content, and obtain separate approval before any public/Production launch.
+
+## Day 1 deployment evidence — 2026-07-13 — Vercel URL reachable but protected
+
+- Chris provided production URL: `https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/`.
+- Direct verification: URL returned HTTP 302 to Vercel SSO; browser reached `Log in to Vercel`; Vercel Authentication protection is active.
+- Limitation: unauthenticated checks cannot verify the deployed Dibayar title or Bahasa content because the page is behind Vercel Authentication. No claim that the application content is smoke-tested yet.
+- Decision: retain protection; complete authenticated browser smoke and verify the deployment/branch mapping before considering M0 deployment evidence complete. Public access still requires Chris approval.

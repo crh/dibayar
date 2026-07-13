@@ -15,8 +15,8 @@ phase: 1-build            # 0-discovery | 1-build | 2-validate  (transition = Ch
 phase_started: 2026-07-12
 day_count: 1
 repo_url: git@github.com:crh/dibayar.git
-prod_url: none
-last_deploy: none
+prod_url: https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/
+last_deploy: 2026-07-13 (Chris-provided production URL; protected-access response verified)
 build_status: green
 latest_validation: 2026-07-13 local gates green; 6/6 tests; HTTP/security-header smoke; 390px accessibility snapshot; npm audit has 5 moderate findings
 stack: Next.js + TS + Tailwind + Postgres + Prisma + Auth.js (Google OAuth) + Vercel
@@ -33,7 +33,7 @@ today_tasks_max_3:
   - Finish M0 scaffold and independent review (local implementation complete)
   - Preserve validated work on the feature branch (commit 4f531d9 created)
   - Resolve the M0 deployment approval/access decision
-open_blockers: Roadmap M0 still requires a deployed Bahasa page; project/repo linkage is Chris-confirmed, but deployment and access protection are unverified
+open_blockers: Production URL is reachable but Vercel Authentication blocks unauthenticated content verification; authenticated Bahasa-page smoke and public-access decision remain
 
 ## recent_signal_findings
 - No external signal check recorded; this run was limited to the M0 bootstrap and validation scope.
@@ -59,10 +59,10 @@ wtp_signals: 0
 ## latest_deployment_status
 project_linkage: confirmed by Chris; dashboard independently inaccessible in current browser session
 preview: none
-production: none
-smoke: local HTTP page and security headers passed
+production: URL reachable; Vercel Authentication redirect verified; app content not yet authenticated-smoke-tested
+smoke: local HTTP page and security headers passed; production access protection verified
 
 ## next_3_tasks
-1. Decide whether Chris approves a confidential protected preview; verify the resulting deployment directly if approved.
-2. Push the validated private feature branch only after explicit push approval.
-3. After M0 deployment evidence, request Chris approval before Phase 2; otherwise continue M0 deployment preparation.
+1. Open the production URL while authenticated to Vercel and verify the Bahasa page/title/content.
+2. Run authenticated production smoke checks and record the deployment/branch mapping.
+3. Decide whether the URL should remain protected or receive explicit public-launch approval before Phase 2.

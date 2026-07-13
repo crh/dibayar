@@ -7,8 +7,9 @@
 - Vercel project: `https://vercel.com/kenji-iwakura/dibayar`.
 - GitHub linkage: Chris-confirmed connection to `https://github.com/crh/dibayar`.
 - Dashboard inspection: not independently verified in the current browser session because Vercel required login.
-- Preview deployment: none.
-- Production deployment/domain: none.
+- Production URL: `https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/`.
+- Production access: URL reachable, but Vercel Authentication redirects unauthenticated visitors to Vercel login.
+- Preview deployment: not separately recorded.
 - Production launch and real-user access require Chris's explicit approval.
 
 ## Local verification
@@ -37,7 +38,7 @@ Never commit `.env.local`, real credentials, database URLs, OAuth secrets, or to
 
 ## Next deployment step
 
-The repository is already linked to Vercel. Push `hermes/day-001-m0-bootstrap`, then deploy that branch as a Preview. Do not deploy `main` yet because the application commits are currently only on the feature branch. Verify the resulting URL and access protection directly.
+The repository is already linked to Vercel and a production URL now exists. The next verification step is to open that URL in an authenticated Vercel session and confirm the deployed Bahasa page. Do not make it public without Chris's explicit approval.
 
 ## Preview policy
 
