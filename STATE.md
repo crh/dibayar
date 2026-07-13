@@ -25,7 +25,7 @@ vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linke
 ## now
 current_milestone: M0 — repo bootstrap (local implementation complete; deployment criteria incomplete)
 active_branch: hermes/day-001-m0-bootstrap
-latest_commit: 4f531d9 feat(m0): bootstrap Dibayar foundation
+latest_feature_commit: 4f531d9 feat(m0): bootstrap Dibayar foundation
 completed_milestones:
   - Phase 0 discovery closed
   - M0 local scaffold and validation checkpoint complete
