@@ -30,7 +30,7 @@ export default function Home() {
             Segera hadir
           </span>
           <Link
-            href="/api/auth/signin/google?callbackUrl=%2Fdashboard"
+            href="/api/auth/signin?callbackUrl=%2Fdashboard"
             className="inline-flex h-11 w-fit items-center justify-center rounded-full bg-primary px-5 text-[15px] font-semibold text-surface hover:bg-primary-d"
           >
             Masuk dengan Google

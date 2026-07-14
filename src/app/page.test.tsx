@@ -52,6 +52,6 @@ describe("Home (coming-soon page)", () => {
 
     expect(
       screen.getByRole("link", { name: "Masuk dengan Google" }).getAttribute("href"),
-    ).toBe("/api/auth/signin/google?callbackUrl=%2Fdashboard");
+    ).toBe("/api/auth/signin?callbackUrl=%2Fdashboard");
   });
 });
