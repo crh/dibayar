@@ -4,13 +4,14 @@
 
 - Target: Vercel.
 - M0 local scaffold: verified.
+- M1 local vertical slice: implemented; 21 tests, lint, typecheck, production build, and local HTTP smoke verified.
 - Vercel project: `https://vercel.com/kenji-iwakura/dibayar`.
 - GitHub linkage: Chris-confirmed connection to `https://github.com/crh/dibayar`.
 - Dashboard inspection: not independently verified in the current browser session because Vercel required login.
 - Production URL: `https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/`.
 - Production access: URL reachable, but Vercel Authentication redirects unauthenticated visitors to Vercel login.
 - Authenticated smoke: Chris confirmed the Dibayar title, Bahasa coming-soon content, absence of the default Next.js template, and approximately 390px mobile layout.
-- Preview deployment: not separately recorded.
+- Preview deployment: not separately recorded; M1 needs a protected preview with Postgres and Google OAuth env vars.
 - Production launch and real-user access require Chris's explicit approval.
 
 ## Local verification
@@ -39,7 +40,7 @@ Never commit `.env.local`, real credentials, database URLs, OAuth secrets, or to
 
 ## Next deployment step
 
-The repository is already linked to Vercel and the protected production page has passed authenticated smoke. Keep it protected; do not make it public without Chris's explicit approval.
+The repository is already linked to Vercel and the protected production page has passed authenticated smoke. Keep it protected; do not make it public without Chris's explicit approval. Before a protected M1 preview, configure `DATABASE_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, and `AUTH_GOOGLE_SECRET` in the approved Vercel environment, then apply the checked-in Prisma migration to the preview database.
 
 ## Preview policy
 

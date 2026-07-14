@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const PIPELINE_STAGES = ["Masuk", "Nego", "Deal", "Konten", "Invoice", "Dibayar"];
 
 const CARA_KERJA = [
@@ -27,6 +29,12 @@ export default function Home() {
           <span className="inline-flex h-7 w-fit items-center rounded-full border border-line bg-surface px-3 text-[13px] font-semibold text-primary">
             Segera hadir
           </span>
+          <Link
+            href="/api/auth/signin/google?callbackUrl=%2Fdashboard"
+            className="inline-flex h-11 w-fit items-center justify-center rounded-full bg-primary px-5 text-[15px] font-semibold text-surface hover:bg-primary-d"
+          >
+            Masuk dengan Google
+          </Link>
         </header>
 
         <section className="flex flex-col gap-3">

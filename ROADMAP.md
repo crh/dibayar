@@ -10,11 +10,11 @@
 - [x] Deployed "coming soon" page in Bahasa Indonesia; authenticated mobile smoke confirmed
 
 ## M1 — Auth + Deal Pipeline (vertical slice #1)
-- [ ] Google OAuth sign-in, secure sessions, rate-limited auth endpoints
-- [ ] Deal model: brand, contact(WA), scope, fee_idr, deadline, payment_terms, status
-- [ ] Pipeline UI: Masuk → Nego → Deal → Konten → Invoice → Dibayar (mobile-first, Bahasa)
-- [ ] Deal capture flow ≤60s on a phone
-- [ ] Minimal tests around deal CRUD; audit log for auth events
+- [~] Google OAuth sign-in, database sessions, rate-limited auth endpoints (local; real OAuth/Postgres env pending)
+- [x] Deal model: brand, contact(WA), scope, fee_idr, deadline, payment_terms, status
+- [x] Pipeline UI: Masuk → Nego → Deal → Konten → Invoice → Dibayar (mobile-first, Bahasa)
+- [~] Deal capture flow ≤60s on a phone (implemented; protected-preview UX check pending)
+- [x] Minimal tests around deal CRUD; audit log for auth events
 
 ## M2 — Invoice (vertical slice #2)
 - [ ] IDR invoice generation (shareable link + PDF), numbered, PPh 21/23 field

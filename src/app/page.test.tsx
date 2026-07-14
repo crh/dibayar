@@ -46,4 +46,12 @@ describe("Home (coming-soon page)", () => {
     ).toBeDefined();
     expect(screen.queryByText(/^submit$/i)).toBeNull();
   });
+
+  it("offers Google sign-in for the private dashboard", () => {
+    render(<Home />);
+
+    expect(
+      screen.getByRole("link", { name: "Masuk dengan Google" }).getAttribute("href"),
+    ).toBe("/api/auth/signin/google?callbackUrl=%2Fdashboard");
+  });
 });
