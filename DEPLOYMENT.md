@@ -47,7 +47,7 @@ The repository is already linked to Vercel and the protected production page has
 
 | Variable | Source | Notes |
 |---|---|---|
-| `DATABASE_URL` | Existing Vercel Neon resource `neon-dijual` / Neon Console | The database exists. Current Vercel Preview and Production values are identical. Enable Preview Branching under the resource's Advanced Options → Deployments Configuration; the current Vercel CLI cannot toggle this setting. |
+| `DATABASE_URL` | Existing Vercel Neon resource `neon-dijual` / Neon Console | Preview uses a branch-scoped connection string. The checked-in M1 migration was applied successfully to that Preview database. |
 | `AUTH_SECRET` | Generate locally with `openssl rand -base64 48` | Already generated and stored as a sensitive Preview branch variable. Never commit or paste it into chat. |
 | `AUTH_GOOGLE_ID` | Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client IDs | Create a **Web application** client. This is the client ID, not the secret. |
 | `AUTH_GOOGLE_SECRET` | Same Google Cloud OAuth Web application | Store only in Vercel as a sensitive value. |
@@ -77,7 +77,7 @@ vercel env add AUTH_GOOGLE_SECRET preview hermes/day-001-m0-bootstrap --sensitiv
 unset GOOGLE_ID GOOGLE_SECRET
 ```
 
-After the separate Preview `DATABASE_URL` and Google values are configured, redeploy the branch, pull the Preview env into a temporary local file, and run the checked-in migration only against that Preview database.
+The Preview branch deployment is configured and Ready. The checked-in M1 migration was applied successfully to the Preview database. Google provider preflight reaches `accounts.google.com`; complete one real test-user login before claiming authenticated CRUD smoke.
 
 ## Preview policy
 

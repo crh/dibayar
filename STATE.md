@@ -33,11 +33,10 @@ completed_milestones:
   - M1 local vertical slice implementation and quality gates complete
 
 today_tasks_max_3:
-  - Enable Preview Branching for the existing Neon resource `neon-dijual`; current Preview and Production Neon project identifiers are identical
-  - Restore the application variable `DATABASE_URL` as a Preview branch-scoped variable after branching; prefixed `DATABASE_URL_*` integration variables do not satisfy Prisma's configuration
-  - Apply checked-in Prisma migration only after Preview database separation; run authenticated CRUD smoke
+  - Complete one real Google test-user login against the protected Preview branch and run authenticated CRUD smoke
+  - Review/remove unused prefixed `DATABASE_URL_*` variables only after confirming the Neon integration does not depend on them
   - Keep production protected; defer public launch and phase transition decisions to Chris
-open_blockers: Preview database isolation and correctly named DATABASE_URL; Google OAuth variables are configured; Vercel source/deployment verification remains pending; production public access remains approval-gated
+open_blockers: Authenticated browser CRUD smoke and optional cleanup of unused prefixed Neon variables; production public access remains approval-gated
 
 ## recent_signal_findings
 - No external signal check recorded; this run was limited to M1 implementation and local verification.
@@ -53,7 +52,7 @@ open_blockers: Preview database isolation and correctly named DATABASE_URL; Goog
 
 ## approvals
 pending_from_chris: protected Preview environment/application and whether production URL should become public
-pending_external: Enabling Neon Preview Branching and restoring the correctly named Preview `DATABASE_URL`; Neon resource `neon-dijual`, AUTH_SECRET, Google OAuth variables, and Vercel project linkage are complete
+pending_external: Chris's Google test-user login/CRUD smoke; Neon resource `neon-dijual`, branch-scoped DATABASE_URL, AUTH_SECRET, Google OAuth variables, migration, and Vercel project linkage are complete
 
 granted_by_chris: local staging/commit review, authenticated M0 production smoke confirmation, and instruction to continue interrupted M1 work
 
@@ -64,11 +63,11 @@ wtp_signals: 0
 
 ## latest_deployment_status
 project_linkage: confirmed by Chris; dashboard independently inaccessible in current browser session
-preview: Ready at https://dibayar-kwpldc7bh-kenji-iwakura.vercel.app; Vercel Authentication protected; AUTH_SECRET and Google OAuth variables configured; existing Neon resource `neon-dijual` is connected, but Preview and Production Neon project identifiers are identical and plain DATABASE_URL is absent
+preview: Ready at https://dibayar-git-hermes-day-001-m0-bootstrap-kenji-iwakura.vercel.app; Vercel Authentication protected; branch-scoped DATABASE_URL and Google OAuth variables configured; M1 migration applied; Google OAuth preflight reaches accounts.google.com
 production: URL reachable; Vercel Authentication protected; no M1 deployment claimed
-smoke: local root/auth/deals/rate-limit endpoints verified; protected production M0 smoke confirmed by Chris; Vercel source-commit mapping unverified
+smoke: local root/auth/deals/rate-limit endpoints verified; Preview root/session/providers/deals checks verified; Google POST preflight reaches accounts.google.com; authenticated browser CRUD smoke pending
 
 ## next_3_tasks
-1. Enable Preview Branching for `neon-dijual` under Advanced Options → Deployments Configuration; verify the generated Preview branch.
-2. Restore/verify the Preview branch-scoped `DATABASE_URL`, then run the Prisma migration and authenticated smoke test.
+1. Complete real Google test-user login on the protected Preview branch and run authenticated CRUD smoke.
+2. Review optional cleanup of unused prefixed `DATABASE_URL_*` variables; do not remove them without confirming integration behavior.
 3. Review M1 diff and decide separately whether to deploy to protected production or keep Preview-only; do not make the URL public without approval.
