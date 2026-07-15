@@ -17,8 +17,8 @@
 - [x] Minimal tests around deal CRUD; audit log for auth events
 
 ## M2 — Invoice (vertical slice #2)
-- [ ] IDR invoice generation (shareable link + PDF), numbered, PPh 21/23 field
-- [ ] Invoice status tracking (sent / due / overdue / paid)
+- [~] IDR invoice generation (shareable link + PDF), numbered, PPh 21/23 field
+- [~] Invoice status tracking (sent / due / overdue / paid)
 
 ## M3 — Payment Chasing (vertical slice #3)
 - [ ] Due-date reminders (in-app first; email if cheap)

@@ -65,3 +65,10 @@
 - OAuth evidence: protected Preview sign-in reached Google, accepted the callback URI, selected the existing Kenji test account, completed the expected profile/email consent, and returned to `/dashboard` authenticated as Kenji.
 - CRUD evidence: created one explicitly labeled disposable smoke deal through the dashboard UI; authenticated API list/read/update/read/delete returned HTTP `200/200/200/200/204`; post-delete read returned `404`; cache-bypassing dashboard reload displayed zero deals.
 - Acceptance: all M1 roadmap items are marked complete. M2 remains isolated on `hermes/m2-invoice`; its migration remains unapplied. No Production deployment or public-access change was made.
+
+## Day 1 M2 backend slice — 2026-07-15
+
+- Scope: added local-only invoice creation API with an owned-deal IDR fee snapshot, Jakarta monthly number allocation inside one Prisma transaction, DRAFT status, optional due date, and PPh selection (NONE/PPH21/PPH23); no tax calculation.
+- Tests/gates: Prisma validate/generate, lint, typecheck, 78 Vitest tests, production build, diff check, and targeted secret scan passed after rebase onto accepted M1.
+- Boundaries: `hermes/m2-invoice` is local-only with no remote tracking branch; migration is unapplied; no Preview/Production deployment, PDF, public link, UI, credential, or public-access change occurred.
+- Next gate: review before pushing M2; then implement invoice list/detail and public share/PDF controls separately.
