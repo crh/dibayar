@@ -17,17 +17,19 @@ enum DealStatus {
 }
 
 model User {
-  id            String      @id @default(cuid())
-  name          String?
-  email         String?     @unique
-  emailVerified DateTime?
-  image         String?
-  accounts      Account[]
-  sessions      Session[]
-  deals         Deal[]
-  authEvents    AuthEvent[]
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id               String            @id @default(cuid())
+  name             String?
+  email            String?           @unique
+  emailVerified    DateTime?
+  image            String?
+  accounts         Account[]
+  sessions         Session[]
+  deals            Deal[]
+  invoices         Invoice[]
+  invoiceSequences InvoiceSequence[]
+  authEvents       AuthEvent[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 }
 
 model Account {
@@ -76,11 +78,43 @@ model Deal {
   paymentTerms String?    @db.Text
   status       DealStatus @default(MASUK)
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoices     Invoice[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
   @@index([userId, status])
   @@index([userId, deadline])
+}
+
+// Numbered per user per calendar month as INV/YYYY/MM/NNN (Asia/Jakarta boundary).
+// See src/lib/invoice-number.ts for the numbering/atomicity contract.
+model Invoice {
+  id        String   @id @default(cuid())
+  userId    String
+  dealId    String
+  number    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deal      Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, number])
+  @@index([dealId])
+}
+
+// One row per (user, year, month); lastSequence is incremented atomically
+// (INSERT ... ON CONFLICT ... DO UPDATE ... RETURNING) to hand out invoice
+// sequence numbers without a race. See src/lib/invoice-number.ts.
+model InvoiceSequence {
+  id           String   @id @default(cuid())
+  userId       String
+  year         Int
+  month        Int
+  lastSequence Int      @default(0)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, year, month])
 }
 
 model AuthEvent {
