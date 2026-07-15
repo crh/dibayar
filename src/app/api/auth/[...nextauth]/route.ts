@@ -3,9 +3,11 @@ import { handlers } from "@/auth";
 import { authRateLimiter } from "@/lib/rate-limit";
 
 function rateLimitResponse(request: NextRequest) {
+  if (request.method !== "POST") return null;
+
   const pathParts = new URL(request.url).pathname.split("/").filter(Boolean);
   const authAction = pathParts[2];
-  if (authAction !== "signin" && authAction !== "callback") return null;
+  if (authAction !== "signin") return null;
 
   const forwardedFor = request.headers.get("x-forwarded-for");
   const key = forwardedFor?.split(",")[0]?.trim() || "unknown-client";
