@@ -18,25 +18,25 @@ repo_url: git@github.com:crh/dibayar.git
 prod_url: https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/
 last_deploy: 2026-07-13 (Chris-provided production URL; protected-access response verified)
 build_status: green
-latest_validation: 2026-07-14 local M1 gates green; 21 tests; lint; typecheck; production build; local HTTP auth/deals/rate-limit smoke; protected Preview Ready; npm audit has 6 moderate findings
+latest_validation: 2026-07-15 M1 accepted; 30 tests; lint; typecheck; production build; protected Preview OAuth sign-in and authenticated create/read/update/delete smoke verified; smoke record deleted; npm audit has 6 moderate findings
 stack: Next.js + TS + Tailwind + Postgres + Prisma + Auth.js (Google OAuth) + Vercel
 vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linked to github.com/crh/dibayar)
 
 ## now
-current_milestone: M1 — Auth + Deal Pipeline (local implementation ready; protected Preview verification pending)
+current_milestone: M1 — Auth + Deal Pipeline accepted; M2 invoice foundation is committed on hermes/m2-invoice and paused pending Chris instruction
 active_branch: hermes/day-001-m0-bootstrap
-latest_feature_commit: local HEAD — feat(m1): add auth and deal pipeline vertical slice
-remote_feature_branch: origin/hermes/day-001-m0-bootstrap at 854a702; local contains additional unpushed governance and M1 commits
+latest_feature_commit: a8c0347 — fix(auth): allow Google OAuth sign-in flow (M1 implementation); d7562dd local documentation evidence update
+remote_feature_branch: origin/hermes/day-001-m0-bootstrap at a8c0347; protected Preview M1 smoke verified
 completed_milestones:
   - Phase 0 discovery closed
   - M0 bootstrap and protected production deployment complete
-  - M1 local vertical slice implementation and quality gates complete
+  - M1 auth + deal pipeline accepted on protected Preview
 
 today_tasks_max_3:
-  - Complete one real Google test-user login against the protected Preview branch and run authenticated CRUD smoke
-  - Review/remove unused prefixed `DATABASE_URL_*` variables only after confirming the Neon integration does not depend on them
-  - Keep production protected; defer public launch and phase transition decisions to Chris
-open_blockers: Authenticated browser CRUD smoke and optional cleanup of unused prefixed Neon variables; production public access remains approval-gated
+  - Review M2 invoice foundation on hermes/m2-invoice before API/UI work; keep the migration unapplied
+  - Decide whether to push the local M1 documentation evidence commit; do not deploy Production or make it public without Chris approval
+  - Keep M4 validation and all phase transitions approval-gated
+open_blockers: Optional cleanup of unused prefixed Neon variables; M2 API/UI integration and migration approval; Production public access and phase transition remain approval-gated
 
 ## recent_signal_findings
 - No external signal check recorded; this run was limited to M1 implementation and local verification.
@@ -46,13 +46,13 @@ open_blockers: Authenticated browser CRUD smoke and optional cleanup of unused p
 (empty)
 
 ## decisions_last_3_days
-- 2026-07-14: Continue M1 after laptop interruption; keep Vercel project/linkage assumptions unchanged and skip already-completed project setup.
+- 2026-07-15: M1 accepted after protected Preview Google OAuth plus authenticated deal create/read/update/delete smoke; added only the stable protected Preview callback URI to the Google OAuth client.
+- 2026-07-15: Pause M2 until M1 acceptance; M2 remains isolated on hermes/m2-invoice with its migration unapplied.
 - 2026-07-14: Enforce auth rate limiting in the Auth.js route handler; module-level middleware state was not reliable in Next.js dev runtime.
-- 2026-07-13: Keep Vercel Authentication protection enabled; public launch and phase transition remain approval-gated.
 
 ## approvals
-pending_from_chris: protected Preview environment/application and whether production URL should become public
-pending_external: Chris's Google test-user login/CRUD smoke; Neon resource `neon-dijual`, branch-scoped DATABASE_URL, AUTH_SECRET, Google OAuth variables, migration, and Vercel project linkage are complete
+pending_from_chris: whether to push the local M1 documentation evidence commit, resume M2, and whether Production should become public
+pending_external: M1 acceptance complete; M2 migration remains unapplied pending API/UI integration and Chris approval
 
 granted_by_chris: local staging/commit review, authenticated M0 production smoke confirmation, and instruction to continue interrupted M1 work
 
@@ -62,12 +62,12 @@ feedback_logged: 0
 wtp_signals: 0
 
 ## latest_deployment_status
-project_linkage: confirmed by Chris; dashboard independently inaccessible in current browser session
-preview: Ready at https://dibayar-git-hermes-day-001-m0-bootstrap-kenji-iwakura.vercel.app; Vercel Authentication protected; branch-scoped DATABASE_URL and Google OAuth variables configured; M1 migration applied; Google OAuth preflight reaches accounts.google.com
+project_linkage: confirmed by Chris; Google Cloud OAuth client managed through logged-in Chrome MCP session
+preview: Ready at https://dibayar-15tw2d2jd-kenji-iwakura.vercel.app with stable alias https://dibayar-git-hermes-day-001-m0-bootstrap-kenji-iwakura.vercel.app; Vercel Authentication protected; M1 migration applied; Google OAuth callback URI registered and login verified
 production: URL reachable; Vercel Authentication protected; no M1 deployment claimed
-smoke: local root/auth/deals/rate-limit endpoints verified; Preview root/session/providers/deals checks verified; Google POST preflight reaches accounts.google.com; authenticated browser CRUD smoke pending
+smoke: protected Preview Google OAuth signed in as the existing test user; UI created a labeled disposable deal; authenticated API list/read/patch/read/delete returned 200/200/200/200/204 and final GET returned 404; cache-bypassing dashboard reload showed zero deals
 
 ## next_3_tasks
-1. Complete real Google test-user login on the protected Preview branch and run authenticated CRUD smoke.
-2. Review optional cleanup of unused prefixed `DATABASE_URL_*` variables; do not remove them without confirming integration behavior.
-3. Review M1 diff and decide separately whether to deploy to protected production or keep Preview-only; do not make the URL public without approval.
+1. On Chris approval, switch to hermes/m2-invoice and review the committed invoice foundation before API/UI work.
+2. Keep the M2 migration unapplied until invoice API integration is reviewed and approved.
+3. Decide separately whether to push M1 documentation evidence and whether to change protected Production access.

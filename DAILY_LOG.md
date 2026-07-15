@@ -49,3 +49,19 @@
 - Decision: mark all M0 Roadmap items complete. Keep Vercel Authentication enabled; do not treat this as public launch or silently start M1.
 - Next gate: Chris approval to start M1 Auth + Deal Pipeline and a separate decision on public access.
 - Rubric self-score: Evidence honesty 2/2; shipped completeness 1/2 (M0 complete but still scaffold/config scope); security discipline 1/2 (security gaps remain logged); focus 2/2; deploy health 2/2; report quality 2/2. Total 10/12.
+
+## Day 1 M1 continuation — 2026-07-15 — OAuth Preview gate narrowed
+
+- Claude Code/Sonnet implemented a focused Auth.js fix: CSP permits only `https://accounts.google.com` for OAuth form redirects and `https://authjs.dev` for the provider logo; sign-in rate limiting applies to POST attempts only, not sign-in-page GETs or OAuth callbacks.
+- Hermes verification: focused regression tests passed; `npm run lint`, `npm run typecheck`, `npm test` (9 files, 30 tests), `npm run build`, and `git diff --check` passed.
+- Commit/push/Preview: `a8c0347 fix(auth): allow Google OAuth sign-in flow` was pushed to `hermes/day-001-m0-bootstrap`; a protected redeployment at `dibayar-15tw2d2jd-kenji-iwakura.vercel.app` is Ready and owns the stable branch alias.
+- Live browser evidence: Google sign-in reaches `accounts.google.com` with no CSP block or 429 and now receives an OAuth client ID; Google returns `redirect_uri_mismatch` for the Preview callback URL.
+- External blocker: add the exact protected Preview callback URL to the Google OAuth client Authorized redirect URIs. Do not complete or claim M1 acceptance until a Google test user authenticates and authenticated deal CRUD smoke passes.
+- Security/deployment: no Production deployment, public launch, database migration, credential exposure, or M2 change occurred.
+
+## Day 1 M1 acceptance — 2026-07-15 — protected Preview end-to-end verified
+
+- Google Cloud OAuth configuration: opened the `dibayar` Web application client through the logged-in Chrome MCP session and added only the stable protected Preview callback URI. Save confirmed by Google Cloud console.
+- OAuth evidence: protected Preview sign-in reached Google, accepted the callback URI, selected the existing Kenji test account, completed the expected profile/email consent, and returned to `/dashboard` authenticated as Kenji.
+- CRUD evidence: created one explicitly labeled disposable smoke deal through the dashboard UI; authenticated API list/read/update/read/delete returned HTTP `200/200/200/200/204`; post-delete read returned `404`; cache-bypassing dashboard reload displayed zero deals.
+- Acceptance: all M1 roadmap items are marked complete. M2 remains isolated on `hermes/m2-invoice`; its migration remains unapplied. No Production deployment or public-access change was made.
