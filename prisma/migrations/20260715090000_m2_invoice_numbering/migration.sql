@@ -1,9 +1,19 @@
+-- CreateEnum
+CREATE TYPE "InvoiceStatus" AS ENUM ('DRAFT', 'SENT', 'DUE', 'OVERDUE', 'PAID');
+
+-- CreateEnum
+CREATE TYPE "WithholdingTaxType" AS ENUM ('NONE', 'PPH21', 'PPH23');
+
 -- CreateTable
 CREATE TABLE "Invoice" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "dealId" TEXT NOT NULL,
     "number" TEXT NOT NULL,
+    "subtotalIdr" INTEGER NOT NULL,
+    "withholdingTaxType" "WithholdingTaxType" NOT NULL DEFAULT 'NONE',
+    "status" "InvoiceStatus" NOT NULL DEFAULT 'DRAFT',
+    "dueDate" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
