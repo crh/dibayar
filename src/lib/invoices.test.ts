@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createInvoice,
+  getOwnedInvoice,
+  listInvoices,
   type InvoiceCreateDb,
+  type InvoiceReadDb,
   type InvoiceRecord,
   type InvoiceTransactionClient,
 } from "./invoices";
@@ -170,5 +173,87 @@ describe("createInvoice", () => {
     await createInvoice(db, "user-1", { dealId: "deal-1" });
 
     expect(db.$transaction).toHaveBeenCalledTimes(1);
+  });
+});
+
+const existingInvoice: InvoiceRecord = {
+  id: "invoice-1",
+  userId: "user-1",
+  dealId: "deal-1",
+  number: "INV/2026/07/001",
+  subtotalIdr: 1_500_000,
+  withholdingTaxType: "NONE",
+  status: "DRAFT",
+  dueDate: null,
+  createdAt: new Date("2026-07-15T00:00:00.000Z"),
+  updatedAt: new Date("2026-07-15T00:00:00.000Z"),
+};
+
+function makeReadDb(records: InvoiceRecord[] = []): InvoiceReadDb {
+  return {
+    invoice: {
+      findMany: vi.fn(async ({ where }: { where: { userId: string } }) =>
+        records.filter((invoice) => invoice.userId === where.userId),
+      ),
+      findFirst: vi.fn(async ({ where }: { where: { id: string; userId: string } }) =>
+        records.find((invoice) => invoice.id === where.id && invoice.userId === where.userId) ?? null,
+      ),
+    },
+  };
+}
+
+describe("listInvoices", () => {
+  it("lists only invoices owned by the current user, ordered by status, due date, then newest first", async () => {
+    const db = makeReadDb([existingInvoice, { ...existingInvoice, id: "invoice-2", userId: "user-2" }]);
+
+    const invoices = await listInvoices(db, "user-1");
+
+    expect(invoices).toHaveLength(1);
+    expect(invoices[0].userId).toBe("user-1");
+    expect(db.invoice.findMany).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+      orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
+    });
+  });
+});
+
+describe("getOwnedInvoice", () => {
+  it("returns the invoice when it belongs to the requesting user", async () => {
+    const db = makeReadDb([existingInvoice]);
+
+    const invoice = await getOwnedInvoice(db, "invoice-1", "user-1");
+
+    expect(invoice?.id).toBe("invoice-1");
+  });
+
+  it("returns null without leaking data for another user's invoice", async () => {
+    const db = makeReadDb([existingInvoice]);
+
+    const invoice = await getOwnedInvoice(db, "invoice-1", "user-2");
+
+    expect(invoice).toBeNull();
+  });
+
+  it("queries by invoice ID and owner together instead of fetching another tenant's record", async () => {
+    const findFirst = vi.fn(async () => null);
+    const db = {
+      invoice: {
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
+        findFirst,
+      },
+    } as unknown as InvoiceReadDb;
+
+    await getOwnedInvoice(db, "invoice-1", "user-2");
+
+    expect(findFirst).toHaveBeenCalledWith({ where: { id: "invoice-1", userId: "user-2" } });
+  });
+
+  it("returns null for a nonexistent invoice", async () => {
+    const db = makeReadDb([]);
+
+    const invoice = await getOwnedInvoice(db, "invoice-x", "user-1");
+
+    expect(invoice).toBeNull();
   });
 });

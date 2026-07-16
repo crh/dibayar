@@ -44,6 +44,28 @@ export type InvoiceCreateDb = {
   $transaction<T>(fn: (tx: InvoiceTransactionClient) => Promise<T>): Promise<T>;
 };
 
+export type InvoiceReadDb = {
+  invoice: {
+    findMany(args: {
+      where: { userId: string };
+      orderBy: Array<Record<string, "asc" | "desc">>;
+    }): Promise<InvoiceRecord[]>;
+    findFirst(args: { where: { id: string; userId: string } }): Promise<InvoiceRecord | null>;
+  };
+};
+
+export async function listInvoices(db: InvoiceReadDb, userId: string) {
+  return db.invoice.findMany({
+    where: { userId },
+    orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
+  });
+}
+
+// Returns null (not a throw) for missing or cross-tenant records so callers can respond 404 uniformly.
+export async function getOwnedInvoice(db: InvoiceReadDb, id: string, userId: string) {
+  return db.invoice.findFirst({ where: { id, userId } });
+}
+
 // Returns null (not a throw) when the deal is missing or not owned by userId, so callers can respond 404 uniformly.
 export async function createInvoice(db: InvoiceCreateDb, userId: string, input: unknown) {
   const validated = invoiceCreateSchema.parse(input);

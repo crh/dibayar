@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ZodError } from "zod";
 import { auth } from "@/auth";
 import { invoiceCreateSchema } from "@/lib/invoice-validation";
-import { createInvoice, type InvoiceRecord } from "@/lib/invoices";
-import { POST } from "./route";
+import { createInvoice, listInvoices, type InvoiceRecord } from "@/lib/invoices";
+import { GET, POST } from "./route";
 
 vi.mock("@/auth", () => ({
   auth: vi.fn(),
@@ -11,6 +11,7 @@ vi.mock("@/auth", () => ({
 
 vi.mock("@/lib/invoices", () => ({
   createInvoice: vi.fn(),
+  listInvoices: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -19,6 +20,7 @@ vi.mock("@/lib/prisma", () => ({
 
 const mockedAuth = vi.mocked(auth);
 const mockedCreateInvoice = vi.mocked(createInvoice);
+const mockedListInvoices = vi.mocked(listInvoices);
 
 function makeRequest(body: unknown) {
   return new Request("http://localhost/api/invoices", {
@@ -45,6 +47,38 @@ const invoice: InvoiceRecord = {
   createdAt: new Date("2026-07-15T00:00:00.000Z"),
   updatedAt: new Date("2026-07-15T00:00:00.000Z"),
 };
+
+describe("GET /api/invoices", () => {
+  beforeEach(() => {
+    mockedAuth.mockReset();
+    mockedListInvoices.mockReset();
+  });
+
+  it("menolak permintaan tanpa sesi login", async () => {
+    mockedAuth.mockResolvedValue(null as never);
+
+    const response = await GET();
+
+    expect(response.status).toBe(401);
+    const body = await response.json();
+    expect(body.error).toBe("Kamu harus masuk terlebih dahulu.");
+    expect(mockedListInvoices).not.toHaveBeenCalled();
+  });
+
+  it("mengembalikan daftar invoice milik pengguna yang sedang login", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedListInvoices.mockResolvedValue([invoice]);
+
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.invoices).toEqual([
+      { ...invoice, createdAt: invoice.createdAt.toISOString(), updatedAt: invoice.updatedAt.toISOString() },
+    ]);
+    expect(mockedListInvoices).toHaveBeenCalledWith(expect.anything(), "user-1");
+  });
+});
 
 describe("POST /api/invoices", () => {
   beforeEach(() => {

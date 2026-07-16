@@ -1,10 +1,21 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { auth } from "@/auth";
-import { createInvoice, type InvoiceCreateDb } from "@/lib/invoices";
+import { createInvoice, listInvoices, type InvoiceCreateDb, type InvoiceReadDb } from "@/lib/invoices";
 import { prisma } from "@/lib/prisma";
 
 const db = prisma as unknown as InvoiceCreateDb;
+const readDb = prisma as unknown as InvoiceReadDb;
+
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
+  }
+
+  const invoices = await listInvoices(readDb, session.user.id);
+  return NextResponse.json({ invoices });
+}
 
 export async function POST(request: Request) {
   const session = await auth();
