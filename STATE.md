@@ -16,27 +16,27 @@ phase_started: 2026-07-12
 day_count: 1
 repo_url: git@github.com:crh/dibayar.git
 prod_url: https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/
-last_deploy: 2026-07-13 (Chris-provided production URL; protected-access response verified)
+last_deploy: 2026-07-16 Git-triggered protected M2 Preview for commit b8fe0ae; Ready in 34 seconds on the stable M2 branch alias
 build_status: green
-latest_validation: 2026-07-15 M2 rebased local slice green; Prisma validate/generate; lint; typecheck; 78 tests; production build; diff check; migration unapplied; npm audit has 6 moderate findings
+latest_validation: 2026-07-16 isolated M2 Preview: Google OAuth, authenticated invoice create/list/detail, missing-invoice 404, and cleanup all passed
 stack: Next.js + TS + Tailwind + Postgres + Prisma + Auth.js (Google OAuth) + Vercel
 vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linked to github.com/crh/dibayar)
 
 ## now
-current_milestone: M2 — Invoice (backend create/numbering/status-tax data slice complete locally; PDF/share link/UI remain)
+current_milestone: M2 — Invoice (isolated Preview migrations/read APIs and invoice creation are verified; mobile UI, PDF/share link, and status transitions remain)
 active_branch: hermes/m2-invoice
-latest_feature_commit: a412b0c — feat(m2): add atomic invoice creation API; rebased on accepted M1 baseline eeb2f42
-remote_feature_branch: no M2 remote branch; local branch rebased on origin/hermes/day-001-m0-bootstrap at eeb2f42
+latest_feature_commit: b8fe0ae — scope deal ownership lookup in query; follows 9f8c00b tenant-scoped invoice reads and 8faadca Prisma transaction fix
+remote_feature_branch: origin/hermes/m2-invoice is current through b8fe0ae
 completed_milestones:
   - Phase 0 discovery closed
   - M0 bootstrap and protected production deployment complete
   - M1 auth + deal pipeline accepted on protected Preview
 
 today_tasks_max_3:
-  - Review the local M2 invoice API slice before any push or protected Preview deployment; keep its migration unapplied
-  - Implement M2 invoice list/detail and PDF/share-link UI only after a review checkpoint
+  - Implement M2 mobile invoice list/detail UI from the verified read APIs
+  - Implement M2 share-link/PDF and invoice status transitions
   - Keep Production protected and all phase transitions approval-gated
-open_blockers: M2 PDF/share-link/UI integration and migration approval; optional cleanup of unused prefixed Neon variables; Production public access and phase transition remain approval-gated
+open_blockers: none; M2 mobile UI, PDF/share-link, and status-transition work remains
 
 ## recent_signal_findings
 - No external signal check recorded; this run was limited to M2 implementation and local verification.
@@ -46,15 +46,15 @@ open_blockers: M2 PDF/share-link/UI integration and migration approval; optional
 (empty)
 
 ## decisions_last_3_days
-- 2026-07-15: Chris approved pushing M1 evidence then starting M2; M2 remains local-only after rebase, with migration unapplied and no Preview/Production deployment.
-- 2026-07-15: M1 accepted after protected Preview Google OAuth plus authenticated deal create/read/update/delete smoke; added only the stable protected Preview callback URI to the Google OAuth client.
-- 2026-07-15: M2 invoice creation snapshots the owned deal fee, records PPh type (NONE/PPH21/PPH23) without tax calculation, and creates the numbered draft invoice in one database transaction.
+- 2026-07-16: Chris granted standing autonomous milestone execution; task selection should not require prompts. Ask only for a genuine access/decision blocker; Production, public access, credentials, destructive changes, financial/legal/medical decisions remain separately gated.
+- 2026-07-16: Commit 9f8c00b adds tenant-scoped invoice list/detail reads; b8fe0ae hardens existing deal reads to scope `id` and `userId` in the database query. Both are live-smoke-passed on isolated protected Preview; Production untouched.
+- 2026-07-16: Commit 8faadca binds methods returned by the lazy Prisma Proxy to the actual client, fixing invoice `$transaction`; creation smoke passed on isolated protected Preview.
 
 ## approvals
-pending_from_chris: review/push M2 local commits, migration application, protected M2 Preview deployment, and whether Production should become public
-pending_external: M2 migration remains unapplied; no external dependency blocks local M2 work
+pending_from_chris: Production public-access decision
+pending_external: none
 
-granted_by_chris: local staging/commit review, authenticated M0 production smoke confirmation, instruction to continue interrupted M1 work, M1 documentation push, and M2 start
+granted_by_chris: standing autonomous milestone execution, code-fix, and protected Preview redeployment approval; local staging/commit review, authenticated M0 production smoke confirmation, instruction to continue interrupted M1 work, M1 documentation push, and M2 start
 
 ## metrics (phase 2+ only)
 users_shown: 0
@@ -63,11 +63,11 @@ wtp_signals: 0
 
 ## latest_deployment_status
 project_linkage: confirmed by Chris; Google Cloud OAuth client managed through logged-in Chrome MCP session
-preview: Ready at https://dibayar-15tw2d2jd-kenji-iwakura.vercel.app with stable alias https://dibayar-git-hermes-day-001-m0-bootstrap-kenji-iwakura.vercel.app; Vercel Authentication protected; M1 migration applied; Google OAuth callback URI registered and login verified; no M2 deployment claimed
+preview: M1 Ready at https://dibayar-15tw2d2jd-kenji-iwakura.vercel.app; M2 Ready from b8fe0ae at https://dibayar-8m9gkr5mq-kenji-iwakura.vercel.app with stable alias https://dibayar-git-hermes-m2-invoice-kenji-iwakura.vercel.app; Vercel Authentication protected; M2 uses its isolated Neon branch, has both approved migrations, and Google OAuth persists User/Account successfully
 production: URL reachable; Vercel Authentication protected; no M1/M2 deployment claimed
-smoke: protected Preview Google OAuth signed in as the existing test user; UI created a labeled disposable deal; authenticated API list/read/patch/read/delete returned 200/200/200/200/204 and final GET returned 404; cache-bypassing dashboard reload showed zero deals
+smoke: protected M2 Preview Google OAuth signed in as Kenji. After 8faadca, authenticated POST /api/deals and POST /api/invoices returned 201. After b8fe0ae, authenticated GET /api/invoices returned 200 including the created invoice, GET /api/invoices/:id returned 200 for it, and a missing invoice returned 404 in Bahasa. Labeled temporary data was removed; final temporary-deal/invoice/sequence counts were 0/0/0.
 
 ## next_3_tasks
-1. Review the local M2 API slice and decide whether to push it for a protected Preview deployment; do not apply the migration yet.
-2. Implement M2 invoice listing/detail plus PDF/share-link UI with unguessable identifier, expiry/revocation, and noindex controls.
-3. Add M2 status transition handling and later decide whether to apply the reviewed migration.
+1. Implement the M2 mobile invoice list/detail UI using the verified read APIs.
+2. Implement M2 share-link/PDF and status transitions with appropriate tenant/public authorization boundaries.
+3. Keep Production protected; request a separate decision before public access or production deployment.

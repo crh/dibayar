@@ -72,3 +72,49 @@
 - Tests/gates: Prisma validate/generate, lint, typecheck, 78 Vitest tests, production build, diff check, and targeted secret scan passed after rebase onto accepted M1.
 - Boundaries: `hermes/m2-invoice` is local-only with no remote tracking branch; migration is unapplied; no Preview/Production deployment, PDF, public link, UI, credential, or public-access change occurred.
 - Next gate: review before pushing M2; then implement invoice list/detail and public share/PDF controls separately.
+
+## Day 1 M2 Preview and read API — 2026-07-16
+
+- Preview configuration: verified `DATABASE_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, and `AUTH_GOOGLE_SECRET` are encrypted and scoped only to `Preview (hermes/m2-invoice)`; protected Git-based redeploy `dpl_2QRBJqkC795eL4qz8Ag5DH1EQHRS` is Ready at `https://dibayar-e6tjk25st-kenji-iwakura.vercel.app` and owns the stable M2 alias.
+- OAuth diagnosis: M2 sign-in page renders; Google callback reaches Auth.js; Vercel runtime log identifies `PrismaClientKnownRequestError: public.Account does not exist`. It is not a Google variable or redirect-URI failure. Later migration preflight established that this runtime target is shared with the Production integration rather than the intended isolated branch.
+- Migration boundary: no database migration was applied. The approved migration scope remains restricted to isolated M2 Preview only; Production is untouched.
+- Implementation: Claude Code 2.1.197 / Sonnet completed the bounded invoice read API: tenant-scoped `GET /api/invoices`, owned `GET /api/invoices/[id]`, service list/read functions, and cross-tenant no-leak coverage. No schema/migration/env/OAuth/Vercel/UI/PDF/share-link/status mutation/dependency changes were delegated.
+- Independent Hermes verification: baseline 78 tests passed; resulting 87 tests passed across 15 files; `npm run lint`, `npm run typecheck`, `npm run build`, and `git diff --check` passed. The production build includes both invoice routes.
+- Git/deployment: invoice-read source changes are intentionally uncommitted and unpushed for review; no post-change deployment occurred.
+
+## Day 1 M2 migration safety stop — 2026-07-16
+
+- Chris approved applying `20260713073000_m1_auth_and_deals` and `20260715090000_m2_invoice_numbering` only to isolated M2 Preview.
+- Preflight result: Prisma reports both migrations pending, but a SHA-256 fingerprint comparison of the M2 Preview Neon integration URL and Production Neon integration URL matched. Migration was stopped before any write.
+- Root cause: Neon contains an existing separate branch named `preview/hermes/m2-invoice`, but the M2 Vercel deployment is not wired to that branch; its active database endpoint differs from the branch endpoint and matches the Production integration target.
+- Required repair gate: explicitly authorize replacing/repointing the M2 Preview branch-scoped `DATABASE_URL` with the existing isolated Neon branch connection, then protected redeploy and repeat the database-isolation check before applying the already approved migrations.
+
+## Day 1 M2 isolated migration and runtime smoke — 2026-07-16
+
+- Chris approved the repair scope: only `Preview (hermes/m2-invoice)` was repointed to the existing `preview/hermes/m2-invoice` Neon branch; Production was not modified.
+- Deployment evidence: protected Vercel Preview redeploy `dpl_2QRBJqkC795eL4qz8Ag5DH1EQHRS` completed Ready in 49 seconds from commit `a986072` and owns the stable M2 alias.
+- Migration evidence: in Neon SQL Editor explicitly scoped to `preview/hermes/m2-invoice` / `neondb`, an atomic transaction created the Prisma migration ledger, applied the exact approved M1 and M2 migration SQL, and recorded their verified SHA-256 checksums. Result: 36 statements completed successfully in 832 ms. Read-back confirmed both finished migration records and all nine expected Auth.js/deal/invoice tables.
+- OAuth evidence: stable M2 Preview Google sign-in completed and reached the authenticated dashboard as Kenji. Isolated branch read-back confirmed one `User` and one `Account`; the prior missing-`Account` failure is resolved.
+- Invoice smoke: authenticated `POST /api/deals` returned 201. Authenticated `POST /api/invoices` returned a reproducible 500 after five seconds. Read-back showed the temporary deal existed but no `Invoice` or `InvoiceSequence` row, so the failure occurs within the invoice transaction path before a durable write. The route currently swallows the underlying exception and Vercel logs contain no stack.
+- Cleanup: deleted the explicitly labeled temporary deal in the isolated branch. Final temporary deal/invoice/sequence counts were 0/0/0. No Production data, permanent smoke fixture, invoice, or sequence remains.
+- Next gate: Chris approval for a bounded Preview-only diagnostic/fix of the invoice transaction failure; do not claim invoice creation as accepted or advance M2 UI work until it passes.
+
+## Day 1 M2 invoice transaction fix and Preview redeploy — 2026-07-16
+
+- Standing scope: Chris granted ongoing approval for code fixes and protected Preview redeployments. Production, public access, credential rotation, and destructive changes remain separately gated.
+- Root cause: the lazy `prisma` Proxy returned function-valued properties unbound. `prisma.$transaction()` therefore ran with the Proxy as `this`, rather than the actual `PrismaClient`; normal delegate CRUD calls did not expose the defect.
+- Fix: commit `8faadca` (`fix(prisma): bind lazy client methods`) binds methods to the real client and adds a deterministic regression test. Only `src/lib/prisma.ts` and `src/lib/prisma.test.ts` were committed/pushed; the tenant-scoped invoice-read work remains uncommitted/unpushed.
+- Quality gates: 88 Vitest tests, lint, typecheck, production build, and diff check passed before commit.
+- Deployment: Git-triggered, protected M2 Preview for `8faadca` was Ready in 30 seconds at `https://dibayar-cs2iv63xt-kenji-iwakura.vercel.app`; the stable M2 branch alias remains protected.
+- Runtime smoke: authenticated isolated Preview `POST /api/deals` returned 201, then `POST /api/invoices` returned 201 with `INV/2026/07/001` in `DRAFT`.
+- Cleanup: the explicit smoke deal and invoice were deleted. A same-statement Postgres snapshot initially preserved the now-unused sequence row; a targeted second delete removed it. Final temporary deal/invoice/sequence counts: 0/0/0. Production was untouched.
+
+## Day 1 M2 tenant-scoped invoice reads and Preview verification — 2026-07-16
+
+- Standing operating model: Chris authorized autonomous milestone execution; choose and execute tasks without prompting, and ask only for a genuine access/decision blocker. Production, public access, credentials, destructive changes, and financial/legal/medical decisions remain separately gated.
+- Read/API commit: `9f8c00b` adds authenticated `GET /api/invoices` and `GET /api/invoices/:id`, plus service and route tests. Both paths are tenant-scoped. Detail reads use `findFirst({ where: { id, userId } })`, so a foreign record is never fetched before authorization.
+- Adjacent hardening: review found that existing `getOwnedDeal` fetched by ID before comparison. Commit `b8fe0ae` changes it to the same ownership-scoped query and adds a deterministic regression test.
+- Quality gates: 90 Vitest tests, lint, typecheck, production build, diff hygiene, manual diff/security scan passed. `npm audit --omit=optional` remains six moderate transitive findings; the offered remediation requires breaking framework/database changes and was not applied. GitHub reported two moderate default-branch alerts; no high/critical alert was reported.
+- Deployment: protected Git-triggered M2 Preview for `b8fe0ae` was Ready in 34 seconds at `https://dibayar-8m9gkr5mq-kenji-iwakura.vercel.app`; the stable M2 branch alias remains Vercel-Authentication protected.
+- Runtime smoke: authenticated Preview `POST /api/deals` and `POST /api/invoices` returned 201. `GET /api/invoices` returned 200 and included the created invoice; `GET /api/invoices/:id` returned 200 for it; a missing ID returned 404 with `Invoice tidak ditemukan.` The invoice was `INV/2026/07/001` and retained `PPH23`.
+- Cleanup: explicitly labeled deal/invoice rows were deleted from `preview/hermes/m2-invoice`. A second targeted sequence cleanup removed the unused monthly sequence. Final temporary deal/invoice/sequence counts: 0/0/0. Production was untouched.
