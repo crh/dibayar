@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createDeal,
   deleteDeal,
+  getOwnedDeal,
   listDeals,
   updateDeal,
   type DealDb,
@@ -23,8 +24,8 @@ function makeDb(records: DealRecord[] = []): DealDb {
       findMany: vi.fn(async ({ where }: { where: { userId: string } }) =>
         data.filter((deal) => deal.userId === where.userId),
       ),
-      findUnique: vi.fn(async ({ where }: { where: { id: string } }) =>
-        data.find((deal) => deal.id === where.id) ?? null,
+      findFirst: vi.fn(async ({ where }: { where: { id: string; userId: string } }) =>
+        data.find((deal) => deal.id === where.id && deal.userId === where.userId) ?? null,
       ),
       create: vi.fn(async ({ data: values }: { data: Omit<DealRecord, "id" | "createdAt" | "updatedAt"> }) => {
         const record: DealRecord = {
@@ -89,6 +90,24 @@ describe("deal repository", () => {
     expect(db.deal.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ userId: "user-1", brand: "Kopi Nusantara" }),
     });
+  });
+
+  it("queries by deal ID and owner together", async () => {
+    const findFirst = vi.fn(async () => null);
+    const db = {
+      deal: {
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
+        findFirst,
+        create: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+      },
+    } as unknown as DealDb;
+
+    await getOwnedDeal(db, "deal-1", "user-2");
+
+    expect(findFirst).toHaveBeenCalledWith({ where: { id: "deal-1", userId: "user-2" } });
   });
 
   it("does not update another user's deal", async () => {

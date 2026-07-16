@@ -23,7 +23,7 @@ type DealModel = {
     where: { userId: string };
     orderBy: Array<Record<string, "asc" | "desc">>;
   }): Promise<DealRecord[]>;
-  findUnique(args: { where: { id: string } }): Promise<DealRecord | null>;
+  findFirst(args: { where: { id: string; userId: string } }): Promise<DealRecord | null>;
   create(args: { data: DealCreateData }): Promise<DealRecord>;
   update(args: { where: { id: string }; data: Partial<DealCreateData> }): Promise<DealRecord>;
   delete(args: { where: { id: string } }): Promise<DealRecord>;
@@ -63,8 +63,7 @@ export async function createDeal(db: DealDb, userId: string, input: unknown) {
 }
 
 export async function getOwnedDeal(db: DealDb, id: string, userId: string) {
-  const deal = await db.deal.findUnique({ where: { id } });
-  return deal?.userId === userId ? deal : null;
+  return db.deal.findFirst({ where: { id, userId } });
 }
 
 export async function updateDeal(
