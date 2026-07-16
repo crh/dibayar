@@ -74,6 +74,12 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
           <span className="rounded-full bg-bg px-3 py-1 text-[13px] font-semibold text-ink">{STATUS_LABEL[invoice.status]}</span>
         </div>
         <p className="mt-3 text-[14px] text-muted">Jatuh tempo: {formatDate(invoice.dueDate)}</p>
+        <a
+          href={`/api/invoices/${invoice.id}/pdf`}
+          className="mt-4 inline-flex h-10 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
+        >
+          Unduh PDF
+        </a>
       </header>
 
       <section aria-labelledby="rincian-invoice" className="rounded-2xl border border-line bg-surface p-5">

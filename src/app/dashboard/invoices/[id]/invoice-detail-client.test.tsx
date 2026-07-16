@@ -23,6 +23,7 @@ describe("InvoiceDetailClient", () => {
     expect(screen.getAllByText("INV/2026/07/001")).toHaveLength(2);
     expect(screen.getByText("PPh 23")).toBeDefined();
     expect(screen.getByRole("button", { name: "Tandai sudah dikirim" })).toBeDefined();
+    expect(screen.getByRole("link", { name: "Unduh PDF" }).getAttribute("href")).toBe("/api/invoices/invoice-1/pdf");
     expect(screen.queryByRole("button", { name: "Tandai lunas" })).toBeNull();
   });
 
