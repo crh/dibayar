@@ -16,24 +16,24 @@ phase_started: 2026-07-12
 day_count: 1
 repo_url: git@github.com:crh/dibayar.git
 prod_url: https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/
-last_deploy: 2026-07-16 Git-triggered protected M2 Preview for commit 2cc00c7; Ready in 33 seconds on the stable M2 branch alias
+last_deploy: 2026-07-16 Git-triggered protected M2 Preview for feature commit 9794d02; Ready with the stable M2 branch alias
 build_status: green
-latest_validation: 2026-07-16 local M2 owner hardening: controlled GET failures, tenant-scoped create/status queries, 105 tests, lint, typecheck, and build passed
+latest_validation: 2026-07-16 M2 owner hardening: 105 tests/lint/typecheck/build passed; protected Preview Ready; no public invoice route added
 stack: Next.js + TS + Tailwind + Postgres + Prisma + Auth.js (Google OAuth) + Vercel
 vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linked to github.com/crh/dibayar)
 
 ## now
-current_milestone: M2 — Invoice (owner list/detail/status/PDF hardened locally; recipient public share link remains approval-gated)
+current_milestone: M2 — Invoice (owner list/detail/status/PDF hardened and protected-Preview deployed; recipient public share link remains approval-gated)
 active_branch: hermes/m2-invoice
-latest_feature_commit: pending review — owner-only GET error handling and tenant-scoped create/status hardening; follows 2cc00c7 owner PDF
-remote_feature_branch: origin/hermes/m2-invoice remains at 2cc00c7 pending reviewed hardening push
+latest_feature_commit: 9794d02 — owner-only GET error handling and tenant-scoped create/status hardening; follows 2cc00c7 owner PDF
+remote_feature_branch: origin/hermes/m2-invoice includes 9794d02
 completed_milestones:
   - Phase 0 discovery closed
   - M0 bootstrap and protected production deployment complete
   - M1 auth + deal pipeline accepted on protected Preview
 
 today_tasks_max_3:
-  - Review, commit, and push owner-only invoice hardening to protected Preview
+  - Owner-only invoice hardening completed and deployed to protected Preview
   - Keep recipient invoice routes unimplemented until explicit public-access approval
   - Keep Production protected and all phase transitions approval-gated
 open_blockers: recipient-facing share links require a public-access decision; protected Preview prevents external recipients from opening a shared URL
@@ -65,7 +65,7 @@ wtp_signals: 0
 
 ## latest_deployment_status
 project_linkage: confirmed by Chris; Google Cloud OAuth client managed through logged-in Chrome MCP session
-preview: M1 Ready at https://dibayar-15tw2d2jd-kenji-iwakura.vercel.app; M2 Ready from 2cc00c7 at https://dibayar-rldjfcxje-kenji-iwakura.vercel.app with stable alias https://dibayar-git-hermes-m2-invoice-kenji-iwakura.vercel.app; Vercel Authentication protected; M2 uses its isolated Neon branch, has both approved migrations, and Google OAuth persists User/Account successfully
+preview: M1 Ready at https://dibayar-15tw2d2jd-kenji-iwakura.vercel.app; M2 owner hardening feature commit 9794d02 Ready at https://dibayar-prkn63wl4-kenji-iwakura.vercel.app with stable alias https://dibayar-git-hermes-m2-invoice-kenji-iwakura.vercel.app; Vercel Authentication protected; M2 uses its isolated Neon branch and approved migrations
 production: URL reachable; Vercel Authentication protected; no M1/M2 deployment claimed
 smoke: protected M2 Preview Google OAuth signed in as Kenji. Authenticated deal/invoice creation returned 201; list/detail returned 200; missing invoice returned 404; DRAFT→SENT returned 200 and rendered correctly in the mobile detail UI. Owner PDF returned 200 application/pdf, attachment filename, %PDF- signature, and 2,769 bytes. Labeled temporary data was removed; final temporary-deal/invoice/sequence counts were 0/0/0.
 

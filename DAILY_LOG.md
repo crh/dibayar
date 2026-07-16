@@ -126,4 +126,4 @@
 - Tenant hardening: invoice creation now queries the source deal by `id` and `userId` together, and status updates retain `userId` in both the read and write predicates.
 - TDD evidence: three GET error regressions and two tenant-query regressions were observed failing before implementation, then passed after the minimal changes.
 - Quality gates: targeted invoice tests passed (39); full Vitest passed (18 files, 105 tests); lint, typecheck, production build, diff check, route inventory, and added-line security scan passed. Build exposes only authenticated invoice routes: `/api/invoices`, `/api/invoices/[id]`, and `/api/invoices/[id]/pdf`.
-- Deployment boundary: local hardening is ready for commit/review. Production remains protected and untouched; public invoice access remains blocked pending explicit approval.
+- Deployment: commit `9794d02` was pushed to `origin/hermes/m2-invoice`; its Git-triggered protected Preview became Ready at `https://dibayar-prkn63wl4-kenji-iwakura.vercel.app` and owns the stable M2 alias. Production remains protected and untouched; public invoice access remains blocked pending explicit approval.
