@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import type { DealRecord } from "@/lib/deals";
+import type { InvoiceRecord } from "@/lib/invoices";
 
 const PIPELINE_STAGES = [
   { value: "MASUK", label: "Masuk" },
@@ -15,6 +16,7 @@ const PIPELINE_STAGES = [
 
 type DashboardClientProps = {
   initialDeals: DealRecord[];
+  initialInvoices?: InvoiceRecord[];
   userName?: string | null;
 };
 
@@ -53,8 +55,24 @@ function formatDeadline(value: Date | null) {
   }).format(new Date(value));
 }
 
-export default function DashboardClient({ initialDeals, userName }: DashboardClientProps) {
+const INVOICE_STATUS_LABEL: Record<InvoiceRecord["status"], string> = {
+  DRAFT: "Draft",
+  SENT: "Terkirim",
+  DUE: "Jatuh tempo",
+  OVERDUE: "Terlambat",
+  PAID: "Lunas",
+};
+
+function statusClass(status: InvoiceRecord["status"]) {
+  if (status === "PAID") return "bg-paid/15 text-paid";
+  if (status === "OVERDUE") return "bg-overdue/10 text-overdue";
+  if (status === "DUE") return "bg-due/20 text-ink";
+  return "bg-bg text-muted";
+}
+
+export default function DashboardClient({ initialDeals, initialInvoices = [], userName }: DashboardClientProps) {
   const [deals, setDeals] = useState(initialDeals);
+  const [invoices, setInvoices] = useState(initialInvoices);
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -81,6 +99,26 @@ export default function DashboardClient({ initialDeals, userName }: DashboardCli
       setForm(EMPTY_FORM);
     } catch (submissionError) {
       setError(submissionError instanceof Error ? submissionError.message : "Deal belum bisa disimpan.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleCreateInvoice(dealId: string) {
+    setError(null);
+    setIsSaving(true);
+
+    try {
+      const response = await fetch("/api/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dealId, withholdingTaxType: "NONE" }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Invoice belum bisa dibuat.");
+      setInvoices((current) => [payload.invoice, ...current]);
+    } catch (submissionError) {
+      setError(submissionError instanceof Error ? submissionError.message : "Invoice belum bisa dibuat.");
     } finally {
       setIsSaving(false);
     }
@@ -202,6 +240,16 @@ export default function DashboardClient({ initialDeals, userName }: DashboardCli
                       <h4 className="font-semibold text-ink">{deal.brand}</h4>
                       <p className="mt-1 text-[15px] font-bold tabular-nums text-primary">{formatIdr(deal.feeIdr)}</p>
                       <p className="mt-1 text-[12px] text-muted">{formatDeadline(deal.deadline)}</p>
+                      {deal.status === "INVOICE" && !invoices.some((invoice) => invoice.dealId === deal.id) ? (
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() => handleCreateInvoice(deal.id)}
+                          className="mt-3 inline-flex h-9 items-center rounded-full bg-primary px-3 text-[13px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
+                        >
+                          {isSaving ? "Membuat…" : "Buat invoice"}
+                        </button>
+                      ) : null}
                     </article>
                   )) : (
                     <p className="text-[13px] text-muted">Belum ada deal</p>
@@ -211,6 +259,39 @@ export default function DashboardClient({ initialDeals, userName }: DashboardCli
             );
           })}
         </div>
+      </section>
+
+      <section aria-labelledby="invoice-saya" className="flex flex-col gap-4">
+        <div>
+          <h2 id="invoice-saya" className="text-[20px] font-bold text-ink">Invoice saya</h2>
+          <p className="text-[13px] text-muted">Buat dari deal tahap Invoice, lalu pantau sampai lunas.</p>
+        </div>
+        {invoices.length ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {invoices.map((invoice) => (
+              <Link
+                key={invoice.id}
+                href={`/dashboard/invoices/${invoice.id}`}
+                className="rounded-2xl border border-line bg-surface p-4 shadow-sm transition-colors hover:border-primary"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
+                    <p className="mt-1 text-[18px] font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr)}</p>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${statusClass(invoice.status)}`}>
+                    {INVOICE_STATUS_LABEL[invoice.status]}
+                  </span>
+                </div>
+                <p className="mt-3 text-[13px] text-muted">{formatDeadline(invoice.dueDate)}</p>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-2xl border border-dashed border-line bg-surface p-4 text-[13px] text-muted">
+            Belum ada invoice. Pindahkan deal ke tahap Invoice, lalu buat drafnya dari kartu deal.
+          </p>
+        )}
       </section>
     </main>
   );

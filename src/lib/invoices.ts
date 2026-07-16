@@ -66,6 +66,44 @@ export async function getOwnedInvoice(db: InvoiceReadDb, id: string, userId: str
   return db.invoice.findFirst({ where: { id, userId } });
 }
 
+export type InvoiceStatusDb = {
+  invoice: {
+    findFirst(args: { where: { id: string; userId: string } }): Promise<InvoiceRecord | null>;
+    update(args: { where: { id: string }; data: { status: InvoiceStatus } }): Promise<InvoiceRecord>;
+  };
+};
+
+const ALLOWED_STATUS_TRANSITIONS: Record<InvoiceStatus, readonly InvoiceStatus[]> = {
+  DRAFT: ["SENT"],
+  SENT: ["DUE", "OVERDUE", "PAID"],
+  DUE: ["OVERDUE", "PAID"],
+  OVERDUE: ["PAID"],
+  PAID: [],
+};
+
+export type UpdateInvoiceStatusResult =
+  | { kind: "updated"; invoice: InvoiceRecord }
+  | { kind: "not-found" }
+  | { kind: "invalid-transition" };
+
+export async function updateInvoiceStatus(
+  db: InvoiceStatusDb,
+  id: string,
+  userId: string,
+  nextStatus: InvoiceStatus,
+): Promise<UpdateInvoiceStatusResult> {
+  const invoice = await db.invoice.findFirst({ where: { id, userId } });
+  if (!invoice) return { kind: "not-found" };
+  if (!ALLOWED_STATUS_TRANSITIONS[invoice.status].includes(nextStatus)) {
+    return { kind: "invalid-transition" };
+  }
+
+  return {
+    kind: "updated",
+    invoice: await db.invoice.update({ where: { id }, data: { status: nextStatus } }),
+  };
+}
+
 // Returns null (not a throw) when the deal is missing or not owned by userId, so callers can respond 404 uniformly.
 export async function createInvoice(db: InvoiceCreateDb, userId: string, input: unknown) {
   const validated = invoiceCreateSchema.parse(input);

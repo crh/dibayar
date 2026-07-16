@@ -15,7 +15,7 @@ describe("DashboardClient", () => {
     expect(screen.getByRole("button", { name: "Simpan deal" })).toBeDefined();
   });
 
-  it("renders an existing deal in its pipeline stage", () => {
+  it("renders an existing deal in its pipeline stage", async () => {
     render(
       <DashboardClient
         userName="Chris"
@@ -41,5 +41,32 @@ describe("DashboardClient", () => {
     expect(screen.getByText("Rp1.500.000")).toBeDefined();
     const negoStage = screen.getByRole("region", { name: "Nego" });
     expect(negoStage.textContent).toContain("Kopi Nusantara");
+  });
+
+  it("renders an invoice card with its number, amount, and status", () => {
+    render(
+      <DashboardClient
+        initialDeals={[]}
+        initialInvoices={[
+          {
+            id: "invoice-1",
+            userId: "user-1",
+            dealId: "deal-1",
+            number: "INV/2026/07/001",
+            subtotalIdr: 1500000,
+            withholdingTaxType: "PPH23",
+            status: "DRAFT",
+            dueDate: new Date("2026-07-31T00:00:00.000Z"),
+            createdAt: new Date("2026-07-15T00:00:00.000Z"),
+            updatedAt: new Date("2026-07-15T00:00:00.000Z"),
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Invoice saya" })).toBeDefined();
+    expect(screen.getByText("INV/2026/07/001")).toBeDefined();
+    expect(screen.getByText("Draft")).toBeDefined();
+    expect(screen.getByRole("link", { name: /INV\/2026\/07\/001/ }).getAttribute("href")).toBe("/dashboard/invoices/invoice-1");
   });
 });

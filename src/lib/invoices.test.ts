@@ -3,9 +3,11 @@ import {
   createInvoice,
   getOwnedInvoice,
   listInvoices,
+  updateInvoiceStatus,
   type InvoiceCreateDb,
   type InvoiceReadDb,
   type InvoiceRecord,
+  type InvoiceStatusDb,
   type InvoiceTransactionClient,
 } from "./invoices";
 
@@ -255,5 +257,44 @@ describe("getOwnedInvoice", () => {
     const invoice = await getOwnedInvoice(db, "invoice-x", "user-1");
 
     expect(invoice).toBeNull();
+  });
+});
+
+describe("updateInvoiceStatus", () => {
+  function makeStatusDb(invoice: InvoiceRecord | null) {
+    const findFirst = vi.fn(async () => invoice);
+    const update = vi.fn(async ({ data }: { data: { status: InvoiceRecord["status"] } }) => ({
+      ...existingInvoice,
+      status: data.status,
+    }));
+    return { db: { invoice: { findFirst, update } } as unknown as InvoiceStatusDb, findFirst, update };
+  }
+
+  it("updates an owned draft invoice to SENT", async () => {
+    const { db, findFirst, update } = makeStatusDb(existingInvoice);
+
+    const result = await updateInvoiceStatus(db, "invoice-1", "user-1", "SENT");
+
+    expect(result).toMatchObject({ kind: "updated", invoice: { status: "SENT" } });
+    expect(findFirst).toHaveBeenCalledWith({ where: { id: "invoice-1", userId: "user-1" } });
+    expect(update).toHaveBeenCalledWith({ where: { id: "invoice-1" }, data: { status: "SENT" } });
+  });
+
+  it("rejects an invalid DRAFT to PAID transition without writing", async () => {
+    const { db, update } = makeStatusDb(existingInvoice);
+
+    const result = await updateInvoiceStatus(db, "invoice-1", "user-1", "PAID");
+
+    expect(result).toEqual({ kind: "invalid-transition" });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("returns not-found without writing when the invoice is missing or foreign", async () => {
+    const { db, update } = makeStatusDb(null);
+
+    const result = await updateInvoiceStatus(db, "invoice-x", "user-1", "SENT");
+
+    expect(result).toEqual({ kind: "not-found" });
+    expect(update).not.toHaveBeenCalled();
   });
 });
