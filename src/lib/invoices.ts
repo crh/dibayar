@@ -39,7 +39,7 @@ export type InvoiceTransactionClient = InvoiceSequenceQueryClient & {
 
 export type InvoiceCreateDb = {
   deal: {
-    findUnique(args: { where: { id: string } }): Promise<OwnedDeal | null>;
+    findFirst(args: { where: { id: string; userId: string } }): Promise<OwnedDeal | null>;
   };
   $transaction<T>(fn: (tx: InvoiceTransactionClient) => Promise<T>): Promise<T>;
 };
@@ -69,7 +69,7 @@ export async function getOwnedInvoice(db: InvoiceReadDb, id: string, userId: str
 export type InvoiceStatusDb = {
   invoice: {
     findFirst(args: { where: { id: string; userId: string } }): Promise<InvoiceRecord | null>;
-    update(args: { where: { id: string }; data: { status: InvoiceStatus } }): Promise<InvoiceRecord>;
+    update(args: { where: { id: string; userId: string }; data: { status: InvoiceStatus } }): Promise<InvoiceRecord>;
   };
 };
 
@@ -100,7 +100,7 @@ export async function updateInvoiceStatus(
 
   return {
     kind: "updated",
-    invoice: await db.invoice.update({ where: { id }, data: { status: nextStatus } }),
+    invoice: await db.invoice.update({ where: { id, userId }, data: { status: nextStatus } }),
   };
 }
 
@@ -108,8 +108,8 @@ export async function updateInvoiceStatus(
 export async function createInvoice(db: InvoiceCreateDb, userId: string, input: unknown) {
   const validated = invoiceCreateSchema.parse(input);
 
-  const deal = await db.deal.findUnique({ where: { id: validated.dealId } });
-  if (!deal || deal.userId !== userId) return null;
+  const deal = await db.deal.findFirst({ where: { id: validated.dealId, userId } });
+  if (!deal) return null;
 
   return db.$transaction(async (tx) => {
     const number = await nextInvoiceNumber(createInvoiceSequenceDb(tx), userId);

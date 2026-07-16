@@ -15,15 +15,19 @@ const statusDb = prisma as unknown as InvoiceStatusDb;
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
-  }
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
+    }
 
-  const { id } = await context.params;
-  const invoice = await getOwnedInvoice(readDb, id, session.user.id);
-  if (!invoice) return NextResponse.json({ error: "Invoice tidak ditemukan." }, { status: 404 });
-  return NextResponse.json({ invoice });
+    const { id } = await context.params;
+    const invoice = await getOwnedInvoice(readDb, id, session.user.id);
+    if (!invoice) return NextResponse.json({ error: "Invoice tidak ditemukan." }, { status: 404 });
+    return NextResponse.json({ invoice });
+  } catch {
+    return NextResponse.json({ error: "Invoice belum bisa dimuat. Coba lagi." }, { status: 500 });
+  }
 }
 
 export async function PATCH(request: Request, context: RouteContext) {

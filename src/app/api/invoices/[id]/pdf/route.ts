@@ -19,29 +19,33 @@ function safeFileName(invoiceNumber: string) {
 }
 
 export async function GET(_request: Request, context: PdfRouteContext) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
+    }
+
+    const { id } = await context.params;
+    const invoice = await getOwnedInvoice(invoiceDb, id, session.user.id);
+    if (!invoice) {
+      return NextResponse.json({ error: "Invoice tidak ditemukan." }, { status: 404 });
+    }
+
+    const deal = await getOwnedDeal(dealDb, invoice.dealId, session.user.id);
+    const document = createElement(InvoicePdf, { invoice, deal }) as unknown as ReactElement<DocumentProps>;
+    const pdf = await renderToBuffer(document);
+    const pdfBytes = new Uint8Array(pdf.length);
+    pdfBytes.set(pdf);
+    const fileName = `${safeFileName(invoice.number)}.pdf`;
+
+    return new NextResponse(pdfBytes, {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Cache-Control": "private, no-store",
+      },
+    });
+  } catch {
+    return NextResponse.json({ error: "PDF invoice belum bisa dibuat. Coba lagi." }, { status: 500 });
   }
-
-  const { id } = await context.params;
-  const invoice = await getOwnedInvoice(invoiceDb, id, session.user.id);
-  if (!invoice) {
-    return NextResponse.json({ error: "Invoice tidak ditemukan." }, { status: 404 });
-  }
-
-  const deal = await getOwnedDeal(dealDb, invoice.dealId, session.user.id);
-  const document = createElement(InvoicePdf, { invoice, deal }) as unknown as ReactElement<DocumentProps>;
-  const pdf = await renderToBuffer(document);
-  const pdfBytes = new Uint8Array(pdf.length);
-  pdfBytes.set(pdf);
-  const fileName = `${safeFileName(invoice.number)}.pdf`;
-
-  return new NextResponse(pdfBytes, {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${fileName}"`,
-      "Cache-Control": "private, no-store",
-    },
-  });
 }

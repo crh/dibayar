@@ -8,13 +8,17 @@ const db = prisma as unknown as InvoiceCreateDb;
 const readDb = prisma as unknown as InvoiceReadDb;
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
-  }
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
+    }
 
-  const invoices = await listInvoices(readDb, session.user.id);
-  return NextResponse.json({ invoices });
+    const invoices = await listInvoices(readDb, session.user.id);
+    return NextResponse.json({ invoices });
+  } catch {
+    return NextResponse.json({ error: "Invoice belum bisa dimuat. Coba lagi." }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {

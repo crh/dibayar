@@ -78,6 +78,16 @@ describe("GET /api/invoices/[id]", () => {
     expect(mockedGetOwnedInvoice).toHaveBeenCalledWith(expect.anything(), "invoice-1", "user-1");
   });
 
+  it("mengembalikan 500 terkontrol saat detail invoice gagal dimuat", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedGetOwnedInvoice.mockRejectedValue(new Error("database details must not leak"));
+
+    const response = await GET(new Request("http://localhost/api/invoices/invoice-1"), makeContext("invoice-1"));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Invoice belum bisa dimuat. Coba lagi." });
+  });
+
   it("menolak perubahan status tanpa sesi login", async () => {
     mockedAuth.mockResolvedValue(null as never);
 

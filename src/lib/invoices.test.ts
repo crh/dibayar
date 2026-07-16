@@ -43,7 +43,7 @@ function makeDb(options: {
       })),
   );
 
-  const dealFindUnique = vi.fn(async () => deal);
+  const dealFindFirst = vi.fn(async () => deal);
 
   // $queryRaw is Prisma's tagged-template overload returning PrismaPromise<T>;
   // a plain vi.fn() can't structurally satisfy that brand, so cast at this
@@ -54,7 +54,7 @@ function makeDb(options: {
   } as unknown as InvoiceTransactionClient;
 
   const db: InvoiceCreateDb = {
-    deal: { findUnique: dealFindUnique },
+    deal: { findFirst: dealFindFirst },
     $transaction: vi.fn(async (fn) => {
       if (rejectTransactionAfterQuery) {
         await queryRaw();
@@ -64,17 +64,23 @@ function makeDb(options: {
     }),
   };
 
-  return { db, dealFindUnique, queryRaw, invoiceCreate };
+  return { db, dealFindFirst, queryRaw, invoiceCreate };
 }
 
 describe("createInvoice", () => {
-  it("rejects when the deal belongs to another user without leaking its data", async () => {
-    const { db, invoiceCreate } = makeDb({ deal: { ...ownedDeal, userId: "user-2" } });
+  it("queries the deal by ID and owner together instead of fetching another tenant's record", async () => {
+    const findFirst = vi.fn(async () => null);
+    const findUnique = vi.fn(async () => ({ ...ownedDeal, userId: "user-2" }));
+    const db = {
+      deal: { findFirst, findUnique },
+      $transaction: vi.fn(),
+    } as unknown as InvoiceCreateDb;
 
     const result = await createInvoice(db, "user-1", { dealId: "deal-1" });
 
     expect(result).toBeNull();
-    expect(invoiceCreate).not.toHaveBeenCalled();
+    expect(findFirst).toHaveBeenCalledWith({ where: { id: "deal-1", userId: "user-1" } });
+    expect(findUnique).not.toHaveBeenCalled();
   });
 
   it("rejects when the deal does not exist", async () => {
@@ -87,10 +93,10 @@ describe("createInvoice", () => {
   });
 
   it("rejects invalid input before touching the database", async () => {
-    const { db, dealFindUnique } = makeDb({});
+    const { db, dealFindFirst } = makeDb({});
 
     await expect(createInvoice(db, "user-1", {})).rejects.toThrow();
-    expect(dealFindUnique).not.toHaveBeenCalled();
+    expect(dealFindFirst).not.toHaveBeenCalled();
   });
 
   it("rejects an unknown withholding tax type", async () => {
@@ -277,7 +283,10 @@ describe("updateInvoiceStatus", () => {
 
     expect(result).toMatchObject({ kind: "updated", invoice: { status: "SENT" } });
     expect(findFirst).toHaveBeenCalledWith({ where: { id: "invoice-1", userId: "user-1" } });
-    expect(update).toHaveBeenCalledWith({ where: { id: "invoice-1" }, data: { status: "SENT" } });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "invoice-1", userId: "user-1" },
+      data: { status: "SENT" },
+    });
   });
 
   it("rejects an invalid DRAFT to PAID transition without writing", async () => {

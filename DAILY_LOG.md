@@ -118,3 +118,12 @@
 - Deployment: protected Git-triggered M2 Preview for `b8fe0ae` was Ready in 34 seconds at `https://dibayar-8m9gkr5mq-kenji-iwakura.vercel.app`; the stable M2 branch alias remains Vercel-Authentication protected.
 - Runtime smoke: authenticated Preview `POST /api/deals` and `POST /api/invoices` returned 201. `GET /api/invoices` returned 200 and included the created invoice; `GET /api/invoices/:id` returned 200 for it; a missing ID returned 404 with `Invoice tidak ditemukan.` The invoice was `INV/2026/07/001` and retained `PPH23`.
 - Cleanup: explicitly labeled deal/invoice rows were deleted from `preview/hermes/m2-invoice`. A second targeted sequence cleanup removed the unused monthly sequence. Final temporary deal/invoice/sequence counts: 0/0/0. Production was untouched.
+
+## Day 1 M2 owner invoice hardening — 2026-07-16
+
+- Scope: retained authenticated owner-only invoice list/detail/PDF routes; no recipient-share token, public invoice route, schema change, migration, credential, or Production change was added.
+- Controlled failures: invoice list/detail GET routes now convert unexpected auth/database failures into a stable Bahasa `500` response; owner PDF GET converts lookup/render failures into a separate stable `500` response. Internal exception details are not returned.
+- Tenant hardening: invoice creation now queries the source deal by `id` and `userId` together, and status updates retain `userId` in both the read and write predicates.
+- TDD evidence: three GET error regressions and two tenant-query regressions were observed failing before implementation, then passed after the minimal changes.
+- Quality gates: targeted invoice tests passed (39); full Vitest passed (18 files, 105 tests); lint, typecheck, production build, diff check, route inventory, and added-line security scan passed. Build exposes only authenticated invoice routes: `/api/invoices`, `/api/invoices/[id]`, and `/api/invoices/[id]/pdf`.
+- Deployment boundary: local hardening is ready for commit/review. Production remains protected and untouched; public invoice access remains blocked pending explicit approval.

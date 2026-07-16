@@ -81,4 +81,16 @@ describe("GET /api/invoices/[id]/pdf", () => {
     expect(await response.text()).toBe("%PDF-1.7 test");
     expect(mockedRenderToBuffer).toHaveBeenCalledOnce();
   });
+
+  it("returns a controlled 500 when the owned PDF cannot be generated", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedGetOwnedInvoice.mockResolvedValue(invoice);
+    mockedGetOwnedDeal.mockResolvedValue(deal);
+    mockedRenderToBuffer.mockRejectedValue(new Error("renderer details must not leak"));
+
+    const response = await GET(new Request("http://localhost/api/invoices/invoice-1/pdf"), context);
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "PDF invoice belum bisa dibuat. Coba lagi." });
+  });
 });

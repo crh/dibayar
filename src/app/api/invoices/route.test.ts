@@ -78,6 +78,16 @@ describe("GET /api/invoices", () => {
     ]);
     expect(mockedListInvoices).toHaveBeenCalledWith(expect.anything(), "user-1");
   });
+
+  it("mengembalikan 500 terkontrol saat daftar invoice gagal dimuat", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedListInvoices.mockRejectedValue(new Error("database details must not leak"));
+
+    const response = await GET();
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Invoice belum bisa dimuat. Coba lagi." });
+  });
 });
 
 describe("POST /api/invoices", () => {
