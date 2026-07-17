@@ -18,25 +18,25 @@ repo_url: git@github.com:crh/dibayar.git
 prod_url: https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/
 last_deploy: 2026-07-16 Git-triggered protected M2 Preview for feature commit 9794d02; Ready with the stable M2 branch alias
 build_status: green
-latest_validation: 2026-07-16 M2 owner hardening: 105 tests/lint/typecheck/build passed; protected Preview Ready; no public invoice route added
+latest_validation: 2026-07-17 Task C pre-apply checkpoint: 111 tests/lint/typecheck/build/prisma validate+generate passed locally; commit 067593c not deployed
 stack: Next.js + TS + Tailwind + Postgres + Prisma + Auth.js (Google OAuth) + Vercel
 vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linked to github.com/crh/dibayar)
 
 ## now
-current_milestone: M2 — Invoice (owner list/detail/status/PDF hardened and protected-Preview deployed; recipient public share link remains approval-gated)
+current_milestone: M2 — Invoice (owner list/detail/status/PDF hardened and protected-Preview deployed; audit-remediation Tasks A/B done; Task C deal-deletion hardening code+migration generated, locally verified, NOT applied/deployed)
 active_branch: hermes/m2-invoice
-latest_feature_commit: 9794d02 — owner-only GET error handling and tenant-scoped create/status hardening; follows 2cc00c7 owner PDF
-remote_feature_branch: origin/hermes/m2-invoice includes 9794d02
+latest_feature_commit: 067593c fix(deals): preserve invoiced records — local only, not pushed, not deployed
+remote_feature_branch: origin/hermes/m2-invoice includes 9794d02 (067593c and docs commits a8f9f9c/a113d5d/0f16cf7 are local-only, unpushed)
 completed_milestones:
   - Phase 0 discovery closed
   - M0 bootstrap and protected production deployment complete
   - M1 auth + deal pipeline accepted on protected Preview
 
 today_tasks_max_3:
-  - Owner-only invoice hardening completed and deployed to protected Preview
-  - Keep recipient invoice routes unimplemented until explicit public-access approval
-  - Keep Production protected and all phase transitions approval-gated
-open_blockers: recipient-facing share links require a public-access decision; protected Preview prevents external recipients from opening a shared URL
+  - Task A: evidence-chain repair (docs-only) — done
+  - Task B: rubric/checklist amendments (docs-only) — done
+  - Task C1-C3: Invoice.deal FK Restrict + 409 owner-facing block on invoiced-deal deletion; migration generated; code committed locally; migration apply and Preview smoke explicitly pending Chris approval — done up to that gate
+open_blockers: Task C migration apply + protected M2 Preview runtime smoke require explicit Chris approval before proceeding; recipient-facing share links still require a separate public-access decision; Production untouched
 
 ## recent_signal_findings
 - No external signal check recorded; this run was limited to M2 implementation and local verification.
@@ -46,6 +46,7 @@ open_blockers: recipient-facing share links require a public-access decision; pr
 (empty)
 
 ## decisions_last_3_days
+- 2026-07-17: Task C hardens deal deletion so financial/tax records survive: `Invoice.deal` FK changed from `onDelete: Cascade` to `Restrict` in `prisma/schema.prisma`; `deleteDeal` (src/lib/deals.ts) now returns `{kind: "deleted"|"not-found"|"has-invoices"}`, narrowly catching only `Prisma.PrismaClientKnownRequestError` code `P2003` (the sole FK restricting Deal deletion) and rethrowing anything else; `DELETE /api/deals/[id]` returns 409 with exact Bahasa copy `Deal ini punya invoice, jadi belum bisa dihapus.` for invoiced deals, 204 otherwise, 404/401 unchanged. TDD: RED confirmed (4 failing assertions) before the code change, GREEN after (11/11 targeted, 111/111 full suite). Migration `prisma/migrations/20260717060000_invoice_deal_restrict_delete` was hand-written then cross-checked byte-for-byte against `prisma migrate diff --script` output; NOT applied to any database. Committed locally as `067593c`; not pushed; Preview/Production untouched. Migration apply + Preview smoke pending explicit Chris approval.
 - 2026-07-17: Task A evidence-chain repair corrected `day_count` from a stale `1` to `6`, counting distinct Asia/Jakarta calendar days with recorded activity from `phase_started` 2026-07-12 through today 2026-07-17 inclusive (git-log/DAILY_LOG evidence on 12, 13, 14, 15, 16, plus this Task A documentation work on 17) — not a count of delegation runs. Also annotated the `4f531d9`→`12e8145` history-rewrite reference and reconciled SECURITY.md with verified evidence (see DAILY_LOG "Day 1 Task A — evidence-chain repair — 2026-07-17").
 - 2026-07-16: Owner invoice hardening keeps all routes authenticated, adds controlled non-leaking 500 responses to list/detail/PDF GETs, and scopes source-deal creation plus status writes by user ID. No public invoice route was added.
 - 2026-07-16: Chris granted standing autonomous milestone execution; task selection should not require prompts. Ask only for a genuine access/decision blocker; Production, public access, credentials, destructive changes, financial/legal/medical decisions remain separately gated.
@@ -54,7 +55,7 @@ open_blockers: recipient-facing share links require a public-access decision; pr
 - 2026-07-16: Commit 8faadca binds methods returned by the lazy Prisma Proxy to the actual client, fixing invoice `$transaction`; creation smoke passed on isolated protected Preview.
 
 ## approvals
-pending_from_chris: Production public-access decision
+pending_from_chris: Task C migration apply (`20260717060000_invoice_deal_restrict_delete`) to isolated M2 Preview + post-apply Preview runtime smoke; Production public-access decision
 pending_external: none
 
 granted_by_chris: standing autonomous milestone execution, code-fix, and protected Preview redeployment approval; local staging/commit review, authenticated M0 production smoke confirmation, instruction to continue interrupted M1 work, M1 documentation push, and M2 start
@@ -71,6 +72,6 @@ production: URL reachable; Vercel Authentication protected; no M1/M2 deployment 
 smoke: protected M2 Preview Google OAuth signed in as Kenji. Authenticated deal/invoice creation returned 201; list/detail returned 200; missing invoice returned 404; DRAFT→SENT returned 200 and rendered correctly in the mobile detail UI. Owner PDF returned 200 application/pdf, attachment filename, %PDF- signature, and 2,769 bytes. Labeled temporary data was removed; final temporary-deal/invoice/sequence counts were 0/0/0.
 
 ## next_3_tasks
-1. Obtain a public-access decision before building recipient-facing invoice links.
-2. After approval, implement share-token/link creation and external-recipient smoke tests.
+1. Obtain Chris approval to apply migration `20260717060000_invoice_deal_restrict_delete` to isolated M2 Preview only, then run and record the post-apply Preview runtime smoke (blocked deletion + normal deletion).
+2. Obtain a public-access decision before building recipient-facing invoice links.
 3. Keep Production protected; request a separate decision before production deployment.
