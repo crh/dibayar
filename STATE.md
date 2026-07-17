@@ -35,8 +35,8 @@ completed_milestones:
 today_tasks_max_3:
   - Task A: evidence-chain repair (docs-only) — done
   - Task B: rubric/checklist amendments (docs-only) — done
-  - Task C1-C3: Invoice.deal FK Restrict + 409 owner-facing block on invoiced-deal deletion; migration generated; code committed locally; migration apply and Preview smoke explicitly pending Chris approval — done up to that gate
-open_blockers: Task C migration apply + protected M2 Preview runtime smoke require explicit Chris approval before proceeding; recipient-facing share links still require a separate public-access decision; Production untouched
+  - Task C1-C3: Invoice.deal FK Restrict + 409 owner-facing block on invoiced-deal deletion; migration generated; code committed locally; Chris approved isolated-Preview migration apply + protected redeploy + authenticated smoke (relayed via Hermes 2026-07-17) — execution still pending, blocked on repeating the SHA-256 fingerprint gate then applying the migration
+open_blockers: Task C approval is granted but not yet executed — fingerprint gate must be repeated, then migration apply to `preview/hermes/m2-invoice`, then push/redeploy protected M2 Preview, then authenticated smoke, all still to be done; recipient-facing share links still require a separate public-access decision; Production untouched
 
 ## recent_signal_findings
 - No external signal check recorded; this run was limited to M2 implementation and local verification.
@@ -46,6 +46,7 @@ open_blockers: Task C migration apply + protected M2 Preview runtime smoke requi
 (empty)
 
 ## decisions_last_3_days
+- 2026-07-17: Chris approved Task C execution scope only (relayed by Hermes from the active Hermes/Chris conversation; exact Chris quote: "I approve"): apply migration `20260717060000_invoice_deal_restrict_delete` to isolated Neon branch `preview/hermes/m2-invoice` only, after repeating the SHA-256 fingerprint gate, then push/redeploy protected M2 Preview and run authenticated smoke. Explicitly excluded from this approval: Production and any public/recipient-facing access change, both of which remain pending. This docs-only run did not witness the approval conversation directly, did not execute the migration, push, or redeploy, and made no source/schema/migration change.
 - 2026-07-17: Task C hardens deal deletion so financial/tax records survive: `Invoice.deal` FK changed from `onDelete: Cascade` to `Restrict` in `prisma/schema.prisma`; `deleteDeal` (src/lib/deals.ts) now returns `{kind: "deleted"|"not-found"|"has-invoices"}`, narrowly catching only `Prisma.PrismaClientKnownRequestError` code `P2003` (the sole FK restricting Deal deletion) and rethrowing anything else; `DELETE /api/deals/[id]` returns 409 with exact Bahasa copy `Deal ini punya invoice, jadi belum bisa dihapus.` for invoiced deals, 204 otherwise, 404/401 unchanged. TDD: RED confirmed (4 failing assertions) before the code change, GREEN after (11/11 targeted, 111/111 full suite). Migration `prisma/migrations/20260717060000_invoice_deal_restrict_delete` was hand-written then cross-checked byte-for-byte against `prisma migrate diff --script` output; NOT applied to any database. Committed locally as `067593c`; not pushed; Preview/Production untouched. Migration apply + Preview smoke pending explicit Chris approval.
 - 2026-07-17: Task A evidence-chain repair corrected `day_count` from a stale `1` to `6`, counting distinct Asia/Jakarta calendar days with recorded activity from `phase_started` 2026-07-12 through today 2026-07-17 inclusive (git-log/DAILY_LOG evidence on 12, 13, 14, 15, 16, plus this Task A documentation work on 17) — not a count of delegation runs. Also annotated the `4f531d9`→`12e8145` history-rewrite reference and reconciled SECURITY.md with verified evidence (see DAILY_LOG "Day 1 Task A — evidence-chain repair — 2026-07-17").
 - 2026-07-16: Owner invoice hardening keeps all routes authenticated, adds controlled non-leaking 500 responses to list/detail/PDF GETs, and scopes source-deal creation plus status writes by user ID. No public invoice route was added.
@@ -55,10 +56,10 @@ open_blockers: Task C migration apply + protected M2 Preview runtime smoke requi
 - 2026-07-16: Commit 8faadca binds methods returned by the lazy Prisma Proxy to the actual client, fixing invoice `$transaction`; creation smoke passed on isolated protected Preview.
 
 ## approvals
-pending_from_chris: Task C migration apply (`20260717060000_invoice_deal_restrict_delete`) to isolated M2 Preview + post-apply Preview runtime smoke; Production public-access decision
+pending_from_chris: Production public-access decision
 pending_external: none
 
-granted_by_chris: standing autonomous milestone execution, code-fix, and protected Preview redeployment approval; local staging/commit review, authenticated M0 production smoke confirmation, instruction to continue interrupted M1 work, M1 documentation push, and M2 start
+granted_by_chris: standing autonomous milestone execution, code-fix, and protected Preview redeployment approval; local staging/commit review, authenticated M0 production smoke confirmation, instruction to continue interrupted M1 work, M1 documentation push, and M2 start; Task C migration `20260717060000_invoice_deal_restrict_delete` apply to isolated Neon branch `preview/hermes/m2-invoice` only (after repeating the SHA-256 fingerprint gate), then push/redeploy protected M2 Preview and authenticated smoke — Production and public-access explicitly excluded; relayed by Hermes 2026-07-17 ("I approve"); execution not yet performed
 
 ## metrics (phase 2+ only)
 users_shown: 0
@@ -72,6 +73,6 @@ production: URL reachable; Vercel Authentication protected; no M1/M2 deployment 
 smoke: protected M2 Preview Google OAuth signed in as Kenji. Authenticated deal/invoice creation returned 201; list/detail returned 200; missing invoice returned 404; DRAFT→SENT returned 200 and rendered correctly in the mobile detail UI. Owner PDF returned 200 application/pdf, attachment filename, %PDF- signature, and 2,769 bytes. Labeled temporary data was removed; final temporary-deal/invoice/sequence counts were 0/0/0.
 
 ## next_3_tasks
-1. Obtain Chris approval to apply migration `20260717060000_invoice_deal_restrict_delete` to isolated M2 Preview only, then run and record the post-apply Preview runtime smoke (blocked deletion + normal deletion).
+1. Chris approved Task C; repeat the SHA-256 fingerprint gate, then apply migration `20260717060000_invoice_deal_restrict_delete` to isolated M2 Preview only, push/redeploy protected Preview, and run/record the authenticated post-apply smoke (blocked deletion + normal deletion).
 2. Obtain a public-access decision before building recipient-facing invoice links.
 3. Keep Production protected; request a separate decision before production deployment.
