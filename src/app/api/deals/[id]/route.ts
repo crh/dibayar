@@ -54,7 +54,15 @@ export async function DELETE(_request: Request, context: RouteContext) {
   }
 
   const { id } = await context.params;
-  const deleted = await deleteDeal(db, id, session.user.id);
-  if (!deleted) return NextResponse.json({ error: "Deal tidak ditemukan." }, { status: 404 });
+  const result = await deleteDeal(db, id, session.user.id);
+  if (result.kind === "not-found") {
+    return NextResponse.json({ error: "Deal tidak ditemukan." }, { status: 404 });
+  }
+  if (result.kind === "has-invoices") {
+    return NextResponse.json(
+      { error: "Deal ini punya invoice, jadi belum bisa dihapus." },
+      { status: 409 },
+    );
+  }
   return new NextResponse(null, { status: 204 });
 }

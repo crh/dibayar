@@ -1,3 +1,4 @@
+import { Prisma } from "@/generated/prisma/client";
 import { dealInputSchema, dealPatchSchema, type DealInput, type DealPatch } from "./deal-validation";
 
 export type DealStatus = DealInput["status"];
@@ -77,8 +78,24 @@ export async function updateDeal(
   return db.deal.update({ where: { id }, data: toPatchData(validated) });
 }
 
-export async function deleteDeal(db: DealDb, id: string, userId: string) {
-  if (!(await getOwnedDeal(db, id, userId))) return false;
-  await db.deal.delete({ where: { id } });
-  return true;
+export type DeleteDealResult =
+  | { kind: "deleted" }
+  | { kind: "not-found" }
+  | { kind: "has-invoices" };
+
+// Deal.invoices carries the only FK restricting Deal deletion, so P2003 here is unambiguous.
+function isInvoiceForeignKeyRestriction(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003";
+}
+
+export async function deleteDeal(db: DealDb, id: string, userId: string): Promise<DeleteDealResult> {
+  if (!(await getOwnedDeal(db, id, userId))) return { kind: "not-found" };
+
+  try {
+    await db.deal.delete({ where: { id } });
+    return { kind: "deleted" };
+  } catch (error) {
+    if (isInvoiceForeignKeyRestriction(error)) return { kind: "has-invoices" };
+    throw error;
+  }
 }

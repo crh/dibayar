@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { Prisma } from "@/generated/prisma/client";
 import {
   createDeal,
   deleteDeal,
@@ -122,8 +123,31 @@ describe("deal repository", () => {
   it("deletes a deal only after ownership is confirmed", async () => {
     const db = makeDb([existing]);
 
-    expect(await deleteDeal(db, "deal-1", "user-2")).toBe(false);
-    expect(await deleteDeal(db, "deal-1", "user-1")).toBe(true);
+    expect(await deleteDeal(db, "deal-1", "user-2")).toEqual({ kind: "not-found" });
+    expect(await deleteDeal(db, "deal-1", "user-1")).toEqual({ kind: "deleted" });
     expect(db.deal.delete).toHaveBeenCalledWith({ where: { id: "deal-1" } });
+  });
+
+  it("reports has-invoices when the database restricts deletion of a deal with invoices", async () => {
+    const db = makeDb([existing]);
+    db.deal.delete = vi.fn(async () => {
+      throw new Prisma.PrismaClientKnownRequestError(
+        "Foreign key constraint violated on the constraint: `Invoice_dealId_fkey`",
+        { code: "P2003", clientVersion: "7.8.0" },
+      );
+    });
+
+    const result = await deleteDeal(db, "deal-1", "user-1");
+
+    expect(result).toEqual({ kind: "has-invoices" });
+  });
+
+  it("rethrows unrelated database errors during deletion", async () => {
+    const db = makeDb([existing]);
+    db.deal.delete = vi.fn(async () => {
+      throw new Error("connection lost");
+    });
+
+    await expect(deleteDeal(db, "deal-1", "user-1")).rejects.toThrow("connection lost");
   });
 });

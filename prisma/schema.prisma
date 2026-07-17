@@ -112,7 +112,7 @@ model Invoice {
   status             InvoiceStatus      @default(DRAFT)
   dueDate            DateTime?
   user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deal               Deal               @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  deal               Deal               @relation(fields: [dealId], references: [id], onDelete: Restrict)
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
