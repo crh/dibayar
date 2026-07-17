@@ -7,13 +7,17 @@ import { prisma } from "@/lib/prisma";
 const db = prisma as unknown as DealDb;
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
-  }
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
+    }
 
-  const deals = await listDeals(db, session.user.id);
-  return NextResponse.json({ deals });
+    const deals = await listDeals(db, session.user.id);
+    return NextResponse.json({ deals });
+  } catch {
+    return NextResponse.json({ error: "Deal belum bisa dimuat. Coba lagi." }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { auth } from "@/auth";
-import { deleteDeal } from "@/lib/deals";
-import { DELETE } from "./route";
+import { deleteDeal, getOwnedDeal, type DealRecord } from "@/lib/deals";
+import { DELETE, GET } from "./route";
 
 vi.mock("@/auth", () => ({
   auth: vi.fn(),
@@ -18,11 +18,73 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 const mockedAuth = vi.mocked(auth);
+const mockedGetOwnedDeal = vi.mocked(getOwnedDeal);
 const mockedDeleteDeal = vi.mocked(deleteDeal);
 
 function makeContext(id: string) {
   return { params: Promise.resolve({ id }) };
 }
+
+const deal: DealRecord = {
+  id: "deal-1",
+  userId: "user-1",
+  brand: "Kopi Nusantara",
+  contactWa: "6281212345678",
+  scope: "3 video TikTok",
+  feeIdr: 1_500_000,
+  deadline: null,
+  paymentTerms: null,
+  status: "MASUK",
+  createdAt: new Date("2026-07-17T00:00:00.000Z"),
+  updatedAt: new Date("2026-07-17T00:00:00.000Z"),
+};
+
+describe("GET /api/deals/[id]", () => {
+  beforeEach(() => {
+    mockedAuth.mockReset();
+    mockedGetOwnedDeal.mockReset();
+  });
+
+  it("menolak permintaan tanpa sesi login", async () => {
+    mockedAuth.mockResolvedValue(null as never);
+
+    const response = await GET(new Request("http://localhost/api/deals/deal-1"), makeContext("deal-1"));
+
+    expect(response.status).toBe(401);
+    expect(mockedGetOwnedDeal).not.toHaveBeenCalled();
+  });
+
+  it("mengembalikan 404 saat deal tidak ditemukan atau bukan milik pengguna", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedGetOwnedDeal.mockResolvedValue(null);
+
+    const response = await GET(new Request("http://localhost/api/deals/deal-x"), makeContext("deal-x"));
+
+    expect(response.status).toBe(404);
+    expect((await response.json()).error).toBe("Deal tidak ditemukan.");
+  });
+
+  it("mengembalikan 200 beserta deal milik pengguna", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedGetOwnedDeal.mockResolvedValue(deal);
+
+    const response = await GET(new Request("http://localhost/api/deals/deal-1"), makeContext("deal-1"));
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).deal.id).toBe("deal-1");
+    expect(mockedGetOwnedDeal).toHaveBeenCalledWith(expect.anything(), "deal-1", "user-1");
+  });
+
+  it("mengembalikan 500 terkontrol saat detail deal gagal dimuat", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedGetOwnedDeal.mockRejectedValue(new Error("database details must not leak"));
+
+    const response = await GET(new Request("http://localhost/api/deals/deal-1"), makeContext("deal-1"));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Deal belum bisa dimuat. Coba lagi." });
+  });
+});
 
 describe("DELETE /api/deals/[id]", () => {
   beforeEach(() => {
@@ -79,5 +141,18 @@ describe("DELETE /api/deals/[id]", () => {
 
     expect(response.status).toBe(204);
     expect(mockedDeleteDeal).toHaveBeenCalledWith(expect.anything(), "deal-1", "user-1");
+  });
+
+  it("mengembalikan 500 terkontrol saat penghapusan deal gagal", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedDeleteDeal.mockRejectedValue(new Error("database details must not leak"));
+
+    const response = await DELETE(
+      new Request("http://localhost/api/deals/deal-1", { method: "DELETE" }),
+      makeContext("deal-1"),
+    );
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Deal belum bisa dihapus. Coba lagi." });
   });
 });
