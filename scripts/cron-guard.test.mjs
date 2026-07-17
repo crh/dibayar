@@ -1,7 +1,7 @@
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -332,4 +332,43 @@ test("wrapper: READY repo executes the child and propagates its nonzero exit cod
   assert.equal(result.status, 7);
   assert.match(result.stdout, /^READY/);
   assert.equal(existsSync(sentinel), true);
+});
+
+test("wrapper: READY child runs with cwd at the verified repo root, not the caller's cwd", () => {
+  const repo = setupRepo();
+  const unrelatedCwd = makeTmpDir();
+  const cwdFile = join(repo, "child-cwd.txt");
+  const result = runCli(
+    [
+      "--repo", repo,
+      "--date", DATE,
+      "--expected-branch", BRANCH,
+      "--",
+      "node", "-e", `require("fs").writeFileSync(${JSON.stringify(cwdFile)}, process.cwd())`,
+    ],
+    { cwd: unrelatedCwd },
+  );
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /^READY/);
+  assert.equal(existsSync(cwdFile), true);
+  const realRepoRoot = git(repo, ["rev-parse", "--show-toplevel"]);
+  assert.equal(readFileSync(cwdFile, "utf8"), realRepoRoot);
+  assert.notEqual(realRepoRoot, unrelatedCwd);
+});
+
+test("wrapper: --check-only combined with -- <command> is a usage error and never runs the command", () => {
+  const repo = setupRepo();
+  const sentinel = join(repo, "sentinel-ambiguous.txt");
+  const result = runCli([
+    "--repo", repo,
+    "--date", DATE,
+    "--expected-branch", BRANCH,
+    "--check-only",
+    "--",
+    "node", "-e", `require("fs").writeFileSync(${JSON.stringify(sentinel)}, "ran")`,
+  ]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /usage error/);
+  assert.match(result.stderr, /--check-only/);
+  assert.equal(existsSync(sentinel), false);
 });

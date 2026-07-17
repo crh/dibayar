@@ -187,6 +187,7 @@ export function runGuard({ repo, date, expectedBranch }) {
 
   const toplevel = runGit(repo, ["rev-parse", "--show-toplevel"]);
   const repoRoot = toplevel.ok && toplevel.stdout ? toplevel.stdout : repo;
+  meta.repoRoot = repoRoot;
 
   const branchResult = runGit(repo, ["rev-parse", "--abbrev-ref", "HEAD"]);
   const currentBranch = branchResult.ok ? branchResult.stdout : null;
@@ -316,9 +317,11 @@ function parseArgv(argv) {
     childCommand: null,
   };
   let i = 0;
+  let sawSeparator = false;
   for (; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--") {
+      sawSeparator = true;
       i++;
       break;
     }
@@ -338,6 +341,11 @@ function parseArgv(argv) {
     } else {
       throw new UsageError(`unknown argument: ${arg}`);
     }
+  }
+  if (opts.checkOnly && sawSeparator) {
+    throw new UsageError(
+      "--check-only cannot be combined with -- <command>; the command would never run, which is ambiguous",
+    );
   }
   if (!opts.checkOnly) {
     const rest = argv.slice(i);
@@ -397,7 +405,14 @@ function main(argv) {
     process.exit(0);
   }
 
-  const child = spawnSync(opts.childCommand.command, opts.childCommand.args, { stdio: "inherit" });
+  // Run the child at the verified git top-level (result.meta.repoRoot), not
+  // process.cwd(): --repo may be a subdirectory of the worktree, and even
+  // when it isn't, spawnSync defaults to the caller's cwd rather than the
+  // path the guard just verified.
+  const child = spawnSync(opts.childCommand.command, opts.childCommand.args, {
+    stdio: "inherit",
+    cwd: result.meta.repoRoot,
+  });
   if (child.error) {
     console.error(`child command failed to start: ${child.error.message}`);
     process.exit(1);
