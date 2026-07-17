@@ -14,6 +14,7 @@
 - Authenticated smoke: Chris confirmed the Dibayar title, Bahasa coming-soon content, absence of the default Next.js template, and approximately 390px mobile layout.
 - Preview deployment: Ready; the existing Vercel Neon resource `neon-dijual` is available, but Preview and Production currently resolve to the same Neon `DATABASE_URL`; do not migrate until Preview has a separate database/branch.
 - Production launch and real-user access require Chris's explicit approval.
+- M2 Preview (2026-07-17): Chris approved pushing the 8 local M2 commits (`745353e..5385f1b`, including Task D error-handling hardening and the Task E cron preflight guard) to `origin/hermes/m2-invoice`. The push triggered protected Preview `dpl_FpTHqmwmxHyxDj7p7pTU8LLFdDaz` (commit `5385f1b3601a33ea6758d3ef21315b3c63012b83`), Ready, still Vercel-Authentication protected (302 on both the immutable URL and the stable alias). Authenticated smoke confirmed `/dashboard` renders correctly with empty pipeline/invoice data; no data was created. Production and public/recipient-facing access remain untouched and still require separate approval.
 
 ## Local verification
 
