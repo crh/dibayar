@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:cron-guard": "node --test scripts/cron-guard.test.mjs",
     "postinstall": "prisma generate"
   },
   "dependencies": {
