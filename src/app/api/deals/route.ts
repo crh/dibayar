@@ -21,12 +21,12 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
-  }
-
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
+    }
+
     const deal = await createDeal(db, session.user.id, await request.json());
     return NextResponse.json({ deal }, { status: 201 });
   } catch (error) {
@@ -35,6 +35,9 @@ export async function POST(request: Request) {
         { error: "Periksa kembali data deal kamu.", fields: error.flatten().fieldErrors },
         { status: 400 },
       );
+    }
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "Periksa kembali data deal kamu." }, { status: 400 });
     }
 
     return NextResponse.json({ error: "Deal belum bisa disimpan. Coba lagi." }, { status: 500 });

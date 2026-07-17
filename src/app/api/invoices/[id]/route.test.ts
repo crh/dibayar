@@ -127,4 +127,32 @@ describe("GET /api/invoices/[id]", () => {
     expect(mockedUpdateInvoiceStatus).toHaveBeenCalledWith(expect.anything(), "invoice-1", "user-1", "SENT");
     expect((await response.json()).invoice.status).toBe("SENT");
   });
+
+  it("mengembalikan 400 saat body bukan JSON yang valid", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+
+    const response = await PATCH(
+      new Request("http://localhost/api/invoices/invoice-1", { method: "PATCH", body: "{not valid json" }),
+      makeContext("invoice-1"),
+    );
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toBe("Status invoice tidak valid.");
+    expect(mockedUpdateInvoiceStatus).not.toHaveBeenCalled();
+  });
+
+  it("mengembalikan 500 terkontrol saat auth() gagal karena masalah infrastruktur", async () => {
+    mockedAuth.mockRejectedValue(new Error("auth provider unreachable"));
+
+    const response = await PATCH(
+      new Request("http://localhost/api/invoices/invoice-1", { method: "PATCH", body: JSON.stringify({ status: "SENT" }) }),
+      makeContext("invoice-1"),
+    );
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error).toBe("Status invoice belum bisa diperbarui. Coba lagi.");
+    expect(mockedUpdateInvoiceStatus).not.toHaveBeenCalled();
+  });
 });

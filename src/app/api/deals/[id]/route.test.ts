@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { auth } from "@/auth";
-import { deleteDeal, getOwnedDeal, type DealRecord } from "@/lib/deals";
-import { DELETE, GET } from "./route";
+import { deleteDeal, getOwnedDeal, updateDeal, type DealRecord } from "@/lib/deals";
+import { DELETE, GET, PATCH } from "./route";
 
 vi.mock("@/auth", () => ({
   auth: vi.fn(),
@@ -20,9 +20,17 @@ vi.mock("@/lib/prisma", () => ({
 const mockedAuth = vi.mocked(auth);
 const mockedGetOwnedDeal = vi.mocked(getOwnedDeal);
 const mockedDeleteDeal = vi.mocked(deleteDeal);
+const mockedUpdateDeal = vi.mocked(updateDeal);
 
 function makeContext(id: string) {
   return { params: Promise.resolve({ id }) };
+}
+
+function makeMalformedPatchRequest(id: string) {
+  return new Request(`http://localhost/api/deals/${id}`, {
+    method: "PATCH",
+    body: "{not valid json",
+  });
 }
 
 const deal: DealRecord = {
@@ -86,10 +94,70 @@ describe("GET /api/deals/[id]", () => {
   });
 });
 
+describe("PATCH /api/deals/[id]", () => {
+  beforeEach(() => {
+    mockedAuth.mockReset();
+    mockedUpdateDeal.mockReset();
+  });
+
+  it("mengembalikan 400 saat body bukan JSON yang valid", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+
+    const response = await PATCH(makeMalformedPatchRequest("deal-1"), makeContext("deal-1"));
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toBe("Periksa kembali data deal kamu.");
+    expect(body.fields).toBeUndefined();
+    expect(mockedUpdateDeal).not.toHaveBeenCalled();
+  });
+
+  it("mengembalikan 500 terkontrol saat auth() gagal karena masalah infrastruktur", async () => {
+    mockedAuth.mockRejectedValue(new Error("auth provider unreachable"));
+
+    const response = await PATCH(
+      new Request("http://localhost/api/deals/deal-1", { method: "PATCH", body: JSON.stringify({ brand: "X" }) }),
+      makeContext("deal-1"),
+    );
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error).toBe("Deal belum bisa diperbarui. Coba lagi.");
+    expect(mockedUpdateDeal).not.toHaveBeenCalled();
+  });
+
+  it("memperbarui deal milik pengguna yang sedang login", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedUpdateDeal.mockResolvedValue(deal);
+
+    const response = await PATCH(
+      new Request("http://localhost/api/deals/deal-1", { method: "PATCH", body: JSON.stringify({ brand: "Kopi Baru" }) }),
+      makeContext("deal-1"),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedUpdateDeal).toHaveBeenCalledWith(expect.anything(), "deal-1", "user-1", { brand: "Kopi Baru" });
+  });
+});
+
 describe("DELETE /api/deals/[id]", () => {
   beforeEach(() => {
     mockedAuth.mockReset();
     mockedDeleteDeal.mockReset();
+  });
+
+  it("mengembalikan 500 terkontrol saat auth() gagal karena masalah infrastruktur", async () => {
+    mockedAuth.mockRejectedValue(new Error("auth provider unreachable"));
+
+    const response = await DELETE(
+      new Request("http://localhost/api/deals/deal-1", { method: "DELETE" }),
+      makeContext("deal-1"),
+    );
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error).toBe("Deal belum bisa dihapus. Coba lagi.");
+    expect(mockedDeleteDeal).not.toHaveBeenCalled();
   });
 
   it("menolak permintaan tanpa sesi login", async () => {

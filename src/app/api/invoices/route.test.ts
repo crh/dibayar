@@ -29,6 +29,13 @@ function makeRequest(body: unknown) {
   });
 }
 
+function makeMalformedRequest() {
+  return new Request("http://localhost/api/invoices", {
+    method: "POST",
+    body: "{not valid json",
+  });
+}
+
 function parseInvalidInputError(): ZodError {
   const result = invoiceCreateSchema.safeParse({});
   if (result.success) throw new Error("expected schema.safeParse to fail");
@@ -151,5 +158,28 @@ describe("POST /api/invoices", () => {
     expect(response.status).toBe(500);
     const body = await response.json();
     expect(body.error).toBe("Invoice belum bisa dibuat. Coba lagi.");
+  });
+
+  it("mengembalikan 400 saat body bukan JSON yang valid", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+
+    const response = await POST(makeMalformedRequest());
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toBe("Periksa kembali data invoice kamu.");
+    expect(body.fields).toBeUndefined();
+    expect(mockedCreateInvoice).not.toHaveBeenCalled();
+  });
+
+  it("mengembalikan 500 terkontrol saat auth() gagal karena masalah infrastruktur", async () => {
+    mockedAuth.mockRejectedValue(new Error("auth provider unreachable"));
+
+    const response = await POST(makeRequest({ dealId: "deal-1" }));
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error).toBe("Invoice belum bisa dibuat. Coba lagi.");
+    expect(mockedCreateInvoice).not.toHaveBeenCalled();
   });
 });

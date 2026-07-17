@@ -29,13 +29,13 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
-  }
-
-  const { id } = await context.params;
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
+    }
+
+    const { id } = await context.params;
     const deal = await updateDeal(db, id, session.user.id, await request.json());
     if (!deal) return NextResponse.json({ error: "Deal tidak ditemukan." }, { status: 404 });
     return NextResponse.json({ deal });
@@ -46,19 +46,22 @@ export async function PATCH(request: Request, context: RouteContext) {
         { status: 400 },
       );
     }
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "Periksa kembali data deal kamu." }, { status: 400 });
+    }
 
     return NextResponse.json({ error: "Deal belum bisa diperbarui. Coba lagi." }, { status: 500 });
   }
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
-  }
-
-  const { id } = await context.params;
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
+    }
+
+    const { id } = await context.params;
     const result = await deleteDeal(db, id, session.user.id);
     if (result.kind === "not-found") {
       return NextResponse.json({ error: "Deal tidak ditemukan." }, { status: 404 });

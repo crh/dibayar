@@ -29,6 +29,13 @@ function makeRequest(body: unknown) {
   });
 }
 
+function makeMalformedRequest() {
+  return new Request("http://localhost/api/deals", {
+    method: "POST",
+    body: "{not valid json",
+  });
+}
+
 function parseInvalidInputError(): ZodError {
   const result = dealInputSchema.safeParse({});
   if (result.success) throw new Error("expected schema.safeParse to fail");
@@ -141,5 +148,28 @@ describe("POST /api/deals", () => {
     expect(response.status).toBe(500);
     const body = await response.json();
     expect(body.error).toBe("Deal belum bisa disimpan. Coba lagi.");
+  });
+
+  it("mengembalikan 400 saat body bukan JSON yang valid", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+
+    const response = await POST(makeMalformedRequest());
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toBe("Periksa kembali data deal kamu.");
+    expect(body.fields).toBeUndefined();
+    expect(mockedCreateDeal).not.toHaveBeenCalled();
+  });
+
+  it("mengembalikan 500 terkontrol saat auth() gagal karena masalah infrastruktur", async () => {
+    mockedAuth.mockRejectedValue(new Error("auth provider unreachable"));
+
+    const response = await POST(makeRequest({ brand: "Kopi Nusantara" }));
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body.error).toBe("Deal belum bisa disimpan. Coba lagi.");
+    expect(mockedCreateDeal).not.toHaveBeenCalled();
   });
 });

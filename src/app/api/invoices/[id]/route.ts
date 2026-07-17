@@ -31,12 +31,12 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PATCH(request: Request, context: RouteContext) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
-  }
-
   try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
+    }
+
     const { status } = invoiceStatusUpdateSchema.parse(await request.json());
     const { id } = await context.params;
     const result = await updateInvoiceStatus(statusDb, id, session.user.id, status);
@@ -50,7 +50,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     return NextResponse.json({ invoice: result.invoice });
   } catch (error) {
-    if (error instanceof ZodError) {
+    if (error instanceof ZodError || error instanceof SyntaxError) {
       return NextResponse.json({ error: "Status invoice tidak valid." }, { status: 400 });
     }
     return NextResponse.json({ error: "Status invoice belum bisa diperbarui. Coba lagi." }, { status: 500 });
