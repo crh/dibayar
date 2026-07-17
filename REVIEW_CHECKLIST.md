@@ -32,6 +32,8 @@
 ## Gate E — Commit
 - [ ] Small commit(s), message format: `feat|fix|chore(scope): what + why`
 - [ ] STATE.md + relevant docs updated in same or adjacent commit
+- [ ] DAILY_LOG entry for this run exists and ends with a rubric self-score
+- [ ] STATE.md day_count equals the count of Asia/Jakarta calendar days since phase_started with activity
 
 ## Stop rules
 - Any Gate A–C failure after 2 fix attempts → do not commit; log blocker in STATE.md.

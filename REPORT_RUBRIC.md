@@ -11,6 +11,9 @@
    0 = claims without sources or unverifiable "done"
    1 = mostly sourced/verifiable, some vagueness
    2 = every claim verifiable (link, commit hash, deploy URL, test output)
+   After any history rewrite (rebase, squash, amend of pushed commits), previously logged
+   hashes must be re-mapped or annotated in the same day's entry. An orphaned hash in the
+   log is an automatic 0 on this dimension.
 
 2. Shipped completeness
    0 = nothing merged, or half-features on main
@@ -41,6 +44,12 @@
 - 10–12: good day
 - 7–9: acceptable — name the weak dimension in the report
 - ≤6: bad day — next day's first task is fixing the lowest dimension, not new features
+- Any dimension scored 0 caps the day at "acceptable" regardless of total, and that
+  dimension is tomorrow's first task.
+
+## Scoring unit
+One rollup score per Asia/Jakarta calendar day covering all runs that day. Multiple
+entries per day are fine; the last entry of the day carries the rollup score.
 
 ## Anti-gaming clause
 Scoring 2 on "Shipped completeness" for scaffolding/config-only days is prohibited.
