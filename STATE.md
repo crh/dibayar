@@ -13,7 +13,7 @@ product_name: Dibayar (working name — rename requires Chris approval)
 one_liner: Brand-deal CRM + invoice + payment tracker for Indonesian creators (WhatsApp-first)
 phase: 1-build            # 0-discovery | 1-build | 2-validate  (transition = Chris approval)
 phase_started: 2026-07-12
-day_count: 1
+day_count: 6
 repo_url: git@github.com:crh/dibayar.git
 prod_url: https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/
 last_deploy: 2026-07-16 Git-triggered protected M2 Preview for feature commit 9794d02; Ready with the stable M2 branch alias
@@ -46,6 +46,7 @@ open_blockers: recipient-facing share links require a public-access decision; pr
 (empty)
 
 ## decisions_last_3_days
+- 2026-07-17: Task A evidence-chain repair corrected `day_count` from a stale `1` to `6`, counting distinct Asia/Jakarta calendar days with recorded activity from `phase_started` 2026-07-12 through today 2026-07-17 inclusive (git-log/DAILY_LOG evidence on 12, 13, 14, 15, 16, plus this Task A documentation work on 17) — not a count of delegation runs. Also annotated the `4f531d9`→`12e8145` history-rewrite reference and reconciled SECURITY.md with verified evidence (see DAILY_LOG "Day 1 Task A — evidence-chain repair — 2026-07-17").
 - 2026-07-16: Owner invoice hardening keeps all routes authenticated, adds controlled non-leaking 500 responses to list/detail/PDF GETs, and scopes source-deal creation plus status writes by user ID. No public invoice route was added.
 - 2026-07-16: Chris granted standing autonomous milestone execution; task selection should not require prompts. Ask only for a genuine access/decision blocker; Production, public access, credentials, destructive changes, financial/legal/medical decisions remain separately gated.
 - 2026-07-16: Commits 3f897c9 and 2cc00c7 add owner-scoped mobile invoice list/detail/status transitions and PDF download. Protected Preview smokes passed; no recipient-public route was exposed.

@@ -18,6 +18,7 @@
 - Phase/milestone: Phase 1 — M0 Bootstrap.
 - Repository evidence: Git root `/home/kenji/code/dibayar`; branch `hermes/day-001-m0-bootstrap`; remote remained `git@github.com:crh/dibayar.git`; `main` was not changed.
 - Commit: `4f531d9 feat(m0): bootstrap Dibayar foundation`; commit was created locally after staged diff review. Push, merge, and deployment were not performed.
+- Correction (added 2026-07-17): `4f531d9` was rewritten to `12e8145` in the 2026-07-13 17:09 history rewrite; `12e8145 feat(m0): bootstrap Dibayar foundation` is the commit reachable in current git history, verified via `git log --all` on 2026-07-17. This note does not alter the original claim text above.
 - Delegation: `/home/kenji/.local/bin/run-dibayar-claude` ran with the exact `claude-sonnet-5` model. The first real task timed out after 600 seconds with recoverable scaffold changes; a correction task then reached the configured 30-turn limit. Hermes reviewed the resulting files independently.
 - Implemented local scope: Next.js/TypeScript/Tailwind/Prisma PostgreSQL scaffold; Bahasa Indonesia coming-soon page; mobile-first design tokens; Vitest/jsdom tests; security headers; synthetic `.env.example`; factual deployment and project instructions.
 - Mechanical evidence: `npm install` passed; `npm run lint` passed; `npm run typecheck` passed; `npm test` passed with 2 files and 6 tests; `npm run build` passed with static `/` and `/_not-found` routes.
@@ -119,6 +120,15 @@
 - Runtime smoke: authenticated Preview `POST /api/deals` and `POST /api/invoices` returned 201. `GET /api/invoices` returned 200 and included the created invoice; `GET /api/invoices/:id` returned 200 for it; a missing ID returned 404 with `Invoice tidak ditemukan.` The invoice was `INV/2026/07/001` and retained `PPH23`.
 - Cleanup: explicitly labeled deal/invoice rows were deleted from `preview/hermes/m2-invoice`. A second targeted sequence cleanup removed the unused monthly sequence. Final temporary deal/invoice/sequence counts: 0/0/0. Production was untouched.
 
+## Day 1 M2 dashboard status workflow and PDF download — 2026-07-16 [backfilled 2026-07-17]
+
+- Scope: commit `3f897c9 feat(invoices): add dashboard status workflow` (authored 2026-07-16 11:47:30 +0700) and commit `2cc00c7 feat(invoices): add owner-safe PDF download` (authored 2026-07-16 12:04:15 +0700). Both fall chronologically between the tenant-scoped invoice-read work above and the owner invoice hardening commit `9794d02` below; neither had a same-day DAILY_LOG entry, which this backfill closes.
+- Local gates (lint/typecheck/tests/build) specific to these two commits: not recorded at the time.
+- Deployment identifier specific to these two commits: not recorded at the time; STATE.md records the stable M2 Preview alias as of commit `9794d02`.
+- Protected Preview smoke evidence, per STATE.md's `smoke` field: DRAFT→SENT status transition (scope of `3f897c9`) returned HTTP 200 and rendered correctly in the mobile detail UI; owner PDF download (scope of `2cc00c7`) returned HTTP 200 `application/pdf` with an attachment filename, a `%PDF-` signature, and 2,769 bytes. Labeled temporary data was removed; final temporary deal/invoice/sequence counts were 0/0/0.
+- No recipient-public invoice route was added by either commit; STATE.md confirms no public recipient route exists.
+- This entry is a documentation backfill written 2026-07-17; it draws only on evidence already recorded in STATE.md and git history, not new testing.
+
 ## Day 1 M2 owner invoice hardening — 2026-07-16
 
 - Scope: retained authenticated owner-only invoice list/detail/PDF routes; no recipient-share token, public invoice route, schema change, migration, credential, or Production change was added.
@@ -127,3 +137,13 @@
 - TDD evidence: three GET error regressions and two tenant-query regressions were observed failing before implementation, then passed after the minimal changes.
 - Quality gates: targeted invoice tests passed (39); full Vitest passed (18 files, 105 tests); lint, typecheck, production build, diff check, route inventory, and added-line security scan passed. Build exposes only authenticated invoice routes: `/api/invoices`, `/api/invoices/[id]`, and `/api/invoices/[id]/pdf`.
 - Deployment: commit `9794d02` was pushed to `origin/hermes/m2-invoice`; its Git-triggered protected Preview became Ready at `https://dibayar-prkn63wl4-kenji-iwakura.vercel.app` and owns the stable M2 alias. Production remains protected and untouched; public invoice access remains blocked pending explicit approval.
+
+## Day 1 Task A — evidence-chain repair — 2026-07-17
+
+- Scope: docs-only Task A (evidence-chain repairs) per audit-remediation task spec. No application/source/config file was touched; no gate (lint/typecheck/test/build) applies to this docs-only change and none is claimed to have run.
+- Evidence checked directly this run: `git log --all --oneline` confirmed `4f531d9` is absent from current history and `12e8145 feat(m0): bootstrap Dibayar foundation` is present; `4f531d9` was authored 2026-07-13 15:49:26 +0700 and `12e8145` was authored 2026-07-13 17:09:37 +0700, consistent with the reported 17:09 history rewrite. `grep -rn "4f531d9"` across tracked files found exactly one reference, at `DAILY_LOG.md:20`, now annotated. `gh repo view crh/dibayar --json visibility,isPrivate,url` was run independently in this session and returned `{"isPrivate":true,"visibility":"PRIVATE","url":"https://github.com/crh/dibayar"}`. Commit authorship timestamps for `3f897c9` (2026-07-16 11:47:30 +0700) and `2cc00c7` (2026-07-16 12:04:15 +0700) were read from `git log`.
+- Evidence relayed, not independently re-executed this run: the read-only Neon SQL Editor query against `preview/hermes/m2-invoice`/`neondb` (`sign_in_events=1`, `latest_sign_in_at=2026-07-16 01:56:09.367`) was reported as already run today; no database tool is available in this session, so it is documented as given rather than re-run by this agent. This is flagged explicitly rather than claimed as self-verified.
+- Files touched: `DAILY_LOG.md` (A1 correction under the `4f531d9` entry; A2 backfilled 2026-07-16 entry marked `[backfilled 2026-07-17]`; this entry), `SECURITY.md` (A3: flipped OAuth login, audit-log write, env-var scoping, and repo-private controls to `[x]` with DAILY_LOG citations; added a dated 2026-07-17 known-gaps entry and annotated the stale 2026-07-14 M1 gap as resolved), `STATE.md` (A4: `day_count` 1→6, one new `decisions_last_3_days` line).
+- No source, config, migration, deployment, credential, environment-variable, or Production change was made. No database write occurred. No push was performed.
+- Verification: `git diff --check` passed (no whitespace errors); `git status --short` shows only the three intended docs files modified; a targeted `grep -rn "4f531d9"` confirms no remaining unannotated reference.
+- Rubric self-score: Evidence honesty 2/2 (every claim is sourced to a commit hash, git-log output, a command run in this session, or an existing DAILY_LOG entry; the one item not independently re-verified — the Neon query — is explicitly flagged as relayed rather than fabricated); shipped completeness 1/2 (docs-only evidence-chain repair, not a vertical feature slice); security discipline 2/2 (no code gates apply; SECURITY.md reconciled to verified evidence with citations and gaps logged honestly); focus 2/2 (single scoped task, zero drift); deploy health 2/2 (justified no-deploy docs day); report quality 2/2 (complete, concise, cites exact evidence). Total 11/12.
