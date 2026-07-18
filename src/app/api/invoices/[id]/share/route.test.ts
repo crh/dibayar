@@ -22,8 +22,12 @@ function makeContext(id: string) {
   return { params: Promise.resolve({ id }) };
 }
 
-function req(method: string, id: string) {
-  return new Request(`http://localhost/api/invoices/${id}/share`, { method });
+function req(method: string, id: string, headers?: HeadersInit) {
+  const defaultHeaders = method === "GET" ? undefined : { origin: "http://localhost" };
+  return new Request(`http://localhost/api/invoices/${id}/share`, {
+    method,
+    headers: headers ?? defaultHeaders,
+  });
 }
 
 beforeEach(() => {
@@ -159,5 +163,87 @@ describe("DELETE /api/invoices/[id]/share", () => {
 
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ error: "Tautan berbagi belum bisa dicabut. Coba lagi." });
+  });
+});
+
+describe("same-origin protection for POST/DELETE /api/invoices/[id]/share", () => {
+  beforeEach(() => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+  });
+
+  it("allows a same-origin POST", async () => {
+    mockedCreateOrRegenerateShare.mockResolvedValue({ kind: "created", path: "/i/abc123token" });
+
+    const response = await POST(req("POST", "invoice-1", { origin: "http://localhost" }), makeContext("invoice-1"));
+
+    expect(response.status).toBe(200);
+    expect(mockedCreateOrRegenerateShare).toHaveBeenCalled();
+  });
+
+  it("allows a same-origin DELETE", async () => {
+    mockedRevokeShare.mockResolvedValue({ kind: "revoked" });
+
+    const response = await DELETE(req("DELETE", "invoice-1", { origin: "http://localhost" }), makeContext("invoice-1"));
+
+    expect(response.status).toBe(200);
+    expect(mockedRevokeShare).toHaveBeenCalled();
+  });
+
+  it("rejects a POST with a missing Origin header", async () => {
+    const response = await POST(req("POST", "invoice-1", {}), makeContext("invoice-1"));
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({ error: expect.any(String) });
+    expect(mockedCreateOrRegenerateShare).not.toHaveBeenCalled();
+  });
+
+  it("rejects a DELETE with a missing Origin header", async () => {
+    const response = await DELETE(req("DELETE", "invoice-1", {}), makeContext("invoice-1"));
+
+    expect(response.status).toBe(403);
+    expect(mockedRevokeShare).not.toHaveBeenCalled();
+  });
+
+  it("rejects a POST with a cross-origin Origin header", async () => {
+    const response = await POST(
+      req("POST", "invoice-1", { origin: "https://evil.example" }),
+      makeContext("invoice-1"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockedCreateOrRegenerateShare).not.toHaveBeenCalled();
+  });
+
+  it("rejects a DELETE with a cross-origin Origin header", async () => {
+    const response = await DELETE(
+      req("DELETE", "invoice-1", { origin: "https://evil.example" }),
+      makeContext("invoice-1"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockedRevokeShare).not.toHaveBeenCalled();
+  });
+
+  it("rejects a POST with a malformed Origin header", async () => {
+    const response = await POST(req("POST", "invoice-1", { origin: "not-a-url" }), makeContext("invoice-1"));
+
+    expect(response.status).toBe(403);
+    expect(mockedCreateOrRegenerateShare).not.toHaveBeenCalled();
+  });
+
+  it("rejects a DELETE with a malformed Origin header", async () => {
+    const response = await DELETE(req("DELETE", "invoice-1", { origin: "not-a-url" }), makeContext("invoice-1"));
+
+    expect(response.status).toBe(403);
+    expect(mockedRevokeShare).not.toHaveBeenCalled();
+  });
+
+  it("keeps no-store headers on a rejected cross-origin response", async () => {
+    const response = await POST(
+      req("POST", "invoice-1", { origin: "https://evil.example" }),
+      makeContext("invoice-1"),
+    );
+
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
   });
 });

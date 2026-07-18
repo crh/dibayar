@@ -42,11 +42,39 @@ const SHARE_CREATE_ERROR = "Tautan berbagi belum bisa dibuat. Coba lagi.";
 const SHARE_REVOKE_ERROR = "Tautan berbagi belum bisa dicabut. Coba lagi.";
 const COPY_LINK_ERROR = "Tautan tidak bisa disalin otomatis. Salin secara manual.";
 
+const SHARE_PATH_PATTERN = /^\/i\/[A-Za-z0-9_-]+$/;
+
 type ShareState =
   | { kind: "loading" }
-  | { kind: "error"; message: string }
-  | { kind: "inactive" }
-  | { kind: "active"; link: string | null };
+  | { kind: "load-error"; message: string }
+  | { kind: "inactive"; error: string | null }
+  | { kind: "active"; link: string | null; error: string | null };
+
+function isValidGetPayload(payload: unknown): payload is { active: boolean } {
+  return typeof payload === "object" && payload !== null && typeof (payload as { active?: unknown }).active === "boolean";
+}
+
+function isValidCreatePayload(payload: unknown): payload is { active: true; path: string } {
+  if (typeof payload !== "object" || payload === null) return false;
+  const { active, path } = payload as { active?: unknown; path?: unknown };
+  return active === true && typeof path === "string" && SHARE_PATH_PATTERN.test(path);
+}
+
+function isValidRevokePayload(payload: unknown): payload is { active: false } {
+  return typeof payload === "object" && payload !== null && (payload as { active?: unknown }).active === false;
+}
+
+function withMutationError(prev: ShareState, message: string): ShareState {
+  if (prev.kind === "inactive") return { kind: "inactive", error: message };
+  if (prev.kind === "active") return { ...prev, error: message };
+  return { kind: "load-error", message };
+}
+
+function clearMutationError(prev: ShareState): ShareState {
+  if (prev.kind === "inactive") return { kind: "inactive", error: null };
+  if (prev.kind === "active") return { ...prev, error: null };
+  return prev;
+}
 
 type ShareConfirm = "regenerate" | "revoke" | null;
 
@@ -65,13 +93,13 @@ function ShareSection({ invoiceId }: { invoiceId: string }) {
         const response = await fetch(`/api/invoices/${invoiceId}/share`);
         const payload = await response.json();
         if (cancelled) return;
-        if (!response.ok) {
-          setShare({ kind: "error", message: SHARE_LOAD_ERROR });
+        if (!response.ok || !isValidGetPayload(payload)) {
+          setShare({ kind: "load-error", message: SHARE_LOAD_ERROR });
           return;
         }
-        setShare(payload.active ? { kind: "active", link: null } : { kind: "inactive" });
+        setShare(payload.active ? { kind: "active", link: null, error: null } : { kind: "inactive", error: null });
       } catch {
-        if (!cancelled) setShare({ kind: "error", message: SHARE_LOAD_ERROR });
+        if (!cancelled) setShare({ kind: "load-error", message: SHARE_LOAD_ERROR });
       }
     })();
     return () => {
@@ -83,16 +111,18 @@ function ShareSection({ invoiceId }: { invoiceId: string }) {
     setConfirm(null);
     setCopyFeedback(null);
     setIsBusy(true);
+    setShare((prev) => clearMutationError(prev));
     try {
       const response = await fetch(`/api/invoices/${invoiceId}/share`, { method: "POST" });
       const payload = await response.json();
-      if (!response.ok) {
-        setShare({ kind: "error", message: payload.error ?? SHARE_CREATE_ERROR });
+      if (!response.ok || !isValidCreatePayload(payload)) {
+        const message = typeof payload?.error === "string" ? payload.error : SHARE_CREATE_ERROR;
+        setShare((prev) => withMutationError(prev, message));
         return;
       }
-      setShare({ kind: "active", link: `${window.location.origin}${payload.path}` });
+      setShare({ kind: "active", link: `${window.location.origin}${payload.path}`, error: null });
     } catch {
-      setShare({ kind: "error", message: SHARE_CREATE_ERROR });
+      setShare((prev) => withMutationError(prev, SHARE_CREATE_ERROR));
     } finally {
       setIsBusy(false);
     }
@@ -102,16 +132,18 @@ function ShareSection({ invoiceId }: { invoiceId: string }) {
     setConfirm(null);
     setCopyFeedback(null);
     setIsBusy(true);
+    setShare((prev) => clearMutationError(prev));
     try {
       const response = await fetch(`/api/invoices/${invoiceId}/share`, { method: "DELETE" });
       const payload = await response.json();
-      if (!response.ok) {
-        setShare({ kind: "error", message: payload.error ?? SHARE_REVOKE_ERROR });
+      if (!response.ok || !isValidRevokePayload(payload)) {
+        const message = typeof payload?.error === "string" ? payload.error : SHARE_REVOKE_ERROR;
+        setShare((prev) => withMutationError(prev, message));
         return;
       }
-      setShare({ kind: "inactive" });
+      setShare({ kind: "inactive", error: null });
     } catch {
-      setShare({ kind: "error", message: SHARE_REVOKE_ERROR });
+      setShare((prev) => withMutationError(prev, SHARE_REVOKE_ERROR));
     } finally {
       setIsBusy(false);
     }
@@ -132,10 +164,11 @@ function ShareSection({ invoiceId }: { invoiceId: string }) {
       <p className="mt-1 text-[13px] text-muted">Buat tautan agar penerima bisa melihat invoice ini tanpa masuk akun.</p>
 
       {share.kind === "loading" ? <p className="mt-3 text-[14px] text-muted">Memuat status berbagi…</p> : null}
-      {share.kind === "error" ? <p role="alert" className="mt-3 text-[13px] text-overdue">{share.message}</p> : null}
+      {share.kind === "load-error" ? <p role="alert" className="mt-3 text-[13px] text-overdue">{share.message}</p> : null}
 
       {share.kind === "inactive" ? (
         <>
+          {share.error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{share.error}</p> : null}
           <p className="mt-3 text-[14px] text-muted">Belum ada tautan berbagi untuk invoice ini.</p>
           <button
             type="button"
@@ -150,6 +183,7 @@ function ShareSection({ invoiceId }: { invoiceId: string }) {
 
       {share.kind === "active" ? (
         <>
+          {share.error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{share.error}</p> : null}
           <p className="mt-3 text-[14px] font-semibold text-paid">Tautan berbagi aktif.</p>
           {share.link ? (
             <>

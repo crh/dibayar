@@ -16,6 +16,19 @@ function json(body: unknown, status?: number) {
   return NextResponse.json(body, { status, headers: NO_STORE_HEADERS });
 }
 
+// Compares the Origin header against the request's own URL rather than any
+// forwarded/host header, since only the Origin header reflects the caller's
+// actual browser origin and can't be spoofed by an unauthenticated attacker.
+function isSameOriginRequest(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (!origin) return false;
+  try {
+    return new URL(origin).origin === new URL(request.url).origin;
+  } catch {
+    return false;
+  }
+}
+
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
@@ -37,11 +50,14 @@ export async function GET(_request: Request, context: RouteContext) {
   }
 }
 
-export async function POST(_request: Request, context: RouteContext) {
+export async function POST(request: Request, context: RouteContext) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return json({ error: "Kamu harus masuk terlebih dahulu." }, 401);
+    }
+    if (!isSameOriginRequest(request)) {
+      return json({ error: "Permintaan ditolak. Muat ulang halaman lalu coba lagi." }, 403);
     }
 
     const { id } = await context.params;
@@ -56,11 +72,14 @@ export async function POST(_request: Request, context: RouteContext) {
   }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return json({ error: "Kamu harus masuk terlebih dahulu." }, 401);
+    }
+    if (!isSameOriginRequest(request)) {
+      return json({ error: "Permintaan ditolak. Muat ulang halaman lalu coba lagi." }, 403);
     }
 
     const { id } = await context.params;

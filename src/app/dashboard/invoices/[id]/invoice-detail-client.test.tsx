@@ -231,5 +231,139 @@ describe("InvoiceDetailClient", () => {
 
       expect(createButton.className).toMatch(/h-11|min-h-\[44px\]/);
     });
+
+    it("keeps the create control available for retry after a failed initial create", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal(
+        "fetch",
+        makeFetchMock({
+          shareGet: { status: 200, body: { active: false } },
+          sharePost: { status: 500, body: { error: "Tautan berbagi belum bisa dibuat. Coba lagi." } },
+        }),
+      );
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
+
+      expect(await screen.findByRole("alert")).toHaveProperty(
+        "textContent",
+        "Tautan berbagi belum bisa dibuat. Coba lagi.",
+      );
+      expect(screen.getByText(/belum ada tautan berbagi/i)).toBeDefined();
+      expect(screen.getByRole("button", { name: "Buat tautan berbagi" })).toBeDefined();
+    });
+
+    it("keeps active state and controls available for retry after a failed regeneration", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal(
+        "fetch",
+        makeFetchMock({
+          shareGet: { status: 200, body: { active: true } },
+          sharePost: { status: 500, body: { error: "Tautan berbagi belum bisa dibuat. Coba lagi." } },
+        }),
+      );
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: /buat ulang tautan/i }));
+      await user.click(screen.getByRole("button", { name: "Ya, buat tautan baru" }));
+
+      expect(await screen.findByRole("alert")).toHaveProperty(
+        "textContent",
+        "Tautan berbagi belum bisa dibuat. Coba lagi.",
+      );
+      expect(screen.getByText(/tautan berbagi aktif/i)).toBeDefined();
+      expect(screen.getByRole("button", { name: /buat ulang tautan/i })).toBeDefined();
+      expect(screen.getByRole("button", { name: /cabut tautan/i })).toBeDefined();
+    });
+
+    it("keeps active state and controls available for retry after a failed revoke", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal(
+        "fetch",
+        makeFetchMock({
+          shareGet: { status: 200, body: { active: true } },
+          shareDelete: { status: 500, body: { error: "Tautan berbagi belum bisa dicabut. Coba lagi." } },
+        }),
+      );
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: /cabut tautan/i }));
+      await user.click(screen.getByRole("button", { name: "Ya, cabut tautan" }));
+
+      expect(await screen.findByRole("alert")).toHaveProperty(
+        "textContent",
+        "Tautan berbagi belum bisa dicabut. Coba lagi.",
+      );
+      expect(screen.getByText(/tautan berbagi aktif/i)).toBeDefined();
+      expect(screen.getByRole("button", { name: /buat ulang tautan/i })).toBeDefined();
+      expect(screen.getByRole("button", { name: /cabut tautan/i })).toBeDefined();
+    });
+
+    it("clears a stale mutation error at the start of a new attempt", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal(
+        "fetch",
+        makeFetchMock({
+          shareGet: { status: 200, body: { active: false } },
+          sharePost: [
+            { status: 500, body: { error: "Tautan berbagi belum bisa dibuat. Coba lagi." } },
+            { status: 200, body: { active: true, path: "/i/deterministic-token" } },
+          ],
+        }),
+      );
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
+      expect(await screen.findByRole("alert")).toBeDefined();
+
+      await user.click(screen.getByRole("button", { name: "Buat tautan berbagi" }));
+      expect(await screen.findByText(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("treats a malformed 2xx GET payload as a recoverable load error", async () => {
+      vi.stubGlobal("fetch", makeFetchMock({ shareGet: { status: 200, body: { nonsense: true } } }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+      expect(await screen.findByText("Status berbagi belum bisa dimuat. Coba lagi.")).toBeDefined();
+    });
+
+    it("treats a malformed 2xx POST payload as a recoverable operation error without rendering an undefined URL", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal(
+        "fetch",
+        makeFetchMock({
+          shareGet: { status: 200, body: { active: false } },
+          sharePost: { status: 200, body: { active: true, path: "not-a-share-path" } },
+        }),
+      );
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
+
+      expect(await screen.findByRole("alert")).toBeDefined();
+      expect(screen.queryByText(/undefined/i)).toBeNull();
+      expect(screen.getByRole("button", { name: "Buat tautan berbagi" })).toBeDefined();
+    });
+
+    it("treats a malformed 2xx DELETE payload as a recoverable operation error that keeps active controls", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal(
+        "fetch",
+        makeFetchMock({
+          shareGet: { status: 200, body: { active: true } },
+          shareDelete: { status: 200, body: { nonsense: true } },
+        }),
+      );
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: /cabut tautan/i }));
+      await user.click(screen.getByRole("button", { name: "Ya, cabut tautan" }));
+
+      expect(await screen.findByRole("alert")).toBeDefined();
+      expect(screen.getByText(/tautan berbagi aktif/i)).toBeDefined();
+      expect(screen.getByRole("button", { name: /cabut tautan/i })).toBeDefined();
+    });
   });
 });
