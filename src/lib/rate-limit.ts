@@ -41,3 +41,25 @@ export const authRateLimiter = new RateLimiter({
   limit: 10,
   windowMs: 60_000,
 });
+
+// In-memory and per-instance: on multi-instance Vercel deployment this limits
+// each instance independently rather than the client globally. Acceptable for
+// current scale; a shared store (e.g. Redis) is required before that changes.
+export const publicInvoiceJsonRateLimiter = new RateLimiter({
+  limit: 30,
+  windowMs: 60_000,
+});
+
+export const publicInvoicePdfRateLimiter = new RateLimiter({
+  limit: 10,
+  windowMs: 60_000,
+});
+
+// Gates the recipient HTML page (`/i/[token]`) itself, ahead of its server-side
+// database lookup. Same per-instance caveat as the limiters above; a denied page
+// request must still resolve to the uniform notFound() response, never a
+// distinguishable one, so it doesn't leak whether a token would otherwise exist.
+export const publicInvoicePageRateLimiter = new RateLimiter({
+  limit: 30,
+  windowMs: 60_000,
+});

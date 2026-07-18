@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { InvoiceRecord } from "@/lib/invoices";
 
@@ -35,6 +35,215 @@ function formatIdr(value: number) {
 function formatDate(value: Date | null) {
   if (!value) return "Belum ditentukan";
   return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date(value));
+}
+
+const SHARE_LOAD_ERROR = "Status berbagi belum bisa dimuat. Coba lagi.";
+const SHARE_CREATE_ERROR = "Tautan berbagi belum bisa dibuat. Coba lagi.";
+const SHARE_REVOKE_ERROR = "Tautan berbagi belum bisa dicabut. Coba lagi.";
+const COPY_LINK_ERROR = "Tautan tidak bisa disalin otomatis. Salin secara manual.";
+
+type ShareState =
+  | { kind: "loading" }
+  | { kind: "error"; message: string }
+  | { kind: "inactive" }
+  | { kind: "active"; link: string | null };
+
+type ShareConfirm = "regenerate" | "revoke" | null;
+
+type CopyFeedback = { kind: "success" | "error"; message: string };
+
+function ShareSection({ invoiceId }: { invoiceId: string }) {
+  const [share, setShare] = useState<ShareState>({ kind: "loading" });
+  const [confirm, setConfirm] = useState<ShareConfirm>(null);
+  const [isBusy, setIsBusy] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(`/api/invoices/${invoiceId}/share`);
+        const payload = await response.json();
+        if (cancelled) return;
+        if (!response.ok) {
+          setShare({ kind: "error", message: SHARE_LOAD_ERROR });
+          return;
+        }
+        setShare(payload.active ? { kind: "active", link: null } : { kind: "inactive" });
+      } catch {
+        if (!cancelled) setShare({ kind: "error", message: SHARE_LOAD_ERROR });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [invoiceId]);
+
+  async function createOrRegenerate() {
+    setConfirm(null);
+    setCopyFeedback(null);
+    setIsBusy(true);
+    try {
+      const response = await fetch(`/api/invoices/${invoiceId}/share`, { method: "POST" });
+      const payload = await response.json();
+      if (!response.ok) {
+        setShare({ kind: "error", message: payload.error ?? SHARE_CREATE_ERROR });
+        return;
+      }
+      setShare({ kind: "active", link: `${window.location.origin}${payload.path}` });
+    } catch {
+      setShare({ kind: "error", message: SHARE_CREATE_ERROR });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function revoke() {
+    setConfirm(null);
+    setCopyFeedback(null);
+    setIsBusy(true);
+    try {
+      const response = await fetch(`/api/invoices/${invoiceId}/share`, { method: "DELETE" });
+      const payload = await response.json();
+      if (!response.ok) {
+        setShare({ kind: "error", message: payload.error ?? SHARE_REVOKE_ERROR });
+        return;
+      }
+      setShare({ kind: "inactive" });
+    } catch {
+      setShare({ kind: "error", message: SHARE_REVOKE_ERROR });
+    } finally {
+      setIsBusy(false);
+    }
+  }
+
+  async function copyLink(link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopyFeedback({ kind: "success", message: "Tautan disalin." });
+    } catch {
+      setCopyFeedback({ kind: "error", message: COPY_LINK_ERROR });
+    }
+  }
+
+  return (
+    <section aria-labelledby="bagikan-invoice" className="rounded-2xl border border-line bg-surface p-5">
+      <h2 id="bagikan-invoice" className="text-[18px] font-bold text-ink">Bagikan invoice</h2>
+      <p className="mt-1 text-[13px] text-muted">Buat tautan agar penerima bisa melihat invoice ini tanpa masuk akun.</p>
+
+      {share.kind === "loading" ? <p className="mt-3 text-[14px] text-muted">Memuat status berbagi…</p> : null}
+      {share.kind === "error" ? <p role="alert" className="mt-3 text-[13px] text-overdue">{share.message}</p> : null}
+
+      {share.kind === "inactive" ? (
+        <>
+          <p className="mt-3 text-[14px] text-muted">Belum ada tautan berbagi untuk invoice ini.</p>
+          <button
+            type="button"
+            disabled={isBusy}
+            onClick={createOrRegenerate}
+            className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
+          >
+            {isBusy ? "Membuat…" : "Buat tautan berbagi"}
+          </button>
+        </>
+      ) : null}
+
+      {share.kind === "active" ? (
+        <>
+          <p className="mt-3 text-[14px] font-semibold text-paid">Tautan berbagi aktif.</p>
+          {share.link ? (
+            <>
+              <p className="mt-2 break-all text-[13px] text-muted">{share.link}</p>
+              <button
+                type="button"
+                onClick={() => copyLink(share.link!)}
+                className="mt-3 inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
+              >
+                Salin tautan
+              </button>
+              {copyFeedback ? (
+                <p
+                  role={copyFeedback.kind === "error" ? "alert" : "status"}
+                  className={`mt-2 text-[13px] font-semibold ${copyFeedback.kind === "error" ? "text-overdue" : "text-paid"}`}
+                >
+                  {copyFeedback.message}
+                </p>
+              ) : null}
+            </>
+          ) : null}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => setConfirm("regenerate")}
+              className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60"
+            >
+              Buat ulang tautan
+            </button>
+            <button
+              type="button"
+              disabled={isBusy}
+              onClick={() => setConfirm("revoke")}
+              className="inline-flex h-11 items-center rounded-full border border-overdue px-4 text-[14px] font-semibold text-overdue disabled:cursor-wait disabled:opacity-60"
+            >
+              Cabut tautan
+            </button>
+          </div>
+
+          {confirm === "regenerate" ? (
+            <div className="mt-3 rounded-xl bg-bg p-3">
+              <p className="text-[13px] font-semibold text-overdue">
+                Tautan lama akan langsung berhenti berfungsi. Lanjutkan buat tautan baru?
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirm(null)}
+                  className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={createOrRegenerate}
+                  className="inline-flex h-11 items-center rounded-full bg-primary px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
+                >
+                  Ya, buat tautan baru
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {confirm === "revoke" ? (
+            <div className="mt-3 rounded-xl bg-bg p-3">
+              <p className="text-[13px] font-semibold text-overdue">
+                Penerima tidak akan bisa membuka invoice ini lagi. Lanjutkan cabut tautan?
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirm(null)}
+                  className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={revoke}
+                  className="inline-flex h-11 items-center rounded-full bg-overdue px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
+                >
+                  Ya, cabut tautan
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </section>
+  );
 }
 
 export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice: InvoiceRecord }) {
@@ -122,6 +331,8 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
           <p className="mt-4 rounded-xl bg-paid/10 px-3 py-2 text-[14px] font-semibold text-paid">Invoice ini sudah lunas.</p>
         )}
       </section>
+
+      <ShareSection invoiceId={invoice.id} />
     </main>
   );
 }

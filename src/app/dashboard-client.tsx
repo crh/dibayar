@@ -76,6 +76,27 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [pendingDealId, setPendingDealId] = useState<string | null>(null);
+
+  async function handleStageChange(dealId: string, status: DealRecord["status"]) {
+    setError(null);
+    setPendingDealId(dealId);
+
+    try {
+      const response = await fetch(`/api/deals/${dealId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "Deal belum bisa diperbarui. Coba lagi.");
+      setDeals((current) => current.map((deal) => (deal.id === dealId ? payload.deal : deal)));
+    } catch (submissionError) {
+      setError(submissionError instanceof Error ? submissionError.message : "Deal belum bisa diperbarui. Coba lagi.");
+    } finally {
+      setPendingDealId(null);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -240,6 +261,22 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
                       <h4 className="font-semibold text-ink">{deal.brand}</h4>
                       <p className="mt-1 text-[15px] font-bold tabular-nums text-primary">{formatIdr(deal.feeIdr)}</p>
                       <p className="mt-1 text-[12px] text-muted">{formatDeadline(deal.deadline)}</p>
+                      <label className="sr-only" htmlFor={`stage-select-${deal.id}`}>
+                        {`Tahap deal ${deal.brand}`}
+                      </label>
+                      <select
+                        id={`stage-select-${deal.id}`}
+                        value={deal.status}
+                        disabled={pendingDealId === deal.id}
+                        onChange={(event) => handleStageChange(deal.id, event.target.value as DealRecord["status"])}
+                        className="mt-2 h-11 w-full rounded-lg border border-line bg-surface px-2 text-[13px] font-semibold text-ink outline-none focus:border-primary disabled:cursor-wait disabled:opacity-60"
+                      >
+                        {PIPELINE_STAGES.map((stage) => (
+                          <option key={stage.value} value={stage.value}>
+                            {stage.label}
+                          </option>
+                        ))}
+                      </select>
                       {deal.status === "INVOICE" && !invoices.some((invoice) => invoice.dealId === deal.id) ? (
                         <button
                           type="button"

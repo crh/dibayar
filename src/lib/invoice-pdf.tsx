@@ -2,6 +2,12 @@ import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import type { DealRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
 
+// Narrowed to exactly the fields this component renders, so callers (including the
+// public token-scoped PDF route) can supply a minimal safe projection instead of a
+// full owner-scoped record.
+type InvoicePdfInvoice = Pick<InvoiceRecord, "number" | "subtotalIdr" | "withholdingTaxType" | "status" | "dueDate">;
+type InvoicePdfDeal = Pick<DealRecord, "brand" | "scope">;
+
 const styles = StyleSheet.create({
   page: { padding: 44, fontFamily: "Helvetica", color: "#171717", fontSize: 10 },
   header: { marginBottom: 28, borderBottomWidth: 1, borderBottomColor: "#e5e5e5", paddingBottom: 16 },
@@ -26,7 +32,7 @@ function formatDate(value: Date | null) {
   return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date(value));
 }
 
-export function InvoicePdf({ invoice, deal }: { invoice: InvoiceRecord; deal: DealRecord | null }) {
+export function InvoicePdf({ invoice, deal }: { invoice: InvoicePdfInvoice; deal: InvoicePdfDeal | null }) {
   return (
     <Document title={invoice.number} author="Dibayar">
       <Page size="A4" style={styles.page}>

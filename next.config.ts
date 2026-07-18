@@ -29,12 +29,28 @@ const securityHeaders = [
   },
 ];
 
+// Token-bearing public share links must never be cached, indexed, or leak the
+// token via the Referer header when a recipient follows an outbound link.
+// This group is declared after the global "/:path*" group so its overrides
+// win for the overlapping keys (Next.js applies headers in array order and
+// the last matching group's value takes precedence for a given key), while
+// every other global header (CSP, X-Frame-Options, etc.) still applies.
+const publicShareLinkHeaders = [
+  { key: "Referrer-Policy", value: "no-referrer" },
+  { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+  { key: "Cache-Control", value: "private, no-store" },
+];
+
 const nextConfig: NextConfig = {
   async headers() {
     return [
       {
         source: "/:path*",
         headers: securityHeaders,
+      },
+      {
+        source: "/i/:path*",
+        headers: publicShareLinkHeaders,
       },
     ];
   },

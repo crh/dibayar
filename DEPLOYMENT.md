@@ -116,3 +116,17 @@ This guard is necessary but not sufficient for unattended execution: it never fe
 Hardening in `50099ba` (after the initial `bee8283`): the child previously inherited the caller's `process.cwd()` instead of the verified repo root, so a cron invoked from an unrelated directory could pass the repo guard but run its command against the wrong tree; it now always runs at `repoRoot` (never printed).
 
 Focused tests: `npm run test:cron-guard` — 28/28 passing (isolated temp Git repos and fixture files only — never the real repo). This is separate from and does not replace canonical `npm run test`.
+
+## Recipient invoice share-link rollout gate (Task F + Task G)
+
+The recipient invoice share-link (Task F) and the dashboard stage-selector/contrast fix (Task G) are implemented locally and uncommitted (see STATE.md, SECURITY.md). Neither is applied, deployed, or externally verified. Chris approved option A for the share-link feature's scope on 2026-07-17; execution of the rollout below was authorized 2026-07-18 ("Please continue what you think the best", said immediately after Hermes stated this exact plan) and must still follow this order and every safety gate:
+
+1. Execution authorization for the protected M2 Preview is granted as of 2026-07-18 (see above); none of the ordered rollout steps below has executed yet.
+2. Repeat the SHA-256 DB fingerprint/isolation preflight against the target Neon branch, exactly as done for prior M2 migrations, to confirm the target is isolated `preview/hermes/m2-invoice` and not Production before any write.
+3. Apply only the new migration, `20260717090000_invoice_share`, to that isolated Preview — no other pending migration should exist at that point.
+4. Push the share-link commit(s) and let the protected M2 Preview redeploy; confirm it reaches Ready and that both the immutable URL and the stable alias remain 302-protected by Vercel SSO.
+5. Run authenticated owner lifecycle smoke (create/regenerate/revoke a share), recipient-route smoke (`/i/[token]` and the public JSON/PDF routes), and Chrome E2E for Task G's dashboard stage-transition control, while SSO remains enabled — this validates the routes and UI exist and behave correctly, but does not validate unauthenticated real-world recipient access, since Vercel SSO still gates every request during this smoke.
+6. Clean up all temporary/smoke records; verify counts return to 0.
+7. Record acceptance evidence (fingerprint prefixes only, deployment ID, smoke results, cleanup counts) in STATE.md/DAILY_LOG.md.
+
+Public recipient usability — an actual unauthenticated visitor reaching `/i/[token]` — cannot be externally verified as long as the only reachable environment stays behind Vercel SSO. Any decision to expose the share-link route beyond SSO (a public or non-SSO-protected environment) is separately approval-gated and distinct from the execution approval above. Production remains untouched by all of the above and requires its own, separate deployment decision.

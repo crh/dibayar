@@ -17,7 +17,7 @@
 - [x] Minimal tests around deal CRUD; audit log for auth events
 
 ## M2 — Invoice (vertical slice #2)
-- [~] IDR invoice generation (shareable link + PDF), numbered, PPh 21/23 field
+- [~] IDR invoice generation (shareable link + PDF), numbered, PPh 21/23 field — recipient share-link (Task F) is locally implemented and uncommitted (hash-only revocable token, owner lifecycle API/UI, public safe-field routes); migration `20260717090000_invoice_share` generated but NOT applied; item stays `[~]` pending isolated Preview migration apply + protected Preview deployment/runtime verification, then a separate Production/public-access decision
 - [~] Invoice status tracking (sent / due / overdue / paid)
 
 ## M3 — Payment Chasing (vertical slice #3)

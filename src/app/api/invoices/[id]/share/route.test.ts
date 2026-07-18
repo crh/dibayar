@@ -1,0 +1,163 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { auth } from "@/auth";
+import { createOrRegenerateShare, getShareState, revokeShare } from "@/lib/invoice-share";
+import { DELETE, GET, POST } from "./route";
+
+vi.mock("@/auth", () => ({ auth: vi.fn() }));
+
+vi.mock("@/lib/invoice-share", () => ({
+  getShareState: vi.fn(),
+  createOrRegenerateShare: vi.fn(),
+  revokeShare: vi.fn(),
+}));
+
+vi.mock("@/lib/prisma", () => ({ prisma: {} }));
+
+const mockedAuth = vi.mocked(auth);
+const mockedGetShareState = vi.mocked(getShareState);
+const mockedCreateOrRegenerateShare = vi.mocked(createOrRegenerateShare);
+const mockedRevokeShare = vi.mocked(revokeShare);
+
+function makeContext(id: string) {
+  return { params: Promise.resolve({ id }) };
+}
+
+function req(method: string, id: string) {
+  return new Request(`http://localhost/api/invoices/${id}/share`, { method });
+}
+
+beforeEach(() => {
+  mockedAuth.mockReset();
+  mockedGetShareState.mockReset();
+  mockedCreateOrRegenerateShare.mockReset();
+  mockedRevokeShare.mockReset();
+});
+
+describe("GET /api/invoices/[id]/share", () => {
+  it("rejects an unauthenticated request", async () => {
+    mockedAuth.mockResolvedValue(null as never);
+
+    const response = await GET(req("GET", "invoice-1"), makeContext("invoice-1"));
+
+    expect(response.status).toBe(401);
+    expect(mockedGetShareState).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for an invoice not owned by the session user", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedGetShareState.mockResolvedValue({ kind: "not-found" });
+
+    const response = await GET(req("GET", "invoice-x"), makeContext("invoice-x"));
+
+    expect(response.status).toBe(404);
+    expect((await response.json()).error).toBe("Invoice tidak ditemukan.");
+  });
+
+  it("returns the active state without a token or hash", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedGetShareState.mockResolvedValue({ kind: "state", active: true });
+
+    const response = await GET(req("GET", "invoice-1"), makeContext("invoice-1"));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({ active: true });
+    expect(mockedGetShareState).toHaveBeenCalledWith(expect.anything(), "invoice-1", "user-1");
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+  });
+
+  it("returns a controlled 500 without leaking database details", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedGetShareState.mockRejectedValue(new Error("db details must not leak"));
+
+    const response = await GET(req("GET", "invoice-1"), makeContext("invoice-1"));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Status berbagi belum bisa dimuat. Coba lagi." });
+  });
+});
+
+describe("POST /api/invoices/[id]/share", () => {
+  it("rejects an unauthenticated request", async () => {
+    mockedAuth.mockResolvedValue(null as never);
+
+    const response = await POST(req("POST", "invoice-1"), makeContext("invoice-1"));
+
+    expect(response.status).toBe(401);
+    expect(mockedCreateOrRegenerateShare).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for an invoice not owned by the session user", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedCreateOrRegenerateShare.mockResolvedValue({ kind: "not-found" });
+
+    const response = await POST(req("POST", "invoice-x"), makeContext("invoice-x"));
+
+    expect(response.status).toBe(404);
+  });
+
+  it("creates or regenerates and returns the plaintext path exactly once", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedCreateOrRegenerateShare.mockResolvedValue({ kind: "created", path: "/i/abc123token" });
+
+    const response = await POST(req("POST", "invoice-1"), makeContext("invoice-1"));
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({ active: true, path: "/i/abc123token" });
+    expect(mockedCreateOrRegenerateShare).toHaveBeenCalledWith(expect.anything(), "invoice-1", "user-1");
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+  });
+
+  it("returns a controlled 500 without leaking database details", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedCreateOrRegenerateShare.mockRejectedValue(new Error("db details must not leak"));
+
+    const response = await POST(req("POST", "invoice-1"), makeContext("invoice-1"));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Tautan berbagi belum bisa dibuat. Coba lagi." });
+  });
+});
+
+describe("DELETE /api/invoices/[id]/share", () => {
+  it("rejects an unauthenticated request", async () => {
+    mockedAuth.mockResolvedValue(null as never);
+
+    const response = await DELETE(req("DELETE", "invoice-1"), makeContext("invoice-1"));
+
+    expect(response.status).toBe(401);
+    expect(mockedRevokeShare).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for an invoice not owned by the session user", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedRevokeShare.mockResolvedValue({ kind: "not-found" });
+
+    const response = await DELETE(req("DELETE", "invoice-x"), makeContext("invoice-x"));
+
+    expect(response.status).toBe(404);
+  });
+
+  it("revokes and returns the inactive state", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedRevokeShare.mockResolvedValue({ kind: "revoked" });
+
+    const response = await DELETE(req("DELETE", "invoice-1"), makeContext("invoice-1"));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ active: false });
+    expect(mockedRevokeShare).toHaveBeenCalledWith(expect.anything(), "invoice-1", "user-1");
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+  });
+
+  it("returns a controlled 500 without leaking database details", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedRevokeShare.mockRejectedValue(new Error("db details must not leak"));
+
+    const response = await DELETE(req("DELETE", "invoice-1"), makeContext("invoice-1"));
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: "Tautan berbagi belum bisa dicabut. Coba lagi." });
+  });
+});

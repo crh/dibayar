@@ -113,11 +113,25 @@ model Invoice {
   dueDate            DateTime?
   user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   deal               Deal               @relation(fields: [dealId], references: [id], onDelete: Restrict)
+  share              InvoiceShare?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
   @@unique([userId, number])
   @@index([dealId])
+}
+
+// Recipient share link: tokenHash is a SHA-256 hex digest of a 32-random-byte,
+// base64url token. The plaintext token is never persisted — only its hash, so
+// a lookup requires re-deriving the hash from a presented token. One row per
+// invoice; presence of a row means the link is active (revoke deletes the row).
+model InvoiceShare {
+  id        String   @id @default(cuid())
+  invoiceId String   @unique
+  tokenHash String   @unique
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // One row per (user, year, month); lastSequence is incremented atomically
