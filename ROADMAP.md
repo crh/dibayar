@@ -16,9 +16,9 @@
 - [x] Deal capture flow ≤60s on a phone (protected Preview create/read/update/delete smoke verified)
 - [x] Minimal tests around deal CRUD; audit log for auth events
 
-## M2 — Invoice (vertical slice #2)
-- [~] IDR invoice generation (shareable link + PDF), numbered, PPh 21/23 field — recipient share-link (Task F) is locally implemented and uncommitted (hash-only revocable token, owner lifecycle API/UI, public safe-field routes); migration `20260717090000_invoice_share` generated but NOT applied; item stays `[~]` pending isolated Preview migration apply + protected Preview deployment/runtime verification, then a separate Production/public-access decision
-- [~] Invoice status tracking (sent / due / overdue / paid)
+## M2 — Invoice (vertical slice #2) — ACCEPTED 2026-07-18
+- [x] IDR invoice generation (shareable link + PDF), numbered, PPh 21/23 field — recipient share-link (hash-only revocable token, owner lifecycle API/UI, public safe-field routes) committed (`85a4f6a`), hardened (`5064e70`), pushed, isolated Preview migration `20260717090000_invoice_share` applied, protected Preview deployed READY, Chrome E2E verified (create/regenerate/revoke, public JSON/PDF, old/new-token 404 invalidation). Production deployment and public/non-SSO recipient access remain separate, still-pending Chris decisions.
+- [x] Invoice status tracking (sent / due / overdue / paid) — dashboard stage-transition control committed/pushed/deployed and Chrome E2E verified alongside the above
 
 ## M3 — Payment Chasing (vertical slice #3)
 - [ ] Due-date reminders (in-app first; email if cheap)
