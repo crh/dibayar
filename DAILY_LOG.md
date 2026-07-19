@@ -428,3 +428,9 @@
 - Browser smoke could not proceed: the existing MCP browser profile is not authenticated for the new deployment hostname, and Vercel SSO intercepts the route before the app sign-in page. This is a real Preview verification blocker, not a claimed pass.
 - Per sequencing rule, Task 2 will not start until Chris authenticates the Preview or provides an approved authenticated smoke path. No disposable data was created, so cleanup is zero by construction.
 - `Rubric self-score: Evidence honesty 2/2; shipped completeness 1/2; security discipline 2/2; Focus 2/2; deploy health 1/2; report quality 2/2. Total 10/12.`
+
+## M3 Task 1 — Preview OAuth configuration blocker — 2026-07-19
+- Chris authorized copying encrypted Preview variables. Vercel’s CLI masked existing secret values, and the first branch-variable write created empty records; no secret values were printed. A metadata-based Preview candidate using the existing M2 Preview environment was used instead.
+- Protected Preview candidate `https://dibayar-4pbq0fqrh-kenji-iwakura.vercel.app` reaches the Auth.js sign-in page, confirming the Auth.js secret is available there. Clicking `Sign in with Google` reaches Google but fails with `Error 400: redirect_uri_mismatch` because the M3 hostname is not in the Google OAuth client allowlist.
+- No Google OAuth configuration, M2 alias, public access, Production, schema, migration, or application scope was changed. Task 2 remains blocked until an approved callback URI is configured or another approved authenticated smoke path is provided.
+- `Rubric self-score: Evidence honesty 2/2; shipped completeness 1/2; security discipline 2/2; Focus 2/2; deploy health 1/2; report quality 2/2. Total 10/12.`
