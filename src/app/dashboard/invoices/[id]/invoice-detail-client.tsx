@@ -4,16 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { InvoiceRecord } from "@/lib/invoices";
 import { buildWhatsAppReminderMessage, buildWhatsAppShareUrl, normalizeWhatsAppNumber } from "@/lib/whatsapp";
-
-const idr = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 });
-
-const STATUS_LABEL: Record<InvoiceRecord["status"], string> = {
-  DRAFT: "Draft",
-  SENT: "Terkirim",
-  DUE: "Jatuh tempo",
-  OVERDUE: "Terlambat",
-  PAID: "Lunas",
-};
+import { useLanguage, LanguageSwitcher } from "@/components/language-switcher";
+import type { Language } from "@/lib/i18n";
 
 const NEXT_ACTIONS: Record<InvoiceRecord["status"], Array<{ status: InvoiceRecord["status"]; label: string }>> = {
   DRAFT: [{ status: "SENT", label: "Tandai sudah dikirim" }],
@@ -29,13 +21,14 @@ const NEXT_ACTIONS: Record<InvoiceRecord["status"], Array<{ status: InvoiceRecor
   PAID: [],
 };
 
-function formatIdr(value: number) {
-  return `Rp${idr.format(value)}`;
+function formatIdr(value: number, language: Language) {
+  const formatter = new Intl.NumberFormat(language === "en" ? "en-US" : "id-ID", { maximumFractionDigits: 0 });
+  return language === "en" ? `IDR ${formatter.format(value)}` : `Rp${formatter.format(value)}`;
 }
 
-function formatDate(value: Date | null) {
-  if (!value) return "Belum ditentukan";
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date(value));
+function formatDate(value: Date | null, language: Language) {
+  if (!value) return language === "en" ? "Not set" : "Belum ditentukan";
+  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date(value));
 }
 
 const SHARE_LOAD_ERROR = "Status berbagi belum bisa dimuat. Coba lagi.";
@@ -83,25 +76,27 @@ function clearMutationError(prev: ShareState): ShareState {
   return prev;
 }
 
-function formatShareExpiry(expiresAt: string | null): string {
-  if (!expiresAt) return "Tautan aktif tanpa batas waktu.";
-  const date = new Intl.DateTimeFormat("id-ID", {
+function formatShareExpiry(expiresAt: string | null, language: Language): string {
+  if (!expiresAt) return language === "en" ? "Link active with no expiry." : "Tautan aktif tanpa batas waktu.";
+  const date = new Intl.DateTimeFormat(language === "en" ? "en-US" : "id-ID", {
     day: "numeric",
     month: "short",
     year: "numeric",
     timeZone: "UTC",
   }).format(new Date(expiresAt));
-  return `Tautan aktif sampai ${date}.`;
+  return language === "en" ? `Link active until ${date}.` : `Tautan aktif sampai ${date}.`;
 }
 
 type ShareConfirm = "regenerate" | "revoke" | null;
 
 type CopyFeedback = { kind: "success" | "error"; message: string };
 
-function ShareSection({ invoiceId, invoice, contactWa }: {
+function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
   invoiceId: string;
   invoice: InvoiceRecord;
   contactWa: string | null;
+  t: (key: string) => string;
+  language: Language;
 }) {
   const [share, setShare] = useState<ShareState>({ kind: "loading" });
   const [confirm, setConfirm] = useState<ShareConfirm>(null);
@@ -203,8 +198,8 @@ function ShareSection({ invoiceId, invoice, contactWa }: {
 
   return (
     <section aria-labelledby="bagikan-invoice" className="rounded-2xl border border-line bg-surface p-5">
-      <h2 id="bagikan-invoice" className="text-[18px] font-bold text-ink">Bagikan invoice</h2>
-      <p className="mt-1 text-[13px] text-muted">Buat tautan agar penerima bisa melihat invoice ini tanpa masuk akun.</p>
+      <h2 id="bagikan-invoice" className="text-[18px] font-bold text-ink">{t("invoice.share")}</h2>
+      <p className="mt-1 text-[13px] text-muted">{t("invoice.shareHint")}</p>
 
       {share.kind === "loading" ? <p className="mt-3 text-[14px] text-muted">Memuat status berbagi…</p> : null}
       {share.kind === "load-error" ? <p role="alert" className="mt-3 text-[13px] text-overdue">{share.message}</p> : null}
@@ -219,7 +214,7 @@ function ShareSection({ invoiceId, invoice, contactWa }: {
             onClick={createOrRegenerate}
             className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
           >
-            {isBusy ? "Membuat…" : "Buat tautan berbagi"}
+            {isBusy ? (language === "en" ? "Creating…" : "Membuat…") : t("invoice.create")}
           </button>
         </>
       ) : null}
@@ -227,8 +222,8 @@ function ShareSection({ invoiceId, invoice, contactWa }: {
       {share.kind === "active" ? (
         <>
           {share.error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{share.error}</p> : null}
-          <p className="mt-3 text-[14px] font-semibold text-paid">Tautan berbagi aktif.</p>
-          <p className="mt-1 text-[13px] text-muted">{formatShareExpiry(share.expiresAt)}</p>
+          <p className="mt-3 text-[14px] font-semibold text-paid">{t("invoice.active")}</p>
+          <p className="mt-1 text-[13px] text-muted">{formatShareExpiry(share.expiresAt, language)}</p>
           {share.link ? (
             <>
               <p className="mt-2 break-all text-[13px] text-muted">{share.link}</p>
@@ -237,7 +232,7 @@ function ShareSection({ invoiceId, invoice, contactWa }: {
                 onClick={() => copyLink(share.link!)}
                 className="mt-3 inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
               >
-                Salin tautan
+                {t("invoice.copy")}
               </button>
               {copyFeedback ? (
                 <p
@@ -250,13 +245,13 @@ function ShareSection({ invoiceId, invoice, contactWa }: {
             </>
           ) : null}
           <div className="mt-3 rounded-xl bg-bg p-3">
-            <p className="text-[13px] font-semibold text-ink">Kirim pengingat lewat WhatsApp</p>
+            <p className="text-[13px] font-semibold text-ink">{t("invoice.whatsapp")}</p>
             <p className="mt-1 text-[13px] text-muted">
               {!normalizedWhatsApp
-                ? "Nomor WhatsApp belum bisa dipakai. Periksa kontak di deal."
+                ? t("invoice.noContact")
                 : !whatsappHref
-                  ? "Buat tautan berbagi dulu agar pesan membawa link invoice."
-                  : "Pesan Bahasa Indonesia sudah disiapkan dengan nomor invoice, nominal, jatuh tempo, dan link invoice."}
+                  ? t("invoice.needShare")
+                  : t("invoice.bahasaReady")}
             </p>
             <button
               type="button"
@@ -264,7 +259,7 @@ function ShareSection({ invoiceId, invoice, contactWa }: {
               onClick={() => whatsappHref && window.open(whatsappHref, "_blank", "noopener,noreferrer")}
               className="mt-3 inline-flex h-11 items-center rounded-full bg-[#25D366] px-4 text-[14px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Buka WhatsApp
+              {t("invoice.openWhatsApp")}
             </button>
           </div>
 
@@ -275,7 +270,7 @@ function ShareSection({ invoiceId, invoice, contactWa }: {
               onClick={() => setConfirm("regenerate")}
               className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60"
             >
-              Buat ulang tautan
+              {t("invoice.regenerate")}
             </button>
             <button
               type="button"
@@ -283,7 +278,7 @@ function ShareSection({ invoiceId, invoice, contactWa }: {
               onClick={() => setConfirm("revoke")}
               className="inline-flex h-11 items-center rounded-full border border-overdue px-4 text-[14px] font-semibold text-overdue disabled:cursor-wait disabled:opacity-60"
             >
-              Cabut tautan
+              {t("invoice.revoke")}
             </button>
           </div>
 
@@ -343,6 +338,7 @@ function ShareSection({ invoiceId, invoice, contactWa }: {
 }
 
 export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice: InvoiceRecord }) {
+  const { language, setLanguage, t } = useLanguage();
   const [invoice, setInvoice] = useState(initialInvoice);
   const [contactWa, setContactWa] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -383,29 +379,33 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
   return (
     <main className="mx-auto flex w-full max-w-xl flex-col gap-6 px-5 py-8 sm:px-8">
       <Link href="/dashboard" className="inline-flex w-fit text-[14px] font-semibold text-primary">
-        ← Kembali ke dashboard
+        ← {language === "en" ? "Back to dashboard" : "Kembali ke dashboard"}
       </Link>
+
+      <header className="flex items-center justify-end">
+        <LanguageSwitcher language={language} onChange={setLanguage} compact />
+      </header>
 
       <header className="rounded-2xl border border-line bg-surface p-5 shadow-sm">
         <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
-        <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-[28px] font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr)}</h1>
-          <span className="rounded-full bg-bg px-3 py-1 text-[13px] font-semibold text-ink">{STATUS_LABEL[invoice.status]}</span>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-[28px] font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr, language)}</h1>
+          <span className="rounded-full bg-bg px-3 py-1 text-[13px] font-semibold text-ink">{invoice.status === "PAID" ? t("invoice.paid") : invoice.status === "SENT" ? t("invoice.sent") : invoice.status === "DUE" ? t("invoice.due") : invoice.status === "OVERDUE" ? t("invoice.overdue") : t("invoice.draft")}</span>
         </div>
-        <p className="mt-3 text-[14px] text-muted">Jatuh tempo: {formatDate(invoice.dueDate)}</p>
+        <p className="mt-3 text-[14px] text-muted">{language === "en" ? "Due: " : "Jatuh tempo: "}{formatDate(invoice.dueDate, language)}</p>
         <a
           href={`/api/invoices/${invoice.id}/pdf`}
           className="mt-4 inline-flex h-10 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
         >
-          Unduh PDF
+          {language === "en" ? "Download PDF" : "Unduh PDF"}
         </a>
       </header>
 
       <section aria-labelledby="rincian-invoice" className="rounded-2xl border border-line bg-surface p-5">
-        <h2 id="rincian-invoice" className="text-[18px] font-bold text-ink">Rincian invoice</h2>
+        <h2 id="rincian-invoice" className="text-[18px] font-bold text-ink">{language === "en" ? "Invoice details" : "Rincian invoice"}</h2>
         <dl className="mt-4 grid gap-3 text-[15px]">
           <div className="flex items-center justify-between gap-4 border-b border-line pb-3">
-            <dt className="text-muted">Nomor invoice</dt>
+            <dt className="text-muted">{language === "en" ? "Invoice number" : "Nomor invoice"}</dt>
             <dd className="font-semibold text-ink">{invoice.number}</dd>
           </div>
           <div className="flex items-center justify-between gap-4 border-b border-line pb-3">
@@ -414,14 +414,14 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
           </div>
           <div className="flex items-center justify-between gap-4">
             <dt className="text-muted">Nilai invoice</dt>
-            <dd className="font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr)}</dd>
+            <dd className="font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr, language)}</dd>
           </div>
         </dl>
       </section>
 
       <section aria-labelledby="status-invoice" className="rounded-2xl border border-line bg-surface p-5">
-        <h2 id="status-invoice" className="text-[18px] font-bold text-ink">Status pembayaran</h2>
-        <p className="mt-1 text-[13px] text-muted">Pilih tahap berikutnya setelah invoice benar-benar bergerak.</p>
+        <h2 id="status-invoice" className="text-[18px] font-bold text-ink">{language === "en" ? "Payment status" : "Status pembayaran"}</h2>
+        <p className="mt-1 text-[13px] text-muted">{language === "en" ? "Choose the next step after the invoice moves forward." : "Pilih tahap berikutnya setelah invoice benar-benar bergerak."}</p>
         {error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{error}</p> : null}
         {NEXT_ACTIONS[invoice.status].length ? (
           <div className="mt-4 flex flex-wrap gap-2">
@@ -433,16 +433,16 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
                 onClick={() => updateStatus(action.status)}
                 className="inline-flex h-10 items-center rounded-full bg-primary px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
               >
-                {isSaving ? "Menyimpan…" : action.label}
+                {isSaving ? (language === "en" ? "Saving…" : "Menyimpan…") : action.status === "SENT" ? (language === "en" ? "Mark as sent" : action.label) : action.status === "DUE" ? (language === "en" ? "Mark as due" : action.label) : action.status === "OVERDUE" ? (language === "en" ? "Mark as overdue" : action.label) : (language === "en" ? "Mark as paid" : action.label)}
               </button>
             ))}
           </div>
         ) : (
-          <p className="mt-4 rounded-xl bg-paid/10 px-3 py-2 text-[14px] font-semibold text-paid">Invoice ini sudah lunas.</p>
+          <p className="mt-4 rounded-xl bg-paid/10 px-3 py-2 text-[14px] font-semibold text-paid">{language === "en" ? "This invoice is already paid." : "Invoice ini sudah lunas."}</p>
         )}
       </section>
 
-      <ShareSection invoiceId={invoice.id} invoice={invoice} contactWa={contactWa} />
+      <ShareSection invoiceId={invoice.id} invoice={invoice} contactWa={contactWa} t={t} language={language} />
     </main>
   );
 }

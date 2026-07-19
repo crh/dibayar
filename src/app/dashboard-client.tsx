@@ -5,7 +5,10 @@ import Link from "next/link";
 import type { DealRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
 import { deriveInvoiceDisplayStatus, DUE_SOON_WINDOW_DAYS, selectAttentionInvoices } from "@/lib/invoice-date-status";
+import { useLanguage } from "@/components/language-switcher";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { summarizeMonthlyIncome } from "@/lib/income-summary";
+import type { Language } from "@/lib/i18n";
 
 const PIPELINE_STAGES = [
   { value: "MASUK", label: "Masuk" },
@@ -16,6 +19,14 @@ const PIPELINE_STAGES = [
   { value: "DIBAYAR", label: "Dibayar" },
 ] as const;
 
+const PIPELINE_STAGE_KEYS: Record<string, string> = {
+  MASUK: "stage.inbox",
+  NEGO: "stage.negotiation",
+  DEAL: "stage.deal",
+  KONTEN: "stage.content",
+  INVOICE: "stage.invoice",
+  DIBAYAR: "stage.paid",
+};
 type DashboardClientProps = {
   initialDeals: DealRecord[];
   initialInvoices?: InvoiceRecord[];
@@ -42,31 +53,20 @@ const EMPTY_FORM: FormState = {
   paymentTerms: "",
 };
 
-const idr = new Intl.NumberFormat("id-ID", {
-  maximumFractionDigits: 0,
-});
-
-function formatIdr(value: number) {
-  return `Rp${idr.format(value)}`;
+function formatIdr(value: number, language: Language) {
+  const formatter = new Intl.NumberFormat(language === "en" ? "en-US" : "id-ID", { maximumFractionDigits: 0 });
+  return language === "en" ? `IDR ${formatter.format(value)}` : `Rp${formatter.format(value)}`;
 }
 
-function formatDeadline(value: Date | null) {
-  if (!value) return "Tanpa tenggat";
-  return new Intl.DateTimeFormat("id-ID", {
+function formatDeadline(value: Date | null, language: Language) {
+  if (!value) return language === "en" ? "No deadline" : "Tanpa tenggat";
+  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "id-ID", {
     day: "numeric",
     month: "short",
     year: "numeric",
     timeZone: "UTC",
   }).format(new Date(value));
 }
-
-const INVOICE_STATUS_LABEL: Record<InvoiceRecord["status"], string> = {
-  DRAFT: "Draft",
-  SENT: "Terkirim",
-  DUE: "Jatuh tempo",
-  OVERDUE: "Terlambat",
-  PAID: "Lunas",
-};
 
 function statusClass(status: InvoiceRecord["status"]) {
   if (status === "PAID") return "bg-paid/15 text-paid";
@@ -75,7 +75,11 @@ function statusClass(status: InvoiceRecord["status"]) {
   return "bg-bg text-muted";
 }
 
-function AttentionInvoiceCard({ invoice }: { invoice: InvoiceRecord & { displayStatus: InvoiceRecord["status"] } }) {
+function AttentionInvoiceCard({ invoice, language, t }: {
+  invoice: InvoiceRecord & { displayStatus: InvoiceRecord["status"] };
+  language: Language;
+  t: (key: string, values?: Record<string, string>) => string;
+}) {
   return (
     <Link
       href={`/dashboard/invoices/${invoice.id}`}
@@ -84,18 +88,19 @@ function AttentionInvoiceCard({ invoice }: { invoice: InvoiceRecord & { displayS
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
-          <p className="mt-1 text-[18px] font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr)}</p>
+          <p className="mt-1 text-[18px] font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr, language)}</p>
         </div>
         <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${statusClass(invoice.displayStatus)}`}>
-          {INVOICE_STATUS_LABEL[invoice.displayStatus]}
+          {invoice.displayStatus === "OVERDUE" ? t("dashboard.overdue") : t("dashboard.dueSoon")}
         </span>
       </div>
-      <p className="mt-3 text-[13px] text-muted">Jatuh tempo: {formatDeadline(invoice.dueDate)}</p>
+      <p className="mt-3 text-[13px] text-muted">{t("dashboard.dueDate", { date: formatDeadline(invoice.dueDate, language) })}</p>
     </Link>
   );
 }
 
 export default function DashboardClient({ initialDeals, initialInvoices = [], userName, now }: DashboardClientProps) {
+  const { language, setLanguage, t } = useLanguage();
   const [deals, setDeals] = useState(initialDeals);
   const [invoices, setInvoices] = useState(initialInvoices);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -166,10 +171,10 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
         body: JSON.stringify({ dealId, withholdingTaxType: "NONE" }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "Invoice belum bisa dibuat.");
+      if (!response.ok) throw new Error(payload.error ?? t("dashboard.invoiceError"));
       setInvoices((current) => [payload.invoice, ...current]);
     } catch (submissionError) {
-      setError(submissionError instanceof Error ? submissionError.message : "Invoice belum bisa dibuat.");
+      setError(submissionError instanceof Error ? submissionError.message : t("dashboard.invoiceError"));
     } finally {
       setIsSaving(false);
     }
@@ -180,25 +185,28 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
       <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[13px] font-semibold uppercase tracking-wide text-primary">Dibayar</p>
-          <h1 className="text-[26px] font-bold text-ink">Halo{userName ? `, ${userName}` : ""}</h1>
-          <p className="text-[15px] text-muted">Pantau deal brand kamu sampai dibayar.</p>
+          <h1 className="text-[26px] font-bold text-ink">{t("dashboard.greeting", { name: userName ?? "" })}</h1>
+          <p className="text-[15px] text-muted">{t("dashboard.subtitle")}</p>
         </div>
-        <Link
-          href="/api/auth/signout?callbackUrl=/"
-          className="inline-flex h-11 w-fit items-center rounded-full border border-line bg-surface px-4 text-[15px] font-semibold text-ink"
-        >
-          Keluar
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <LanguageSwitcher language={language} onChange={setLanguage} compact />
+          <Link
+            href="/api/auth/signout?callbackUrl=/"
+            className="inline-flex h-11 w-fit items-center rounded-full border border-line bg-surface px-4 text-[15px] font-semibold text-ink"
+          >
+            {t("dashboard.signOut")}
+          </Link>
+        </div>
       </header>
 
       <section aria-labelledby="tambah-deal" className="rounded-2xl border border-line bg-surface p-5 shadow-sm">
         <div className="mb-5">
-          <h2 id="tambah-deal" className="text-[20px] font-bold text-ink">Tambah deal pertama kamu</h2>
-          <p className="mt-1 text-[13px] text-muted">Isi yang penting dulu. Detail lain bisa kamu lengkapi nanti.</p>
+          <h2 id="tambah-deal" className="text-[20px] font-bold text-ink">{t("dashboard.addDeal")}</h2>
+          <p className="mt-1 text-[13px] text-muted">{t("dashboard.addDealHint")}</p>
         </div>
         <form className="grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit}>
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
-            Nama brand
+            {t("dashboard.brand")}
             <input
               required
               name="brand"
@@ -208,7 +216,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
             />
           </label>
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
-            Kontak WhatsApp
+            {t("dashboard.whatsapp")}
             <input
               required
               name="contactWa"
@@ -219,7 +227,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
             />
           </label>
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink sm:col-span-2">
-            Scope pekerjaan
+            {t("dashboard.scope")}
             <textarea
               required
               name="scope"
@@ -229,7 +237,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
             />
           </label>
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
-            Fee (Rp)
+            {t("dashboard.fee")}
             <input
               required
               min="0"
@@ -242,7 +250,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
             />
           </label>
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
-            Tenggat
+            {t("dashboard.deadline")}
             <input
               name="deadline"
               type="date"
@@ -252,7 +260,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
             />
           </label>
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink sm:col-span-2">
-            Syarat pembayaran (opsional)
+            {t("dashboard.paymentTerms")}
             <input
               name="paymentTerms"
               value={form.paymentTerms}
@@ -266,72 +274,72 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
             disabled={isSaving}
             className="inline-flex h-11 items-center justify-center rounded-full bg-primary px-5 text-[15px] font-semibold text-surface hover:bg-primary-d disabled:cursor-wait disabled:opacity-60 sm:col-span-2 sm:w-fit"
           >
-            {isSaving ? "Menyimpan…" : "Simpan deal"}
+            {isSaving ? t("dashboard.saving") : t("dashboard.saveDeal")}
           </button>
         </form>
       </section>
 
       <section aria-labelledby="perlu-dikejar" className="flex flex-col gap-4">
-        <div>
-          <h2 id="perlu-dikejar" className="text-[20px] font-bold text-ink">Perlu dikejar</h2>
-          <p className="text-[13px] text-muted">Invoice terlambat dan yang jatuh tempo dalam 7 hari.</p>
-        </div>
-        {overdue.length || dueSoon.length ? (
-          <div className="flex flex-col gap-4">
-            {overdue.length ? (
               <div>
-                <h3 className="text-[15px] font-bold text-overdue">Terlambat ({overdue.length}) · {formatIdr(overdueTotal)}</h3>
-                <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                  {overdue.map((invoice) => (
-                    <AttentionInvoiceCard key={invoice.id} invoice={invoice} />
-                  ))}
-                </div>
+                <h2 id="perlu-dikejar" className="text-[20px] font-bold text-ink">{t("dashboard.attention")}</h2>
+                <p className="text-[13px] text-muted">{language === "en" ? `Overdue invoices and those due within ${DUE_SOON_WINDOW_DAYS} days.` : `Invoice terlambat dan yang jatuh tempo dalam ${DUE_SOON_WINDOW_DAYS} hari.`}</p>
               </div>
-            ) : null}
-            {dueSoon.length ? (
-              <div>
-                <h3 className="text-[15px] font-bold text-ink">Jatuh tempo dalam {DUE_SOON_WINDOW_DAYS} hari ({dueSoon.length}) · {formatIdr(dueSoonTotal)}</h3>
-                <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                  {dueSoon.map((invoice) => (
-                    <AttentionInvoiceCard key={invoice.id} invoice={invoice} />
-                  ))}
+              {overdue.length || dueSoon.length ? (
+                <div className="flex flex-col gap-4">
+                  {overdue.length ? (
+                    <div>
+                      <h3 className="text-[15px] font-bold text-overdue">{t("dashboard.overdue")} ({overdue.length}) · {formatIdr(overdueTotal, language)}</h3>
+                      <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                        {overdue.map((invoice) => (
+                          <AttentionInvoiceCard key={invoice.id} invoice={invoice} language={language} t={t} />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {dueSoon.length ? (
+                    <div>
+                      <h3 className="text-[15px] font-bold text-ink">{language === "en" ? `Due within ${DUE_SOON_WINDOW_DAYS} days` : `Jatuh tempo dalam ${DUE_SOON_WINDOW_DAYS} hari`} ({dueSoon.length}) · {formatIdr(dueSoonTotal, language)}</h3>
+                      <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                        {dueSoon.map((invoice) => (
+                          <AttentionInvoiceCard key={invoice.id} invoice={invoice} language={language} t={t} />
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <p className="rounded-2xl border border-dashed border-line bg-surface p-4 text-[13px] text-muted">
-            Tidak ada invoice yang perlu dikejar saat ini.
-          </p>
-        )}
-      </section>
+              ) : (
+                <p className="rounded-2xl border border-dashed border-line bg-surface p-4 text-[13px] text-muted">
+                  {t("dashboard.noAttention")}
+                </p>
+              )}
+            </section>
 
       <section aria-labelledby="ringkasan-pendapatan" className="flex flex-col gap-4">
         <div>
-          <h2 id="ringkasan-pendapatan" className="text-[20px] font-bold text-ink">Ringkasan pendapatan</h2>
-          <p className="text-[13px] text-muted">Invoice terbit · {incomeSummary.label} · {incomeSummary.invoiceCount} invoice</p>
+          <h2 id="ringkasan-pendapatan" className="text-[20px] font-bold text-ink">{t("dashboard.income")}</h2>
+          <p className="text-[13px] text-muted">{t("dashboard.issued")} · {incomeSummary.label} · {incomeSummary.invoiceCount}</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-line bg-surface p-4">
-            <p className="text-[13px] text-muted">Gross</p>
-            <p className="mt-1 text-[20px] font-bold tabular-nums text-ink">{formatIdr(incomeSummary.grossIdr)}</p>
+            <p className="text-[13px] text-muted">{t("dashboard.gross")}</p>
+            <p className="mt-1 text-[20px] font-bold tabular-nums text-ink">{formatIdr(incomeSummary.grossIdr, language)}</p>
           </div>
           <div className="rounded-2xl border border-line bg-surface p-4">
-            <p className="text-[13px] text-muted">Estimasi PPh</p>
-            <p className="mt-1 text-[20px] font-bold tabular-nums text-overdue">-{formatIdr(incomeSummary.withholdingIdr)}</p>
+            <p className="text-[13px] text-muted">{t("dashboard.withholding")}</p>
+            <p className="mt-1 text-[20px] font-bold tabular-nums text-overdue">-{formatIdr(incomeSummary.withholdingIdr, language)}</p>
           </div>
           <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
-            <p className="text-[13px] text-muted">Net estimasi</p>
-            <p className="mt-1 text-[20px] font-bold tabular-nums text-primary">{formatIdr(incomeSummary.netIdr)}</p>
+            <p className="text-[13px] text-muted">{t("dashboard.estimated")}</p>
+            <p className="mt-1 text-[20px] font-bold tabular-nums text-primary">{formatIdr(incomeSummary.netIdr, language)}</p>
           </div>
         </div>
-        <p className="text-[12px] text-muted">Estimasi menggunakan PPh 21 5% dan PPh 23 2%; bukan perhitungan atau nasihat pajak resmi.</p>
+        <p className="text-[12px] text-muted">{t("dashboard.taxNote")}</p>
       </section>
 
       <section aria-labelledby="pipeline" className="flex flex-col gap-4">
         <div>
-          <h2 id="pipeline" className="text-[20px] font-bold text-ink">Pipeline deal</h2>
-          <p className="text-[13px] text-muted">Geser ke samping untuk melihat semua tahap.</p>
+          <h2 id="pipeline" className="text-[20px] font-bold text-ink">{t("dashboard.pipeline")}</h2>
+          <p className="text-[13px] text-muted">{language === "en" ? "Swipe sideways to see every stage." : "Geser ke samping untuk melihat semua tahap."}</p>
         </div>
         <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
           {PIPELINE_STAGES.map((stage) => {
@@ -339,15 +347,15 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
             return (
               <section key={stage.value} aria-labelledby={`stage-${stage.value}`} className="min-w-0 rounded-2xl border border-line bg-surface p-3">
                 <div className="mb-3 flex items-center justify-between gap-2">
-                  <h3 id={`stage-${stage.value}`} className="text-[15px] font-bold text-ink">{stage.label}</h3>
+                  <h3 id={`stage-${stage.value}`} className="text-[15px] font-bold text-ink">{t(PIPELINE_STAGE_KEYS[stage.value])}</h3>
                   <span className="rounded-full bg-bg px-2 py-1 text-[12px] font-semibold text-muted">{stageDeals.length}</span>
                 </div>
                 <div className="flex flex-col gap-2">
                   {stageDeals.length ? stageDeals.map((deal) => (
                     <article key={deal.id} className="rounded-xl border border-line bg-bg p-3">
                       <h4 className="font-semibold text-ink">{deal.brand}</h4>
-                      <p className="mt-1 text-[15px] font-bold tabular-nums text-primary">{formatIdr(deal.feeIdr)}</p>
-                      <p className="mt-1 text-[12px] text-muted">{formatDeadline(deal.deadline)}</p>
+                      <p className="mt-1 text-[15px] font-bold tabular-nums text-primary">{formatIdr(deal.feeIdr, language)}</p>
+                      <p className="mt-1 text-[12px] text-muted">{formatDeadline(deal.deadline, language)}</p>
                       <label className="sr-only" htmlFor={`stage-select-${deal.id}`}>
                         {`Tahap deal ${deal.brand}`}
                       </label>
@@ -360,7 +368,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
                       >
                         {PIPELINE_STAGES.map((stage) => (
                           <option key={stage.value} value={stage.value}>
-                            {stage.label}
+                            {t(PIPELINE_STAGE_KEYS[stage.value])}
                           </option>
                         ))}
                       </select>
@@ -371,12 +379,12 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
                           onClick={() => handleCreateInvoice(deal.id)}
                           className="mt-3 inline-flex h-9 items-center rounded-full bg-primary px-3 text-[13px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
                         >
-                          {isSaving ? "Membuat…" : "Buat invoice"}
+                          {isSaving ? t("dashboard.saving") : t("dashboard.createInvoice")}
                         </button>
                       ) : null}
                     </article>
                   )) : (
-                    <p className="text-[13px] text-muted">Belum ada deal</p>
+                    <p className="text-[13px] text-muted">{language === "en" ? "No deals in this stage." : "Belum ada deal"}</p>
                   )}
                 </div>
               </section>
@@ -387,8 +395,8 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
 
       <section aria-labelledby="invoice-saya" className="flex flex-col gap-4">
         <div>
-          <h2 id="invoice-saya" className="text-[20px] font-bold text-ink">Invoice saya</h2>
-          <p className="text-[13px] text-muted">Buat dari deal tahap Invoice, lalu pantau sampai lunas.</p>
+          <h2 id="invoice-saya" className="text-[20px] font-bold text-ink">{language === "en" ? "My invoices" : "Invoice saya"}</h2>
+          <p className="text-[13px] text-muted">{language === "en" ? "Create invoices from the Invoice stage and track them until paid." : "Buat dari deal tahap Invoice, lalu pantau sampai lunas."}</p>
         </div>
         {invoices.length ? (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -403,13 +411,13 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
-                      <p className="mt-1 text-[18px] font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr)}</p>
+                      <p className="mt-1 text-[18px] font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr, language)}</p>
                     </div>
                     <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${statusClass(displayStatus)}`}>
-                      {INVOICE_STATUS_LABEL[displayStatus]}
+                      {displayStatus === "PAID" ? t("invoice.paid") : displayStatus === "SENT" ? t("invoice.sent") : displayStatus === "DUE" ? t("invoice.due") : displayStatus === "OVERDUE" ? t("invoice.overdue") : t("invoice.draft")}
                     </span>
                   </div>
-                  <p className="mt-3 text-[13px] text-muted">{formatDeadline(invoice.dueDate)}</p>
+                  <p className="mt-3 text-[13px] text-muted">{formatDeadline(invoice.dueDate, language)}</p>
                 </Link>
               );
             })}
