@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { DealRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
 import { deriveInvoiceDisplayStatus, DUE_SOON_WINDOW_DAYS, selectAttentionInvoices } from "@/lib/invoice-date-status";
+import { summarizeMonthlyIncome } from "@/lib/income-summary";
 
 const PIPELINE_STAGES = [
   { value: "MASUK", label: "Masuk" },
@@ -105,6 +106,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
   const { overdue, dueSoon } = selectAttentionInvoices(invoices, referenceNow);
   const overdueTotal = overdue.reduce((total, invoice) => total + invoice.subtotalIdr, 0);
   const dueSoonTotal = dueSoon.reduce((total, invoice) => total + invoice.subtotalIdr, 0);
+  const incomeSummary = summarizeMonthlyIncome(invoices, referenceNow);
 
   async function handleStageChange(dealId: string, status: DealRecord["status"]) {
     setError(null);
@@ -302,6 +304,28 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
             Tidak ada invoice yang perlu dikejar saat ini.
           </p>
         )}
+      </section>
+
+      <section aria-labelledby="ringkasan-pendapatan" className="flex flex-col gap-4">
+        <div>
+          <h2 id="ringkasan-pendapatan" className="text-[20px] font-bold text-ink">Ringkasan pendapatan</h2>
+          <p className="text-[13px] text-muted">Invoice terbit · {incomeSummary.label} · {incomeSummary.invoiceCount} invoice</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-line bg-surface p-4">
+            <p className="text-[13px] text-muted">Gross</p>
+            <p className="mt-1 text-[20px] font-bold tabular-nums text-ink">{formatIdr(incomeSummary.grossIdr)}</p>
+          </div>
+          <div className="rounded-2xl border border-line bg-surface p-4">
+            <p className="text-[13px] text-muted">Estimasi PPh</p>
+            <p className="mt-1 text-[20px] font-bold tabular-nums text-overdue">-{formatIdr(incomeSummary.withholdingIdr)}</p>
+          </div>
+          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+            <p className="text-[13px] text-muted">Net estimasi</p>
+            <p className="mt-1 text-[20px] font-bold tabular-nums text-primary">{formatIdr(incomeSummary.netIdr)}</p>
+          </div>
+        </div>
+        <p className="text-[12px] text-muted">Estimasi menggunakan PPh 21 5% dan PPh 23 2%; bukan perhitungan atau nasihat pajak resmi.</p>
       </section>
 
       <section aria-labelledby="pipeline" className="flex flex-col gap-4">
