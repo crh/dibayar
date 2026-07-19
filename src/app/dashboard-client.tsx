@@ -19,6 +19,14 @@ const PIPELINE_STAGES = [
   { value: "DIBAYAR", label: "Dibayar" },
 ] as const;
 
+function formatIncomeLabel(year: number, month: number, language: Language) {
+  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "id-ID", {
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Jakarta",
+  }).format(new Date(Date.UTC(year, month - 1, 15)));
+}
+
 const PIPELINE_STAGE_KEYS: Record<string, string> = {
   MASUK: "stage.inbox",
   NEGO: "stage.negotiation",
@@ -317,7 +325,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
       <section aria-labelledby="ringkasan-pendapatan" className="flex flex-col gap-4">
         <div>
           <h2 id="ringkasan-pendapatan" className="text-[20px] font-bold text-ink">{t("dashboard.income")}</h2>
-          <p className="text-[13px] text-muted">{t("dashboard.issued")} · {incomeSummary.label} · {incomeSummary.invoiceCount}</p>
+          <p className="text-[13px] text-muted">{t("dashboard.issued")} · {formatIncomeLabel(incomeSummary.year, incomeSummary.month, language)} · {incomeSummary.invoiceCount}</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-line bg-surface p-4">
