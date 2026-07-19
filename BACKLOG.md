@@ -1,6 +1,6 @@
 # BACKLOG.md
 
-<!-- Pick 1–3 items per day into STATE.md today_tasks. Prefer finishing one vertical slice.
+<!-- Pick approved work into STATE.md today_tasks. Prefer finishing one vertical slice.
      Prune stale items every Monday retro. Keep items one line each. -->
 
 ## Product / UX

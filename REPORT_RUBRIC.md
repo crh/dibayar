@@ -26,9 +26,9 @@
    2 = all gates run, SECURITY.md current, gaps logged honestly
 
 4. Focus
-   0 = >3 tasks touched or scope drift / unapproved direction change
-   1 = mostly on-plan with small drift
-   2 = 1–3 planned tasks, drift = zero or logged to pivot_watch
+   0 = self-directed scope drift or an unapproved direction change not logged to pivot_watch
+   1 = on-plan overall, but with minor unlogged detours
+   2 = all work was planned or explicitly Chris-requested; any drift logged to pivot_watch
 
 5. Deploy health
    0 = red build/deploy unexplained

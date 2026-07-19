@@ -13,7 +13,7 @@ product_name: Dibayar (working name — rename requires Chris approval)
 one_liner: Brand-deal CRM + invoice + payment tracker for Indonesian creators (WhatsApp-first)
 phase: 1-build            # 0-discovery | 1-build | 2-validate  (transition = Chris approval)
 phase_started: 2026-07-12
-day_count: 7
+day_count: 8
 repo_url: git@github.com:crh/dibayar.git
 prod_url: https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/
 last_deploy: 2026-07-18 — commit `5064e70` (invoice-share mutation hardening) pushed to `origin/hermes/m2-invoice`; local HEAD == origin HEAD == `5064e70`, working tree docs-only dirty (this reconciliation). Protected Preview `dpl_JBQfD2wYbjuDhb81t4GrYyjLAmBo` (target preview) is READY at https://dibayar-6jix1zc83-kenji-iwakura.vercel.app, stable alias https://dibayar-git-hermes-m2-invoice-kenji-iwakura.vercel.app. Prior commit `85a4f6a` deployed as `dpl_3XePMMPAs9tSBydhmPYNQ687QSFZ`, also READY, and carries the isolated-Preview migration apply + full Chrome E2E pass described below. Production untouched; no public/non-SSO access enabled.
@@ -33,13 +33,11 @@ completed_milestones:
   - M1 auth + deal pipeline accepted on protected Preview
   - M2 invoice (generation, share-link, status tracking) accepted on protected Preview 2026-07-18 — Production/public-access separately gated, not yet decided
 
-today_tasks_max_3 (2026-07-18 is a multi-task day under Chris's standing continuation authorization; Focus stays 0/2, see DAILY_LOG):
-  - Deploy + verify Task F/G (`85a4f6a`): committed, pushed, isolated Preview migration applied, protected Preview READY, full Chrome E2E passed, cleanup 0/0/0 — done
-  - Mutation hardening (`5064e70`): owner-auth share route + dashboard client hardened, committed, pushed, deployed READY — done
-  - Stuck-loading bug re-diagnosis: reported bug not reproducible; post-deploy screenshot confirms correct active-share UI — done
-  - M2 documentation reconciliation + explicit acceptance (this task) — done
+today_work (Focus measures approved scope, not task volume, from 2026-07-19):
+  - Governance catch-up Task 1: apply the Chris-approved Focus amendment and consistency sweep — done
+  - Governance catch-up Tasks 2–4: share expiry implementation plus public-access and distributed-rate-limit decision docs — requested; next
 
-open_blockers: none for M2 (accepted). Separate, still-pending, Chris-gated decisions: (1) Production deployment, (2) public/non-SSO recipient access for share links. Unrelated: unattended cron remains NO-GO on `daily-log-no-zero-dimension` (today's Focus 0/2) — not an M2 blocker.
+open_blockers: none for M2 (accepted). Separate, still-pending, Chris-gated decisions: (1) Production deployment, (2) public/non-SSO recipient access for share links. The 2026-07-19 amended-rubric entry establishes a no-zero day; unattended cron still requires a fresh post-commit guard check before go/no-go.
 
 ## recent_signal_findings
 - No external signal check recorded.
@@ -49,6 +47,7 @@ open_blockers: none for M2 (accepted). Separate, still-pending, Chris-gated deci
 (empty)
 
 ## decisions_last_3_days
+- 2026-07-19: Applied Chris's 2026-07-17 Focus amendment. Focus now measures whether work stayed planned or explicitly requested; task volume is not scored. Historical DAILY_LOG scores remain unchanged. Thresholds, Gate E, and cron-guard code are unchanged. Today's Task 1 entry scores no dimension 0; unattended cron awaits a fresh guard check after commit.
 - 2026-07-18: M2 explicitly accepted; both ROADMAP.md M2 items marked `[x]`. Basis: `85a4f6a` (share-link + stage controls) and `5064e70` (mutation hardening) both committed and pushed; `origin/hermes/m2-invoice` HEAD == local HEAD == `5064e70`. Isolated Preview migration `20260717090000_invoice_share` applied. Protected Preview `dpl_JBQfD2wYbjuDhb81t4GrYyjLAmBo` (`5064e70`) READY; prior `dpl_3XePMMPAs9tSBydhmPYNQ687QSFZ` (`85a4f6a`) also READY, same stable alias, both Vercel-SSO protected. Full authenticated Chrome E2E on the `85a4f6a` deployment passed: dashboard stage transition, invoice creation, share create/regenerate/revoke, recipient page, public JSON/PDF privacy headers, old/new-token 404 invalidation; cleanup returned disposable deal/invoice/share counts to 0/0/0; browser console clean; mobile Lighthouse Accessibility/Best Practices/SEO all 100. A later "share panel stuck loading" report was diagnosed and found not reproducible — the code already handles the `{ active: false }` transition correctly; a post-`5064e70` browser screenshot (inspected by Hermes, not run by Claude) confirms the working active-share state. Excluded from this acceptance, separately gated and undecided: Production deployment, public/non-SSO recipient access. The unrelated cron NO-GO (today's Focus 0/2) is not an M2 blocker. Full detail: DAILY_LOG "Day 1 M2 acceptance and documentation reconciliation — 2026-07-18".
 - 2026-07-18 (earlier same day, superseded by the above): Task F+G final pre-commit review passed (dashboard 7/7, share/public 37/37, full suite 27 files/223 tests, lint/typecheck/build/prisma/cron-guard/diff-check all green). The "uncommitted/unpushed/undeployed" and "M2 NOT accepted" language recorded at that point has since been superseded by the commit/push/migration-apply/deploy/E2E chain above. Full detail: DAILY_LOG "Day 1 Task F+G — final pre-commit review disposition — 2026-07-18" and the earlier Task F entries.
 - 2026-07-17: Chris approved item 1 (push 8 M2 commits + protected Preview redeploy) and separately approved option A for share-link scope; both executed and closed same day. Full detail: DAILY_LOG "Day 1 Task C/D/E/F" entries.
