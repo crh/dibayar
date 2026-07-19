@@ -59,13 +59,17 @@ describe("GET /api/invoices/[id]/share", () => {
 
   it("returns the active state without a token or hash", async () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
-    mockedGetShareState.mockResolvedValue({ kind: "state", active: true });
+    mockedGetShareState.mockResolvedValue({
+      kind: "state",
+      active: true,
+      expiresAt: new Date("2026-10-17T00:00:00.000Z"),
+    });
 
     const response = await GET(req("GET", "invoice-1"), makeContext("invoice-1"));
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ active: true });
+    expect(body).toEqual({ active: true, expiresAt: "2026-10-17T00:00:00.000Z" });
     expect(mockedGetShareState).toHaveBeenCalledWith(expect.anything(), "invoice-1", "user-1");
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
   });
@@ -102,13 +106,21 @@ describe("POST /api/invoices/[id]/share", () => {
 
   it("creates or regenerates and returns the plaintext path exactly once", async () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
-    mockedCreateOrRegenerateShare.mockResolvedValue({ kind: "created", path: "/i/abc123token" });
+    mockedCreateOrRegenerateShare.mockResolvedValue({
+      kind: "created",
+      path: "/i/abc123token",
+      expiresAt: new Date("2026-10-17T00:00:00.000Z"),
+    });
 
     const response = await POST(req("POST", "invoice-1"), makeContext("invoice-1"));
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ active: true, path: "/i/abc123token" });
+    expect(body).toEqual({
+      active: true,
+      path: "/i/abc123token",
+      expiresAt: "2026-10-17T00:00:00.000Z",
+    });
     expect(mockedCreateOrRegenerateShare).toHaveBeenCalledWith(expect.anything(), "invoice-1", "user-1");
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
   });
@@ -172,7 +184,11 @@ describe("same-origin protection for POST/DELETE /api/invoices/[id]/share", () =
   });
 
   it("allows a same-origin POST", async () => {
-    mockedCreateOrRegenerateShare.mockResolvedValue({ kind: "created", path: "/i/abc123token" });
+    mockedCreateOrRegenerateShare.mockResolvedValue({
+      kind: "created",
+      path: "/i/abc123token",
+      expiresAt: new Date("2026-10-17T00:00:00.000Z"),
+    });
 
     const response = await POST(req("POST", "invoice-1", { origin: "http://localhost" }), makeContext("invoice-1"));
 

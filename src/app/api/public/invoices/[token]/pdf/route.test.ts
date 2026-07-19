@@ -84,6 +84,15 @@ describe("GET /api/public/invoices/[token]/pdf", () => {
     expect(mockedRenderToBuffer).not.toHaveBeenCalled();
   });
 
+  it("returns the same 404 for an expired token", async () => {
+    mockedLookup.mockResolvedValue(null);
+
+    const response = await GET(req("expired-token"), makeContext("expired-token"));
+
+    expect(response.status).toBe(404);
+    expect(mockedRenderToBuffer).not.toHaveBeenCalled();
+  });
+
   it("keys the rate limiter by endpoint plus the first trusted x-forwarded-for address", async () => {
     mockedLookup.mockResolvedValue(pdfData);
     mockedRenderToBuffer.mockResolvedValue(Buffer.from("%PDF"));

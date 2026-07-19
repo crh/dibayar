@@ -31,6 +31,7 @@ const existingShare: InvoiceShareRecord = {
   id: "share-1",
   invoiceId: "invoice-1",
   tokenHash: "existing-hash",
+  expiresAt: new Date("2026-10-14T00:00:00.000Z"),
   createdAt: new Date("2026-07-16T00:00:00.000Z"),
   updatedAt: new Date("2026-07-16T00:00:00.000Z"),
 };
@@ -119,7 +120,7 @@ describe("getShareState", () => {
 
     const result = await getShareState(db, "invoice-1", "user-1");
 
-    expect(result).toEqual({ kind: "state", active: true });
+    expect(result).toEqual({ kind: "state", active: true, expiresAt: existingShare.expiresAt });
     expect(JSON.stringify(result)).not.toContain("existing-hash");
   });
 });
@@ -136,16 +137,29 @@ describe("createOrRegenerateShare", () => {
 
   it("stores only the hash of a freshly generated token and returns the plaintext path once", async () => {
     const injectedToken = "deterministic-test-token-value";
+    const now = new Date("2026-07-19T00:00:00.000Z");
+    const expectedExpiry = new Date("2026-10-17T00:00:00.000Z");
     const { db, shareUpsert } = makeDb({});
 
-    const result = await createOrRegenerateShare(db, "invoice-1", "user-1", () => injectedToken);
+    const result = await createOrRegenerateShare(db, "invoice-1", "user-1", () => injectedToken, () => now);
 
-    expect(result).toEqual({ kind: "created", path: `/i/${injectedToken}` });
+    expect(result).toEqual({ kind: "created", path: `/i/${injectedToken}`, expiresAt: expectedExpiry });
     expect(shareUpsert).toHaveBeenCalledWith({
       where: { invoiceId: "invoice-1" },
-      create: { invoiceId: "invoice-1", tokenHash: hashShareToken(injectedToken) },
-      update: { tokenHash: hashShareToken(injectedToken) },
+      create: { invoiceId: "invoice-1", tokenHash: hashShareToken(injectedToken), expiresAt: expectedExpiry },
+      update: { tokenHash: hashShareToken(injectedToken), expiresAt: expectedExpiry },
     });
+  });
+
+  it("resets the 90-day expiry clock when regenerating", async () => {
+    const now = new Date("2026-08-01T12:00:00.000Z");
+    const { db, shareUpsert } = makeDb({ share: existingShare });
+
+    await createOrRegenerateShare(db, "invoice-1", "user-1", () => "new-token", () => now);
+
+    expect(shareUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      update: expect.objectContaining({ expiresAt: new Date("2026-10-30T12:00:00.000Z") }),
+    }));
   });
 
   it("never passes the plaintext token itself to the database layer", async () => {
@@ -241,6 +255,7 @@ describe("getPublicInvoiceByToken", () => {
     const call = findUnique.mock.calls[0][0] as unknown as Record<string, unknown>;
     expect(call).not.toHaveProperty("include");
     expect(call.select).toEqual({
+      expiresAt: true,
       invoice: {
         select: {
           number: true,
@@ -257,6 +272,7 @@ describe("getPublicInvoiceByToken", () => {
 
   it("projects only the minimum safe invoice fields", async () => {
     const { db } = makeLookupDb({
+      expiresAt: new Date("2026-10-17T00:00:00.000Z"),
       invoice: {
         number: "INV/2026/07/001",
         subtotalIdr: 1_500_000,
@@ -288,6 +304,7 @@ describe("getPublicInvoiceByToken", () => {
 
   it("labels NONE withholding tax as no withholding, in Bahasa", async () => {
     const { db } = makeLookupDb({
+      expiresAt: null,
       invoice: {
         number: "INV/2026/07/002",
         subtotalIdr: 500_000,
@@ -303,6 +320,30 @@ describe("getPublicInvoiceByToken", () => {
 
     expect(view?.withholdingTaxLabel).toBe("Tidak ada");
     expect(view?.issuerName).toBeNull();
+  });
+
+  it("returns null for an expired token through the same result as unknown or revoked", async () => {
+    const { db } = makeLookupDb({
+      expiresAt: new Date("2026-07-18T23:59:59.999Z"),
+      invoice: {
+        number: "INV/2026/07/001", subtotalIdr: 1_500_000, withholdingTaxType: "PPH23",
+        status: "SENT", dueDate: null, deal: { brand: "Brand", scope: "Scope" }, user: { name: "Kenji" },
+      },
+    });
+
+    expect(await getPublicInvoiceByToken(db, "expired-token", new Date("2026-07-19T00:00:00.000Z"))).toBeNull();
+  });
+
+  it("keeps a null-expiry legacy row valid", async () => {
+    const { db } = makeLookupDb({
+      expiresAt: null,
+      invoice: {
+        number: "INV/2026/07/001", subtotalIdr: 1_500_000, withholdingTaxType: "PPH23",
+        status: "SENT", dueDate: null, deal: { brand: "Brand", scope: "Scope" }, user: { name: "Kenji" },
+      },
+    });
+
+    expect(await getPublicInvoiceByToken(db, "legacy-token", new Date("2030-01-01T00:00:00.000Z"))).not.toBeNull();
   });
 });
 
@@ -339,6 +380,7 @@ describe("getPublicInvoicePdfDataByToken", () => {
     const call = findUnique.mock.calls[0][0] as unknown as Record<string, unknown>;
     expect(call).not.toHaveProperty("include");
     expect(call.select).toEqual({
+      expiresAt: true,
       invoice: {
         select: {
           number: true,
@@ -355,6 +397,7 @@ describe("getPublicInvoicePdfDataByToken", () => {
 
   it("returns only the fields InvoicePdf renders, nothing more", async () => {
     const { db } = makeLookupDb({
+      expiresAt: new Date("2026-10-17T00:00:00.000Z"),
       invoice: {
         number: "INV/2026/07/001",
         subtotalIdr: 1_500_000,
@@ -378,5 +421,17 @@ describe("getPublicInvoicePdfDataByToken", () => {
       },
       deal: { brand: "Brand Kopi", scope: "1 reel + 2 story" },
     });
+  });
+
+  it("returns null for an expired token", async () => {
+    const { db } = makeLookupDb({
+      expiresAt: new Date("2026-07-19T00:00:00.000Z"),
+      invoice: {
+        number: "INV/2026/07/001", subtotalIdr: 1_500_000, withholdingTaxType: "PPH23",
+        status: "SENT", dueDate: null, deal: { brand: "Brand", scope: "Scope" }, user: { name: "Kenji" },
+      },
+    });
+
+    expect(await getPublicInvoicePdfDataByToken(db, "expired-token", new Date("2026-07-19T00:00:00.000Z"))).toBeNull();
   });
 });

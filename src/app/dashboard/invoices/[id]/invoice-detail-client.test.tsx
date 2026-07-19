@@ -35,7 +35,10 @@ function makeFetchMock(
   const statusPatch = options.statusPatch ?? { status: 200, body: {} };
   const sharePostQueue = Array.isArray(options.sharePost)
     ? [...options.sharePost]
-    : [options.sharePost ?? { status: 200, body: { active: true, path: "/i/deterministic-token" } }];
+    : [options.sharePost ?? {
+        status: 200,
+        body: { active: true, path: "/i/deterministic-token", expiresAt: "2026-10-17T00:00:00.000Z" },
+      }];
 
   return vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
@@ -146,14 +149,34 @@ describe("InvoiceDetailClient", () => {
     });
 
     it("shows the active state after a reload without reconstructing the plaintext link", async () => {
-      vi.stubGlobal("fetch", makeFetchMock({ shareGet: { status: 200, body: { active: true } } }));
+      vi.stubGlobal("fetch", makeFetchMock({
+        shareGet: { status: 200, body: { active: true, expiresAt: "2026-10-17T00:00:00.000Z" } },
+      }));
 
       render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
 
       expect(await screen.findByText(/tautan berbagi aktif/i)).toBeDefined();
+      expect(screen.getByText("Tautan aktif sampai 17 Okt 2026.")).toBeDefined();
       expect(screen.getByRole("button", { name: /buat ulang tautan/i })).toBeDefined();
       expect(screen.getByRole("button", { name: /cabut tautan/i })).toBeDefined();
       expect(screen.queryByText(/^https?:\/\//)).toBeNull();
+    });
+
+    it("shows the reset expiry after regenerating", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal("fetch", makeFetchMock({
+        shareGet: { status: 200, body: { active: true, expiresAt: "2026-10-17T00:00:00.000Z" } },
+        sharePost: {
+          status: 200,
+          body: { active: true, path: "/i/new-token", expiresAt: "2026-11-01T00:00:00.000Z" },
+        },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: /buat ulang tautan/i }));
+      await user.click(screen.getByRole("button", { name: "Ya, buat tautan baru" }));
+
+      expect(await screen.findByText("Tautan aktif sampai 1 Nov 2026.")).toBeDefined();
     });
 
     it("requires explicit confirmation with a clear warning before regenerating an active link", async () => {

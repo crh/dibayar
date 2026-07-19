@@ -96,6 +96,14 @@ describe("PublicInvoicePage server validation", () => {
     expect(notFound).toHaveBeenCalledOnce();
   });
 
+  it("calls the same notFound path for an expired token", async () => {
+    mockedLookup.mockResolvedValue(null);
+
+    await expect(PublicInvoicePage(makeProps("expired-token"))).rejects.toThrow("NEXT_NOT_FOUND");
+
+    expect(notFound).toHaveBeenCalledOnce();
+  });
+
   it("calls notFound for a malformed token, identically to an unknown or revoked one", async () => {
     mockedLookup.mockResolvedValue(null);
 

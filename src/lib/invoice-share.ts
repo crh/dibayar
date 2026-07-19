@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { getOwnedInvoice, type InvoiceReadDb, type InvoiceRecord, type InvoiceStatus, type WithholdingTaxType } from "./invoices";
 
 const TOKEN_BYTES = 32;
+export const DEFAULT_SHARE_LIFETIME_DAYS = 90;
 
 export function generateShareToken(): string {
   return randomBytes(TOKEN_BYTES).toString("base64url");
@@ -15,6 +16,7 @@ export type InvoiceShareRecord = {
   id: string;
   invoiceId: string;
   tokenHash: string;
+  expiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -24,14 +26,17 @@ export type InvoiceShareDb = InvoiceReadDb & {
     findUnique(args: { where: { invoiceId: string } }): Promise<InvoiceShareRecord | null>;
     upsert(args: {
       where: { invoiceId: string };
-      create: { invoiceId: string; tokenHash: string };
-      update: { tokenHash: string };
+      create: { invoiceId: string; tokenHash: string; expiresAt: Date };
+      update: { tokenHash: string; expiresAt: Date };
     }): Promise<InvoiceShareRecord>;
     deleteMany(args: { where: { invoiceId: string } }): Promise<{ count: number }>;
   };
 };
 
-export type ShareStateResult = { kind: "not-found" } | { kind: "state"; active: boolean };
+export type ShareStateResult =
+  | { kind: "not-found" }
+  | { kind: "state"; active: false }
+  | { kind: "state"; active: true; expiresAt: Date | null };
 
 // Active means a share row exists; revoking deletes the row rather than flagging it,
 // so a revoked token's hash is simply absent — indistinguishable from unknown/invalid.
@@ -44,29 +49,36 @@ export async function getShareState(
   if (!invoice) return { kind: "not-found" };
 
   const share = await db.invoiceShare.findUnique({ where: { invoiceId } });
-  return { kind: "state", active: share !== null };
+  return share
+    ? { kind: "state", active: true, expiresAt: share.expiresAt }
+    : { kind: "state", active: false };
 }
 
-export type CreateShareResult = { kind: "not-found" } | { kind: "created"; path: string };
+export type CreateShareResult =
+  | { kind: "not-found" }
+  | { kind: "created"; path: string; expiresAt: Date };
 
 export async function createOrRegenerateShare(
   db: InvoiceShareDb,
   invoiceId: string,
   userId: string,
   tokenFactory: () => string = generateShareToken,
+  nowFactory: () => Date = () => new Date(),
 ): Promise<CreateShareResult> {
   const invoice = await getOwnedInvoice(db, invoiceId, userId);
   if (!invoice) return { kind: "not-found" };
 
   const token = tokenFactory();
   const tokenHash = hashShareToken(token);
+  const expiresAt = new Date(nowFactory().getTime());
+  expiresAt.setUTCDate(expiresAt.getUTCDate() + DEFAULT_SHARE_LIFETIME_DAYS);
   await db.invoiceShare.upsert({
     where: { invoiceId },
-    create: { invoiceId, tokenHash },
-    update: { tokenHash },
+    create: { invoiceId, tokenHash, expiresAt },
+    update: { tokenHash, expiresAt },
   });
 
-  return { kind: "created", path: `/i/${token}` };
+  return { kind: "created", path: `/i/${token}`, expiresAt };
 }
 
 export type RevokeShareResult = { kind: "not-found" } | { kind: "revoked" };
@@ -95,6 +107,7 @@ export type PublicInvoiceView = {
 };
 
 type PublicInvoiceJoin = {
+  expiresAt: Date | null;
   invoice: {
     number: string;
     subtotalIdr: number;
@@ -107,6 +120,7 @@ type PublicInvoiceJoin = {
 };
 
 const PUBLIC_INVOICE_SELECT = {
+  expiresAt: true,
   invoice: {
     select: {
       number: true,
@@ -151,6 +165,7 @@ function toPublicView(invoice: PublicInvoiceJoin["invoice"]): PublicInvoiceView 
 export async function getPublicInvoiceByToken(
   db: PublicInvoiceLookupDb,
   token: string,
+  now: Date = new Date(),
 ): Promise<PublicInvoiceView | null> {
   const tokenHash = hashShareToken(token);
   const row = await db.invoiceShare.findUnique({
@@ -158,7 +173,8 @@ export async function getPublicInvoiceByToken(
     select: PUBLIC_INVOICE_SELECT,
   });
 
-  return row ? toPublicView(row.invoice) : null;
+  if (!row || (row.expiresAt !== null && row.expiresAt.getTime() <= now.getTime())) return null;
+  return toPublicView(row.invoice);
 }
 
 export type PublicInvoicePdfData = {
@@ -171,13 +187,14 @@ export type PublicInvoicePdfData = {
 export async function getPublicInvoicePdfDataByToken(
   db: PublicInvoiceLookupDb,
   token: string,
+  now: Date = new Date(),
 ): Promise<PublicInvoicePdfData | null> {
   const tokenHash = hashShareToken(token);
   const row = await db.invoiceShare.findUnique({
     where: { tokenHash },
     select: PUBLIC_INVOICE_SELECT,
   });
-  if (!row) return null;
+  if (!row || (row.expiresAt !== null && row.expiresAt.getTime() <= now.getTime())) return null;
 
   return {
     invoice: {

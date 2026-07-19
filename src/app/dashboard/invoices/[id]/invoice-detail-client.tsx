@@ -48,16 +48,22 @@ type ShareState =
   | { kind: "loading" }
   | { kind: "load-error"; message: string }
   | { kind: "inactive"; error: string | null }
-  | { kind: "active"; link: string | null; error: string | null };
+  | { kind: "active"; link: string | null; expiresAt: string | null; error: string | null };
 
-function isValidGetPayload(payload: unknown): payload is { active: boolean } {
-  return typeof payload === "object" && payload !== null && typeof (payload as { active?: unknown }).active === "boolean";
+function isValidExpiry(value: unknown): value is string | null | undefined {
+  return value === undefined || value === null || (typeof value === "string" && !Number.isNaN(Date.parse(value)));
 }
 
-function isValidCreatePayload(payload: unknown): payload is { active: true; path: string } {
+function isValidGetPayload(payload: unknown): payload is { active: boolean; expiresAt?: string | null } {
   if (typeof payload !== "object" || payload === null) return false;
-  const { active, path } = payload as { active?: unknown; path?: unknown };
-  return active === true && typeof path === "string" && SHARE_PATH_PATTERN.test(path);
+  const { active, expiresAt } = payload as { active?: unknown; expiresAt?: unknown };
+  return typeof active === "boolean" && isValidExpiry(expiresAt);
+}
+
+function isValidCreatePayload(payload: unknown): payload is { active: true; path: string; expiresAt?: string | null } {
+  if (typeof payload !== "object" || payload === null) return false;
+  const { active, path, expiresAt } = payload as { active?: unknown; path?: unknown; expiresAt?: unknown };
+  return active === true && typeof path === "string" && SHARE_PATH_PATTERN.test(path) && isValidExpiry(expiresAt);
 }
 
 function isValidRevokePayload(payload: unknown): payload is { active: false } {
@@ -74,6 +80,17 @@ function clearMutationError(prev: ShareState): ShareState {
   if (prev.kind === "inactive") return { kind: "inactive", error: null };
   if (prev.kind === "active") return { ...prev, error: null };
   return prev;
+}
+
+function formatShareExpiry(expiresAt: string | null): string {
+  if (!expiresAt) return "Tautan aktif tanpa batas waktu.";
+  const date = new Intl.DateTimeFormat("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(expiresAt));
+  return `Tautan aktif sampai ${date}.`;
 }
 
 type ShareConfirm = "regenerate" | "revoke" | null;
@@ -97,7 +114,9 @@ function ShareSection({ invoiceId }: { invoiceId: string }) {
           setShare({ kind: "load-error", message: SHARE_LOAD_ERROR });
           return;
         }
-        setShare(payload.active ? { kind: "active", link: null, error: null } : { kind: "inactive", error: null });
+        setShare(payload.active
+          ? { kind: "active", link: null, expiresAt: payload.expiresAt ?? null, error: null }
+          : { kind: "inactive", error: null });
       } catch {
         if (!cancelled) setShare({ kind: "load-error", message: SHARE_LOAD_ERROR });
       }
@@ -120,7 +139,12 @@ function ShareSection({ invoiceId }: { invoiceId: string }) {
         setShare((prev) => withMutationError(prev, message));
         return;
       }
-      setShare({ kind: "active", link: `${window.location.origin}${payload.path}`, error: null });
+      setShare({
+        kind: "active",
+        link: `${window.location.origin}${payload.path}`,
+        expiresAt: payload.expiresAt ?? null,
+        error: null,
+      });
     } catch {
       setShare((prev) => withMutationError(prev, SHARE_CREATE_ERROR));
     } finally {
@@ -185,6 +209,7 @@ function ShareSection({ invoiceId }: { invoiceId: string }) {
         <>
           {share.error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{share.error}</p> : null}
           <p className="mt-3 text-[14px] font-semibold text-paid">Tautan berbagi aktif.</p>
+          <p className="mt-1 text-[13px] text-muted">{formatShareExpiry(share.expiresAt)}</p>
           {share.link ? (
             <>
               <p className="mt-2 break-all text-[13px] text-muted">{share.link}</p>

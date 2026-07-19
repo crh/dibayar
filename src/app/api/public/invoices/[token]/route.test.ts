@@ -77,6 +77,15 @@ describe("GET /api/public/invoices/[token]", () => {
     expect((await response.json()).error).toBe("Invoice tidak ditemukan.");
   });
 
+  it("returns the identical 404 for an expired token", async () => {
+    mockedLookup.mockResolvedValue(null);
+
+    const response = await GET(req("expired-token"), makeContext("expired-token"));
+
+    expect(response.status).toBe(404);
+    expect((await response.json()).error).toBe("Invoice tidak ditemukan.");
+  });
+
   it("returns the identical 404 body for a malformed token as for an unknown one", async () => {
     mockedLookup.mockResolvedValue(null);
 

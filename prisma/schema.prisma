@@ -126,12 +126,13 @@ model Invoice {
 // a lookup requires re-deriving the hash from a presented token. One row per
 // invoice; presence of a row means the link is active (revoke deletes the row).
 model InvoiceShare {
-  id        String   @id @default(cuid())
-  invoiceId String   @unique
-  tokenHash String   @unique
-  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id        String    @id @default(cuid())
+  invoiceId String    @unique
+  tokenHash String    @unique
+  expiresAt DateTime?
+  invoice   Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 // One row per (user, year, month); lastSequence is incremented atomically
