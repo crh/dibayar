@@ -133,3 +133,58 @@ The recipient invoice share-link (Task F) and the dashboard stage-selector/contr
 A later report of a "share panel stuck loading" bug was investigated and found not reproducible: the source already transitions a valid `{ active: false }` response to the create-link UI state. A user-provided browser screenshot taken after the `5064e70` deployment, inspected by Hermes, visibly confirms the correct active-share state (Bahasa text "Tautan berbagi aktif.").
 
 Public recipient usability — an actual unauthenticated visitor reaching `/i/[token]` from outside Vercel SSO — still cannot be externally verified, since the only reachable environment stays behind Vercel SSO (step 5's E2E was run by an authenticated browser session; it validates the routes/UI, not unauthenticated real-world reach). Any decision to expose the share-link route beyond SSO (a public or non-SSO-protected environment) remains separately approval-gated. Production remains untouched by all of the above and requires its own, separate deployment decision.
+
+## Public / non-SSO recipient access — decision brief (pending Chris approval, not yet decided)
+
+This section states the facts needed to decide whether, and how, to make invoice recipients able to reach their share link without a Vercel SSO login. **No change has been made.** Vercel Authentication (SSO) remains on for every environment.
+
+**1. Routes that need unauthenticated reach vs. routes that must stay behind app auth**
+
+- Must be reachable without Vercel SSO for the feature to work for a recipient: `/i/[token]`, `/api/public/invoices/[token]`, `/api/public/invoices/[token]/pdf`.
+- Must remain application-authenticated regardless of this decision: the dashboard, the owner invoice/deal APIs, the owner invoice-PDF and share-mutation APIs (create/regenerate/revoke), and any auth/admin surfaces. These already require an authenticated session at the application layer independent of Vercel SSO.
+
+**2. What the Vercel mechanisms actually do (verify against current docs before acting — this is not a stable API)**
+
+- **Deployment Protection Exceptions** unprotect a preview **domain**, making that whole domain publicly reachable at the Vercel edge. They are not path-scoped — there is no way to except only `/i/*`. (https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/deployment-protection-exceptions)
+- **OPTIONS Allowlist** only bypasses protection for CORS preflight `OPTIONS` requests. It does not let a recipient's actual `GET` (HTML page, JSON, or PDF) through — it is irrelevant to this use case. (https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection/options-allowlist)
+- **Protection Bypass for Automation** is a shared secret meant for testing/automation clients that attach it to requests. It is not a mechanism for anonymous recipients to reach a page — a real recipient has no way to attach that secret. (https://vercel.com/docs/deployment-protection/methods-to-bypass-deployment-protection)
+- Conclusion: turning off Vercel Authentication for the deployment/environment, or adding a Deployment Protection Exception for the target preview domain, exposes **the entire selected domain/deployment** at the Vercel edge — not only the three public routes above. There is currently no Vercel-edge mechanism in the cited docs that unprotects only specific paths.
+
+**3. What becomes internet-reachable if SSO is turned off for a domain**
+
+- Every route and static asset served from that domain becomes reachable past the Vercel edge, including the landing page, any auth entrypoints, and any other route that happens to be deployed there — not just the three public invoice routes.
+- This is edge reachability only. The application's own auth layer is unaffected: protected dashboard pages and owner APIs still require a valid session and will still reject or redirect an unauthenticated request. Turning off Vercel SSO does **not** by itself make owner data readable — it removes one outer layer, not the app-level authorization checks.
+
+**4. Residual risk if this is enabled, stated honestly**
+
+- Share tokens are 256-bit CSPRNG-random, stored only as a SHA-256 hash; a database read alone cannot reconstruct a usable link.
+- Unknown, malformed, revoked, and (as of `53032e3`, not yet applied — see SECURITY.md) expired tokens all return the same uniform 404.
+- Shares support expiry (pending migration apply), revocation (delete), and regeneration (rotates the token, invalidating the old one).
+- Public responses set `no-store`, `noindex`, and `no-referrer`.
+- Public routes return a minimal safe-field projection, not full owner/invoice data.
+- Existing rate limiters (`publicInvoiceJsonRateLimiter`, `publicInvoicePdfRateLimiter`, `publicInvoicePageRateLimiter`) apply — but they are **in-memory and per-instance**. They do not bound abuse across multiple Vercel instances; see the distributed-rate-limit trigger note in `SECURITY.md`. This limiter gap becomes directly relevant the moment this decision is made "yes."
+- A share link is a bearer capability: anyone who obtains the URL (forwarded in chat, screenshotted, cached by a proxy) can use it until it is revoked, regenerated, or expires. This is inherent to the link-sharing design, not a bug to fix before deciding.
+
+**5. Concrete post-enable verification (to run only after Chris approves and the change is made), from a network context with no Vercel/app credentials**
+
+```bash
+# Recipient routes — expect 200 and the correct content-type on a known valid token
+curl -i -L https://<domain>/i/<valid-token>
+curl -i -L https://<domain>/api/public/invoices/<valid-token>
+curl -i -L https://<domain>/api/public/invoices/<valid-token>/pdf
+
+# Unknown / expired / revoked token — expect the same 404 status and body as each other
+curl -i -L https://<domain>/i/<unknown-or-expired-or-revoked-token>
+
+# Owner-only surfaces — expect a redirect or 401, never a 200 with data
+curl -i -L https://<domain>/dashboard
+curl -i -L https://<domain>/api/invoices
+```
+
+A `302`/login-page response from any of the first three recipient-route checks means the decision has **not** taken effect for recipients — it proves SSO is still active, not that the rollout succeeded. Do not report this as a pass.
+
+**6. Rollback**
+
+Re-enable Vercel Authentication for the environment, or remove the domain from Deployment Protection Exceptions. Re-run the unauthenticated curl checks above against `/i/[token]` and confirm they return to a `3xx`/login response.
+
+This brief is informational only. It does not enable, schedule, or recommend a specific choice — it exists so Chris can decide with the actual mechanism and blast radius in view. No Vercel setting has been changed as part of writing this section.
