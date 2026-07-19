@@ -247,26 +247,26 @@ function ShareSection({ invoiceId, invoice, contactWa }: {
                   {copyFeedback.message}
                 </p>
               ) : null}
-              <div className="mt-3 rounded-xl bg-bg p-3">
-                <p className="text-[13px] font-semibold text-ink">Kirim pengingat lewat WhatsApp</p>
-                <p className="mt-1 text-[13px] text-muted">
-                  {!normalizedWhatsApp
-                    ? "Nomor WhatsApp belum bisa dipakai. Periksa kontak di deal."
-                    : !whatsappHref
-                      ? "Buat tautan berbagi dulu agar pesan membawa link invoice."
-                      : "Pesan Bahasa Indonesia sudah disiapkan dengan nomor invoice, nominal, jatuh tempo, dan link invoice."}
-                </p>
-                <button
-                  type="button"
-                  disabled={!whatsappHref}
-                  onClick={() => whatsappHref && window.open(whatsappHref, "_blank", "noopener,noreferrer")}
-                  className="mt-3 inline-flex h-11 items-center rounded-full bg-[#25D366] px-4 text-[14px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Buka WhatsApp
-                </button>
-              </div>
             </>
           ) : null}
+          <div className="mt-3 rounded-xl bg-bg p-3">
+            <p className="text-[13px] font-semibold text-ink">Kirim pengingat lewat WhatsApp</p>
+            <p className="mt-1 text-[13px] text-muted">
+              {!normalizedWhatsApp
+                ? "Nomor WhatsApp belum bisa dipakai. Periksa kontak di deal."
+                : !whatsappHref
+                  ? "Buat tautan berbagi dulu agar pesan membawa link invoice."
+                  : "Pesan Bahasa Indonesia sudah disiapkan dengan nomor invoice, nominal, jatuh tempo, dan link invoice."}
+            </p>
+            <button
+              type="button"
+              disabled={!whatsappHref}
+              onClick={() => whatsappHref && window.open(whatsappHref, "_blank", "noopener,noreferrer")}
+              className="mt-3 inline-flex h-11 items-center rounded-full bg-[#25D366] px-4 text-[14px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Buka WhatsApp
+            </button>
+          </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
             <button
