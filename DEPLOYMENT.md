@@ -22,6 +22,8 @@
 - M3 Preview closeout (2026-07-19): `hermes/m3-chasing` commits `41784f8` (WhatsApp) and `4a16fc8` (monthly income summary) passed the full local gates. Metadata-based Preview `https://dibayar-ml5aq10at-kenji-iwakura.vercel.app` is Ready and Vercel-SSO protected; Chrome MCP authenticated smoke verified OAuth, the income summary card, Jakarta month label, draft exclusion, and the PPh disclaimer. Production remains untouched and public/non-SSO access remains disabled.
 - M3 income basis: summary uses invoice `createdAt` interpreted in `Asia/Jakarta`; there is no `paidAt` field, so the UI says `Invoice terbit` and `Net estimasi`. Draft invoices are excluded. PPh 21/23 rates are explicit estimates (5%/2%), not tax filing logic.
 
+- M3 bilingual UI (2026-07-19): commits `866c237` and `99a15c9` add an Indonesian-default/English language switch with localStorage persistence, locale-aware month/currency formatting, and translated dashboard/invoice-detail workflow copy. Final protected Preview `https://dibayar-qgo0n3fn6-kenji-iwakura.vercel.app` is Ready; authenticated Chrome MCP verified both languages. Production remains untouched; public/non-SSO access remains disabled.
+
 ## M3 email decision — not built
 
 Email reminders are intentionally out of scope for M3 Task 1. A responsible implementation needs an email provider, a verified sender domain and identity, deliverability and bounce handling, unsubscribe/consent rules, a new secret, and operational monitoring. Adding only a provider call would create an unreliable reminder path rather than a cheap feature.

@@ -435,3 +435,10 @@
 - Final local evidence: full Vitest suite 30 files / 310 tests passed; lint, typecheck, production build, and diff check passed. Preview `https://dibayar-ml5aq10at-kenji-iwakura.vercel.app` is Ready and Vercel-SSO protected; Chrome MCP authenticated smoke verified the dashboard summary, `Juli 2026` Jakarta month label, draft exclusion, Rp0 aggregate state, and disclaimer. Google callback URI was added through Chrome MCP.
 - Production was not deployed or modified. Public/non-SSO share access was not enabled. M4 was not advanced; its creator-validation and go/no-go gates remain Chris approval-gated.
 - `Rubric self-score: Evidence honesty 2/2; shipped completeness 2/2; security discipline 2/2; Focus 2/2; deploy health 2/2; report quality 2/2. Total 12/12.`
+
+## M3 bilingual UI — 2026-07-19
+- Added `src/lib/i18n.ts` and `src/components/language-switcher.tsx`. Indonesian remains the default; English can be selected from the dashboard or invoice detail and persists in browser localStorage.
+- Translated the primary dashboard and invoice-detail workflow: forms, pipeline stages, follow-up, monthly income summary, invoice statuses/actions, share panel, WhatsApp section, and PDF/status controls. Month labels and IDR display now follow the selected locale.
+- Verification: full suite previously passed 31 files / 313 tests; post-fix focused locale/dashboard tests passed 15 tests; lint, typecheck, diff check, and Vercel build passed. Final Preview `https://dibayar-qgo0n3fn6-kenji-iwakura.vercel.app` is Ready and Vercel-SSO protected. Chrome MCP authenticated smoke verified Indonesian default → English switch and `July 2026` / `IDR 5,000,000` output.
+- Production was not deployed or modified. Public/non-SSO access remains disabled. M4 remains unadvanced and Chris-gated.
+- `Rubric self-score: Evidence honesty 2/2; shipped completeness 2/2; security discipline 2/2; Focus 2/2; deploy health 2/2; report quality 2/2. Total 12/12.`

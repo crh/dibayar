@@ -25,8 +25,8 @@ vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linke
 ## now
 current_milestone: M3 — Payment Chasing — COMPLETE (Tasks 1–3 locally gated and authenticated Preview-verified). Pre-M3 security review landed in `fa12cf3`; Production deployment and public/non-SSO recipient access remain separate, Chris-gated decisions.
 active_branch: hermes/m3-chasing
-latest_feature_commit: `4a16fc8` feat(m3): add monthly income summary; WhatsApp regression fix is `b532203`; pushed to `origin/hermes/m3-chasing`. Latest metadata-based Preview is `https://dibayar-ml5aq10at-kenji-iwakura.vercel.app`, READY and Vercel-SSO protected.
-remote_feature_branch: origin/hermes/m3-chasing @ 4a16fc8; hermes/m2-invoice remains unchanged
+latest_feature_commit: `99a15c9` fix(i18n): localize income month label; bilingual implementation is `866c237`; pushed to `origin/hermes/m3-chasing`. Latest metadata-based Preview is `https://dibayar-qgo0n3fn6-kenji-iwakura.vercel.app`, READY and Vercel-SSO protected.
+remote_feature_branch: origin/hermes/m3-chasing @ 99a15c9; hermes/m2-invoice remains unchanged
 completed_milestones:
   - Phase 0 discovery closed
   - M0 bootstrap and protected production deployment complete
@@ -76,7 +76,7 @@ wtp_signals: 0
 
 ## latest_deployment_status
 project_linkage: confirmed by Chris; Google Cloud OAuth client managed through logged-in Chrome MCP session
-preview: latest M3 metadata-based Preview `https://dibayar-ml5aq10at-kenji-iwakura.vercel.app` from `4a16fc8` READY and Vercel-SSO protected; authenticated Chrome MCP smoke passed for OAuth and the monthly income summary. Production untouched; no public/non-SSO access enabled.
+preview: latest bilingual M3 Preview `https://dibayar-qgo0n3fn6-kenji-iwakura.vercel.app` from `99a15c9` READY and Vercel-SSO protected; authenticated Chrome MCP smoke passed for Indonesian default, English switch, localized July 2026 label, IDR formatting, dashboard copy, and persisted selector. Production untouched; no public/non-SSO access enabled.
 production: URL reachable; Vercel Authentication protected; no new Production deployment this run.
 smoke: full authenticated Chrome E2E on the `85a4f6a` deployment passed (see decisions above); a post-`5064e70` screenshot confirms the share panel renders the correct active state.
 
