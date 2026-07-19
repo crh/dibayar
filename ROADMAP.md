@@ -21,9 +21,9 @@
 - [x] Invoice status tracking (sent / due / overdue / paid) — dashboard stage-transition control committed/pushed/deployed and Chrome E2E verified alongside the above
 
 ## M3 — Payment Chasing (vertical slice #3)
-- [ ] Due-date reminders (in-app first; email if cheap)
-- [ ] One-tap WhatsApp follow-up: prefilled polite Bahasa message via wa.me link
-- [ ] Monthly income summary view
+- [x] Due-date reminders (in-app first; email if cheap) — Jakarta-aware overdue/due-soon dashboard surface; email intentionally not built
+- [x] One-tap WhatsApp follow-up: prefilled polite Bahasa message via wa.me link — owner-only contact fetch, normalized numbers, encoded share URL
+- [x] Monthly income summary view — Jakarta month boundary, gross/estimated PPh/net arithmetic; issue-date basis documented
 
 ## M4 — Validation Gate  ⛔ Chris approval to pass
 - [ ] Product shown to ≥5 real Indonesian creators; feedback logged in DAILY_LOG.md

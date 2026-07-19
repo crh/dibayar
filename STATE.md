@@ -16,17 +16,17 @@ phase_started: 2026-07-12
 day_count: 8
 repo_url: git@github.com:crh/dibayar.git
 prod_url: https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/
-last_deploy: 2026-07-19 — remote `hermes/m2-invoice` is synchronized at `bc732a8` (includes `58eed07` and `53032e3`); latest protected Preview `dpl_HGimfRd7RKdmZwDgpABCeo5ZgU36` is READY, Vercel `gitSource.sha`/`meta.githubCommitSha` both `bc732a8b777be966dc3978ce3c2d3488900a82a1`. Expiry-aware code (`53032e3`) is pushed and deployed on protected Preview. Production untouched; no public/non-SSO access enabled.
+last_deploy: 2026-07-19 — latest M3 metadata-based Preview `https://dibayar-ml5aq10at-kenji-iwakura.vercel.app` is READY from `4a16fc8`; authenticated Chrome MCP smoke passed. Production untouched; no public/non-SSO access enabled.
 build_status: green
 latest_validation: Local verification after `53032e3`: full Vitest suite 27 files / 247 tests passed; lint, typecheck, Prisma validate/generate, and production build passed. `5064e70` hardens the owner-auth invoice-share route and dashboard client (4 files: route + client, both with tests). A later report of a "share panel stuck loading" bug was investigated and found NOT reproducible: the source already transitions a valid `{ active: false }` response to the create-link UI state. A user-supplied browser screenshot taken after the `5064e70` deploy, inspected by Hermes, visibly shows the correct active-share state with the Bahasa text "Tautan berbagi aktif." No fresh automated test-count is claimed for `5064e70` beyond deployment-READY status and this screenshot; the deployment READY state and the isolated-Preview migration/E2E evidence for `85a4f6a` below are the load-bearing evidence for M2 acceptance.
 stack: Next.js + TS + Tailwind + Postgres + Prisma + Auth.js (Google OAuth) + Vercel
 vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linked to github.com/crh/dibayar)
 
 ## now
-current_milestone: M3 — Payment Chasing — IN PROGRESS (Task 1 local slice; Preview verification pending). Pre-M3 security review landed in `fa12cf3` and the M3 URL/data-minimization rules are documented in SECURITY.md. M2 remains accepted; Production deployment and public/non-SSO recipient access remain explicit, separate, still-pending Chris decisions.
+current_milestone: M3 — Payment Chasing — COMPLETE (Tasks 1–3 locally gated and authenticated Preview-verified). Pre-M3 security review landed in `fa12cf3`; Production deployment and public/non-SSO recipient access remain separate, Chris-gated decisions.
 active_branch: hermes/m3-chasing
-latest_feature_commit: `2f3c985` docs(m3): record preview smoke blocker — pushed to `origin/hermes/m3-chasing`; latest branch-triggered Preview `dpl_8MM1qrPyCaHKqYiBoR2EDtZvmth2`, Ready at `https://dibayar-culfd6e58-kenji-iwakura.vercel.app`; branch-scoped env was initially empty, then verified via a metadata-based Preview candidate `https://dibayar-4pbq0fqrh-kenji-iwakura.vercel.app` using existing M2 env. Auth.js loads there, but Google rejects the M3 callback with `redirect_uri_mismatch` because that hostname is not in the OAuth client allowlist.
-remote_feature_branch: origin/hermes/m3-chasing @ 2f3c985; hermes/m2-invoice remains unchanged
+latest_feature_commit: `4a16fc8` feat(m3): add monthly income summary; WhatsApp regression fix is `b532203`; pushed to `origin/hermes/m3-chasing`. Latest metadata-based Preview is `https://dibayar-ml5aq10at-kenji-iwakura.vercel.app`, READY and Vercel-SSO protected.
+remote_feature_branch: origin/hermes/m3-chasing @ 4a16fc8; hermes/m2-invoice remains unchanged
 completed_milestones:
   - Phase 0 discovery closed
   - M0 bootstrap and protected production deployment complete
@@ -40,9 +40,11 @@ today_work (Focus measures approved scope, not task volume, from 2026-07-19):
   - Governance catch-up Task 5: migration `20260719075600_invoice_share_expiry` applied to isolated Preview (`preview/hermes/m2-invoice`, database `neondb`) via Neon SQL Editor, verified by pre/postflight checks and the `_prisma_migrations` checksum; expiry code pushed and protected Preview redeployed READY — done
   - Governance catch-up Task 6 (audit correction): `bc732a8`'s claim of having updated the DEPLOYMENT.md §4 residual-risk bullets was inaccurate — those two bullets still said `53032e3` was "not yet pushed or deployed" and named `5064e70` as the deployed commit, both false now that `origin/hermes/m2-invoice` is at `bc732a8` (includes `53032e3`) and protected Preview `dpl_HGimfRd7RKdmZwDgpABCeo5ZgU36` is READY at that SHA; corrected, plus a 3-file sweep (DEPLOYMENT.md, SECURITY.md, STATE.md) — done, docs-only
   - Pre-M3 security review (Chris-requested; existing-code review plus focused CSRF remediation; no commit/push): output-escaping and URL-construction inventory (zero dangerous-construct hits; 10 href/src/action hits, 11 URL/query hits, all fixed/internal/server-generated) — done; CSRF same-origin protection verified wired into all 5 deal/invoice mutation handlers (RED 15 failed/46 passed → GREEN 61/61 passed) — done; personal-data minimization 40-field census across all 9 schema models, `Deal.contactWa` and `User.image` flagged, none deleted — done; PDF render structural review with an open control-character/long-string caveat — done
-  - M3 Task 1 local slice: Jakarta-aware read-time OVERDUE derivation, shared attention selection, provisional 7-day due-soon dashboard surface, and IDR count/amount totals — local tests GREEN; Preview verification pending
+  - M3 Task 1: Jakarta-aware due-date attention surface — complete; local gates and authenticated Preview smoke passed
+  - M3 Task 2: owner-only contact fetch and one-tap WhatsApp reminder — complete; local gates and authenticated Preview smoke passed
+  - M3 Task 3: monthly income summary with Jakarta boundary and explicit PPh estimates — complete; local gates and authenticated Preview smoke passed
 
-open_blockers: Task 1 local gates are green and protected Preview is Ready, but authenticated dashboard smoke is blocked by Google OAuth `redirect_uri_mismatch` for the M3 Preview hostname. Do not start Task 2 until an approved callback URI is configured or an approved authenticated smoke path is provided. Separate, still-pending, Chris-gated decisions: (1) Production deployment, (2) public/non-SSO recipient access for share links. Email remains a separate product decision; the provisional 7-day due-soon window is not yet validated with creator feedback. No schema/migration/cron change is part of this slice.
+open_blockers: No implementation blocker. Separate, still-pending, Chris-gated decisions: (1) Production deployment, (2) public/non-SSO recipient access for share links, (3) M4 validation/go-no-go. Email remains a separate product decision. The 7-day due-soon window is provisional and needs creator feedback. Monthly income uses invoice `createdAt` as the basis because no `paidAt` field exists; PPh values are estimates, not tax filing calculations.
 
 ## recent_signal_findings
 - No external signal check recorded.
@@ -62,7 +64,7 @@ open_blockers: Task 1 local gates are green and protected Preview is Ready, but 
 - 2026-07-17: Chris approved item 1 (push 8 M2 commits + protected Preview redeploy) and separately approved option A for share-link scope; both executed and closed same day. Full detail: DAILY_LOG "Day 1 Task C/D/E/F" entries.
 
 ## approvals
-pending_from_chris: Production deployment decision; separate public (non-SSO) access decision for recipient share links; M3 product choices still open: provisional 7-day due-soon window, email reminder scope, and monthly income month basis (issue date vs payment date).
+pending_from_chris: Production deployment decision; separate public (non-SSO) access decision for recipient share links; M4 validation/go-no-go; confirm or revise provisional 7-day due-soon window and invoice-issue-date income basis.
 pending_external: none
 
 granted_by_chris: standing autonomous milestone execution, code-fix, and protected Preview redeployment approval; M2 share-link option A + Preview-only rollout execution (2026-07-18, "Please continue what you think the best") — executed in full (commit/push/migration-apply/deploy/E2E, see decisions above); M2 documentation reconciliation + explicit acceptance closeout (2026-07-18, "continue") — this task, completed; M3 go-ahead for all three ROADMAP items, including one-tap WhatsApp follow-up (2026-07-19 task-set instruction).
@@ -74,7 +76,7 @@ wtp_signals: 0
 
 ## latest_deployment_status
 project_linkage: confirmed by Chris; Google Cloud OAuth client managed through logged-in Chrome MCP session
-preview: latest protected deployment `dpl_HGimfRd7RKdmZwDgpABCeo5ZgU36` (remote `bc732a8`, branch `hermes/m2-invoice`, target preview) READY, Vercel `gitSource.sha`/`meta.githubCommitSha` both `bc732a8b777be966dc3978ce3c2d3488900a82a1`, still Vercel-SSO protected. Isolated Neon Preview branch (`preview/hermes/m2-invoice`, database `neondb`) has migrations `20260717090000_invoice_share` and `20260719075600_invoice_share_expiry` applied 2026-07-19 via Neon SQL Editor.
+preview: latest M3 metadata-based Preview `https://dibayar-ml5aq10at-kenji-iwakura.vercel.app` from `4a16fc8` READY and Vercel-SSO protected; authenticated Chrome MCP smoke passed for OAuth and the monthly income summary. Production untouched; no public/non-SSO access enabled.
 production: URL reachable; Vercel Authentication protected; no new Production deployment this run.
 smoke: full authenticated Chrome E2E on the `85a4f6a` deployment passed (see decisions above); a post-`5064e70` screenshot confirms the share panel renders the correct active state.
 
