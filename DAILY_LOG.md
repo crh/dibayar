@@ -421,3 +421,10 @@
 - Email decision: intentionally not built. `DEPLOYMENT.md` now documents the provider, verified sender domain, deliverability/bounce, consent/unsubscribe, secret, and monitoring requirements as a separate Chris decision. No provider dependency or sender was added.
 - Scope: no schema or migration, no dependency, no cron/background sender, no WhatsApp, no income summary, no deployment, no public/non-SSO access, and no Production change. Preview verification is still pending; M3 is not yet accepted and ROADMAP M3 items remain unchecked.
 - `Rubric self-score: Evidence honesty 2/2; shipped completeness 1/2; security discipline 2/2; Focus 2/2; deploy health 2/2; report quality 2/2. Total 11/12.`
+
+## M3 Task 1 — Preview verification blocker — 2026-07-19
+- Protected Preview deployment `dpl_7iYbE4aD8kMLwsmtAk3f4idPaPq9` is Ready at `https://dibayar-q89mrrvep-kenji-iwakura.vercel.app`, from commit `1108012` on `hermes/m3-chasing`.
+- `vercel curl /dashboard --deployment ... --yes -- --head` passed the protected edge and returned the expected application-auth redirect `307 Location: /api/auth/signin?callbackUrl=%2Fdashboard`; no public/non-SSO protection change was made.
+- Browser smoke could not proceed: the existing MCP browser profile is not authenticated for the new deployment hostname, and Vercel SSO intercepts the route before the app sign-in page. This is a real Preview verification blocker, not a claimed pass.
+- Per sequencing rule, Task 2 will not start until Chris authenticates the Preview or provides an approved authenticated smoke path. No disposable data was created, so cleanup is zero by construction.
+- `Rubric self-score: Evidence honesty 2/2; shipped completeness 1/2; security discipline 2/2; Focus 2/2; deploy health 1/2; report quality 2/2. Total 10/12.`

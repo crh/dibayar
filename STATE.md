@@ -25,8 +25,8 @@ vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linke
 ## now
 current_milestone: M3 — Payment Chasing — IN PROGRESS (Task 1 local slice; Preview verification pending). Pre-M3 security review landed in `fa12cf3` and the M3 URL/data-minimization rules are documented in SECURITY.md. M2 remains accepted; Production deployment and public/non-SSO recipient access remain explicit, separate, still-pending Chris decisions.
 active_branch: hermes/m3-chasing
-latest_feature_commit: fa12cf3 pre-M3 security review; M3 Task 1 changes are currently uncommitted local work
-remote_feature_branch: origin/hermes/m2-invoice remains unchanged; hermes/m3-chasing is local and not pushed
+latest_feature_commit: `1108012` feat(m3): add Jakarta due-date attention surface — pushed to `origin/hermes/m3-chasing`; protected Preview `dpl_7iYbE4aD8kMLwsmtAk3f4idPaPq9`, Ready at `https://dibayar-q89mrrvep-kenji-iwakura.vercel.app`; authenticated dashboard smoke remains pending because the current browser profile is not authenticated for the new hostname and Vercel SSO blocks the route before Auth.js
+remote_feature_branch: origin/hermes/m3-chasing @ 1108012; hermes/m2-invoice remains unchanged
 completed_milestones:
   - Phase 0 discovery closed
   - M0 bootstrap and protected production deployment complete
@@ -42,7 +42,7 @@ today_work (Focus measures approved scope, not task volume, from 2026-07-19):
   - Pre-M3 security review (Chris-requested; existing-code review plus focused CSRF remediation; no commit/push): output-escaping and URL-construction inventory (zero dangerous-construct hits; 10 href/src/action hits, 11 URL/query hits, all fixed/internal/server-generated) — done; CSRF same-origin protection verified wired into all 5 deal/invoice mutation handlers (RED 15 failed/46 passed → GREEN 61/61 passed) — done; personal-data minimization 40-field census across all 9 schema models, `Deal.contactWa` and `User.image` flagged, none deleted — done; PDF render structural review with an open control-character/long-string caveat — done
   - M3 Task 1 local slice: Jakarta-aware read-time OVERDUE derivation, shared attention selection, provisional 7-day due-soon dashboard surface, and IDR count/amount totals — local tests GREEN; Preview verification pending
 
-open_blockers: M3 Task 1 Preview verification is pending. Separate, still-pending, Chris-gated decisions: (1) Production deployment, (2) public/non-SSO recipient access for share links. Email remains a separate product decision; the provisional 7-day due-soon window is not yet validated with creator feedback. No schema/migration/cron change is part of this slice.
+open_blockers: Task 1 local gates are green and protected Preview is Ready, but authenticated Preview dashboard smoke is blocked by Vercel SSO on the new deployment hostname. Do not start Task 2 until that smoke is completed. Separate, still-pending, Chris-gated decisions: (1) Production deployment, (2) public/non-SSO recipient access for share links. Email remains a separate product decision; the provisional 7-day due-soon window is not yet validated with creator feedback. No schema/migration/cron change is part of this slice.
 
 ## recent_signal_findings
 - No external signal check recorded.
