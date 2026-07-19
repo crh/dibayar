@@ -28,11 +28,13 @@ function makeFetchMock(
     sharePost?: JsonResult | JsonResult[];
     shareDelete?: JsonResult;
     statusPatch?: JsonResult;
+    contactGet?: JsonResult;
   } = {},
 ) {
   const shareGet = options.shareGet ?? { status: 200, body: { active: false } };
   const shareDelete = options.shareDelete ?? { status: 200, body: { active: false } };
   const statusPatch = options.statusPatch ?? { status: 200, body: {} };
+  const contactGet = options.contactGet ?? { status: 200, body: {} };
   const sharePostQueue = Array.isArray(options.sharePost)
     ? [...options.sharePost]
     : [options.sharePost ?? {
@@ -42,6 +44,7 @@ function makeFetchMock(
 
   return vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
+    if (url.endsWith("/contact") && method === "GET") return jsonResponse(contactGet);
     if (url.endsWith("/share") && method === "GET") return jsonResponse(shareGet);
     if (url.endsWith("/share") && method === "POST") {
       const next = sharePostQueue.length > 1 ? sharePostQueue.shift()! : sharePostQueue[0];
@@ -123,30 +126,65 @@ describe("InvoiceDetailClient", () => {
       expect(await screen.findByRole("status")).toHaveProperty("textContent", expect.stringMatching(/disalin/i));
     });
 
-    it("shows a controlled Bahasa alert when the clipboard write is denied or unavailable", async () => {
-      const user = userEvent.setup();
-      vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
-      vi.stubGlobal(
-        "fetch",
-        makeFetchMock({
-          shareGet: { status: 200, body: { active: false } },
-          sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
-        }),
-      );
+    it("opens a prefilled WhatsApp reminder after a share link exists", async () => {
+    const user = userEvent.setup();
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    vi.stubGlobal("fetch", makeFetchMock({
+      contactGet: { status: 200, body: { contactWa: "+62 812-3456-7890" } },
+      sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
+    }));
 
-      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
-      await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
+    render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "OVERDUE" }} />);
+    await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
+    const button = await screen.findByRole("button", { name: "Buka WhatsApp" });
+    expect(button).toHaveProperty("disabled", false);
 
-      const expectedLink = `${window.location.origin}/i/deterministic-token`;
-      expect(await screen.findByText(expectedLink)).toBeDefined();
+    await user.click(button);
+    expect(open).toHaveBeenCalledWith(
+      expect.stringContaining("https://wa.me/6281234567890?text="),
+      "_blank",
+      "noopener,noreferrer",
+    );
+    expect(open.mock.calls[0]?.[0]).toContain(encodeURIComponent("INV/2026/07/001"));
+  });
 
-      await user.click(screen.getByRole("button", { name: /salin tautan/i }));
-      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expectedLink);
-      expect(await screen.findByRole("alert")).toHaveProperty(
-        "textContent",
-        expect.stringMatching(/tautan tidak bisa disalin/i),
-      );
-    });
+  it("disables WhatsApp when the deal contact is unusable", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetchMock({
+      contactGet: { status: 200, body: { contactWa: "not-a-phone" } },
+      sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
+    }));
+
+    render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+    await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
+    expect(await screen.findByRole("button", { name: "Buka WhatsApp" })).toHaveProperty("disabled", true);
+    expect(screen.getByText(/nomor whatsapp belum bisa dipakai/i)).toBeDefined();
+  });
+  it("shows a controlled Bahasa alert when the clipboard write is denied or unavailable", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
+    vi.stubGlobal(
+      "fetch",
+      makeFetchMock({
+        shareGet: { status: 200, body: { active: false } },
+        sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
+      }),
+    );
+
+    render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+    await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
+
+    const expectedLink = `${window.location.origin}/i/deterministic-token`;
+    expect(await screen.findByText(expectedLink)).toBeDefined();
+
+    await user.click(screen.getByRole("button", { name: /salin tautan/i }));
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expectedLink);
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      expect.stringMatching(/tautan tidak bisa disalin/i),
+    );
+  });
+
 
     it("shows the active state after a reload without reconstructing the plaintext link", async () => {
       vi.stubGlobal("fetch", makeFetchMock({

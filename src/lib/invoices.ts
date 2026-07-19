@@ -66,6 +66,22 @@ export async function getOwnedInvoice(db: InvoiceReadDb, id: string, userId: str
   return db.invoice.findFirst({ where: { id, userId } });
 }
 
+export type InvoiceContactDb = {
+  invoice: {
+    findFirst(args: {
+      where: { id: string; userId: string };
+      select: { deal: { select: { contactWa: true } } };
+    }): Promise<{ deal: { contactWa: string } } | null>;
+  };
+};
+
+export async function getOwnedInvoiceContact(db: InvoiceContactDb, id: string, userId: string) {
+  return db.invoice.findFirst({
+    where: { id, userId },
+    select: { deal: { select: { contactWa: true } } },
+  });
+}
+
 export type InvoiceStatusDb = {
   invoice: {
     findFirst(args: { where: { id: string; userId: string } }): Promise<InvoiceRecord | null>;

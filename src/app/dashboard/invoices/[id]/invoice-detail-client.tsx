@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { InvoiceRecord } from "@/lib/invoices";
+import { buildWhatsAppReminderMessage, buildWhatsAppShareUrl, normalizeWhatsAppNumber } from "@/lib/whatsapp";
 
 const idr = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 });
 
@@ -97,7 +98,11 @@ type ShareConfirm = "regenerate" | "revoke" | null;
 
 type CopyFeedback = { kind: "success" | "error"; message: string };
 
-function ShareSection({ invoiceId }: { invoiceId: string }) {
+function ShareSection({ invoiceId, invoice, contactWa }: {
+  invoiceId: string;
+  invoice: InvoiceRecord;
+  contactWa: string | null;
+}) {
   const [share, setShare] = useState<ShareState>({ kind: "loading" });
   const [confirm, setConfirm] = useState<ShareConfirm>(null);
   const [isBusy, setIsBusy] = useState(false);
@@ -182,6 +187,20 @@ function ShareSection({ invoiceId }: { invoiceId: string }) {
     }
   }
 
+  const normalizedWhatsApp = contactWa ? normalizeWhatsAppNumber(contactWa) : null;
+  const whatsappHref = share.kind === "active" && share.link && normalizedWhatsApp && invoice.dueDate
+    ? buildWhatsAppShareUrl(
+        normalizedWhatsApp,
+        buildWhatsAppReminderMessage({
+          kind: invoice.status === "OVERDUE" ? "overdue" : "due-soon",
+          invoiceNumber: invoice.number,
+          totalIdr: invoice.subtotalIdr,
+          dueDate: invoice.dueDate,
+          shareUrl: share.link,
+        }),
+      )
+    : null;
+
   return (
     <section aria-labelledby="bagikan-invoice" className="rounded-2xl border border-line bg-surface p-5">
       <h2 id="bagikan-invoice" className="text-[18px] font-bold text-ink">Bagikan invoice</h2>
@@ -228,6 +247,24 @@ function ShareSection({ invoiceId }: { invoiceId: string }) {
                   {copyFeedback.message}
                 </p>
               ) : null}
+              <div className="mt-3 rounded-xl bg-bg p-3">
+                <p className="text-[13px] font-semibold text-ink">Kirim pengingat lewat WhatsApp</p>
+                <p className="mt-1 text-[13px] text-muted">
+                  {!normalizedWhatsApp
+                    ? "Nomor WhatsApp belum bisa dipakai. Periksa kontak di deal."
+                    : !whatsappHref
+                      ? "Buat tautan berbagi dulu agar pesan membawa link invoice."
+                      : "Pesan Bahasa Indonesia sudah disiapkan dengan nomor invoice, nominal, jatuh tempo, dan link invoice."}
+                </p>
+                <button
+                  type="button"
+                  disabled={!whatsappHref}
+                  onClick={() => whatsappHref && window.open(whatsappHref, "_blank", "noopener,noreferrer")}
+                  className="mt-3 inline-flex h-11 items-center rounded-full bg-[#25D366] px-4 text-[14px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Buka WhatsApp
+                </button>
+              </div>
             </>
           ) : null}
 
@@ -307,8 +344,22 @@ function ShareSection({ invoiceId }: { invoiceId: string }) {
 
 export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice: InvoiceRecord }) {
   const [invoice, setInvoice] = useState(initialInvoice);
+  const [contactWa, setContactWa] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/invoices/${initialInvoice.id}/contact`)
+      .then((response) => response.json().then((payload) => ({ response, payload })))
+      .then(({ response, payload }) => {
+        if (!cancelled && response.ok && typeof payload.contactWa === "string") setContactWa(payload.contactWa);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [initialInvoice.id]);
 
   async function updateStatus(status: InvoiceRecord["status"]) {
     setError(null);
@@ -391,7 +442,7 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
         )}
       </section>
 
-      <ShareSection invoiceId={invoice.id} />
+      <ShareSection invoiceId={invoice.id} invoice={invoice} contactWa={contactWa} />
     </main>
   );
 }
