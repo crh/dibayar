@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import type { DealRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
+import { deriveInvoiceDisplayStatus, DUE_SOON_WINDOW_DAYS, selectAttentionInvoices } from "@/lib/invoice-date-status";
 
 const PIPELINE_STAGES = [
   { value: "MASUK", label: "Masuk" },
@@ -18,6 +19,8 @@ type DashboardClientProps = {
   initialDeals: DealRecord[];
   initialInvoices?: InvoiceRecord[];
   userName?: string | null;
+  // Injectable for deterministic tests; defaults to the real current time.
+  now?: Date;
 };
 
 type FormState = {
@@ -52,6 +55,7 @@ function formatDeadline(value: Date | null) {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: "UTC",
   }).format(new Date(value));
 }
 
@@ -70,13 +74,37 @@ function statusClass(status: InvoiceRecord["status"]) {
   return "bg-bg text-muted";
 }
 
-export default function DashboardClient({ initialDeals, initialInvoices = [], userName }: DashboardClientProps) {
+function AttentionInvoiceCard({ invoice }: { invoice: InvoiceRecord & { displayStatus: InvoiceRecord["status"] } }) {
+  return (
+    <Link
+      href={`/dashboard/invoices/${invoice.id}`}
+      className="rounded-2xl border border-line bg-surface p-4 shadow-sm transition-colors hover:border-primary"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
+          <p className="mt-1 text-[18px] font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr)}</p>
+        </div>
+        <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${statusClass(invoice.displayStatus)}`}>
+          {INVOICE_STATUS_LABEL[invoice.displayStatus]}
+        </span>
+      </div>
+      <p className="mt-3 text-[13px] text-muted">Jatuh tempo: {formatDeadline(invoice.dueDate)}</p>
+    </Link>
+  );
+}
+
+export default function DashboardClient({ initialDeals, initialInvoices = [], userName, now }: DashboardClientProps) {
   const [deals, setDeals] = useState(initialDeals);
   const [invoices, setInvoices] = useState(initialInvoices);
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingDealId, setPendingDealId] = useState<string | null>(null);
+  const referenceNow = now ?? new Date();
+  const { overdue, dueSoon } = selectAttentionInvoices(invoices, referenceNow);
+  const overdueTotal = overdue.reduce((total, invoice) => total + invoice.subtotalIdr, 0);
+  const dueSoonTotal = dueSoon.reduce((total, invoice) => total + invoice.subtotalIdr, 0);
 
   async function handleStageChange(dealId: string, status: DealRecord["status"]) {
     setError(null);
@@ -241,6 +269,41 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
         </form>
       </section>
 
+      <section aria-labelledby="perlu-dikejar" className="flex flex-col gap-4">
+        <div>
+          <h2 id="perlu-dikejar" className="text-[20px] font-bold text-ink">Perlu dikejar</h2>
+          <p className="text-[13px] text-muted">Invoice terlambat dan yang jatuh tempo dalam 7 hari.</p>
+        </div>
+        {overdue.length || dueSoon.length ? (
+          <div className="flex flex-col gap-4">
+            {overdue.length ? (
+              <div>
+                <h3 className="text-[15px] font-bold text-overdue">Terlambat ({overdue.length}) · {formatIdr(overdueTotal)}</h3>
+                <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  {overdue.map((invoice) => (
+                    <AttentionInvoiceCard key={invoice.id} invoice={invoice} />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {dueSoon.length ? (
+              <div>
+                <h3 className="text-[15px] font-bold text-ink">Jatuh tempo dalam {DUE_SOON_WINDOW_DAYS} hari ({dueSoon.length}) · {formatIdr(dueSoonTotal)}</h3>
+                <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  {dueSoon.map((invoice) => (
+                    <AttentionInvoiceCard key={invoice.id} invoice={invoice} />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <p className="rounded-2xl border border-dashed border-line bg-surface p-4 text-[13px] text-muted">
+            Tidak ada invoice yang perlu dikejar saat ini.
+          </p>
+        )}
+      </section>
+
       <section aria-labelledby="pipeline" className="flex flex-col gap-4">
         <div>
           <h2 id="pipeline" className="text-[20px] font-bold text-ink">Pipeline deal</h2>
@@ -305,24 +368,27 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
         </div>
         {invoices.length ? (
           <div className="grid gap-3 sm:grid-cols-2">
-            {invoices.map((invoice) => (
-              <Link
-                key={invoice.id}
-                href={`/dashboard/invoices/${invoice.id}`}
-                className="rounded-2xl border border-line bg-surface p-4 shadow-sm transition-colors hover:border-primary"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
-                    <p className="mt-1 text-[18px] font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr)}</p>
+            {invoices.map((invoice) => {
+              const displayStatus = deriveInvoiceDisplayStatus(invoice, referenceNow);
+              return (
+                <Link
+                  key={invoice.id}
+                  href={`/dashboard/invoices/${invoice.id}`}
+                  className="rounded-2xl border border-line bg-surface p-4 shadow-sm transition-colors hover:border-primary"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
+                      <p className="mt-1 text-[18px] font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr)}</p>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${statusClass(displayStatus)}`}>
+                      {INVOICE_STATUS_LABEL[displayStatus]}
+                    </span>
                   </div>
-                  <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${statusClass(invoice.status)}`}>
-                    {INVOICE_STATUS_LABEL[invoice.status]}
-                  </span>
-                </div>
-                <p className="mt-3 text-[13px] text-muted">{formatDeadline(invoice.dueDate)}</p>
-              </Link>
-            ))}
+                  <p className="mt-3 text-[13px] text-muted">{formatDeadline(invoice.dueDate)}</p>
+                </Link>
+              );
+            })}
           </div>
         ) : (
           <p className="rounded-2xl border border-dashed border-line bg-surface p-4 text-[13px] text-muted">

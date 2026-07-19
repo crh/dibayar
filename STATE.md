@@ -23,10 +23,10 @@ stack: Next.js + TS + Tailwind + Postgres + Prisma + Auth.js (Google OAuth) + Ve
 vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linked to github.com/crh/dibayar)
 
 ## now
-current_milestone: M2 — Invoice — ACCEPTED 2026-07-18. Both ROADMAP.md M2 items now `[x]`. Basis: `85a4f6a` (share-link + dashboard stage controls) and `5064e70` (mutation hardening) committed, pushed, HEAD == origin; isolated Preview migration `20260717090000_invoice_share` applied; protected Preview deployed READY; full authenticated Chrome E2E passed (see decisions below). Production deployment and public/non-SSO recipient access are explicit, separate, still-pending Chris decisions — NOT part of this acceptance. Next milestone: M3 (payment chasing) — not started, awaiting Chris go-ahead.
-active_branch: hermes/m2-invoice
-latest_feature_commit: 53032e3 feat(m2): expire invoice share links — pushed and deployed (remote now at `bc732a8`); migration `20260719075600_invoice_share_expiry` applied 2026-07-19 to isolated Preview (`preview/hermes/m2-invoice`, database `neondb`) via Neon SQL Editor; latest protected Preview deployment is Ready
-remote_feature_branch: origin/hermes/m2-invoice @ bc732a8; local branch matches remote; no unpushed feature work
+current_milestone: M3 — Payment Chasing — IN PROGRESS (Task 1 local slice; Preview verification pending). Pre-M3 security review landed in `fa12cf3` and the M3 URL/data-minimization rules are documented in SECURITY.md. M2 remains accepted; Production deployment and public/non-SSO recipient access remain explicit, separate, still-pending Chris decisions.
+active_branch: hermes/m3-chasing
+latest_feature_commit: fa12cf3 pre-M3 security review; M3 Task 1 changes are currently uncommitted local work
+remote_feature_branch: origin/hermes/m2-invoice remains unchanged; hermes/m3-chasing is local and not pushed
 completed_milestones:
   - Phase 0 discovery closed
   - M0 bootstrap and protected production deployment complete
@@ -40,8 +40,9 @@ today_work (Focus measures approved scope, not task volume, from 2026-07-19):
   - Governance catch-up Task 5: migration `20260719075600_invoice_share_expiry` applied to isolated Preview (`preview/hermes/m2-invoice`, database `neondb`) via Neon SQL Editor, verified by pre/postflight checks and the `_prisma_migrations` checksum; expiry code pushed and protected Preview redeployed READY — done
   - Governance catch-up Task 6 (audit correction): `bc732a8`'s claim of having updated the DEPLOYMENT.md §4 residual-risk bullets was inaccurate — those two bullets still said `53032e3` was "not yet pushed or deployed" and named `5064e70` as the deployed commit, both false now that `origin/hermes/m2-invoice` is at `bc732a8` (includes `53032e3`) and protected Preview `dpl_HGimfRd7RKdmZwDgpABCeo5ZgU36` is READY at that SHA; corrected, plus a 3-file sweep (DEPLOYMENT.md, SECURITY.md, STATE.md) — done, docs-only
   - Pre-M3 security review (Chris-requested; existing-code review plus focused CSRF remediation; no commit/push): output-escaping and URL-construction inventory (zero dangerous-construct hits; 10 href/src/action hits, 11 URL/query hits, all fixed/internal/server-generated) — done; CSRF same-origin protection verified wired into all 5 deal/invoice mutation handlers (RED 15 failed/46 passed → GREEN 61/61 passed) — done; personal-data minimization 40-field census across all 9 schema models, `Deal.contactWa` and `User.image` flagged, none deleted — done; PDF render structural review with an open control-character/long-string caveat — done
+  - M3 Task 1 local slice: Jakarta-aware read-time OVERDUE derivation, shared attention selection, provisional 7-day due-soon dashboard surface, and IDR count/amount totals — local tests GREEN; Preview verification pending
 
-open_blockers: none for M2 (accepted). Separate, still-pending, Chris-gated decisions: (1) Production deployment, (2) public/non-SSO recipient access for share links — decision brief now in DEPLOYMENT.md, decision itself not made. The 2026-07-19 amended-rubric entry establishes a no-zero day; unattended cron still requires a fresh post-commit guard check before go/no-go. Pre-M3 security review found no blocking issue; PDF library edge-case behavior and the two flagged personal-data fields remain open, non-blocking items for Chris to weigh in on before M3 starts.
+open_blockers: M3 Task 1 Preview verification is pending. Separate, still-pending, Chris-gated decisions: (1) Production deployment, (2) public/non-SSO recipient access for share links. Email remains a separate product decision; the provisional 7-day due-soon window is not yet validated with creator feedback. No schema/migration/cron change is part of this slice.
 
 ## recent_signal_findings
 - No external signal check recorded.
@@ -61,10 +62,10 @@ open_blockers: none for M2 (accepted). Separate, still-pending, Chris-gated deci
 - 2026-07-17: Chris approved item 1 (push 8 M2 commits + protected Preview redeploy) and separately approved option A for share-link scope; both executed and closed same day. Full detail: DAILY_LOG "Day 1 Task C/D/E/F" entries.
 
 ## approvals
-pending_from_chris: Production deployment decision; separate public (non-SSO) access decision for recipient share links; M3 go-ahead.
+pending_from_chris: Production deployment decision; separate public (non-SSO) access decision for recipient share links; M3 product choices still open: provisional 7-day due-soon window, email reminder scope, and monthly income month basis (issue date vs payment date).
 pending_external: none
 
-granted_by_chris: standing autonomous milestone execution, code-fix, and protected Preview redeployment approval; M2 share-link option A + Preview-only rollout execution (2026-07-18, "Please continue what you think the best") — executed in full (commit/push/migration-apply/deploy/E2E, see decisions above); M2 documentation reconciliation + explicit acceptance closeout (2026-07-18, "continue") — this task, completed.
+granted_by_chris: standing autonomous milestone execution, code-fix, and protected Preview redeployment approval; M2 share-link option A + Preview-only rollout execution (2026-07-18, "Please continue what you think the best") — executed in full (commit/push/migration-apply/deploy/E2E, see decisions above); M2 documentation reconciliation + explicit acceptance closeout (2026-07-18, "continue") — this task, completed; M3 go-ahead for all three ROADMAP items, including one-tap WhatsApp follow-up (2026-07-19 task-set instruction).
 
 ## metrics (phase 2+ only)
 users_shown: 0

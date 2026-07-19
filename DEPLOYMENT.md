@@ -19,6 +19,12 @@
 - Migration apply (2026-07-19): `20260719075600_invoice_share_expiry` (adds nullable `InvoiceShare.expiresAt`) was applied directly via the Neon SQL Editor to the isolated Preview branch `preview/hermes/m2-invoice`, database `neondb` — the SQL Editor was visibly scoped to that branch/database before running. Preflight read `expires_at_exists=false`, `migration_finished=false`; the exact checked-in migration SQL ran successfully in one transaction; postflight confirmed `InvoiceShare.expiresAt` is `timestamp without time zone`, nullable, and `_prisma_migrations` records `20260719075600_invoice_share_expiry` `finished=true` with checksum `05fbf7a79269cf4420dfea84d2114bd69ff3137215f998dee077e75275f4df2e`. Expiry code is pushed in `58eed07`; latest protected Preview `dpl_CgARDeZex6BpTFx3UVmXQ8dibXSp` is Ready. Production untouched; no public/non-SSO access enabled; neither pending Chris decision made or implied made by this apply. Superseded by the entry immediately below — `58eed07` and `dpl_CgARDeZex6BpTFx3UVmXQ8dibXSp` are no longer the current pushed/deployed state.
 - Docs audit correction (2026-07-19, later same day, supersedes the "latest protected Preview" language in the two bullets above): `origin/hermes/m2-invoice` is now synchronized at `bc732a8` (which includes `58eed07` and `53032e3`); the latest protected Preview deployment is `dpl_HGimfRd7RKdmZwDgpABCeo5ZgU36`, READY, with Vercel `gitSource.sha`/`meta.githubCommitSha` both `bc732a8b777be966dc3978ce3c2d3488900a82a1`. Expiry-aware application code (`53032e3`) is therefore pushed and deployed on protected Preview, not merely pushed. The schema migration `20260719075600_invoice_share_expiry` remains applied to the isolated Preview database only (see SECURITY.md); it has not been applied to Production. Production and public/non-SSO recipient access remain untouched and undecided.
 
+## M3 email decision — not built
+
+Email reminders are intentionally out of scope for M3 Task 1. A responsible implementation needs an email provider, a verified sender domain and identity, deliverability and bounce handling, unsubscribe/consent rules, a new secret, and operational monitoring. Adding only a provider call would create an unreliable reminder path rather than a cheap feature.
+
+This is a separate Chris product and deployment decision. No email provider dependency, sender credential, background sender, or email route was added in this slice.
+
 ## Local verification
 
 From `/home/kenji/code/dibayar`:
