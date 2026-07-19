@@ -22,16 +22,18 @@ const mockedAuth = vi.mocked(auth);
 const mockedCreateInvoice = vi.mocked(createInvoice);
 const mockedListInvoices = vi.mocked(listInvoices);
 
-function makeRequest(body: unknown) {
+function makeRequest(body: unknown, headers: HeadersInit = { origin: "http://localhost" }) {
   return new Request("http://localhost/api/invoices", {
     method: "POST",
+    headers,
     body: JSON.stringify(body),
   });
 }
 
-function makeMalformedRequest() {
+function makeMalformedRequest(headers: HeadersInit = { origin: "http://localhost" }) {
   return new Request("http://localhost/api/invoices", {
     method: "POST",
+    headers,
     body: "{not valid json",
   });
 }
@@ -180,6 +182,44 @@ describe("POST /api/invoices", () => {
     expect(response.status).toBe(500);
     const body = await response.json();
     expect(body.error).toBe("Invoice belum bisa dibuat. Coba lagi.");
+    expect(mockedCreateInvoice).not.toHaveBeenCalled();
+  });
+});
+
+describe("same-origin protection for POST /api/invoices", () => {
+  beforeEach(() => {
+    mockedAuth.mockReset();
+    mockedCreateInvoice.mockReset();
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+  });
+
+  it("allows a same-origin POST", async () => {
+    mockedCreateInvoice.mockResolvedValue(invoice);
+
+    const response = await POST(makeRequest({ dealId: "deal-1" }));
+
+    expect(response.status).toBe(201);
+    expect(mockedCreateInvoice).toHaveBeenCalled();
+  });
+
+  it("rejects a POST with a missing Origin header", async () => {
+    const response = await POST(makeRequest({ dealId: "deal-1" }, {}));
+
+    expect(response.status).toBe(403);
+    expect(mockedCreateInvoice).not.toHaveBeenCalled();
+  });
+
+  it("rejects a POST with a cross-origin Origin header", async () => {
+    const response = await POST(makeRequest({ dealId: "deal-1" }, { origin: "https://evil.example" }));
+
+    expect(response.status).toBe(403);
+    expect(mockedCreateInvoice).not.toHaveBeenCalled();
+  });
+
+  it("rejects a POST with a malformed Origin header", async () => {
+    const response = await POST(makeRequest({ dealId: "deal-1" }, { origin: "not-a-url" }));
+
+    expect(response.status).toBe(403);
     expect(mockedCreateInvoice).not.toHaveBeenCalled();
   });
 });

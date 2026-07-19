@@ -8,6 +8,7 @@ import {
   type DealDb,
 } from "@/lib/deals";
 import { prisma } from "@/lib/prisma";
+import { isSameOriginRequest } from "@/lib/request-origin";
 
 const db = prisma as unknown as DealDb;
 type RouteContext = { params: Promise<{ id: string }> };
@@ -34,6 +35,9 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
     }
+    if (!isSameOriginRequest(request)) {
+      return NextResponse.json({ error: "Permintaan ditolak. Muat ulang halaman lalu coba lagi." }, { status: 403 });
+    }
 
     const { id } = await context.params;
     const deal = await updateDeal(db, id, session.user.id, await request.json());
@@ -54,11 +58,14 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   try {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
+    }
+    if (!isSameOriginRequest(request)) {
+      return NextResponse.json({ error: "Permintaan ditolak. Muat ulang halaman lalu coba lagi." }, { status: 403 });
     }
 
     const { id } = await context.params;

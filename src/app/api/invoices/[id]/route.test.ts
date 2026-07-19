@@ -24,6 +24,22 @@ function makeContext(id: string) {
   return { params: Promise.resolve({ id }) };
 }
 
+function patchRequest(id: string, body: unknown, headers: HeadersInit = { origin: "http://localhost" }) {
+  return new Request(`http://localhost/api/invoices/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(body),
+  });
+}
+
+function malformedPatchRequest(id: string, headers: HeadersInit = { origin: "http://localhost" }) {
+  return new Request(`http://localhost/api/invoices/${id}`, {
+    method: "PATCH",
+    headers,
+    body: "{not valid json",
+  });
+}
+
 const invoice: InvoiceRecord = {
   id: "invoice-1",
   userId: "user-1",
@@ -91,10 +107,7 @@ describe("GET /api/invoices/[id]", () => {
   it("menolak perubahan status tanpa sesi login", async () => {
     mockedAuth.mockResolvedValue(null as never);
 
-    const response = await PATCH(
-      new Request("http://localhost/api/invoices/invoice-1", { method: "PATCH", body: JSON.stringify({ status: "SENT" }) }),
-      makeContext("invoice-1"),
-    );
+    const response = await PATCH(patchRequest("invoice-1", { status: "SENT" }), makeContext("invoice-1"));
 
     expect(response.status).toBe(401);
     expect(mockedUpdateInvoiceStatus).not.toHaveBeenCalled();
@@ -104,10 +117,7 @@ describe("GET /api/invoices/[id]", () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
     mockedUpdateInvoiceStatus.mockResolvedValue({ kind: "invalid-transition" });
 
-    const response = await PATCH(
-      new Request("http://localhost/api/invoices/invoice-1", { method: "PATCH", body: JSON.stringify({ status: "PAID" }) }),
-      makeContext("invoice-1"),
-    );
+    const response = await PATCH(patchRequest("invoice-1", { status: "PAID" }), makeContext("invoice-1"));
 
     expect(response.status).toBe(409);
     const body = await response.json();
@@ -118,10 +128,7 @@ describe("GET /api/invoices/[id]", () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
     mockedUpdateInvoiceStatus.mockResolvedValue({ kind: "updated", invoice: { ...invoice, status: "SENT" } });
 
-    const response = await PATCH(
-      new Request("http://localhost/api/invoices/invoice-1", { method: "PATCH", body: JSON.stringify({ status: "SENT" }) }),
-      makeContext("invoice-1"),
-    );
+    const response = await PATCH(patchRequest("invoice-1", { status: "SENT" }), makeContext("invoice-1"));
 
     expect(response.status).toBe(200);
     expect(mockedUpdateInvoiceStatus).toHaveBeenCalledWith(expect.anything(), "invoice-1", "user-1", "SENT");
@@ -131,10 +138,7 @@ describe("GET /api/invoices/[id]", () => {
   it("mengembalikan 400 saat body bukan JSON yang valid", async () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
 
-    const response = await PATCH(
-      new Request("http://localhost/api/invoices/invoice-1", { method: "PATCH", body: "{not valid json" }),
-      makeContext("invoice-1"),
-    );
+    const response = await PATCH(malformedPatchRequest("invoice-1"), makeContext("invoice-1"));
 
     expect(response.status).toBe(400);
     const body = await response.json();
@@ -145,14 +149,55 @@ describe("GET /api/invoices/[id]", () => {
   it("mengembalikan 500 terkontrol saat auth() gagal karena masalah infrastruktur", async () => {
     mockedAuth.mockRejectedValue(new Error("auth provider unreachable"));
 
-    const response = await PATCH(
-      new Request("http://localhost/api/invoices/invoice-1", { method: "PATCH", body: JSON.stringify({ status: "SENT" }) }),
-      makeContext("invoice-1"),
-    );
+    const response = await PATCH(patchRequest("invoice-1", { status: "SENT" }), makeContext("invoice-1"));
 
     expect(response.status).toBe(500);
     const body = await response.json();
     expect(body.error).toBe("Status invoice belum bisa diperbarui. Coba lagi.");
+    expect(mockedUpdateInvoiceStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe("same-origin protection for PATCH /api/invoices/[id]", () => {
+  beforeEach(() => {
+    mockedAuth.mockReset();
+    mockedUpdateInvoiceStatus.mockReset();
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+  });
+
+  it("allows a same-origin PATCH", async () => {
+    mockedUpdateInvoiceStatus.mockResolvedValue({ kind: "updated", invoice: { ...invoice, status: "SENT" } });
+
+    const response = await PATCH(patchRequest("invoice-1", { status: "SENT" }), makeContext("invoice-1"));
+
+    expect(response.status).toBe(200);
+    expect(mockedUpdateInvoiceStatus).toHaveBeenCalled();
+  });
+
+  it("rejects a PATCH with a missing Origin header", async () => {
+    const response = await PATCH(patchRequest("invoice-1", { status: "SENT" }, {}), makeContext("invoice-1"));
+
+    expect(response.status).toBe(403);
+    expect(mockedUpdateInvoiceStatus).not.toHaveBeenCalled();
+  });
+
+  it("rejects a PATCH with a cross-origin Origin header", async () => {
+    const response = await PATCH(
+      patchRequest("invoice-1", { status: "SENT" }, { origin: "https://evil.example" }),
+      makeContext("invoice-1"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockedUpdateInvoiceStatus).not.toHaveBeenCalled();
+  });
+
+  it("rejects a PATCH with a malformed Origin header", async () => {
+    const response = await PATCH(
+      patchRequest("invoice-1", { status: "SENT" }, { origin: "not-a-url" }),
+      makeContext("invoice-1"),
+    );
+
+    expect(response.status).toBe(403);
     expect(mockedUpdateInvoiceStatus).not.toHaveBeenCalled();
   });
 });

@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import { auth } from "@/auth";
 import { createInvoice, listInvoices, type InvoiceCreateDb, type InvoiceReadDb } from "@/lib/invoices";
 import { prisma } from "@/lib/prisma";
+import { isSameOriginRequest } from "@/lib/request-origin";
 
 const db = prisma as unknown as InvoiceCreateDb;
 const readDb = prisma as unknown as InvoiceReadDb;
@@ -26,6 +27,9 @@ export async function POST(request: Request) {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
+    }
+    if (!isSameOriginRequest(request)) {
+      return NextResponse.json({ error: "Permintaan ditolak. Muat ulang halaman lalu coba lagi." }, { status: 403 });
     }
 
     const invoice = await createInvoice(db, session.user.id, await request.json());

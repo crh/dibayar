@@ -26,11 +26,24 @@ function makeContext(id: string) {
   return { params: Promise.resolve({ id }) };
 }
 
-function makeMalformedPatchRequest(id: string) {
+function makeMalformedPatchRequest(id: string, headers: HeadersInit = { origin: "http://localhost" }) {
   return new Request(`http://localhost/api/deals/${id}`, {
     method: "PATCH",
+    headers,
     body: "{not valid json",
   });
+}
+
+function patchRequest(id: string, body: unknown, headers: HeadersInit = { origin: "http://localhost" }) {
+  return new Request(`http://localhost/api/deals/${id}`, {
+    method: "PATCH",
+    headers,
+    body: JSON.stringify(body),
+  });
+}
+
+function deleteRequest(id: string, headers: HeadersInit = { origin: "http://localhost" }) {
+  return new Request(`http://localhost/api/deals/${id}`, { method: "DELETE", headers });
 }
 
 const deal: DealRecord = {
@@ -116,7 +129,7 @@ describe("PATCH /api/deals/[id]", () => {
     mockedAuth.mockRejectedValue(new Error("auth provider unreachable"));
 
     const response = await PATCH(
-      new Request("http://localhost/api/deals/deal-1", { method: "PATCH", body: JSON.stringify({ brand: "X" }) }),
+      patchRequest("deal-1", { brand: "X" }),
       makeContext("deal-1"),
     );
 
@@ -131,12 +144,56 @@ describe("PATCH /api/deals/[id]", () => {
     mockedUpdateDeal.mockResolvedValue(deal);
 
     const response = await PATCH(
-      new Request("http://localhost/api/deals/deal-1", { method: "PATCH", body: JSON.stringify({ brand: "Kopi Baru" }) }),
+      patchRequest("deal-1", { brand: "Kopi Baru" }),
       makeContext("deal-1"),
     );
 
     expect(response.status).toBe(200);
     expect(mockedUpdateDeal).toHaveBeenCalledWith(expect.anything(), "deal-1", "user-1", { brand: "Kopi Baru" });
+  });
+});
+
+describe("same-origin protection for PATCH /api/deals/[id]", () => {
+  beforeEach(() => {
+    mockedAuth.mockReset();
+    mockedUpdateDeal.mockReset();
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+  });
+
+  it("allows a same-origin PATCH", async () => {
+    mockedUpdateDeal.mockResolvedValue(deal);
+
+    const response = await PATCH(patchRequest("deal-1", { brand: "Kopi Baru" }), makeContext("deal-1"));
+
+    expect(response.status).toBe(200);
+    expect(mockedUpdateDeal).toHaveBeenCalled();
+  });
+
+  it("rejects a PATCH with a missing Origin header", async () => {
+    const response = await PATCH(patchRequest("deal-1", { brand: "Kopi Baru" }, {}), makeContext("deal-1"));
+
+    expect(response.status).toBe(403);
+    expect(mockedUpdateDeal).not.toHaveBeenCalled();
+  });
+
+  it("rejects a PATCH with a cross-origin Origin header", async () => {
+    const response = await PATCH(
+      patchRequest("deal-1", { brand: "Kopi Baru" }, { origin: "https://evil.example" }),
+      makeContext("deal-1"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockedUpdateDeal).not.toHaveBeenCalled();
+  });
+
+  it("rejects a PATCH with a malformed Origin header", async () => {
+    const response = await PATCH(
+      patchRequest("deal-1", { brand: "Kopi Baru" }, { origin: "not-a-url" }),
+      makeContext("deal-1"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockedUpdateDeal).not.toHaveBeenCalled();
   });
 });
 
@@ -149,10 +206,7 @@ describe("DELETE /api/deals/[id]", () => {
   it("mengembalikan 500 terkontrol saat auth() gagal karena masalah infrastruktur", async () => {
     mockedAuth.mockRejectedValue(new Error("auth provider unreachable"));
 
-    const response = await DELETE(
-      new Request("http://localhost/api/deals/deal-1", { method: "DELETE" }),
-      makeContext("deal-1"),
-    );
+    const response = await DELETE(deleteRequest("deal-1"), makeContext("deal-1"));
 
     expect(response.status).toBe(500);
     const body = await response.json();
@@ -163,10 +217,7 @@ describe("DELETE /api/deals/[id]", () => {
   it("menolak permintaan tanpa sesi login", async () => {
     mockedAuth.mockResolvedValue(null as never);
 
-    const response = await DELETE(
-      new Request("http://localhost/api/deals/deal-1", { method: "DELETE" }),
-      makeContext("deal-1"),
-    );
+    const response = await DELETE(deleteRequest("deal-1"), makeContext("deal-1"));
 
     expect(response.status).toBe(401);
     expect(mockedDeleteDeal).not.toHaveBeenCalled();
@@ -176,10 +227,7 @@ describe("DELETE /api/deals/[id]", () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
     mockedDeleteDeal.mockResolvedValue({ kind: "not-found" });
 
-    const response = await DELETE(
-      new Request("http://localhost/api/deals/deal-x", { method: "DELETE" }),
-      makeContext("deal-x"),
-    );
+    const response = await DELETE(deleteRequest("deal-x"), makeContext("deal-x"));
 
     expect(response.status).toBe(404);
     expect((await response.json()).error).toBe("Deal tidak ditemukan.");
@@ -189,10 +237,7 @@ describe("DELETE /api/deals/[id]", () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
     mockedDeleteDeal.mockResolvedValue({ kind: "has-invoices" });
 
-    const response = await DELETE(
-      new Request("http://localhost/api/deals/deal-1", { method: "DELETE" }),
-      makeContext("deal-1"),
-    );
+    const response = await DELETE(deleteRequest("deal-1"), makeContext("deal-1"));
 
     expect(response.status).toBe(409);
     expect((await response.json()).error).toBe("Deal ini punya invoice, jadi belum bisa dihapus.");
@@ -202,10 +247,7 @@ describe("DELETE /api/deals/[id]", () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
     mockedDeleteDeal.mockResolvedValue({ kind: "deleted" });
 
-    const response = await DELETE(
-      new Request("http://localhost/api/deals/deal-1", { method: "DELETE" }),
-      makeContext("deal-1"),
-    );
+    const response = await DELETE(deleteRequest("deal-1"), makeContext("deal-1"));
 
     expect(response.status).toBe(204);
     expect(mockedDeleteDeal).toHaveBeenCalledWith(expect.anything(), "deal-1", "user-1");
@@ -215,12 +257,50 @@ describe("DELETE /api/deals/[id]", () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
     mockedDeleteDeal.mockRejectedValue(new Error("database details must not leak"));
 
-    const response = await DELETE(
-      new Request("http://localhost/api/deals/deal-1", { method: "DELETE" }),
-      makeContext("deal-1"),
-    );
+    const response = await DELETE(deleteRequest("deal-1"), makeContext("deal-1"));
 
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ error: "Deal belum bisa dihapus. Coba lagi." });
+  });
+});
+
+describe("same-origin protection for DELETE /api/deals/[id]", () => {
+  beforeEach(() => {
+    mockedAuth.mockReset();
+    mockedDeleteDeal.mockReset();
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+  });
+
+  it("allows a same-origin DELETE", async () => {
+    mockedDeleteDeal.mockResolvedValue({ kind: "deleted" });
+
+    const response = await DELETE(deleteRequest("deal-1"), makeContext("deal-1"));
+
+    expect(response.status).toBe(204);
+    expect(mockedDeleteDeal).toHaveBeenCalled();
+  });
+
+  it("rejects a DELETE with a missing Origin header", async () => {
+    const response = await DELETE(deleteRequest("deal-1", {}), makeContext("deal-1"));
+
+    expect(response.status).toBe(403);
+    expect(mockedDeleteDeal).not.toHaveBeenCalled();
+  });
+
+  it("rejects a DELETE with a cross-origin Origin header", async () => {
+    const response = await DELETE(
+      deleteRequest("deal-1", { origin: "https://evil.example" }),
+      makeContext("deal-1"),
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockedDeleteDeal).not.toHaveBeenCalled();
+  });
+
+  it("rejects a DELETE with a malformed Origin header", async () => {
+    const response = await DELETE(deleteRequest("deal-1", { origin: "not-a-url" }), makeContext("deal-1"));
+
+    expect(response.status).toBe(403);
+    expect(mockedDeleteDeal).not.toHaveBeenCalled();
   });
 });

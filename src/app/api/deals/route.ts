@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import { auth } from "@/auth";
 import { createDeal, listDeals, type DealDb } from "@/lib/deals";
 import { prisma } from "@/lib/prisma";
+import { isSameOriginRequest } from "@/lib/request-origin";
 
 const db = prisma as unknown as DealDb;
 
@@ -25,6 +26,9 @@ export async function POST(request: Request) {
     const session = await auth();
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
+    }
+    if (!isSameOriginRequest(request)) {
+      return NextResponse.json({ error: "Permintaan ditolak. Muat ulang halaman lalu coba lagi." }, { status: 403 });
     }
 
     const deal = await createDeal(db, session.user.id, await request.json());

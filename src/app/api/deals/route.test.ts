@@ -22,16 +22,18 @@ const mockedAuth = vi.mocked(auth);
 const mockedCreateDeal = vi.mocked(createDeal);
 const mockedListDeals = vi.mocked(listDeals);
 
-function makeRequest(body: unknown) {
+function makeRequest(body: unknown, headers: HeadersInit = { origin: "http://localhost" }) {
   return new Request("http://localhost/api/deals", {
     method: "POST",
+    headers,
     body: JSON.stringify(body),
   });
 }
 
-function makeMalformedRequest() {
+function makeMalformedRequest(headers: HeadersInit = { origin: "http://localhost" }) {
   return new Request("http://localhost/api/deals", {
     method: "POST",
+    headers,
     body: "{not valid json",
   });
 }
@@ -170,6 +172,44 @@ describe("POST /api/deals", () => {
     expect(response.status).toBe(500);
     const body = await response.json();
     expect(body.error).toBe("Deal belum bisa disimpan. Coba lagi.");
+    expect(mockedCreateDeal).not.toHaveBeenCalled();
+  });
+});
+
+describe("same-origin protection for POST /api/deals", () => {
+  beforeEach(() => {
+    mockedAuth.mockReset();
+    mockedCreateDeal.mockReset();
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+  });
+
+  it("allows a same-origin POST", async () => {
+    mockedCreateDeal.mockResolvedValue(deal);
+
+    const response = await POST(makeRequest({ brand: "Kopi Nusantara" }));
+
+    expect(response.status).toBe(201);
+    expect(mockedCreateDeal).toHaveBeenCalled();
+  });
+
+  it("rejects a POST with a missing Origin header", async () => {
+    const response = await POST(makeRequest({ brand: "Kopi Nusantara" }, {}));
+
+    expect(response.status).toBe(403);
+    expect(mockedCreateDeal).not.toHaveBeenCalled();
+  });
+
+  it("rejects a POST with a cross-origin Origin header", async () => {
+    const response = await POST(makeRequest({ brand: "Kopi Nusantara" }, { origin: "https://evil.example" }));
+
+    expect(response.status).toBe(403);
+    expect(mockedCreateDeal).not.toHaveBeenCalled();
+  });
+
+  it("rejects a POST with a malformed Origin header", async () => {
+    const response = await POST(makeRequest({ brand: "Kopi Nusantara" }, { origin: "not-a-url" }));
+
+    expect(response.status).toBe(403);
     expect(mockedCreateDeal).not.toHaveBeenCalled();
   });
 });
