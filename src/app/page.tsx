@@ -23,7 +23,7 @@ const CARA_KERJA = [
 export default function Home() {
   return (
     <div className="flex flex-1 flex-col bg-bg">
-      <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-10 px-5 py-12">
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center gap-12 px-5 py-12 sm:px-8 lg:grid lg:grid-cols-[1.1fr_.9fr] lg:items-center lg:gap-20">
         <header className="flex flex-col gap-3">
           <p className="text-[17px] font-bold tracking-tight text-ink">Dibayar</p>
           <span className="inline-flex h-7 w-fit items-center rounded-full border border-line bg-surface px-3 text-[13px] font-semibold text-primary">

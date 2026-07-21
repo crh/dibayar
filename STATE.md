@@ -23,10 +23,10 @@ stack: Next.js + TS + Tailwind + Postgres + Prisma + Auth.js (Google OAuth) + Ve
 vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linked to github.com/crh/dibayar)
 
 ## now
-current_milestone: M3 — Payment Chasing — COMPLETE (Tasks 1–3 locally gated and authenticated Preview-verified). Pre-M3 security review landed in `fa12cf3`; Production deployment and public/non-SSO recipient access remain separate, Chris-gated decisions.
-active_branch: hermes/m3-chasing
-latest_feature_commit: `99a15c9` fix(i18n): localize income month label; bilingual implementation is `866c237`; pushed to `origin/hermes/m3-chasing`. Latest metadata-based Preview is `https://dibayar-qgo0n3fn6-kenji-iwakura.vercel.app`, READY and Vercel-SSO protected.
-remote_feature_branch: origin/hermes/m3-chasing @ 99a15c9; hermes/m2-invoice remains unchanged
+current_milestone: M3 — Payment Chasing — COMPLETE. Phase 1 design-system pass is active on `hermes/design-system`; Production deployment, public/non-SSO recipient access, and M4 remain Chris-gated.
+active_branch: hermes/design-system
+latest_feature_commit: `c826a58` docs(m3): record bilingual Preview verification; design-system work branches from this HEAD.
+remote_feature_branch: origin/hermes/design-system @ c826a58; source branch `hermes/m3-chasing` remains unchanged
 completed_milestones:
   - Phase 0 discovery closed
   - M0 bootstrap and protected production deployment complete

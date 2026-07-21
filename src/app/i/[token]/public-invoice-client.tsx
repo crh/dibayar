@@ -36,7 +36,7 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date(value));
 }
 
-export default function PublicInvoiceClient({ token }: { token: string }) {
+export default function PublicInvoiceClient({ token, publicFontClass = "" }: { token: string; publicFontClass?: string }) {
   const [state, setState] = useState<LoadState>("loading");
   const [invoice, setInvoice] = useState<PublicInvoiceView | null>(null);
 
@@ -96,11 +96,11 @@ export default function PublicInvoiceClient({ token }: { token: string }) {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-col gap-6 px-5 py-8 sm:px-8">
-      <header className="rounded-2xl border border-line bg-surface p-5 shadow-sm">
+    <main className={`public-invoice ${publicFontClass} mx-auto flex min-h-dvh w-full max-w-[640px] flex-col gap-6 px-5 py-8 sm:px-8`}>
+      <header className="rounded-md border border-line border-t-[3px] border-t-primary bg-surface p-6 shadow-md">
         <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-[28px] font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr)}</h1>
+          <h1 className="font-serif text-[38px] font-semibold leading-tight tabular-nums text-ink">{formatIdr(invoice.subtotalIdr)}</h1>
           <span className="rounded-full bg-bg px-3 py-1 text-[13px] font-semibold text-ink">{STATUS_LABEL[invoice.status]}</span>
         </div>
         <p className="mt-3 text-[14px] text-muted">Ditagihkan kepada {invoice.brand}</p>
@@ -113,7 +113,7 @@ export default function PublicInvoiceClient({ token }: { token: string }) {
         </a>
       </header>
 
-      <section aria-labelledby="rincian-invoice" className="rounded-2xl border border-line bg-surface p-5">
+      <section aria-labelledby="rincian-invoice" className="rounded-md border border-line bg-surface p-6">
         <h2 id="rincian-invoice" className="text-[18px] font-bold text-ink">Rincian invoice</h2>
         <dl className="mt-4 grid gap-3 text-[15px]">
           <div className="flex items-center justify-between gap-4 border-b border-line pb-3">

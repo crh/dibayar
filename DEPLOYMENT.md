@@ -23,6 +23,7 @@
 - M3 income basis: summary uses invoice `createdAt` interpreted in `Asia/Jakarta`; there is no `paidAt` field, so the UI says `Invoice terbit` and `Net estimasi`. Draft invoices are excluded. PPh 21/23 rates are explicit estimates (5%/2%), not tax filing logic.
 
 - M3 bilingual UI (2026-07-19): commits `866c237` and `99a15c9` add an Indonesian-default/English language switch with localStorage persistence, locale-aware month/currency formatting, and translated dashboard/invoice-detail workflow copy. Final protected Preview `https://dibayar-qgo0n3fn6-kenji-iwakura.vercel.app` is Ready; authenticated Chrome MCP verified both languages. Production remains untouched; public/non-SSO access remains disabled.
+- Phase 1 design-system Preview (2026-07-21): branch `hermes/design-system` is isolated from `hermes/m3-chasing`; local design-system implementation passed 31 files / 313 tests, lint, typecheck, build, and diff check. Preview deployment is required for final visual/bilingual smoke. Production, public/non-SSO access, database migrations, and M4 remain unchanged and approval-gated.
 
 ## M3 email decision — not built
 

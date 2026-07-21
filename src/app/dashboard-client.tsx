@@ -9,6 +9,7 @@ import { useLanguage } from "@/components/language-switcher";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { summarizeMonthlyIncome } from "@/lib/income-summary";
 import type { Language } from "@/lib/i18n";
+import { StatusChip, MoneyDisplay, EmptyState, fieldClassName } from "@/components/design-system";
 
 const PIPELINE_STAGES = [
   { value: "MASUK", label: "Masuk" },
@@ -96,7 +97,7 @@ function AttentionInvoiceCard({ invoice, language, t }: {
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
-          <p className="mt-1 text-[18px] font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr, language)}</p>
+          <MoneyDisplay value={invoice.subtotalIdr} language={language} size="card" />
         </div>
         <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${statusClass(invoice.displayStatus)}`}>
           {invoice.displayStatus === "OVERDUE" ? t("dashboard.overdue") : t("dashboard.dueSoon")}
@@ -115,6 +116,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingDealId, setPendingDealId] = useState<string | null>(null);
+  const [isAddDealOpen, setIsAddDealOpen] = useState(initialDeals.length === 0);
   const referenceNow = now ?? new Date();
   const { overdue, dueSoon } = selectAttentionInvoices(invoices, referenceNow);
   const overdueTotal = overdue.reduce((total, invoice) => total + invoice.subtotalIdr, 0);
@@ -189,7 +191,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-5 py-8 sm:px-8">
+    <main className="mx-auto flex w-full max-w-[1100px] flex-col gap-8 px-5 py-8 sm:px-8">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[13px] font-semibold uppercase tracking-wide text-primary">Dibayar</p>
@@ -207,12 +209,25 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
         </div>
       </header>
 
-      <section aria-labelledby="tambah-deal" className="rounded-2xl border border-line bg-surface p-5 shadow-sm">
-        <div className="mb-5">
-          <h2 id="tambah-deal" className="text-[20px] font-bold text-ink">{t("dashboard.addDeal")}</h2>
-          <p className="mt-1 text-[13px] text-muted">{t("dashboard.addDealHint")}</p>
+      <div aria-label={language === "en" ? "Deal progress" : "Progress deal"} className="flex h-2 overflow-hidden rounded-full bg-line">
+        {PIPELINE_STAGES.map((stage) => <div key={stage.value} className={`flex-1 ${stage.value === "DIBAYAR" ? "bg-paid" : stage.value === "INVOICE" ? "bg-due" : stage.value === "KONTEN" ? "bg-due-tint" : stage.value === "MASUK" ? "bg-line" : "bg-primary-tint"}`} />)}
+      </div>
+
+      <section aria-labelledby="tambah-deal" className={`${initialDeals.length ? "rounded-lg border border-line bg-surface p-4" : "rounded-lg border border-primary-tint bg-primary-tint p-5 shadow-sm"}`}>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="ds-micro text-primary">{initialDeals.length ? "Quick action" : "Mulai dari sini"}</p>
+            <h2 id="tambah-deal" className="ds-h2 text-ink">{t("dashboard.addDeal")}</h2>
+            <p className="mt-1 ds-small text-muted">{t("dashboard.addDealHint")}</p>
+          </div>
+          {initialDeals.length ? (
+            <button type="button" onClick={() => setIsAddDealOpen((open) => !open)} className="ds-button ds-button-primary min-h-11 px-4 text-[13px]">
+              {isAddDealOpen ? (language === "en" ? "Close" : "Tutup") : (language === "en" ? "+ Add deal" : "+ Tambah deal")}
+            </button>
+          ) : null}
         </div>
-        <form className="grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit}>
+        {isAddDealOpen ? (
+        <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit}>
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
             {t("dashboard.brand")}
             <input
@@ -220,7 +235,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
               name="brand"
               value={form.brand}
               onChange={(event) => setForm({ ...form, brand: event.target.value })}
-              className="h-11 rounded-xl border border-line bg-bg px-3 text-[15px] font-normal outline-none focus:border-primary"
+              className={fieldClassName}
             />
           </label>
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
@@ -231,7 +246,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
               inputMode="tel"
               value={form.contactWa}
               onChange={(event) => setForm({ ...form, contactWa: event.target.value })}
-              className="h-11 rounded-xl border border-line bg-bg px-3 text-[15px] font-normal outline-none focus:border-primary"
+              className={fieldClassName}
             />
           </label>
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink sm:col-span-2">
@@ -254,7 +269,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
               inputMode="numeric"
               value={form.feeIdr}
               onChange={(event) => setForm({ ...form, feeIdr: event.target.value })}
-              className="h-11 rounded-xl border border-line bg-bg px-3 text-[15px] font-normal outline-none focus:border-primary"
+              className={fieldClassName}
             />
           </label>
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
@@ -264,7 +279,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
               type="date"
               value={form.deadline}
               onChange={(event) => setForm({ ...form, deadline: event.target.value })}
-              className="h-11 rounded-xl border border-line bg-bg px-3 text-[15px] font-normal outline-none focus:border-primary"
+              className={fieldClassName}
             />
           </label>
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink sm:col-span-2">
@@ -273,10 +288,9 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
               name="paymentTerms"
               value={form.paymentTerms}
               onChange={(event) => setForm({ ...form, paymentTerms: event.target.value })}
-              className="h-11 rounded-xl border border-line bg-bg px-3 text-[15px] font-normal outline-none focus:border-primary"
+              className={fieldClassName}
             />
           </label>
-          {error ? <p role="alert" className="text-[13px] text-overdue sm:col-span-2">{error}</p> : null}
           <button
             type="submit"
             disabled={isSaving}
@@ -285,6 +299,8 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
             {isSaving ? t("dashboard.saving") : t("dashboard.saveDeal")}
           </button>
         </form>
+        ) : null}
+        {error ? <p role="alert" className="mt-3 ds-small text-overdue">{error}</p> : null}
       </section>
 
       <section aria-labelledby="perlu-dikejar" className="flex flex-col gap-4">
@@ -316,9 +332,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
                   ) : null}
                 </div>
               ) : (
-                <p className="rounded-2xl border border-dashed border-line bg-surface p-4 text-[13px] text-muted">
-                  {t("dashboard.noAttention")}
-                </p>
+                <EmptyState>{t("dashboard.noAttention")}</EmptyState>
               )}
             </section>
 
@@ -349,11 +363,11 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
           <h2 id="pipeline" className="text-[20px] font-bold text-ink">{t("dashboard.pipeline")}</h2>
           <p className="text-[13px] text-muted">{language === "en" ? "Swipe sideways to see every stage." : "Geser ke samping untuk melihat semua tahap."}</p>
         </div>
-        <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 lg:grid lg:grid-cols-6 lg:overflow-visible">
           {PIPELINE_STAGES.map((stage) => {
             const stageDeals = deals.filter((deal) => deal.status === stage.value);
             return (
-              <section key={stage.value} aria-labelledby={`stage-${stage.value}`} className="min-w-0 rounded-2xl border border-line bg-surface p-3">
+              <section key={stage.value} aria-labelledby={`stage-${stage.value}`} className="min-w-[260px] snap-start rounded-md border border-line bg-surface p-4 lg:min-w-0">
                 <div className="mb-3 flex items-center justify-between gap-2">
                   <h3 id={`stage-${stage.value}`} className="text-[15px] font-bold text-ink">{t(PIPELINE_STAGE_KEYS[stage.value])}</h3>
                   <span className="rounded-full bg-bg px-2 py-1 text-[12px] font-semibold text-muted">{stageDeals.length}</span>
@@ -362,6 +376,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
                   {stageDeals.length ? stageDeals.map((deal) => (
                     <article key={deal.id} className="rounded-xl border border-line bg-bg p-3">
                       <h4 className="font-semibold text-ink">{deal.brand}</h4>
+                      <div className="mt-2"><StatusChip status={deal.status} language={language} /></div>
                       <p className="mt-1 text-[15px] font-bold tabular-nums text-primary">{formatIdr(deal.feeIdr, language)}</p>
                       <p className="mt-1 text-[12px] text-muted">{formatDeadline(deal.deadline, language)}</p>
                       <label className="sr-only" htmlFor={`stage-select-${deal.id}`}>
@@ -419,7 +434,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
-                      <p className="mt-1 text-[18px] font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr, language)}</p>
+                      <MoneyDisplay value={invoice.subtotalIdr} language={language} size="card" />
                     </div>
                     <span className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ${statusClass(displayStatus)}`}>
                       {displayStatus === "PAID" ? t("invoice.paid") : displayStatus === "SENT" ? t("invoice.sent") : displayStatus === "DUE" ? t("invoice.due") : displayStatus === "OVERDUE" ? t("invoice.overdue") : t("invoice.draft")}

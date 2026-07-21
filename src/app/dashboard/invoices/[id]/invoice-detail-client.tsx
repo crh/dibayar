@@ -5,6 +5,8 @@ import Link from "next/link";
 import type { InvoiceRecord } from "@/lib/invoices";
 import { buildWhatsAppReminderMessage, buildWhatsAppShareUrl, normalizeWhatsAppNumber } from "@/lib/whatsapp";
 import { useLanguage, LanguageSwitcher } from "@/components/language-switcher";
+import { MoneyDisplay, StatusChip, Button } from "@/components/design-system";
+import { triggerPaidHaptic } from "@/lib/haptics";
 import type { Language } from "@/lib/i18n";
 
 const NEXT_ACTIONS: Record<InvoiceRecord["status"], Array<{ status: InvoiceRecord["status"]; label: string }>> = {
@@ -20,11 +22,6 @@ const NEXT_ACTIONS: Record<InvoiceRecord["status"], Array<{ status: InvoiceRecor
   OVERDUE: [{ status: "PAID", label: "Tandai lunas" }],
   PAID: [],
 };
-
-function formatIdr(value: number, language: Language) {
-  const formatter = new Intl.NumberFormat(language === "en" ? "en-US" : "id-ID", { maximumFractionDigits: 0 });
-  return language === "en" ? `IDR ${formatter.format(value)}` : `Rp${formatter.format(value)}`;
-}
 
 function formatDate(value: Date | null, language: Language) {
   if (!value) return language === "en" ? "Not set" : "Belum ditentukan";
@@ -343,6 +340,7 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
   const [contactWa, setContactWa] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [paidMoment, setPaidMoment] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -369,6 +367,11 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? "Status invoice belum bisa diperbarui.");
       setInvoice(payload.invoice);
+      if (status === "PAID" && invoice.status !== "PAID") {
+        triggerPaidHaptic();
+        setPaidMoment(true);
+        window.setTimeout(() => setPaidMoment(false), 2600);
+      }
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Status invoice belum bisa diperbarui.");
     } finally {
@@ -377,7 +380,7 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-xl flex-col gap-6 px-5 py-8 sm:px-8">
+    <main className="mx-auto flex w-full max-w-[720px] flex-col gap-6 px-5 py-8 sm:px-8">
       <Link href="/dashboard" className="inline-flex w-fit text-[14px] font-semibold text-primary">
         ← {language === "en" ? "Back to dashboard" : "Kembali ke dashboard"}
       </Link>
@@ -386,11 +389,13 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
         <LanguageSwitcher language={language} onChange={setLanguage} compact />
       </header>
 
-      <header className="rounded-2xl border border-line bg-surface p-5 shadow-sm">
+      {paidMoment ? <div role="status" aria-live="polite" className="rounded-md border border-paid/30 bg-paid-tint px-4 py-3 text-[14px] font-semibold text-paid">{language === "en" ? "Paid — nice, this one is closed." : "Lunas — invoice ini sudah selesai."}</div> : null}
+
+      <header className="rounded-md border border-line border-t-[3px] border-t-primary bg-surface p-6 shadow-md">
         <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-[28px] font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr, language)}</h1>
-          <span className="rounded-full bg-bg px-3 py-1 text-[13px] font-semibold text-ink">{invoice.status === "PAID" ? t("invoice.paid") : invoice.status === "SENT" ? t("invoice.sent") : invoice.status === "DUE" ? t("invoice.due") : invoice.status === "OVERDUE" ? t("invoice.overdue") : t("invoice.draft")}</span>
+          <h1><MoneyDisplay value={invoice.subtotalIdr} language={language} size="hero" /></h1>
+          <StatusChip status={invoice.status} language={language} />
         </div>
         <p className="mt-3 text-[14px] text-muted">{language === "en" ? "Due: " : "Jatuh tempo: "}{formatDate(invoice.dueDate, language)}</p>
         <a
@@ -414,7 +419,7 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
           </div>
           <div className="flex items-center justify-between gap-4">
             <dt className="text-muted">Nilai invoice</dt>
-            <dd className="font-bold tabular-nums text-ink">{formatIdr(invoice.subtotalIdr, language)}</dd>
+            <dd><MoneyDisplay value={invoice.subtotalIdr} language={language} size="card" /></dd>
           </div>
         </dl>
       </section>
@@ -426,15 +431,15 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
         {NEXT_ACTIONS[invoice.status].length ? (
           <div className="mt-4 flex flex-wrap gap-2">
             {NEXT_ACTIONS[invoice.status].map((action) => (
-              <button
+              <Button
                 key={action.status}
                 type="button"
                 disabled={isSaving}
+                loading={isSaving}
                 onClick={() => updateStatus(action.status)}
-                className="inline-flex h-10 items-center rounded-full bg-primary px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
               >
                 {isSaving ? (language === "en" ? "Saving…" : "Menyimpan…") : action.status === "SENT" ? (language === "en" ? "Mark as sent" : action.label) : action.status === "DUE" ? (language === "en" ? "Mark as due" : action.label) : action.status === "OVERDUE" ? (language === "en" ? "Mark as overdue" : action.label) : (language === "en" ? "Mark as paid" : action.label)}
-              </button>
+              </Button>
             ))}
           </div>
         ) : (

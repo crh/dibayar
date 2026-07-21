@@ -436,9 +436,12 @@
 - Production was not deployed or modified. Public/non-SSO share access was not enabled. M4 was not advanced; its creator-validation and go/no-go gates remain Chris approval-gated.
 - `Rubric self-score: Evidence honesty 2/2; shipped completeness 2/2; security discipline 2/2; Focus 2/2; deploy health 2/2; report quality 2/2. Total 12/12.`
 
-## M3 bilingual UI — 2026-07-19
-- Added `src/lib/i18n.ts` and `src/components/language-switcher.tsx`. Indonesian remains the default; English can be selected from the dashboard or invoice detail and persists in browser localStorage.
-- Translated the primary dashboard and invoice-detail workflow: forms, pipeline stages, follow-up, monthly income summary, invoice statuses/actions, share panel, WhatsApp section, and PDF/status controls. Month labels and IDR display now follow the selected locale.
-- Verification: full suite previously passed 31 files / 313 tests; post-fix focused locale/dashboard tests passed 15 tests; lint, typecheck, diff check, and Vercel build passed. Final Preview `https://dibayar-qgo0n3fn6-kenji-iwakura.vercel.app` is Ready and Vercel-SSO protected. Chrome MCP authenticated smoke verified Indonesian default → English switch and `July 2026` / `IDR 5,000,000` output.
-- Production was not deployed or modified. Public/non-SSO access remains disabled. M4 remains unadvanced and Chris-gated.
-- `Rubric self-score: Evidence honesty 2/2; shipped completeness 2/2; security discipline 2/2; Focus 2/2; deploy health 2/2; report quality 2/2. Total 12/12.`
+## Phase 1 design-system pass — 2026-07-21
+- Branch baseline: `hermes/design-system` created from `hermes/m3-chasing` HEAD `c826a58`, pushed to `origin/hermes/design-system`; source branch and Production remain unchanged.
+- Foundation: extended existing `globals.css` token names with oklch palette/tint, radius, shadow, font, type-scale, focus, and tabular-number tokens. Added Plus Jakarta Sans globally; Source Serif 4 is passed only to the public invoice client. Metadata now describes the active product instead of “Segera Hadir”.
+- Shared primitives: added `src/components/design-system.tsx` for buttons, status chips, money display, empty states, and fields. Added `src/lib/haptics.ts`; paid transition uses one short vibration when supported and respects reduced-motion. No dependency or route change.
+- UX surfaces: dashboard now has a clearer hierarchy, progress strip, compact populated-state add-deal action that opens the existing form, first-run inline capture, mobile horizontal pipeline scroll, and shared money/status/empty primitives. Invoice detail and public invoice use stronger amount hierarchy, restrained cards, and an explicit transient paid confirmation. Landing/sign-in surface received responsive hierarchy improvements.
+- Deferred to Phase 2: creator-aesthetic illustration/art direction, richer motion and paid celebration choreography, iOS-specific adaptations, support.js/A-B apparatus, new routes, behavior changes, and any public recipient-access change.
+- Verification: full Vitest suite 31 files / 313 tests passed; `npm run lint`, `npm run typecheck`, `npm run build`, and `git diff --check` passed. Protected Preview deployment and authenticated Indonesian/English smoke are the remaining gates.
+- Production, public/non-SSO recipient access, database migrations, and M4 creator validation/go-no-go were not changed or advanced.
+- `Rubric self-score: Evidence honesty 2/2; shipped completeness 2/2; security discipline 2/2; Focus 2/2; deploy health 1/2 pending Preview smoke; report quality 2/2. Total 11/12.`

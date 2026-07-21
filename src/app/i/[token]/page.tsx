@@ -5,7 +5,10 @@ import { getPublicInvoiceByToken, type PublicInvoiceLookupDb } from "@/lib/invoi
 import { publicInvoicePageRateLimiter } from "@/lib/rate-limit";
 import { bestEffortClientIp } from "@/lib/request-ip";
 import { prisma } from "@/lib/prisma";
+import { Source_Serif_4 } from "next/font/google";
 import PublicInvoiceClient from "./public-invoice-client";
+
+const sourceSerif = Source_Serif_4({ subsets: ["latin"], display: "swap", weight: ["500", "600"], variable: "--font-source-serif" });
 
 export const dynamic = "force-dynamic";
 
@@ -33,5 +36,5 @@ export default async function PublicInvoicePage({ params }: PublicInvoicePagePro
   const invoice = await getPublicInvoiceByToken(db, token);
   if (!invoice) notFound();
 
-  return <PublicInvoiceClient token={token} />;
+  return <PublicInvoiceClient token={token} publicFontClass={sourceSerif.variable} />;
 }
