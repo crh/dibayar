@@ -25,8 +25,8 @@ vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linke
 ## now
 current_milestone: M3 — Payment Chasing — COMPLETE. Phase 1 design-system pass is active on `hermes/design-system`; Production deployment, public/non-SSO recipient access, and M4 remain Chris-gated.
 active_branch: hermes/design-system
-latest_feature_commit: `c826a58` docs(m3): record bilingual Preview verification; design-system work branches from this HEAD.
-remote_feature_branch: origin/hermes/design-system @ c826a58; source branch `hermes/m3-chasing` remains unchanged
+latest_feature_commit: `f71ed98` feat(ui): apply phase one design system; pushed to `origin/hermes/design-system`.
+remote_feature_branch: origin/hermes/design-system @ f71ed98; source branch `hermes/m3-chasing` remains unchanged
 completed_milestones:
   - Phase 0 discovery closed
   - M0 bootstrap and protected production deployment complete
@@ -44,7 +44,7 @@ today_work (Focus measures approved scope, not task volume, from 2026-07-19):
   - M3 Task 2: owner-only contact fetch and one-tap WhatsApp reminder — complete; local gates and authenticated Preview smoke passed
   - M3 Task 3: monthly income summary with Jakarta boundary and explicit PPh estimates — complete; local gates and authenticated Preview smoke passed
 
-open_blockers: No implementation blocker. Separate, still-pending, Chris-gated decisions: (1) Production deployment, (2) public/non-SSO recipient access for share links, (3) M4 validation/go-no-go. Email remains a separate product decision. The 7-day due-soon window is provisional and needs creator feedback. Monthly income uses invoice `createdAt` as the basis because no `paidAt` field exists; PPh values are estimates, not tax filing calculations.
+open_blockers: Phase 1 Preview authenticated smoke is blocked: Vercel branch-scoped `hermes/design-system` lacks usable `AUTH_SECRET`, Google OAuth credentials, and `DATABASE_URL`; Git-linked Preview is READY/SSO-protected but Auth.js cannot start. Separate Chris-gated decisions remain: (1) Production deployment, (2) public/non-SSO recipient access for share links, (3) M4 validation/go-no-go. Email remains a separate product decision. The 7-day due-soon window is provisional and needs creator feedback. Monthly income uses invoice `createdAt` as the basis because no `paidAt` field exists; PPh values are estimates, not tax filing calculations.
 
 ## recent_signal_findings
 - No external signal check recorded.
