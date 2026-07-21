@@ -25,8 +25,8 @@ vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linke
 ## now
 current_milestone: M3 — Payment Chasing — COMPLETE. Phase 1 design-system pass is active on `hermes/design-system`; Production deployment, public/non-SSO recipient access, and M4 remain Chris-gated.
 active_branch: hermes/design-system
-latest_feature_commit: `f71ed98` feat(ui): apply phase one design system; pushed to `origin/hermes/design-system`.
-remote_feature_branch: origin/hermes/design-system @ f71ed98; source branch `hermes/m3-chasing` remains unchanged
+latest_feature_commit: `285393d` docs(ui): record design Preview blocker; implementation commit is `f71ed98`; both pushed to `origin/hermes/design-system`.
+remote_feature_branch: origin/hermes/design-system @ 285393d; source branch `hermes/m3-chasing` remains unchanged
 completed_milestones:
   - Phase 0 discovery closed
   - M0 bootstrap and protected production deployment complete
