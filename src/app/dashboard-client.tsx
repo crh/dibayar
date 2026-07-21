@@ -221,13 +221,19 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
             <p className="mt-1 ds-small text-muted">{t("dashboard.addDealHint")}</p>
           </div>
           {initialDeals.length ? (
-            <button type="button" onClick={() => setIsAddDealOpen((open) => !open)} className="ds-button ds-button-primary min-h-11 px-4 text-[13px]">
+            <button
+              type="button"
+              onClick={() => setIsAddDealOpen((open) => !open)}
+              aria-expanded={isAddDealOpen}
+              aria-controls="tambah-deal-form"
+              className="ds-button ds-button-primary min-h-11 px-4 text-[13px]"
+            >
               {isAddDealOpen ? (language === "en" ? "Close" : "Tutup") : (language === "en" ? "+ Add deal" : "+ Tambah deal")}
             </button>
           ) : null}
         </div>
         {isAddDealOpen ? (
-        <form className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit}>
+        <form id="tambah-deal-form" className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit}>
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
             {t("dashboard.brand")}
             <input

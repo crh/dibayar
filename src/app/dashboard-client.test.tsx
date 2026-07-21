@@ -36,6 +36,24 @@ describe("DashboardClient", () => {
     expect(screen.getByRole("button", { name: "Simpan deal" })).toBeDefined();
   });
 
+  it("exposes accessible disclosure state on the Add deal / Close toggle", async () => {
+    const user = userEvent.setup();
+    render(<DashboardClient initialDeals={[kopiDeal]} userName="Chris" />);
+
+    const toggle = screen.getByRole("button", { name: "+ Tambah deal" });
+    expect(toggle).toHaveProperty("ariaExpanded", "false");
+    const controlsId = toggle.getAttribute("aria-controls");
+    expect(controlsId).toBeTruthy();
+    expect(document.getElementById(controlsId!)).toBeNull();
+
+    await user.click(toggle);
+
+    const closeToggle = screen.getByRole("button", { name: "Tutup" });
+    expect(closeToggle.getAttribute("aria-controls")).toBe(controlsId);
+    expect(closeToggle).toHaveProperty("ariaExpanded", "true");
+    expect(document.getElementById(controlsId!)).toBe(screen.getByRole("textbox", { name: "Nama brand" }).closest("form"));
+  });
+
   it("renders an existing deal in its pipeline stage", async () => {
     render(
       <DashboardClient

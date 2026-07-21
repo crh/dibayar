@@ -11,11 +11,13 @@ export function Button({
   children,
   variant = "primary",
   loading = false,
+  loadingLabel = "Menyimpan…",
   className = "",
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
   loading?: boolean;
+  loadingLabel?: ReactNode;
 }) {
   return (
     <button
@@ -23,7 +25,7 @@ export function Button({
       className={`ds-button ds-button-${variant} inline-flex items-center justify-center px-5 ${className}`}
       aria-busy={loading || undefined}
     >
-      {loading ? "Menyimpan…" : children}
+      {loading ? loadingLabel : children}
     </button>
   );
 }

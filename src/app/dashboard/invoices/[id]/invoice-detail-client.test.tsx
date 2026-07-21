@@ -57,6 +57,7 @@ function makeFetchMock(
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  window.localStorage.clear();
 });
 
 describe("InvoiceDetailClient", () => {
@@ -71,6 +72,26 @@ describe("InvoiceDetailClient", () => {
     expect(screen.getByRole("button", { name: "Tandai sudah dikirim" })).toBeDefined();
     expect(screen.getByRole("link", { name: "Unduh PDF" }).getAttribute("href")).toBe("/api/invoices/invoice-1/pdf");
     expect(screen.queryByRole("button", { name: "Tandai lunas" })).toBeNull();
+  });
+
+  it("shows the localized English loading label while a status action is saving", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("dibayar-language", "en");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method ?? "GET";
+        if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: {} });
+        if (url.endsWith("/share") && method === "GET") return jsonResponse({ status: 200, body: { active: false } });
+        return new Promise(() => {});
+      }),
+    );
+
+    render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+    await user.click(await screen.findByRole("button", { name: "Mark as sent" }));
+
+    expect(await screen.findByRole("button", { name: "Saving…" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: /menyimpan/i })).toBeNull();
   });
 
   it("shows no further transition control for a paid invoice", async () => {

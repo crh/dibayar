@@ -436,9 +436,10 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
                 type="button"
                 disabled={isSaving}
                 loading={isSaving}
+                loadingLabel={language === "en" ? "Saving…" : "Menyimpan…"}
                 onClick={() => updateStatus(action.status)}
               >
-                {isSaving ? (language === "en" ? "Saving…" : "Menyimpan…") : action.status === "SENT" ? (language === "en" ? "Mark as sent" : action.label) : action.status === "DUE" ? (language === "en" ? "Mark as due" : action.label) : action.status === "OVERDUE" ? (language === "en" ? "Mark as overdue" : action.label) : (language === "en" ? "Mark as paid" : action.label)}
+                {action.status === "SENT" ? (language === "en" ? "Mark as sent" : action.label) : action.status === "DUE" ? (language === "en" ? "Mark as due" : action.label) : action.status === "OVERDUE" ? (language === "en" ? "Mark as overdue" : action.label) : (language === "en" ? "Mark as paid" : action.label)}
               </Button>
             ))}
           </div>
