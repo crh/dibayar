@@ -49,6 +49,31 @@ describe("DashboardClient", () => {
     expect(screen.queryByText("Belum ada invoice. Pindahkan deal ke tahap Invoice, lalu buat drafnya dari kartu deal.")).toBeNull();
   });
 
+  it("keeps deal controls and API failure feedback fully English when English is selected", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("dibayar-language", "en");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: "Deal belum bisa diperbarui. Coba lagi." }),
+      })),
+    );
+
+    render(<DashboardClient initialDeals={[kopiDeal]} userName="Chris" />);
+
+    const stageSelect = screen.getByRole("combobox", { name: "Deal stage for Kopi Nusantara" });
+    await user.selectOptions(stageSelect, "INVOICE");
+
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      "The deal could not be updated. Try again.",
+    );
+    expect(screen.queryByText(/deal belum bisa diperbarui/i)).toBeNull();
+    expect(screen.queryByRole("combobox", { name: /tahap deal/i })).toBeNull();
+  });
+
   it("exposes accessible disclosure state on the Add deal / Close toggle", async () => {
     const user = userEvent.setup();
     render(<DashboardClient initialDeals={[kopiDeal]} userName="Chris" />);

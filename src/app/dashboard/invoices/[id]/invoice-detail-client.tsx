@@ -9,29 +9,29 @@ import { MoneyDisplay, StatusChip, Button } from "@/components/design-system";
 import { triggerPaidHaptic } from "@/lib/haptics";
 import type { Language } from "@/lib/i18n";
 
-const NEXT_ACTIONS: Record<InvoiceRecord["status"], Array<{ status: InvoiceRecord["status"]; label: string }>> = {
-  DRAFT: [{ status: "SENT", label: "Tandai sudah dikirim" }],
+const NEXT_ACTIONS: Record<InvoiceRecord["status"], Array<{ status: InvoiceRecord["status"]; labelKey: string }>> = {
+  DRAFT: [{ status: "SENT", labelKey: "invoice.markSent" }],
   SENT: [
-    { status: "DUE", label: "Tandai jatuh tempo" },
-    { status: "PAID", label: "Tandai lunas" },
+    { status: "DUE", labelKey: "invoice.markDue" },
+    { status: "PAID", labelKey: "invoice.markPaid" },
   ],
   DUE: [
-    { status: "OVERDUE", label: "Tandai terlambat" },
-    { status: "PAID", label: "Tandai lunas" },
+    { status: "OVERDUE", labelKey: "invoice.markOverdue" },
+    { status: "PAID", labelKey: "invoice.markPaid" },
   ],
-  OVERDUE: [{ status: "PAID", label: "Tandai lunas" }],
+  OVERDUE: [{ status: "PAID", labelKey: "invoice.markPaid" }],
   PAID: [],
 };
 
-function formatDate(value: Date | null, language: Language) {
-  if (!value) return language === "en" ? "Not set" : "Belum ditentukan";
+function formatDate(value: Date | null, language: Language, emptyLabel: string) {
+  if (!value) return emptyLabel;
   return new Intl.DateTimeFormat(language === "en" ? "en-US" : "id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date(value));
 }
 
-const SHARE_LOAD_ERROR = "Status berbagi belum bisa dimuat. Coba lagi.";
-const SHARE_CREATE_ERROR = "Tautan berbagi belum bisa dibuat. Coba lagi.";
-const SHARE_REVOKE_ERROR = "Tautan berbagi belum bisa dicabut. Coba lagi.";
-const COPY_LINK_ERROR = "Tautan tidak bisa disalin otomatis. Salin secara manual.";
+const SHARE_LOAD_ERROR = "invoice.shareLoadError";
+const SHARE_CREATE_ERROR = "invoice.shareCreateError";
+const SHARE_REVOKE_ERROR = "invoice.shareRevokeError";
+const COPY_LINK_ERROR = "invoice.copyError";
 
 const SHARE_PATH_PATTERN = /^\/i\/[A-Za-z0-9_-]+$/;
 
@@ -73,15 +73,15 @@ function clearMutationError(prev: ShareState): ShareState {
   return prev;
 }
 
-function formatShareExpiry(expiresAt: string | null, language: Language): string {
-  if (!expiresAt) return language === "en" ? "Link active with no expiry." : "Tautan aktif tanpa batas waktu.";
+function formatShareExpiry(expiresAt: string | null, language: Language, t: (key: string, values?: Record<string, string>) => string): string {
+  if (!expiresAt) return t("invoice.activeNoExpiry");
   const date = new Intl.DateTimeFormat(language === "en" ? "en-US" : "id-ID", {
     day: "numeric",
     month: "short",
     year: "numeric",
     timeZone: "UTC",
   }).format(new Date(expiresAt));
-  return language === "en" ? `Link active until ${date}.` : `Tautan aktif sampai ${date}.`;
+  return t("invoice.activeUntil", { date });
 }
 
 type ShareConfirm = "regenerate" | "revoke" | null;
@@ -92,7 +92,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
   invoiceId: string;
   invoice: InvoiceRecord;
   contactWa: string | null;
-  t: (key: string) => string;
+  t: (key: string, values?: Record<string, string>) => string;
   language: Language;
 }) {
   const [share, setShare] = useState<ShareState>({ kind: "loading" });
@@ -132,8 +132,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
       const response = await fetch(`/api/invoices/${invoiceId}/share`, { method: "POST" });
       const payload = await response.json();
       if (!response.ok || !isValidCreatePayload(payload)) {
-        const message = typeof payload?.error === "string" ? payload.error : SHARE_CREATE_ERROR;
-        setShare((prev) => withMutationError(prev, message));
+        setShare((prev) => withMutationError(prev, SHARE_CREATE_ERROR));
         return;
       }
       setShare({
@@ -158,8 +157,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
       const response = await fetch(`/api/invoices/${invoiceId}/share`, { method: "DELETE" });
       const payload = await response.json();
       if (!response.ok || !isValidRevokePayload(payload)) {
-        const message = typeof payload?.error === "string" ? payload.error : SHARE_REVOKE_ERROR;
-        setShare((prev) => withMutationError(prev, message));
+        setShare((prev) => withMutationError(prev, SHARE_REVOKE_ERROR));
         return;
       }
       setShare({ kind: "inactive", error: null });
@@ -173,7 +171,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
   async function copyLink(link: string) {
     try {
       await navigator.clipboard.writeText(link);
-      setCopyFeedback({ kind: "success", message: "Tautan disalin." });
+      setCopyFeedback({ kind: "success", message: "invoice.copySuccess" });
     } catch {
       setCopyFeedback({ kind: "error", message: COPY_LINK_ERROR });
     }
@@ -198,29 +196,29 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
       <h2 id="bagikan-invoice" className="text-[18px] font-bold text-ink">{t("invoice.share")}</h2>
       <p className="mt-1 text-[13px] text-muted">{t("invoice.shareHint")}</p>
 
-      {share.kind === "loading" ? <p className="mt-3 text-[14px] text-muted">Memuat status berbagi…</p> : null}
-      {share.kind === "load-error" ? <p role="alert" className="mt-3 text-[13px] text-overdue">{share.message}</p> : null}
+      {share.kind === "loading" ? <p className="mt-3 text-[14px] text-muted">{t("invoice.loading")}</p> : null}
+      {share.kind === "load-error" ? <p role="alert" className="mt-3 text-[13px] text-overdue">{t(share.message)}</p> : null}
 
       {share.kind === "inactive" ? (
         <>
-          {share.error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{share.error}</p> : null}
-          <p className="mt-3 text-[14px] text-muted">Belum ada tautan berbagi untuk invoice ini.</p>
+          {share.error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{t(share.error)}</p> : null}
+          <p className="mt-3 text-[14px] text-muted">{t("invoice.inactive")}</p>
           <button
             type="button"
             disabled={isBusy}
             onClick={createOrRegenerate}
             className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
           >
-            {isBusy ? (language === "en" ? "Creating…" : "Membuat…") : t("invoice.create")}
+            {isBusy ? t("invoice.creating") : t("invoice.create")}
           </button>
         </>
       ) : null}
 
       {share.kind === "active" ? (
         <>
-          {share.error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{share.error}</p> : null}
+          {share.error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{t(share.error)}</p> : null}
           <p className="mt-3 text-[14px] font-semibold text-paid">{t("invoice.active")}</p>
-          <p className="mt-1 text-[13px] text-muted">{formatShareExpiry(share.expiresAt, language)}</p>
+          <p className="mt-1 text-[13px] text-muted">{formatShareExpiry(share.expiresAt, language, t)}</p>
           {share.link ? (
             <>
               <p className="mt-2 break-all text-[13px] text-muted">{share.link}</p>
@@ -236,7 +234,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
                   role={copyFeedback.kind === "error" ? "alert" : "status"}
                   className={`mt-2 text-[13px] font-semibold ${copyFeedback.kind === "error" ? "text-overdue" : "text-paid"}`}
                 >
-                  {copyFeedback.message}
+                  {t(copyFeedback.message)}
                 </p>
               ) : null}
             </>
@@ -282,7 +280,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
           {confirm === "regenerate" ? (
             <div className="mt-3 rounded-xl bg-bg p-3">
               <p className="text-[13px] font-semibold text-overdue">
-                Tautan lama akan langsung berhenti berfungsi. Lanjutkan buat tautan baru?
+                {t("invoice.regenerateWarning")}
               </p>
               <div className="mt-3 flex gap-2">
                 <button
@@ -290,7 +288,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
                   onClick={() => setConfirm(null)}
                   className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
                 >
-                  Batal
+                  {t("invoice.cancel")}
                 </button>
                 <button
                   type="button"
@@ -298,7 +296,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
                   onClick={createOrRegenerate}
                   className="inline-flex h-11 items-center rounded-full bg-primary px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
                 >
-                  Ya, buat tautan baru
+                  {t("invoice.confirmRegenerate")}
                 </button>
               </div>
             </div>
@@ -307,7 +305,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
           {confirm === "revoke" ? (
             <div className="mt-3 rounded-xl bg-bg p-3">
               <p className="text-[13px] font-semibold text-overdue">
-                Penerima tidak akan bisa membuka invoice ini lagi. Lanjutkan cabut tautan?
+                {t("invoice.revokeWarning")}
               </p>
               <div className="mt-3 flex gap-2">
                 <button
@@ -315,7 +313,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
                   onClick={() => setConfirm(null)}
                   className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
                 >
-                  Batal
+                  {t("invoice.cancel")}
                 </button>
                 <button
                   type="button"
@@ -323,7 +321,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
                   onClick={revoke}
                   className="inline-flex h-11 items-center rounded-full bg-overdue px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
                 >
-                  Ya, cabut tautan
+                  {t("invoice.confirmRevoke")}
                 </button>
               </div>
             </div>
@@ -365,15 +363,15 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
         body: JSON.stringify({ status }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "Status invoice belum bisa diperbarui.");
+      if (!response.ok) throw new Error("invoice.statusUpdateError");
       setInvoice(payload.invoice);
       if (status === "PAID" && invoice.status !== "PAID") {
         triggerPaidHaptic();
         setPaidMoment(true);
         window.setTimeout(() => setPaidMoment(false), 2600);
       }
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : "Status invoice belum bisa diperbarui.");
+    } catch {
+      setError("invoice.statusUpdateError");
     } finally {
       setIsSaving(false);
     }
@@ -382,14 +380,14 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
   return (
     <main className="mx-auto flex w-full max-w-[720px] flex-col gap-6 px-5 py-8 sm:px-8">
       <Link href="/dashboard" className="inline-flex w-fit text-[14px] font-semibold text-primary">
-        ← {language === "en" ? "Back to dashboard" : "Kembali ke dashboard"}
+        ← {t("invoice.back")}
       </Link>
 
       <header className="flex items-center justify-end">
         <LanguageSwitcher language={language} onChange={setLanguage} compact />
       </header>
 
-      {paidMoment ? <div role="status" aria-live="polite" className="rounded-md border border-paid/30 bg-paid-tint px-4 py-3 text-[14px] font-semibold text-paid">{language === "en" ? "Paid — nice, this one is closed." : "Lunas — invoice ini sudah selesai."}</div> : null}
+      {paidMoment ? <div role="status" aria-live="polite" className="rounded-md border border-paid/30 bg-paid-tint px-4 py-3 text-[14px] font-semibold text-paid">{t("invoice.paidMoment")}</div> : null}
 
       <header className="rounded-md border border-line border-t-[3px] border-t-primary bg-surface p-6 shadow-md">
         <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
@@ -397,37 +395,37 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
           <h1><MoneyDisplay value={invoice.subtotalIdr} language={language} size="hero" /></h1>
           <StatusChip status={invoice.status} language={language} />
         </div>
-        <p className="mt-3 text-[14px] text-muted">{language === "en" ? "Due: " : "Jatuh tempo: "}{formatDate(invoice.dueDate, language)}</p>
+        <p className="mt-3 text-[14px] text-muted">{t("invoice.dueLabel", { date: formatDate(invoice.dueDate, language, t("invoice.notSet")) })}</p>
         <a
           href={`/api/invoices/${invoice.id}/pdf`}
           className="mt-4 inline-flex h-10 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
         >
-          {language === "en" ? "Download PDF" : "Unduh PDF"}
+          {t("invoice.downloadPdf")}
         </a>
       </header>
 
       <section aria-labelledby="rincian-invoice" className="rounded-2xl border border-line bg-surface p-5">
-        <h2 id="rincian-invoice" className="text-[18px] font-bold text-ink">{language === "en" ? "Invoice details" : "Rincian invoice"}</h2>
+        <h2 id="rincian-invoice" className="text-[18px] font-bold text-ink">{t("invoice.details")}</h2>
         <dl className="mt-4 grid gap-3 text-[15px]">
           <div className="flex items-center justify-between gap-4 border-b border-line pb-3">
-            <dt className="text-muted">{language === "en" ? "Invoice number" : "Nomor invoice"}</dt>
+            <dt className="text-muted">{t("invoice.number")}</dt>
             <dd className="font-semibold text-ink">{invoice.number}</dd>
           </div>
           <div className="flex items-center justify-between gap-4 border-b border-line pb-3">
-            <dt className="text-muted">Pajak potong</dt>
-            <dd className="font-semibold text-ink">{invoice.withholdingTaxType === "NONE" ? "Tidak ada" : invoice.withholdingTaxType.replace("PPH", "PPh ")}</dd>
+            <dt className="text-muted">{t("invoice.withholdingTax")}</dt>
+            <dd className="font-semibold text-ink">{invoice.withholdingTaxType === "NONE" ? t("invoice.none") : invoice.withholdingTaxType.replace("PPH", "PPh ")}</dd>
           </div>
           <div className="flex items-center justify-between gap-4">
-            <dt className="text-muted">Nilai invoice</dt>
+            <dt className="text-muted">{t("invoice.amount")}</dt>
             <dd><MoneyDisplay value={invoice.subtotalIdr} language={language} size="card" /></dd>
           </div>
         </dl>
       </section>
 
       <section aria-labelledby="status-invoice" className="rounded-2xl border border-line bg-surface p-5">
-        <h2 id="status-invoice" className="text-[18px] font-bold text-ink">{language === "en" ? "Payment status" : "Status pembayaran"}</h2>
-        <p className="mt-1 text-[13px] text-muted">{language === "en" ? "Choose the next step after the invoice moves forward." : "Pilih tahap berikutnya setelah invoice benar-benar bergerak."}</p>
-        {error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{error}</p> : null}
+        <h2 id="status-invoice" className="text-[18px] font-bold text-ink">{t("invoice.paymentStatus")}</h2>
+        <p className="mt-1 text-[13px] text-muted">{t("invoice.paymentStatusHint")}</p>
+        {error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{t(error)}</p> : null}
         {NEXT_ACTIONS[invoice.status].length ? (
           <div className="mt-4 flex flex-wrap gap-2">
             {NEXT_ACTIONS[invoice.status].map((action) => (
@@ -436,15 +434,15 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
                 type="button"
                 disabled={isSaving}
                 loading={isSaving}
-                loadingLabel={language === "en" ? "Saving…" : "Menyimpan…"}
+                loadingLabel={t("invoice.saving")}
                 onClick={() => updateStatus(action.status)}
               >
-                {action.status === "SENT" ? (language === "en" ? "Mark as sent" : action.label) : action.status === "DUE" ? (language === "en" ? "Mark as due" : action.label) : action.status === "OVERDUE" ? (language === "en" ? "Mark as overdue" : action.label) : (language === "en" ? "Mark as paid" : action.label)}
+                {t(action.labelKey)}
               </Button>
             ))}
           </div>
         ) : (
-          <p className="mt-4 rounded-xl bg-paid/10 px-3 py-2 text-[14px] font-semibold text-paid">{language === "en" ? "This invoice is already paid." : "Invoice ini sudah lunas."}</p>
+          <p className="mt-4 rounded-xl bg-paid/10 px-3 py-2 text-[14px] font-semibold text-paid">{t("invoice.alreadyPaid")}</p>
         )}
       </section>
 

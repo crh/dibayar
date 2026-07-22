@@ -134,10 +134,10 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
         body: JSON.stringify({ status }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "Deal belum bisa diperbarui. Coba lagi.");
+      if (!response.ok) throw new Error("dashboard.dealError");
       setDeals((current) => current.map((deal) => (deal.id === dealId ? payload.deal : deal)));
-    } catch (submissionError) {
-      setError(submissionError instanceof Error ? submissionError.message : "Deal belum bisa diperbarui. Coba lagi.");
+    } catch {
+      setError("dashboard.dealError");
     } finally {
       setPendingDealId(null);
     }
@@ -160,11 +160,11 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
         }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "Deal belum bisa disimpan.");
+      if (!response.ok) throw new Error("dashboard.saveError");
       setDeals((current) => [payload.deal, ...current]);
       setForm(EMPTY_FORM);
-    } catch (submissionError) {
-      setError(submissionError instanceof Error ? submissionError.message : "Deal belum bisa disimpan.");
+    } catch {
+      setError("dashboard.saveError");
     } finally {
       setIsSaving(false);
     }
@@ -181,10 +181,10 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
         body: JSON.stringify({ dealId, withholdingTaxType: "NONE" }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? t("dashboard.invoiceError"));
+      if (!response.ok) throw new Error("dashboard.invoiceError");
       setInvoices((current) => [payload.invoice, ...current]);
-    } catch (submissionError) {
-      setError(submissionError instanceof Error ? submissionError.message : t("dashboard.invoiceError"));
+    } catch {
+      setError("dashboard.invoiceError");
     } finally {
       setIsSaving(false);
     }
@@ -217,7 +217,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="ds-micro text-primary">
-              {initialDeals.length ? (language === "en" ? "Quick action" : "Aksi cepat") : (language === "en" ? "Start here" : "Mulai dari sini")}
+              {initialDeals.length ? t("dashboard.quickAction") : t("dashboard.startHere")}
             </p>
             <h2 id="tambah-deal" className="ds-h2 text-ink">{t("dashboard.addDeal")}</h2>
             <p className="mt-1 ds-small text-muted">{t("dashboard.addDealHint")}</p>
@@ -230,7 +230,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
               aria-controls="tambah-deal-form"
               className="ds-button ds-button-primary min-h-11 px-4 text-[13px]"
             >
-              {isAddDealOpen ? (language === "en" ? "Close" : "Tutup") : (language === "en" ? "+ Add deal" : "+ Tambah deal")}
+              {isAddDealOpen ? t("dashboard.close") : t("dashboard.addDealButton")}
             </button>
           ) : null}
         </div>
@@ -308,13 +308,13 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
           </button>
         </form>
         ) : null}
-        {error ? <p role="alert" className="mt-3 ds-small text-overdue">{error}</p> : null}
+        {error ? <p role="alert" className="mt-3 ds-small text-overdue">{t(error)}</p> : null}
       </section>
 
       <section aria-labelledby="perlu-dikejar" className="flex flex-col gap-4">
               <div>
                 <h2 id="perlu-dikejar" className="text-[20px] font-bold text-ink">{t("dashboard.attention")}</h2>
-                <p className="text-[13px] text-muted">{language === "en" ? `Overdue invoices and those due within ${DUE_SOON_WINDOW_DAYS} days.` : `Invoice terlambat dan yang jatuh tempo dalam ${DUE_SOON_WINDOW_DAYS} hari.`}</p>
+                <p className="text-[13px] text-muted">{t("dashboard.attentionHint", { days: String(DUE_SOON_WINDOW_DAYS) })}</p>
               </div>
               {overdue.length || dueSoon.length ? (
                 <div className="flex flex-col gap-4">
@@ -330,7 +330,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
                   ) : null}
                   {dueSoon.length ? (
                     <div>
-                      <h3 className="text-[15px] font-bold text-ink">{language === "en" ? `Due within ${DUE_SOON_WINDOW_DAYS} days` : `Jatuh tempo dalam ${DUE_SOON_WINDOW_DAYS} hari`} ({dueSoon.length}) · {formatIdr(dueSoonTotal, language)}</h3>
+                      <h3 className="text-[15px] font-bold text-ink">{t("dashboard.dueWithin", { days: String(DUE_SOON_WINDOW_DAYS) })} ({dueSoon.length}) · {formatIdr(dueSoonTotal, language)}</h3>
                       <div className="mt-2 grid gap-3 sm:grid-cols-2">
                         {dueSoon.map((invoice) => (
                           <AttentionInvoiceCard key={invoice.id} invoice={invoice} language={language} t={t} />
@@ -369,7 +369,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
       <section aria-labelledby="pipeline" className="flex flex-col gap-4">
         <div>
           <h2 id="pipeline" className="text-[20px] font-bold text-ink">{t("dashboard.pipeline")}</h2>
-          <p className="text-[13px] text-muted">{language === "en" ? "Swipe sideways to see every stage." : "Geser ke samping untuk melihat semua tahap."}</p>
+          <p className="text-[13px] text-muted">{t("dashboard.pipelineHint")}</p>
         </div>
         <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 lg:grid lg:grid-cols-6 lg:overflow-visible">
           {PIPELINE_STAGES.map((stage) => {
@@ -388,7 +388,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
                       <p className="mt-1 text-[15px] font-bold tabular-nums text-primary">{formatIdr(deal.feeIdr, language)}</p>
                       <p className="mt-1 text-[12px] text-muted">{formatDeadline(deal.deadline, language)}</p>
                       <label className="sr-only" htmlFor={`stage-select-${deal.id}`}>
-                        {`Tahap deal ${deal.brand}`}
+                        {t("dashboard.stageLabel", { brand: deal.brand })}
                       </label>
                       <select
                         id={`stage-select-${deal.id}`}
@@ -415,7 +415,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
                       ) : null}
                     </article>
                   )) : (
-                    <p className="text-[13px] text-muted">{language === "en" ? "No deals in this stage." : "Belum ada deal"}</p>
+                    <p className="text-[13px] text-muted">{t("dashboard.noDealsInStage")}</p>
                   )}
                 </div>
               </section>
@@ -426,8 +426,8 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
 
       <section aria-labelledby="invoice-saya" className="flex flex-col gap-4">
         <div>
-          <h2 id="invoice-saya" className="text-[20px] font-bold text-ink">{language === "en" ? "My invoices" : "Invoice saya"}</h2>
-          <p className="text-[13px] text-muted">{language === "en" ? "Create invoices from the Invoice stage and track them until paid." : "Buat dari deal tahap Invoice, lalu pantau sampai lunas."}</p>
+          <h2 id="invoice-saya" className="text-[20px] font-bold text-ink">{t("dashboard.myInvoices")}</h2>
+          <p className="text-[13px] text-muted">{t("dashboard.myInvoicesHint")}</p>
         </div>
         {invoices.length ? (
           <div className="grid gap-3 sm:grid-cols-2">
@@ -455,9 +455,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
           </div>
         ) : (
           <p className="rounded-2xl border border-dashed border-line bg-surface p-4 text-[13px] text-muted">
-            {language === "en"
-              ? "No invoices yet. Move a deal to the Invoice stage, then create a draft from its deal card."
-              : "Belum ada invoice. Pindahkan deal ke tahap Invoice, lalu buat drafnya dari kartu deal."}
+            {t("dashboard.noInvoices")}
           </p>
         )}
       </section>

@@ -94,6 +94,69 @@ describe("InvoiceDetailClient", () => {
     expect(screen.queryByRole("button", { name: /menyimpan/i })).toBeNull();
   });
 
+  it("keeps invoice details, sharing states, confirmations, and errors fully English", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("dibayar-language", "en");
+    vi.stubGlobal(
+      "fetch",
+      makeFetchMock({
+        shareGet: { status: 200, body: { active: true, expiresAt: "2026-10-17T00:00:00.000Z" } },
+        sharePost: { status: 500, body: { error: "Tautan berbagi belum bisa dibuat. Coba lagi." } },
+      }),
+    );
+
+    render(
+      <InvoiceDetailClient
+        initialInvoice={{ ...draftInvoice, withholdingTaxType: "NONE" }}
+      />,
+    );
+
+    expect(await screen.findByText("Sharing link is active.")).toBeDefined();
+    expect(screen.getByText("Withholding tax")).toBeDefined();
+    expect(screen.getByText("None")).toBeDefined();
+    expect(screen.getByText("Invoice amount")).toBeDefined();
+
+    await user.click(screen.getByRole("button", { name: "Regenerate link" }));
+    expect(screen.getByText("The old link will stop working immediately. Continue and create a new link?")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDefined();
+    await user.click(screen.getByRole("button", { name: "Yes, create a new link" }));
+
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      "The sharing link could not be created. Try again.",
+    );
+    for (const leakedCopy of ["Pajak potong", "Tidak ada", "Nilai invoice", "Batal", "Tautan lama"]) {
+      expect(document.body.textContent).not.toContain(leakedCopy);
+    }
+  });
+
+  it("localizes the inactive share state in English", async () => {
+    window.localStorage.setItem("dibayar-language", "en");
+    vi.stubGlobal("fetch", makeFetchMock({ shareGet: { status: 200, body: { active: false } } }));
+
+    render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+    expect(await screen.findByText("No sharing link exists for this invoice yet.")).toBeDefined();
+    expect(screen.queryByText(/belum ada tautan berbagi/i)).toBeNull();
+  });
+
+  it("updates all invoice copy when switching from English back to Indonesian", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem("dibayar-language", "en");
+    vi.stubGlobal("fetch", makeFetchMock({ shareGet: { status: 200, body: { active: false } } }));
+
+    render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+    expect(await screen.findByText("Withholding tax")).toBeDefined();
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Language" }), "id");
+
+    expect(screen.getByText("Pajak potong")).toBeDefined();
+    expect(screen.getByText("Nilai invoice")).toBeDefined();
+    expect(screen.getByText("Belum ada tautan berbagi untuk invoice ini.")).toBeDefined();
+    expect(screen.queryByText("Withholding tax")).toBeNull();
+    expect(screen.queryByText("No sharing link exists for this invoice yet.")).toBeNull();
+  });
+
   it("shows no further transition control for a paid invoice", async () => {
     vi.stubGlobal("fetch", makeFetchMock());
     render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "PAID" }} />);
