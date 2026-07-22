@@ -216,7 +216,9 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
       <section aria-labelledby="tambah-deal" className={`${initialDeals.length ? "rounded-lg border border-line bg-surface p-4" : "rounded-lg border border-primary-tint bg-primary-tint p-5 shadow-sm"}`}>
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="ds-micro text-primary">{initialDeals.length ? "Quick action" : "Mulai dari sini"}</p>
+            <p className="ds-micro text-primary">
+              {initialDeals.length ? (language === "en" ? "Quick action" : "Aksi cepat") : (language === "en" ? "Start here" : "Mulai dari sini")}
+            </p>
             <h2 id="tambah-deal" className="ds-h2 text-ink">{t("dashboard.addDeal")}</h2>
             <p className="mt-1 ds-small text-muted">{t("dashboard.addDealHint")}</p>
           </div>
@@ -453,7 +455,9 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
           </div>
         ) : (
           <p className="rounded-2xl border border-dashed border-line bg-surface p-4 text-[13px] text-muted">
-            Belum ada invoice. Pindahkan deal ke tahap Invoice, lalu buat drafnya dari kartu deal.
+            {language === "en"
+              ? "No invoices yet. Move a deal to the Invoice stage, then create a draft from its deal card."
+              : "Belum ada invoice. Pindahkan deal ke tahap Invoice, lalu buat drafnya dari kartu deal."}
           </p>
         )}
       </section>

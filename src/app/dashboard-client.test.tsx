@@ -20,6 +20,7 @@ const kopiDeal: DealRecord = {
 };
 
 afterEach(() => {
+  localStorage.clear();
   vi.unstubAllGlobals();
 });
 
@@ -34,6 +35,18 @@ describe("DashboardClient", () => {
     expect(screen.getByRole("textbox", { name: "Kontak WhatsApp" })).toBeDefined();
     expect(screen.getByRole("spinbutton", { name: "Fee (Rp)" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Simpan deal" })).toBeDefined();
+  });
+
+  it("localizes the first-run microcopy and empty invoice guidance in English", async () => {
+    const user = userEvent.setup();
+    render(<DashboardClient initialDeals={[]} userName="Chris" />);
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Bahasa" }), "en");
+
+    expect(screen.getByText("Start here")).toBeDefined();
+    expect(screen.getByText("No invoices yet. Move a deal to the Invoice stage, then create a draft from its deal card.")).toBeDefined();
+    expect(screen.queryByText("Mulai dari sini")).toBeNull();
+    expect(screen.queryByText("Belum ada invoice. Pindahkan deal ke tahap Invoice, lalu buat drafnya dari kartu deal.")).toBeNull();
   });
 
   it("exposes accessible disclosure state on the Add deal / Close toggle", async () => {
