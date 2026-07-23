@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { InvoiceRecord } from "@/lib/invoices";
-import { buildWhatsAppReminderMessage, buildWhatsAppShareUrl, normalizeWhatsAppNumber } from "@/lib/whatsapp";
+import { buildWhatsAppReminder } from "@/lib/whatsapp";
 import { useLanguage, LanguageSwitcher } from "@/components/language-switcher";
 import { MoneyDisplay, StatusChip, Button } from "@/components/design-system";
 import { triggerPaidHaptic } from "@/lib/haptics";
+import { fetchWithTimeout } from "@/lib/http";
 import type { Language } from "@/lib/i18n";
 
 const NEXT_ACTIONS: Record<InvoiceRecord["status"], Array<{ status: InvoiceRecord["status"]; labelKey: string }>> = {
@@ -97,40 +98,58 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
 }) {
   const [share, setShare] = useState<ShareState>({ kind: "loading" });
   const [confirm, setConfirm] = useState<ShareConfirm>(null);
-  const [isBusy, setIsBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"create" | "revoke" | null>(null);
+  const isBusy = pendingAction !== null;
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const response = await fetch(`/api/invoices/${invoiceId}/share`);
-        const payload = await response.json();
-        if (cancelled) return;
-        if (!response.ok || !isValidGetPayload(payload)) {
-          setShare({ kind: "load-error", message: SHARE_LOAD_ERROR });
-          return;
-        }
-        setShare(payload.active
-          ? { kind: "active", link: null, expiresAt: payload.expiresAt ?? null, error: null }
-          : { kind: "inactive", error: null });
-      } catch {
-        if (!cancelled) setShare({ kind: "load-error", message: SHARE_LOAD_ERROR });
-      }
-    })();
+    mountedRef.current = true;
     return () => {
-      cancelled = true;
+      mountedRef.current = false;
     };
+  }, []);
+
+  const loadShareState = useCallback(async () => {
+    try {
+      const response = await fetchWithTimeout(`/api/invoices/${invoiceId}/share`);
+      const payload = await response.json();
+      if (!mountedRef.current) return;
+      if (!response.ok || !isValidGetPayload(payload)) {
+        setShare({ kind: "load-error", message: SHARE_LOAD_ERROR });
+        return;
+      }
+      setShare(payload.active
+        ? { kind: "active", link: null, expiresAt: payload.expiresAt ?? null, error: null }
+        : { kind: "inactive", error: null });
+    } catch {
+      if (mountedRef.current) setShare({ kind: "load-error", message: SHARE_LOAD_ERROR });
+    }
   }, [invoiceId]);
+
+  useEffect(() => {
+    // Defer to a microtask so the effect body doesn't synchronously invoke a
+    // state-setting loader (react-hooks/set-state-in-effect); the loader's
+    // own mountedRef check still guards against post-unmount updates.
+    queueMicrotask(() => {
+      loadShareState();
+    });
+  }, [loadShareState]);
+
+  const retryLoad = useCallback(() => {
+    setShare({ kind: "loading" });
+    loadShareState();
+  }, [loadShareState]);
 
   async function createOrRegenerate() {
     setConfirm(null);
     setCopyFeedback(null);
-    setIsBusy(true);
+    setPendingAction("create");
     setShare((prev) => clearMutationError(prev));
     try {
-      const response = await fetch(`/api/invoices/${invoiceId}/share`, { method: "POST" });
+      const response = await fetchWithTimeout(`/api/invoices/${invoiceId}/share`, { method: "POST" });
       const payload = await response.json();
+      if (!mountedRef.current) return;
       if (!response.ok || !isValidCreatePayload(payload)) {
         setShare((prev) => withMutationError(prev, SHARE_CREATE_ERROR));
         return;
@@ -142,29 +161,30 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
         error: null,
       });
     } catch {
-      setShare((prev) => withMutationError(prev, SHARE_CREATE_ERROR));
+      if (mountedRef.current) setShare((prev) => withMutationError(prev, SHARE_CREATE_ERROR));
     } finally {
-      setIsBusy(false);
+      if (mountedRef.current) setPendingAction(null);
     }
   }
 
   async function revoke() {
     setConfirm(null);
     setCopyFeedback(null);
-    setIsBusy(true);
+    setPendingAction("revoke");
     setShare((prev) => clearMutationError(prev));
     try {
-      const response = await fetch(`/api/invoices/${invoiceId}/share`, { method: "DELETE" });
+      const response = await fetchWithTimeout(`/api/invoices/${invoiceId}/share`, { method: "DELETE" });
       const payload = await response.json();
+      if (!mountedRef.current) return;
       if (!response.ok || !isValidRevokePayload(payload)) {
         setShare((prev) => withMutationError(prev, SHARE_REVOKE_ERROR));
         return;
       }
       setShare({ kind: "inactive", error: null });
     } catch {
-      setShare((prev) => withMutationError(prev, SHARE_REVOKE_ERROR));
+      if (mountedRef.current) setShare((prev) => withMutationError(prev, SHARE_REVOKE_ERROR));
     } finally {
-      setIsBusy(false);
+      if (mountedRef.current) setPendingAction(null);
     }
   }
 
@@ -177,19 +197,15 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
     }
   }
 
-  const normalizedWhatsApp = contactWa ? normalizeWhatsAppNumber(contactWa) : null;
-  const whatsappHref = share.kind === "active" && share.link && normalizedWhatsApp && invoice.dueDate
-    ? buildWhatsAppShareUrl(
-        normalizedWhatsApp,
-        buildWhatsAppReminderMessage({
-          kind: invoice.status === "OVERDUE" ? "overdue" : "due-soon",
-          invoiceNumber: invoice.number,
-          totalIdr: invoice.subtotalIdr,
-          dueDate: invoice.dueDate,
-          shareUrl: share.link,
-        }),
-      )
-    : null;
+  const reminder = buildWhatsAppReminder({
+    contactWa,
+    shareUrl: share.kind === "active" ? share.link : null,
+    invoiceNumber: invoice.number,
+    totalIdr: invoice.subtotalIdr,
+    dueDate: invoice.dueDate,
+    isOverdue: invoice.status === "OVERDUE",
+  });
+  const whatsappHref = reminder.kind === "ok" ? reminder.href : null;
 
   return (
     <section aria-labelledby="bagikan-invoice" className="rounded-2xl border border-line bg-surface p-5">
@@ -197,7 +213,18 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
       <p className="mt-1 text-[13px] text-muted">{t("invoice.shareHint")}</p>
 
       {share.kind === "loading" ? <p className="mt-3 text-[14px] text-muted">{t("invoice.loading")}</p> : null}
-      {share.kind === "load-error" ? <p role="alert" className="mt-3 text-[13px] text-overdue">{t(share.message)}</p> : null}
+      {share.kind === "load-error" ? (
+        <>
+          <p role="alert" className="mt-3 text-[13px] text-overdue">{t(share.message)}</p>
+          <button
+            type="button"
+            onClick={retryLoad}
+            className="mt-3 inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
+          >
+            {t("invoice.retry")}
+          </button>
+        </>
+      ) : null}
 
       {share.kind === "inactive" ? (
         <>
@@ -242,11 +269,13 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
           <div className="mt-3 rounded-xl bg-bg p-3">
             <p className="text-[13px] font-semibold text-ink">{t("invoice.whatsapp")}</p>
             <p className="mt-1 text-[13px] text-muted">
-              {!normalizedWhatsApp
+              {reminder.kind === "no-contact"
                 ? t("invoice.noContact")
-                : !whatsappHref
+                : reminder.kind === "no-share"
                   ? t("invoice.needShare")
-                  : t("invoice.bahasaReady")}
+                  : reminder.kind === "no-duedate"
+                    ? t("invoice.needDueDate")
+                    : t("invoice.bahasaReady")}
             </p>
             <button
               type="button"
@@ -296,7 +325,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
                   onClick={createOrRegenerate}
                   className="inline-flex h-11 items-center rounded-full bg-primary px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
                 >
-                  {t("invoice.confirmRegenerate")}
+                  {pendingAction === "create" ? t("invoice.creating") : t("invoice.confirmRegenerate")}
                 </button>
               </div>
             </div>
@@ -321,7 +350,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
                   onClick={revoke}
                   className="inline-flex h-11 items-center rounded-full bg-overdue px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
                 >
-                  {t("invoice.confirmRevoke")}
+                  {pendingAction === "revoke" ? t("invoice.revoking") : t("invoice.confirmRevoke")}
                 </button>
               </div>
             </div>
@@ -342,7 +371,7 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/invoices/${initialInvoice.id}/contact`)
+    fetchWithTimeout(`/api/invoices/${initialInvoice.id}/contact`)
       .then((response) => response.json().then((payload) => ({ response, payload })))
       .then(({ response, payload }) => {
         if (!cancelled && response.ok && typeof payload.contactWa === "string") setContactWa(payload.contactWa);
@@ -357,7 +386,7 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
     setError(null);
     setIsSaving(true);
     try {
-      const response = await fetch(`/api/invoices/${invoice.id}`, {
+      const response = await fetchWithTimeout(`/api/invoices/${invoice.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import InvoiceDetailClient from "./invoice-detail-client";
 
@@ -57,6 +57,7 @@ function makeFetchMock(
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   window.localStorage.clear();
 });
 
@@ -244,6 +245,20 @@ describe("InvoiceDetailClient", () => {
     expect(await screen.findByRole("button", { name: "Buka WhatsApp" })).toHaveProperty("disabled", true);
     expect(screen.getByText(/nomor whatsapp belum bisa dipakai/i)).toBeDefined();
   });
+
+  it("disables WhatsApp with a distinct reason when the invoice has no due date, even with a valid contact and active share", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetchMock({
+      contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+      sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
+    }));
+
+    render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: null }} />);
+    await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
+    expect(await screen.findByRole("button", { name: "Buka WhatsApp" })).toHaveProperty("disabled", true);
+    expect(screen.getByText(/belum punya tanggal jatuh tempo/i)).toBeDefined();
+  });
+
   it("shows a controlled Bahasa alert when the clipboard write is denied or unavailable", async () => {
     const user = userEvent.setup();
     vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("denied"));
@@ -350,6 +365,73 @@ describe("InvoiceDetailClient", () => {
       render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
 
       expect(await screen.findByText("Status berbagi belum bisa dimuat. Coba lagi.")).toBeDefined();
+      expect(screen.getByRole("button", { name: "Coba lagi" })).toBeDefined();
+    });
+
+    it("shows the controlled Bahasa load error, with a retry, when the share status request hangs past the bounded timeout", async () => {
+      vi.useFakeTimers();
+      vi.stubGlobal("fetch", vi.fn(() => new Promise(() => {})));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(8000);
+      });
+
+      expect(screen.getByText("Status berbagi belum bisa dimuat. Coba lagi.")).toBeDefined();
+      expect(screen.getByRole("button", { name: "Coba lagi" })).toBeDefined();
+    });
+
+    it("shows a controlled Bahasa error when creating a share link hangs past the bounded timeout", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          const method = init?.method ?? "GET";
+          if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: {} });
+          if (url.endsWith("/share") && method === "GET") return jsonResponse({ status: 200, body: { active: false } });
+          return new Promise(() => {});
+        }),
+      );
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      const createButton = await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      vi.useFakeTimers();
+      fireEvent.click(createButton);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(8000);
+      });
+      vi.useRealTimers();
+
+      expect(await screen.findByRole("alert")).toHaveProperty(
+        "textContent",
+        "Tautan berbagi belum bisa dibuat. Coba lagi.",
+      );
+      expect(screen.getByRole("button", { name: "Buat tautan berbagi" })).toBeDefined();
+    });
+
+    it("retries the share status load and recovers when the retry succeeds", async () => {
+      const user = userEvent.setup();
+      let getCount = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          const method = init?.method ?? "GET";
+          if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: {} });
+          if (url.endsWith("/share") && method === "GET") {
+            getCount += 1;
+            if (getCount === 1) return jsonResponse({ status: 500, body: { error: "boom" } });
+            return jsonResponse({ status: 200, body: { active: false } });
+          }
+          return jsonResponse({ status: 200, body: {} });
+        }),
+      );
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+      await user.click(await screen.findByRole("button", { name: "Coba lagi" }));
+
+      expect(await screen.findByText(/belum ada tautan berbagi/i)).toBeDefined();
+      expect(getCount).toBe(2);
     });
 
     it("shows a controlled Bahasa error when creating a link fails, without a raw error leaking", async () => {

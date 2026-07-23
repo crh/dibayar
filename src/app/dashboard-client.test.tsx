@@ -74,6 +74,72 @@ describe("DashboardClient", () => {
     expect(screen.queryByRole("combobox", { name: /tahap deal/i })).toBeNull();
   });
 
+  it("shows a live-formatted IDR preview under the fee input without changing the underlying numeric value", async () => {
+    const user = userEvent.setup();
+    render(<DashboardClient initialDeals={[]} userName="Chris" />);
+
+    const feeInput = screen.getByRole("spinbutton", { name: "Fee (Rp)" });
+    await user.type(feeInput, "1500000");
+
+    expect((feeInput as HTMLInputElement).value).toBe("1500000");
+    expect(screen.getByText("≈ Rp1.500.000")).toBeDefined();
+  });
+
+  it("shows a bounded success confirmation after a deal is saved", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 201,
+        json: async () => ({ deal: { ...kopiDeal, id: "deal-2", brand: "Baru" } }),
+      })),
+    );
+
+    render(<DashboardClient initialDeals={[]} userName="Chris" />);
+
+    await user.type(screen.getByRole("textbox", { name: "Nama brand" }), "Baru");
+    await user.type(screen.getByRole("textbox", { name: "Kontak WhatsApp" }), "081234567890");
+    await user.type(screen.getByRole("textbox", { name: "Scope pekerjaan" }), "1 post Instagram");
+    await user.type(screen.getByRole("spinbutton", { name: "Fee (Rp)" }), "1000000");
+    await user.click(screen.getByRole("button", { name: "Simpan deal" }));
+
+    expect(await screen.findByRole("status")).toHaveProperty("textContent", "Deal disimpan");
+  });
+
+  it("shows a bounded success confirmation after an invoice is created from a deal card", async () => {
+    const user = userEvent.setup();
+    const invoiceDeal: DealRecord = { ...kopiDeal, id: "deal-3", status: "INVOICE" };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 201,
+        json: async () => ({
+          invoice: {
+            id: "invoice-9",
+            userId: "user-1",
+            dealId: "deal-3",
+            number: "INV/2026/07/009",
+            subtotalIdr: invoiceDeal.feeIdr,
+            withholdingTaxType: "NONE",
+            status: "DRAFT",
+            dueDate: null,
+            createdAt: new Date("2026-07-15T00:00:00.000Z"),
+            updatedAt: new Date("2026-07-15T00:00:00.000Z"),
+          },
+        }),
+      })),
+    );
+
+    render(<DashboardClient userName="Chris" initialDeals={[invoiceDeal]} />);
+
+    const invoiceStage = screen.getByRole("region", { name: "Invoice" });
+    await user.click(within(invoiceStage).getByRole("button", { name: "Buat invoice" }));
+
+    expect(await screen.findByRole("status")).toHaveProperty("textContent", "Invoice dibuat");
+  });
+
   it("exposes accessible disclosure state on the Add deal / Close toggle", async () => {
     const user = userEvent.setup();
     render(<DashboardClient initialDeals={[kopiDeal]} userName="Chris" />);

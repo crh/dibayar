@@ -11,7 +11,7 @@ import {
   type InvoiceTransactionClient,
 } from "./invoices";
 
-const ownedDeal = { id: "deal-1", userId: "user-1", feeIdr: 1_500_000 };
+const ownedDeal = { id: "deal-1", userId: "user-1", feeIdr: 1_500_000, deadline: null as Date | null };
 
 type SequenceRow = { lastSequence: number | bigint };
 
@@ -164,6 +164,40 @@ describe("createInvoice", () => {
 
     expect(invoiceCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({ dueDate: new Date("2026-08-01") }),
+    });
+  });
+
+  it("inherits the deal deadline as the invoice due date when no explicit due date is given", async () => {
+    const { db, invoiceCreate } = makeDb({
+      deal: { ...ownedDeal, deadline: new Date("2026-07-31T00:00:00.000Z") },
+    });
+
+    await createInvoice(db, "user-1", { dealId: "deal-1" });
+
+    expect(invoiceCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ dueDate: new Date("2026-07-31T00:00:00.000Z") }),
+    });
+  });
+
+  it("lets an explicit due date override the deal deadline", async () => {
+    const { db, invoiceCreate } = makeDb({
+      deal: { ...ownedDeal, deadline: new Date("2026-07-31T00:00:00.000Z") },
+    });
+
+    await createInvoice(db, "user-1", { dealId: "deal-1", dueDate: "2026-08-15" });
+
+    expect(invoiceCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ dueDate: new Date("2026-08-15") }),
+    });
+  });
+
+  it("leaves the due date null when neither an explicit due date nor a deal deadline is set", async () => {
+    const { db, invoiceCreate } = makeDb({ deal: { ...ownedDeal, deadline: null } });
+
+    await createInvoice(db, "user-1", { dealId: "deal-1" });
+
+    expect(invoiceCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ dueDate: null }),
     });
   });
 

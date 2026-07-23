@@ -43,3 +43,35 @@ export function buildWhatsAppReminderMessage(input: {
 export function buildWhatsAppShareUrl(number: string, message: string): string {
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 }
+
+export type WhatsAppReminderResult =
+  | { kind: "ok"; href: string }
+  | { kind: "no-contact" }
+  | { kind: "no-share" }
+  | { kind: "no-duedate" };
+
+// Pure composition of the pieces above, with each blocked precondition kept
+// distinguishable (missing contact vs missing share link vs missing due date)
+// so the UI can explain the specific gap instead of a single generic disable.
+export function buildWhatsAppReminder(input: {
+  contactWa: string | null;
+  shareUrl: string | null;
+  invoiceNumber: string;
+  totalIdr: number;
+  dueDate: Date | string | null;
+  isOverdue: boolean;
+}): WhatsAppReminderResult {
+  const normalizedNumber = input.contactWa ? normalizeWhatsAppNumber(input.contactWa) : null;
+  if (!normalizedNumber) return { kind: "no-contact" };
+  if (!input.shareUrl) return { kind: "no-share" };
+  if (!input.dueDate) return { kind: "no-duedate" };
+
+  const message = buildWhatsAppReminderMessage({
+    kind: input.isOverdue ? "overdue" : "due-soon",
+    invoiceNumber: input.invoiceNumber,
+    totalIdr: input.totalIdr,
+    dueDate: input.dueDate,
+    shareUrl: input.shareUrl,
+  });
+  return { kind: "ok", href: buildWhatsAppShareUrl(normalizedNumber, message) };
+}

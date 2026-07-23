@@ -114,6 +114,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
   const [invoices, setInvoices] = useState(initialInvoices);
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingDealId, setPendingDealId] = useState<string | null>(null);
   const [isAddDealOpen, setIsAddDealOpen] = useState(initialDeals.length === 0);
@@ -125,6 +126,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
 
   async function handleStageChange(dealId: string, status: DealRecord["status"]) {
     setError(null);
+    setSuccessMessage(null);
     setPendingDealId(dealId);
 
     try {
@@ -146,6 +148,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setSuccessMessage(null);
     setIsSaving(true);
 
     try {
@@ -163,6 +166,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
       if (!response.ok) throw new Error("dashboard.saveError");
       setDeals((current) => [payload.deal, ...current]);
       setForm(EMPTY_FORM);
+      setSuccessMessage("dashboard.dealSaved");
     } catch {
       setError("dashboard.saveError");
     } finally {
@@ -172,6 +176,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
 
   async function handleCreateInvoice(dealId: string) {
     setError(null);
+    setSuccessMessage(null);
     setIsSaving(true);
 
     try {
@@ -183,6 +188,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
       const payload = await response.json();
       if (!response.ok) throw new Error("dashboard.invoiceError");
       setInvoices((current) => [payload.invoice, ...current]);
+      setSuccessMessage("dashboard.invoiceCreated");
     } catch {
       setError("dashboard.invoiceError");
     } finally {
@@ -208,6 +214,12 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
           </Link>
         </div>
       </header>
+
+      {successMessage ? (
+        <div role="status" aria-live="polite" className="rounded-md border border-paid/30 bg-paid-tint px-4 py-3 text-[14px] font-semibold text-paid">
+          {t(successMessage)}
+        </div>
+      ) : null}
 
       <div aria-label={language === "en" ? "Deal progress" : "Progress deal"} className="flex h-2 overflow-hidden rounded-full bg-line">
         {PIPELINE_STAGES.map((stage) => <div key={stage.value} className={`flex-1 ${stage.value === "DIBAYAR" ? "bg-paid" : stage.value === "INVOICE" ? "bg-due" : stage.value === "KONTEN" ? "bg-due-tint" : stage.value === "MASUK" ? "bg-line" : "bg-primary-tint"}`} />)}
@@ -279,6 +291,11 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
               onChange={(event) => setForm({ ...form, feeIdr: event.target.value })}
               className={fieldClassName}
             />
+            {form.feeIdr && Number.isFinite(Number(form.feeIdr)) && Number(form.feeIdr) > 0 ? (
+              <span className="text-[12px] font-normal text-muted">
+                {t("dashboard.feePreview", { amount: formatIdr(Number(form.feeIdr), language) })}
+              </span>
+            ) : null}
           </label>
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
             {t("dashboard.deadline")}

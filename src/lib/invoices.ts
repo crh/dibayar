@@ -18,7 +18,7 @@ export type InvoiceRecord = {
   updatedAt: Date;
 };
 
-type OwnedDeal = { id: string; userId: string; feeIdr: number };
+type OwnedDeal = { id: string; userId: string; feeIdr: number; deadline: Date | null };
 
 type InvoiceCreateData = {
   userId: string;
@@ -137,7 +137,7 @@ export async function createInvoice(db: InvoiceCreateDb, userId: string, input: 
         subtotalIdr: deal.feeIdr,
         withholdingTaxType: validated.withholdingTaxType,
         status: "DRAFT",
-        dueDate: validated.dueDate ?? null,
+        dueDate: validated.dueDate ?? deal.deadline ?? null,
       },
     });
   });
