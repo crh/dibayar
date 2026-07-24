@@ -36,6 +36,41 @@ const COPY_LINK_ERROR = "invoice.copyError";
 
 const SHARE_PATH_PATTERN = /^\/i\/[A-Za-z0-9_-]+$/;
 
+// The server only ever stores a hash of the share token, so the plaintext
+// path is never recoverable from the API after a reload. We keep a
+// best-effort copy in sessionStorage (scoped to this tab, keyed by invoice
+// id) purely so the owner doesn't lose Copy/WhatsApp access to a link they
+// just created in this session. It's read-and-validate-only: never used to
+// fabricate a link for a share this browser didn't create.
+function shareCacheKey(invoiceId: string) {
+  return `dibayar-share-path:${invoiceId}`;
+}
+
+function readCachedSharePath(invoiceId: string): string | null {
+  try {
+    const raw = window.sessionStorage.getItem(shareCacheKey(invoiceId));
+    return raw && SHARE_PATH_PATTERN.test(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedSharePath(invoiceId: string, path: string) {
+  try {
+    window.sessionStorage.setItem(shareCacheKey(invoiceId), path);
+  } catch {
+    // Storage may be unavailable (private mode, quota); the cache is best-effort.
+  }
+}
+
+function clearCachedSharePath(invoiceId: string) {
+  try {
+    window.sessionStorage.removeItem(shareCacheKey(invoiceId));
+  } catch {
+    // Storage may be unavailable; nothing to clean up in that case.
+  }
+}
+
 type ShareState =
   | { kind: "loading" }
   | { kind: "load-error"; message: string }
@@ -119,9 +154,18 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
         setShare({ kind: "load-error", message: SHARE_LOAD_ERROR });
         return;
       }
-      setShare(payload.active
-        ? { kind: "active", link: null, expiresAt: payload.expiresAt ?? null, error: null }
-        : { kind: "inactive", error: null });
+      if (!payload.active) {
+        clearCachedSharePath(invoiceId);
+        setShare({ kind: "inactive", error: null });
+        return;
+      }
+      const cachedPath = readCachedSharePath(invoiceId);
+      setShare({
+        kind: "active",
+        link: cachedPath ? `${window.location.origin}${cachedPath}` : null,
+        expiresAt: payload.expiresAt ?? null,
+        error: null,
+      });
     } catch {
       if (mountedRef.current) setShare({ kind: "load-error", message: SHARE_LOAD_ERROR });
     }
@@ -154,6 +198,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
         setShare((prev) => withMutationError(prev, SHARE_CREATE_ERROR));
         return;
       }
+      writeCachedSharePath(invoiceId, payload.path);
       setShare({
         kind: "active",
         link: `${window.location.origin}${payload.path}`,
@@ -180,6 +225,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
         setShare((prev) => withMutationError(prev, SHARE_REVOKE_ERROR));
         return;
       }
+      clearCachedSharePath(invoiceId);
       setShare({ kind: "inactive", error: null });
     } catch {
       if (mountedRef.current) setShare((prev) => withMutationError(prev, SHARE_REVOKE_ERROR));
@@ -272,7 +318,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
               {reminder.kind === "no-contact"
                 ? t("invoice.noContact")
                 : reminder.kind === "no-share"
-                  ? t("invoice.needShare")
+                  ? t("invoice.shareLinkUnavailable")
                   : reminder.kind === "no-duedate"
                     ? t("invoice.needDueDate")
                     : t("invoice.bahasaReady")}

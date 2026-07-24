@@ -275,8 +275,36 @@ describe("DashboardClient", () => {
 
     expect(screen.getByRole("heading", { name: "Invoice saya" })).toBeDefined();
     expect(screen.getByText("INV/2026/07/001")).toBeDefined();
-    expect(screen.getByText("Draft")).toBeDefined();
+    expect(screen.getByText("Draf")).toBeDefined();
     expect(screen.getByRole("link", { name: /INV\/2026\/07\/001/ }).getAttribute("href")).toBe("/dashboard/invoices/invoice-1");
+  });
+
+  it("still renders the English Draft label for a draft invoice when English is selected", async () => {
+    const user = userEvent.setup();
+    render(
+      <DashboardClient
+        initialDeals={[]}
+        initialInvoices={[
+          {
+            id: "invoice-1",
+            userId: "user-1",
+            dealId: "deal-1",
+            number: "INV/2026/07/001",
+            subtotalIdr: 1500000,
+            withholdingTaxType: "PPH23",
+            status: "DRAFT",
+            dueDate: new Date("2026-07-31T00:00:00.000Z"),
+            createdAt: new Date("2026-07-15T00:00:00.000Z"),
+            updatedAt: new Date("2026-07-15T00:00:00.000Z"),
+          },
+        ]}
+      />,
+    );
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Bahasa" }), "en");
+
+    expect(screen.getByText("Draft")).toBeDefined();
+    expect(screen.queryByText("Draf")).toBeNull();
   });
 
   describe("attention section", () => {

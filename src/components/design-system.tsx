@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { DealRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
+import { translate, type Language } from "@/lib/i18n";
 
 export type PipelineStage = DealRecord["status"];
 export type InvoiceStatus = InvoiceRecord["status"];
@@ -30,30 +31,27 @@ export function Button({
   );
 }
 
-const PIPELINE_CHIP: Record<PipelineStage, { label: string; className: string }> = {
-  MASUK: { label: "Masuk", className: "border-line bg-line text-muted" },
-  NEGO: { label: "Nego", className: "border-primary-tint bg-primary-tint text-primary-d" },
-  DEAL: { label: "Deal", className: "border-primary-tint bg-primary-tint text-primary-d" },
-  KONTEN: { label: "Konten", className: "border-due bg-due-tint text-ink" },
-  INVOICE: { label: "Invoice", className: "border-due bg-due text-ink" },
-  DIBAYAR: { label: "Dibayar", className: "border-paid bg-paid text-surface" },
+const PIPELINE_CHIP: Record<PipelineStage, { key: string; className: string }> = {
+  MASUK: { key: "stage.inbox", className: "border-line bg-line text-muted" },
+  NEGO: { key: "stage.negotiation", className: "border-primary-tint bg-primary-tint text-primary-d" },
+  DEAL: { key: "stage.deal", className: "border-primary-tint bg-primary-tint text-primary-d" },
+  KONTEN: { key: "stage.content", className: "border-due bg-due-tint text-ink" },
+  INVOICE: { key: "stage.invoice", className: "border-due bg-due text-ink" },
+  DIBAYAR: { key: "stage.paid", className: "border-paid bg-paid text-surface" },
 };
 
-const INVOICE_CHIP: Record<InvoiceStatus, { label: string; className: string }> = {
-  DRAFT: { label: "Draft", className: "border-line bg-line text-muted" },
-  SENT: { label: "Terkirim", className: "border-primary-tint bg-primary-tint text-primary-d" },
-  DUE: { label: "Jatuh tempo", className: "border-due bg-due-tint text-ink" },
-  OVERDUE: { label: "Terlambat", className: "border-overdue bg-overdue text-surface" },
-  PAID: { label: "Lunas", className: "border-paid bg-paid text-surface" },
+const INVOICE_CHIP: Record<InvoiceStatus, { key: string; className: string }> = {
+  DRAFT: { key: "invoice.draft", className: "border-line bg-line text-muted" },
+  SENT: { key: "invoice.sent", className: "border-primary-tint bg-primary-tint text-primary-d" },
+  DUE: { key: "invoice.due", className: "border-due bg-due-tint text-ink" },
+  OVERDUE: { key: "invoice.overdue", className: "border-overdue bg-overdue text-surface" },
+  PAID: { key: "invoice.paid", className: "border-paid bg-paid text-surface" },
 };
 
-export function StatusChip({ status, language = "id" }: { status: PipelineStage | InvoiceStatus; language?: "id" | "en" }) {
+export function StatusChip({ status, language = "id" }: { status: PipelineStage | InvoiceStatus; language?: Language }) {
   const item = status in PIPELINE_CHIP ? PIPELINE_CHIP[status as PipelineStage] : INVOICE_CHIP[status as InvoiceStatus];
-  const labels: Record<string, string> = {
-    Masuk: "Inbox", Nego: "Negotiation", Deal: "Deal", Konten: "Content", Invoice: "Invoice", Dibayar: "Paid",
-    Draft: "Draft", Terkirim: "Sent", "Jatuh tempo": "Due", Terlambat: "Overdue", Lunas: "Paid",
-  };
-  return <span className={`inline-flex min-h-7 items-center rounded-full border px-3 text-[11px] font-bold uppercase tracking-wide ${item.className}`}>{language === "en" ? labels[item.label] : item.label}{status === "DIBAYAR" || status === "PAID" ? " ✓" : ""}</span>;
+  const label = translate(language, item.key);
+  return <span className={`inline-flex min-h-7 items-center rounded-full border px-3 text-[11px] font-bold uppercase tracking-wide ${item.className}`}>{label}{status === "DIBAYAR" || status === "PAID" ? " ✓" : ""}</span>;
 }
 
 export function MoneyDisplay({ value, language = "id", tone = "default", size = "card" }: { value: number; language?: "id" | "en"; tone?: "default" | "paid" | "negative" | "primary"; size?: "card" | "hero" }) {

@@ -59,6 +59,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
   window.localStorage.clear();
+  window.sessionStorage.clear();
 });
 
 describe("InvoiceDetailClient", () => {
@@ -73,6 +74,19 @@ describe("InvoiceDetailClient", () => {
     expect(screen.getByRole("button", { name: "Tandai sudah dikirim" })).toBeDefined();
     expect(screen.getByRole("link", { name: "Unduh PDF" }).getAttribute("href")).toBe("/api/invoices/invoice-1/pdf");
     expect(screen.queryByRole("button", { name: "Tandai lunas" })).toBeNull();
+    expect(screen.getByText("Draf")).toBeDefined();
+    expect(screen.queryByText("Draft")).toBeNull();
+    expect(screen.queryByText("DRAFT")).toBeNull();
+  });
+
+  it("shows the English Draft status chip on the detail page when English is selected", async () => {
+    window.localStorage.setItem("dibayar-language", "en");
+    vi.stubGlobal("fetch", makeFetchMock());
+    render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+    await screen.findByRole("button", { name: "Create sharing link" });
+
+    expect(screen.getByText("Draft")).toBeDefined();
+    expect(screen.queryByText("Draf")).toBeNull();
   });
 
   it("shows the localized English loading label while a status action is saving", async () => {
@@ -285,8 +299,9 @@ describe("InvoiceDetailClient", () => {
   });
 
 
-    it("shows the active state after a reload without reconstructing the plaintext link", async () => {
+    it("shows the active state after a reload without reconstructing the plaintext link, with an accurate WhatsApp disabled reason", async () => {
       vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
         shareGet: { status: 200, body: { active: true, expiresAt: "2026-10-17T00:00:00.000Z" } },
       }));
 
@@ -297,6 +312,91 @@ describe("InvoiceDetailClient", () => {
       expect(screen.getByRole("button", { name: /buat ulang tautan/i })).toBeDefined();
       expect(screen.getByRole("button", { name: /cabut tautan/i })).toBeDefined();
       expect(screen.queryByText(/^https?:\/\//)).toBeNull();
+      expect(screen.queryByRole("button", { name: /salin tautan/i })).toBeNull();
+
+      expect(await screen.findByRole("button", { name: "Buka WhatsApp" })).toHaveProperty("disabled", true);
+      expect(screen.getByText(/tautan yang bisa dipakai tidak tersedia setelah halaman dimuat ulang/i)).toBeDefined();
+      expect(screen.queryByText(/buat tautan berbagi dulu/i)).toBeNull();
+    });
+
+    it("restores a cached share path in the same browser session so Copy and WhatsApp work after reload", async () => {
+      const user = userEvent.setup();
+      vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const fetchMock = makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+        shareGet: { status: 200, body: { active: false } },
+        sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const { unmount } = render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
+      const expectedLink = `${window.location.origin}/i/deterministic-token`;
+      expect(await screen.findByText(expectedLink)).toBeDefined();
+      unmount();
+
+      // Simulate a reload: same tab (sessionStorage persists), fresh component mount,
+      // and the server now reports the share as active with no path in the payload.
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+        shareGet: { status: 200, body: { active: true } },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      expect(await screen.findByText(expectedLink)).toBeDefined();
+
+      await user.click(screen.getByRole("button", { name: /salin tautan/i }));
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expectedLink);
+
+      const whatsappButton = await screen.findByRole("button", { name: "Buka WhatsApp" });
+      expect(whatsappButton).toHaveProperty("disabled", false);
+      await user.click(whatsappButton);
+      expect(open.mock.calls[0]?.[0]).toContain(encodeURIComponent(expectedLink));
+    });
+
+    it("clears the cached share path when the server reports the share inactive", async () => {
+      window.sessionStorage.setItem("dibayar-share-path:invoice-1", "/i/deterministic-token");
+      vi.stubGlobal("fetch", makeFetchMock({ shareGet: { status: 200, body: { active: false } } }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+      expect(await screen.findByText(/belum ada tautan berbagi/i)).toBeDefined();
+      expect(window.sessionStorage.getItem("dibayar-share-path:invoice-1")).toBeNull();
+    });
+
+    it("clears the cached share path once the owner revokes the link", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal("fetch", makeFetchMock({
+        shareGet: { status: 200, body: { active: false } },
+        sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
+        shareDelete: { status: 200, body: { active: false } },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
+      expect(await screen.findByText(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
+      expect(window.sessionStorage.getItem("dibayar-share-path:invoice-1")).toBe("/i/deterministic-token");
+
+      await user.click(screen.getByRole("button", { name: /cabut tautan/i }));
+      await user.click(screen.getByRole("button", { name: "Ya, cabut tautan" }));
+
+      expect(await screen.findByText(/belum ada tautan berbagi/i)).toBeDefined();
+      expect(window.sessionStorage.getItem("dibayar-share-path:invoice-1")).toBeNull();
+    });
+
+    it("ignores a malformed cached share path instead of treating it as a usable link", async () => {
+      window.sessionStorage.setItem("dibayar-share-path:invoice-1", "https://evil.example/i/token");
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+        shareGet: { status: 200, body: { active: true } },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+      expect(await screen.findByText(/tautan berbagi aktif/i)).toBeDefined();
+      expect(screen.queryByText(/^https?:\/\//)).toBeNull();
+      expect(await screen.findByRole("button", { name: "Buka WhatsApp" })).toHaveProperty("disabled", true);
     });
 
     it("shows the reset expiry after regenerating", async () => {
