@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { auth } from "@/auth";
-import { getOwnedInvoice, updateInvoiceStatus, type InvoiceRecord } from "@/lib/invoices";
+import { getOwnedInvoice, updateInvoiceDueDate, updateInvoiceStatus, type InvoiceRecord } from "@/lib/invoices";
 import { GET, PATCH } from "./route";
 
 vi.mock("@/auth", () => ({
@@ -10,6 +10,7 @@ vi.mock("@/auth", () => ({
 vi.mock("@/lib/invoices", () => ({
   getOwnedInvoice: vi.fn(),
   updateInvoiceStatus: vi.fn(),
+  updateInvoiceDueDate: vi.fn(),
 }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -19,6 +20,7 @@ vi.mock("@/lib/prisma", () => ({
 const mockedAuth = vi.mocked(auth);
 const mockedGetOwnedInvoice = vi.mocked(getOwnedInvoice);
 const mockedUpdateInvoiceStatus = vi.mocked(updateInvoiceStatus);
+const mockedUpdateInvoiceDueDate = vi.mocked(updateInvoiceDueDate);
 
 function makeContext(id: string) {
   return { params: Promise.resolve({ id }) };
@@ -58,6 +60,7 @@ describe("GET /api/invoices/[id]", () => {
     mockedAuth.mockReset();
     mockedGetOwnedInvoice.mockReset();
     mockedUpdateInvoiceStatus.mockReset();
+    mockedUpdateInvoiceDueDate.mockReset();
   });
 
   it("menolak permintaan tanpa sesi login", async () => {
@@ -156,12 +159,65 @@ describe("GET /api/invoices/[id]", () => {
     expect(body.error).toBe("Status invoice belum bisa diperbarui. Coba lagi.");
     expect(mockedUpdateInvoiceStatus).not.toHaveBeenCalled();
   });
+
+  it("mengizinkan pemilik mengatur tanggal jatuh tempo invoice", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedUpdateInvoiceDueDate.mockResolvedValue({
+      kind: "updated",
+      invoice: { ...invoice, dueDate: new Date("2026-08-01T00:00:00.000Z") },
+    });
+
+    const response = await PATCH(patchRequest("invoice-1", { dueDate: "2026-08-01" }), makeContext("invoice-1"));
+
+    expect(response.status).toBe(200);
+    expect(mockedUpdateInvoiceDueDate).toHaveBeenCalledWith(
+      expect.anything(),
+      "invoice-1",
+      "user-1",
+      new Date("2026-08-01T00:00:00.000Z"),
+    );
+    expect((await response.json()).invoice.dueDate).toBe("2026-08-01T00:00:00.000Z");
+  });
+
+  it("mengizinkan pemilik menghapus tanggal jatuh tempo invoice", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedUpdateInvoiceDueDate.mockResolvedValue({ kind: "updated", invoice: { ...invoice, dueDate: null } });
+
+    const response = await PATCH(patchRequest("invoice-1", { dueDate: null }), makeContext("invoice-1"));
+
+    expect(response.status).toBe(200);
+    expect(mockedUpdateInvoiceDueDate).toHaveBeenCalledWith(expect.anything(), "invoice-1", "user-1", null);
+    expect((await response.json()).invoice.dueDate).toBeNull();
+  });
+
+  it("mengembalikan 400 saat dueDate tidak valid", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+
+    const response = await PATCH(patchRequest("invoice-1", { dueDate: "not-a-date" }), makeContext("invoice-1"));
+
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toBe("Tanggal jatuh tempo tidak valid.");
+    expect(mockedUpdateInvoiceDueDate).not.toHaveBeenCalled();
+  });
+
+  it("mengembalikan 404 saat mengatur tanggal jatuh tempo invoice yang bukan milik pengguna", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedUpdateInvoiceDueDate.mockResolvedValue({ kind: "not-found" });
+
+    const response = await PATCH(patchRequest("invoice-x", { dueDate: "2026-08-01" }), makeContext("invoice-x"));
+
+    expect(response.status).toBe(404);
+    const body = await response.json();
+    expect(body.error).toBe("Invoice tidak ditemukan.");
+  });
 });
 
 describe("same-origin protection for PATCH /api/invoices/[id]", () => {
   beforeEach(() => {
     mockedAuth.mockReset();
     mockedUpdateInvoiceStatus.mockReset();
+    mockedUpdateInvoiceDueDate.mockReset();
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
   });
 
@@ -179,6 +235,13 @@ describe("same-origin protection for PATCH /api/invoices/[id]", () => {
 
     expect(response.status).toBe(403);
     expect(mockedUpdateInvoiceStatus).not.toHaveBeenCalled();
+  });
+
+  it("rejects a dueDate PATCH with a missing Origin header", async () => {
+    const response = await PATCH(patchRequest("invoice-1", { dueDate: "2026-08-01" }, {}), makeContext("invoice-1"));
+
+    expect(response.status).toBe(403);
+    expect(mockedUpdateInvoiceDueDate).not.toHaveBeenCalled();
   });
 
   it("rejects a PATCH with a cross-origin Origin header", async () => {

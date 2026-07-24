@@ -16,3 +16,11 @@ export const invoiceStatusUpdateSchema = z.object({
 });
 
 export type InvoiceStatusUpdateInput = z.infer<typeof invoiceStatusUpdateSchema>;
+
+// dueDate is nullable (not just optional) so the owner can explicitly clear a
+// previously set date; z.coerce.date() only runs when the value isn't null.
+export const invoiceDueDateUpdateSchema = z.object({
+  dueDate: z.coerce.date().nullable(),
+});
+
+export type InvoiceDueDateUpdateInput = z.infer<typeof invoiceDueDateUpdateSchema>;

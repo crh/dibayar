@@ -113,6 +113,10 @@ const translations: Record<Language, Record<string, TranslationValue>> = {
     "invoice.due": "Jatuh tempo",
     "invoice.overdue": "Terlambat",
     "invoice.draft": "Draf",
+    "invoice.dueDateFieldLabel": "Tanggal jatuh tempo",
+    "invoice.dueDateSave": "Simpan tanggal",
+    "invoice.dueDateClear": "Hapus tanggal",
+    "invoice.dueDateUpdateError": "Tanggal jatuh tempo belum bisa diperbarui. Coba lagi.",
   },
   en: {
     "language.label": "Language",
@@ -223,6 +227,10 @@ const translations: Record<Language, Record<string, TranslationValue>> = {
     "invoice.due": "Due",
     "invoice.overdue": "Overdue",
     "invoice.draft": "Draft",
+    "invoice.dueDateFieldLabel": "Due date",
+    "invoice.dueDateSave": "Save date",
+    "invoice.dueDateClear": "Clear date",
+    "invoice.dueDateUpdateError": "The due date could not be updated. Try again.",
   },
 };
 

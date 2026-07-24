@@ -120,6 +120,32 @@ export async function updateInvoiceStatus(
   };
 }
 
+export type InvoiceDueDateDb = {
+  invoice: {
+    findFirst(args: { where: { id: string; userId: string } }): Promise<InvoiceRecord | null>;
+    update(args: { where: { id: string; userId: string }; data: { dueDate: Date | null } }): Promise<InvoiceRecord>;
+  };
+};
+
+export type UpdateInvoiceDueDateResult =
+  | { kind: "updated"; invoice: InvoiceRecord }
+  | { kind: "not-found" };
+
+export async function updateInvoiceDueDate(
+  db: InvoiceDueDateDb,
+  id: string,
+  userId: string,
+  dueDate: Date | null,
+): Promise<UpdateInvoiceDueDateResult> {
+  const invoice = await db.invoice.findFirst({ where: { id, userId } });
+  if (!invoice) return { kind: "not-found" };
+
+  return {
+    kind: "updated",
+    invoice: await db.invoice.update({ where: { id, userId }, data: { dueDate } }),
+  };
+}
+
 // Returns null (not a throw) when the deal is missing or not owned by userId, so callers can respond 404 uniformly.
 export async function createInvoice(db: InvoiceCreateDb, userId: string, input: unknown) {
   const validated = invoiceCreateSchema.parse(input);

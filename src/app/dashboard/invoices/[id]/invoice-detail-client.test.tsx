@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import InvoiceDetailClient from "./invoice-detail-client";
 
@@ -179,6 +179,151 @@ describe("InvoiceDetailClient", () => {
 
     expect(screen.getByText("Invoice ini sudah lunas.")).toBeDefined();
     expect(screen.queryByRole("button", { name: "Tandai sudah dikirim" })).toBeNull();
+  });
+
+  describe("Status yang ditampilkan (derived, bukan status mentah)", () => {
+    it("shows the derived SENT chip, not the stale raw OVERDUE, when the invoice has no due date", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(
+        <InvoiceDetailClient
+          initialInvoice={{ ...draftInvoice, status: "OVERDUE", dueDate: null }}
+          now={new Date("2026-07-24T00:00:00.000Z")}
+        />,
+      );
+      await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      expect(screen.getByText("Terkirim")).toBeDefined();
+      expect(screen.queryByText("Terlambat")).toBeNull();
+      // Raw state-machine actions for OVERDUE stay unchanged regardless of display status.
+      expect(screen.getByRole("button", { name: "Tandai lunas" })).toBeDefined();
+    });
+
+    it("derives OVERDUE at 00:01 Jakarta the day after the due date, even though the underlying status is still SENT", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(
+        <InvoiceDetailClient
+          initialInvoice={{ ...draftInvoice, status: "SENT", dueDate: new Date("2026-07-19T00:00:00.000Z") }}
+          now={new Date("2026-07-19T17:01:00.000Z")}
+        />,
+      );
+      await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      expect(screen.getByText("Terlambat")).toBeDefined();
+      expect(screen.queryByText("Terkirim")).toBeNull();
+    });
+
+    it("does not build an overdue WhatsApp reminder when the due date has not actually passed, despite a stale raw OVERDUE status", async () => {
+      const user = userEvent.setup();
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      vi.stubGlobal(
+        "fetch",
+        makeFetchMock({
+          contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+          sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
+        }),
+      );
+
+      render(
+        <InvoiceDetailClient
+          initialInvoice={{ ...draftInvoice, status: "OVERDUE", dueDate: new Date("2026-08-01T00:00:00.000Z") }}
+          now={new Date("2026-07-24T00:00:00.000Z")}
+        />,
+      );
+      await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
+      const button = await screen.findByRole("button", { name: "Buka WhatsApp" });
+      await user.click(button);
+
+      const href = open.mock.calls[0]?.[0] as string;
+      expect(href).toContain(encodeURIComponent("jatuh tempo pada"));
+      expect(href).not.toContain(encodeURIComponent("melewati jatuh tempo"));
+    });
+  });
+
+  describe("Tanggal jatuh tempo yang bisa diatur pemilik", () => {
+    it("lets the owner set the due date from the detail page and sends the correct PATCH payload", async () => {
+      const user = userEvent.setup();
+      const calls: Array<{ url: string; init?: RequestInit }> = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          calls.push({ url, init });
+          const method = init?.method ?? "GET";
+          if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: {} });
+          if (url.endsWith("/share") && method === "GET") return jsonResponse({ status: 200, body: { active: false } });
+          if (method === "PATCH") {
+            const body = JSON.parse(init!.body as string);
+            return jsonResponse({ status: 200, body: { invoice: { ...draftInvoice, dueDate: body.dueDate } } });
+          }
+          return jsonResponse({ status: 200, body: {} });
+        }),
+      );
+
+      render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: null }} />);
+      await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      const input = screen.getByLabelText("Tanggal jatuh tempo");
+      fireEvent.change(input, { target: { value: "2026-08-15" } });
+      await user.click(screen.getByRole("button", { name: "Simpan tanggal" }));
+
+      await screen.findByText(/15 Agustus 2026/);
+      const patchCall = calls.find((call) => call.init?.method === "PATCH");
+      expect(patchCall?.url).toBe("/api/invoices/invoice-1");
+      expect(JSON.parse(patchCall!.init!.body as string)).toEqual({ dueDate: "2026-08-15" });
+    });
+
+    it("lets the owner clear an existing due date, sending an explicit null payload", async () => {
+      const user = userEvent.setup();
+      const calls: Array<{ url: string; init?: RequestInit }> = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          calls.push({ url, init });
+          const method = init?.method ?? "GET";
+          if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: {} });
+          if (url.endsWith("/share") && method === "GET") return jsonResponse({ status: 200, body: { active: false } });
+          if (method === "PATCH") {
+            const body = JSON.parse(init!.body as string);
+            return jsonResponse({ status: 200, body: { invoice: { ...draftInvoice, dueDate: body.dueDate } } });
+          }
+          return jsonResponse({ status: 200, body: {} });
+        }),
+      );
+
+      render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: new Date("2026-07-31T00:00:00.000Z") }} />);
+      await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      await user.click(screen.getByRole("button", { name: "Hapus tanggal" }));
+
+      await waitFor(() => expect(screen.getByText(/Belum ditentukan/)).toBeDefined());
+      const patchCall = calls.find((call) => call.init?.method === "PATCH");
+      expect(JSON.parse(patchCall!.init!.body as string)).toEqual({ dueDate: null });
+    });
+
+    it("shows a controlled Bahasa error and keeps the previous date when the due date update fails", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          const method = init?.method ?? "GET";
+          if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: {} });
+          if (url.endsWith("/share") && method === "GET") return jsonResponse({ status: 200, body: { active: false } });
+          if (method === "PATCH") return jsonResponse({ status: 500, body: { error: "boom" } });
+          return jsonResponse({ status: 200, body: {} });
+        }),
+      );
+
+      render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: null }} />);
+      await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      const input = screen.getByLabelText("Tanggal jatuh tempo");
+      fireEvent.change(input, { target: { value: "2026-08-15" } });
+      await user.click(screen.getByRole("button", { name: "Simpan tanggal" }));
+
+      expect(await screen.findByRole("alert")).toHaveProperty(
+        "textContent",
+        "Tanggal jatuh tempo belum bisa diperbarui. Coba lagi.",
+      );
+    });
   });
 
   describe("Bagikan invoice", () => {

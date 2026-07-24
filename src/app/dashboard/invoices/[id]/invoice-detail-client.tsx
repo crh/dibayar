@@ -3,12 +3,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { InvoiceRecord } from "@/lib/invoices";
+import { deriveInvoiceDisplayStatus, getDueDateCalendarDate } from "@/lib/invoice-date-status";
 import { buildWhatsAppReminder } from "@/lib/whatsapp";
 import { useLanguage, LanguageSwitcher } from "@/components/language-switcher";
-import { MoneyDisplay, StatusChip, Button } from "@/components/design-system";
+import { MoneyDisplay, StatusChip, Button, fieldClassName } from "@/components/design-system";
 import { triggerPaidHaptic } from "@/lib/haptics";
 import { fetchWithTimeout } from "@/lib/http";
 import type { Language } from "@/lib/i18n";
+
+// Fetch responses round-trip dueDate through JSON (a string), while the
+// server-rendered initial invoice carries a real Date; normalize both to a
+// Date before any date-math so derivation never sees an unparsed string.
+function normalizeDueDate(value: InvoiceRecord["dueDate"]): Date | null {
+  return value ? new Date(value) : null;
+}
 
 const NEXT_ACTIONS: Record<InvoiceRecord["status"], Array<{ status: InvoiceRecord["status"]; labelKey: string }>> = {
   DRAFT: [{ status: "SENT", labelKey: "invoice.markSent" }],
@@ -24,9 +32,16 @@ const NEXT_ACTIONS: Record<InvoiceRecord["status"], Array<{ status: InvoiceRecor
   PAID: [],
 };
 
+// dueDate is a date-only business date stored as UTC midnight; formatting
+// without timeZone: "UTC" would shift the shown day on a non-UTC server clock.
 function formatDate(value: Date | null, language: Language, emptyLabel: string) {
   if (!value) return emptyLabel;
-  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date(value));
+  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(value));
 }
 
 const SHARE_LOAD_ERROR = "invoice.shareLoadError";
@@ -124,9 +139,10 @@ type ShareConfirm = "regenerate" | "revoke" | null;
 
 type CopyFeedback = { kind: "success" | "error"; message: string };
 
-function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
+function ShareSection({ invoiceId, invoice, displayStatus, contactWa, t, language }: {
   invoiceId: string;
   invoice: InvoiceRecord;
+  displayStatus: InvoiceRecord["status"];
   contactWa: string | null;
   t: (key: string, values?: Record<string, string>) => string;
   language: Language;
@@ -249,7 +265,7 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
     invoiceNumber: invoice.number,
     totalIdr: invoice.subtotalIdr,
     dueDate: invoice.dueDate,
-    isOverdue: invoice.status === "OVERDUE",
+    isOverdue: displayStatus === "OVERDUE",
   });
   const whatsappHref = reminder.kind === "ok" ? reminder.href : null;
 
@@ -407,13 +423,23 @@ function ShareSection({ invoiceId, invoice, contactWa, t, language }: {
   );
 }
 
-export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice: InvoiceRecord }) {
+export default function InvoiceDetailClient({ initialInvoice, now }: { initialInvoice: InvoiceRecord; now?: Date }) {
   const { language, setLanguage, t } = useLanguage();
   const [invoice, setInvoice] = useState(initialInvoice);
   const [contactWa, setContactWa] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [paidMoment, setPaidMoment] = useState(false);
+  const [dueDateInput, setDueDateInput] = useState(() => {
+    const normalized = normalizeDueDate(initialInvoice.dueDate);
+    return normalized ? getDueDateCalendarDate(normalized) : "";
+  });
+  const [dueDateError, setDueDateError] = useState<string | null>(null);
+  const [isSavingDueDate, setIsSavingDueDate] = useState(false);
+
+  const referenceNow = now ?? new Date();
+  const normalizedDueDate = normalizeDueDate(invoice.dueDate);
+  const displayStatus = deriveInvoiceDisplayStatus({ status: invoice.status, dueDate: normalizedDueDate }, referenceNow);
 
   useEffect(() => {
     let cancelled = false;
@@ -452,6 +478,26 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
     }
   }
 
+  async function saveDueDate(nextValue: string | null) {
+    setDueDateError(null);
+    setIsSavingDueDate(true);
+    try {
+      const response = await fetchWithTimeout(`/api/invoices/${invoice.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dueDate: nextValue }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error("invoice.dueDateUpdateError");
+      setInvoice(payload.invoice);
+      setDueDateInput(nextValue ?? "");
+    } catch {
+      setDueDateError("invoice.dueDateUpdateError");
+    } finally {
+      setIsSavingDueDate(false);
+    }
+  }
+
   return (
     <main className="mx-auto flex w-full max-w-[720px] flex-col gap-6 px-5 py-8 sm:px-8">
       <Link href="/dashboard" className="inline-flex w-fit text-[14px] font-semibold text-primary">
@@ -468,9 +514,45 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
         <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1><MoneyDisplay value={invoice.subtotalIdr} language={language} size="hero" /></h1>
-          <StatusChip status={invoice.status} language={language} />
+          <StatusChip status={displayStatus} language={language} />
         </div>
-        <p className="mt-3 text-[14px] text-muted">{t("invoice.dueLabel", { date: formatDate(invoice.dueDate, language, t("invoice.notSet")) })}</p>
+        <p className="mt-3 text-[14px] text-muted">{t("invoice.dueLabel", { date: formatDate(normalizedDueDate, language, t("invoice.notSet")) })}</p>
+
+        <div className="mt-3">
+          <label htmlFor="invoice-due-date" className="text-[13px] font-semibold text-ink">
+            {t("invoice.dueDateFieldLabel")}
+          </label>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <input
+              id="invoice-due-date"
+              type="date"
+              value={dueDateInput}
+              onChange={(event) => setDueDateInput(event.target.value)}
+              className={fieldClassName}
+            />
+            <Button
+              type="button"
+              disabled={isSavingDueDate || !dueDateInput}
+              loading={isSavingDueDate}
+              loadingLabel={t("invoice.saving")}
+              onClick={() => saveDueDate(dueDateInput)}
+            >
+              {t("invoice.dueDateSave")}
+            </Button>
+            {invoice.dueDate ? (
+              <button
+                type="button"
+                disabled={isSavingDueDate}
+                onClick={() => saveDueDate(null)}
+                className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60"
+              >
+                {t("invoice.dueDateClear")}
+              </button>
+            ) : null}
+          </div>
+          {dueDateError ? <p role="alert" className="mt-2 text-[13px] text-overdue">{t(dueDateError)}</p> : null}
+        </div>
+
         <a
           href={`/api/invoices/${invoice.id}/pdf`}
           className="mt-4 inline-flex h-10 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
@@ -521,7 +603,7 @@ export default function InvoiceDetailClient({ initialInvoice }: { initialInvoice
         )}
       </section>
 
-      <ShareSection invoiceId={invoice.id} invoice={invoice} contactWa={contactWa} t={t} language={language} />
+      <ShareSection invoiceId={invoice.id} invoice={invoice} displayStatus={displayStatus} contactWa={contactWa} t={t} language={language} />
     </main>
   );
 }
