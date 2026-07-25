@@ -1,9 +1,17 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import DashboardClient from "./dashboard-client";
 import type { DealRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
+
+// The app now defaults to English (see src/lib/i18n.ts). This suite exercises
+// Dibayar's Indonesian-language behavior in depth, so it seeds an explicit
+// "id" preference by default; the English-default behavior itself is covered
+// by the dedicated test below.
+beforeEach(() => {
+  window.localStorage.setItem("dibayar-language", "id");
+});
 
 const kopiDeal: DealRecord = {
   id: "deal-1",
@@ -35,6 +43,15 @@ describe("DashboardClient", () => {
     expect(screen.getByRole("textbox", { name: "Kontak WhatsApp" })).toBeDefined();
     expect(screen.getByRole("spinbutton", { name: "Fee (Rp)" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Simpan deal" })).toBeDefined();
+  });
+
+  it("defaults to English when no language preference is stored", () => {
+    window.localStorage.clear();
+    render(<DashboardClient initialDeals={[]} userName="Chris" />);
+
+    expect(screen.getByRole("combobox", { name: "Language" })).toBeDefined();
+    expect(screen.getByText("Start here")).toBeDefined();
+    expect(screen.queryByText("Mulai dari sini")).toBeNull();
   });
 
   it("localizes the first-run microcopy and empty invoice guidance in English", async () => {

@@ -25,6 +25,7 @@ function mockFetchOnce(response: { status: number; body?: unknown }) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  window.localStorage.clear();
 });
 
 beforeEach(() => {
@@ -55,6 +56,30 @@ describe("PublicInvoiceClient", () => {
     expect(screen.getByText(/Kenji/)).toBeDefined();
     expect(screen.getByRole("link", { name: "Unduh PDF" }).getAttribute("href")).toBe(
       "/api/public/invoices/token-abc/pdf",
+    );
+  });
+
+  it("keeps all rendered copy Indonesian regardless of a stale English creator/UI language cache", async () => {
+    window.localStorage.setItem("dibayar-language", "en");
+    mockFetchOnce({ status: 200, body: { invoice: safeInvoice } });
+
+    render(<PublicInvoiceClient token="token-abc" />);
+
+    await waitFor(() => expect(screen.getAllByText("INV/2026/07/001").length).toBeGreaterThan(0));
+
+    expect(screen.getByText(/Ditagihkan kepada/)).toBeDefined();
+    expect(screen.getByText(/Jatuh tempo/)).toBeDefined();
+    expect(screen.getByText("Rincian invoice")).toBeDefined();
+    expect(screen.getByText("Nomor invoice")).toBeDefined();
+    expect(screen.getByText("Cakupan kerja")).toBeDefined();
+    expect(screen.getByText("Pajak potong")).toBeDefined();
+    expect(screen.getByText("Nilai invoice")).toBeDefined();
+    expect(screen.getByRole("link", { name: "Unduh PDF" })).toBeDefined();
+    expect(screen.getByText("Terkirim")).toBeDefined();
+    expect(screen.getByText(/Dikirim oleh Kenji melalui Dibayar\./)).toBeDefined();
+
+    expect(document.body.textContent).not.toMatch(
+      /billed to|due date|invoice details|download pdf|withholding tax|not set|issued by|sent via/i,
     );
   });
 

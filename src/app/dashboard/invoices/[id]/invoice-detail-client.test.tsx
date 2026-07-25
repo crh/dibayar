@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import InvoiceDetailClient from "./invoice-detail-client";
@@ -55,6 +55,14 @@ function makeFetchMock(
   });
 }
 
+// The app now defaults to English (see src/lib/i18n.ts). This suite exercises
+// Dibayar's Indonesian-language behavior in depth, so it seeds an explicit
+// "id" preference by default; the English-default behavior itself is covered
+// by the dedicated test below.
+beforeEach(() => {
+  window.localStorage.setItem("dibayar-language", "id");
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
@@ -63,6 +71,16 @@ afterEach(() => {
 });
 
 describe("InvoiceDetailClient", () => {
+  it("defaults to English when no language preference is stored", async () => {
+    window.localStorage.clear();
+    vi.stubGlobal("fetch", makeFetchMock());
+    render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+    expect(await screen.findByRole("button", { name: "Create sharing link" })).toBeDefined();
+    expect(screen.getByRole("combobox", { name: "Language" })).toBeDefined();
+    expect(screen.getByText("Draft")).toBeDefined();
+  });
+
   it("renders invoice detail and only the legal next action for a draft", async () => {
     vi.stubGlobal("fetch", makeFetchMock());
     render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
@@ -390,6 +408,28 @@ describe("InvoiceDetailClient", () => {
       "noopener,noreferrer",
     );
     expect(open.mock.calls[0]?.[0]).toContain(encodeURIComponent("INV/2026/07/001"));
+  });
+
+  it("sends an Indonesian-only WhatsApp reminder even when the creator's UI language is English", async () => {
+    window.localStorage.setItem("dibayar-language", "en");
+    const user = userEvent.setup();
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    vi.stubGlobal("fetch", makeFetchMock({
+      contactGet: { status: 200, body: { contactWa: "+62 812-3456-7890" } },
+      sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
+    }));
+
+    render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "OVERDUE" }} />);
+    expect(await screen.findByRole("button", { name: "Create sharing link" })).toBeDefined();
+    await user.click(screen.getByRole("button", { name: "Create sharing link" }));
+    const button = await screen.findByRole("button", { name: "Open WhatsApp" });
+
+    await user.click(button);
+    const href = open.mock.calls[0]?.[0];
+    const message = decodeURIComponent(String(href ?? "").split("?text=")[1] ?? "");
+    expect(message).toContain("yang jatuh tempo pada");
+    expect(message).toContain("Terima kasih");
+    expect(message).not.toMatch(/reminder|overdue|thank you|due date/i);
   });
 
   it("disables WhatsApp when the deal contact is unusable", async () => {

@@ -42,6 +42,14 @@ describe("WhatsApp reminders", () => {
     expect(buildWhatsAppReminderMessage({ ...base, kind: "overdue" })).toContain("sudah melewati jatuh tempo");
   });
 
+  it("keeps due-soon and overdue messages Indonesian-only, with no English equivalents", () => {
+    const dueSoon = buildWhatsAppReminderMessage({ ...base, kind: "due-soon" });
+    const overdue = buildWhatsAppReminderMessage({ ...base, kind: "overdue" });
+
+    expect(dueSoon).not.toMatch(/reminder|overdue|thank you|due date/i);
+    expect(overdue).not.toMatch(/reminder|overdue|thank you|due date/i);
+  });
+
   it("encodes the message in a wa.me URL", () => {
     const url = buildWhatsAppShareUrl("6281234567890", "Halo invoice INV/1 & detail");
     expect(url).toBe("https://wa.me/6281234567890?text=Halo%20invoice%20INV%2F1%20%26%20detail");

@@ -11,9 +11,19 @@ tasks — clarity and speed beat decoration. Primary target width: 390px. Every 
 (log a deal, mark paid, send follow-up) reachable one-handed.
 
 ## Language
-- All user-facing copy in **Bahasa Indonesia**, natural (not literal English translation).
-- Money always formatted IDR: `Rp1.500.000` (dot thousands separator, no decimals).
-- Dates in local format; relative where useful ("jatuh tempo 3 hari lagi").
+- The **landing page and authenticated creator UI are bilingual, English + Bahasa
+  Indonesia, English by default**, with an explicit language switcher. Every string in
+  both languages must read as natural, native copy — not a literal translation of the
+  other. The authenticated choice persists cross-device via `User.language` in the DB;
+  the pre-login choice persists per-device via a cookie.
+- **Public invoices, generated PDFs, and WhatsApp reminder messages stay Bahasa
+  Indonesia-only in v1**, regardless of the creator's own UI language — the recipient is
+  assumed to be an Indonesian brand/business contact. A future, separate recipient-locale
+  feature is backlogged, not built (see BACKLOG.md).
+- Money always formatted IDR: `Rp1.500.000` (dot thousands separator, no decimals), in
+  both languages.
+- Dates in the active language's local format; relative where useful (`"jatuh tempo 3
+  hari lagi"` / `"due in 3 days"`).
 
 ## Color tokens
 ```
@@ -55,7 +65,8 @@ creator learns the language once (green = paid, amber = due, red = overdue).
 
 ## What NOT to do
 - No heavy animations, no splash screens, no carousel heroes.
-- No English leaking into the UI.
+- No English leaking into recipient-facing output — public invoices, PDFs, and WhatsApp
+  reminder messages stay Bahasa Indonesia-only regardless of the creator's UI language.
 - No decorative dashboards without a workflow behind them (PRODUCT.md non-goal).
 
 ## Updating this file

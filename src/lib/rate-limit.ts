@@ -63,3 +63,11 @@ export const publicInvoicePageRateLimiter = new RateLimiter({
   limit: 30,
   windowMs: 60_000,
 });
+
+// Keyed by session user id (not IP): PATCH /api/me/language is authenticated,
+// so the session id is a stable, spoof-resistant key that also can't
+// false-positive multiple users behind the same NAT/IP.
+export const userLanguageRateLimiter = new RateLimiter({
+  limit: 10,
+  windowMs: 60_000,
+});

@@ -7,6 +7,8 @@
 - Deal capture flow wireframe: 60-second target, thumb-reachable, Bahasa microcopy
 - Empty-state onboarding: seed one contoh deal so pipeline isn't blank
 - Polite WhatsApp follow-up message templates (3 tones: ramah, netral, tegas)
+- Recipient-locale for public invoices / PDF / WhatsApp reminders (currently Indonesian-only
+  in v1) — future, separate feature. Not scheduled.
 
 ## Frontend
 - Pipeline board (mobile-first, horizontal scroll stages)

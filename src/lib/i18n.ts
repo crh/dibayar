@@ -117,6 +117,21 @@ const translations: Record<Language, Record<string, TranslationValue>> = {
     "invoice.dueDateSave": "Simpan tanggal",
     "invoice.dueDateClear": "Hapus tanggal",
     "invoice.dueDateUpdateError": "Tanggal jatuh tempo belum bisa diperbarui. Coba lagi.",
+    "landing.comingSoon": "Segera hadir",
+    "landing.signInGoogle": "Masuk dengan Google",
+    "landing.heroHeading": "Kelola deal brand, invoice, dan pembayaran di satu tempat",
+    "landing.heroSubtitle":
+      "Dibayar sedang disiapkan untuk kreator Indonesia yang capek nego dan nagih pembayaran lewat chat WhatsApp yang berantakan.",
+    "landing.workflowHeading": "Alur kerja deal brand kamu",
+    "landing.seeHowItWorks": "Lihat cara kerja",
+    "landing.howItWorksHeading": "Cara kerjanya",
+    "landing.step1Title": "Catat deal dalam hitungan detik",
+    "landing.step1Detail": "Simpan brand, fee, dan tenggat langsung dari chat WhatsApp atau DM, tanpa formulir panjang.",
+    "landing.step2Title": "Pantau semua deal di satu alur",
+    "landing.step2Detail": "Lihat setiap deal bergerak dari Masuk sampai Dibayar, tanpa scroll chat lama.",
+    "landing.step3Title": "Kirim pengingat sebelum telat bayar",
+    "landing.step3Detail": "Tandai invoice jatuh tempo dan kirim tindak lanjut yang sopan lewat WhatsApp.",
+    "landing.footer": "Dibayar — belum tersedia untuk umum. Dibuat untuk kreator Indonesia.",
   },
   en: {
     "language.label": "Language",
@@ -231,15 +246,30 @@ const translations: Record<Language, Record<string, TranslationValue>> = {
     "invoice.dueDateSave": "Save date",
     "invoice.dueDateClear": "Clear date",
     "invoice.dueDateUpdateError": "The due date could not be updated. Try again.",
+    "landing.comingSoon": "Coming soon",
+    "landing.signInGoogle": "Sign in with Google",
+    "landing.heroHeading": "Manage brand deals, invoices, and payments in one place",
+    "landing.heroSubtitle":
+      "Dibayar is being built for Indonesian creators tired of negotiating and chasing payments through messy WhatsApp chats.",
+    "landing.workflowHeading": "Your brand-deal workflow",
+    "landing.seeHowItWorks": "See how it works",
+    "landing.howItWorksHeading": "How it works",
+    "landing.step1Title": "Log a deal in seconds",
+    "landing.step1Detail": "Save the brand, fee, and deadline straight from a WhatsApp chat or DM — no long forms.",
+    "landing.step2Title": "Track every deal in one flow",
+    "landing.step2Detail": "Watch each deal move from Inbox to Paid, without scrolling through old chats.",
+    "landing.step3Title": "Send reminders before payments are late",
+    "landing.step3Detail": "Flag due invoices and send a polite WhatsApp follow-up.",
+    "landing.footer": "Dibayar — not yet available to the public. Built for Indonesian creators.",
   },
 };
 
 export function getLanguage(value: unknown): Language {
-  return value === "en" ? "en" : "id";
+  return value === "id" ? "id" : "en";
 }
 
 export function translate(language: Language, key: string, values: Record<string, string> = {}) {
-  const value = translations[language][key] ?? translations.id[key];
+  const value = translations[language][key] ?? translations.en[key];
   if (!value) return key;
   return typeof value === "function" ? value(values) : value;
 }
