@@ -225,8 +225,9 @@ describe("InvoiceDetailClient", () => {
       expect(screen.queryByRole("button", { name: "Hapus tanggal" })).toBeNull();
       expect(screen.queryByRole("heading", { name: "Status pembayaran" })).toBeNull();
 
-      expect(screen.getByText("Dibayar 20 Juli 2026")).toBeDefined();
+      expect(screen.getByText("Invoice ini sudah ditandai lunas.")).toBeDefined();
       expect(screen.getByText("Rp1.500.000 diterima")).toBeDefined();
+      expect(screen.queryByText(/20 Juli 2026/)).toBeNull();
     });
 
     it("keeps the due-date editor and payment-status actions for a non-PAID invoice (behavior-preserving)", async () => {
@@ -238,7 +239,7 @@ describe("InvoiceDetailClient", () => {
       expect(screen.getByRole("button", { name: "Simpan tanggal" })).toBeDefined();
       expect(screen.getByRole("button", { name: "Hapus tanggal" })).toBeDefined();
       expect(screen.getByRole("heading", { name: "Status pembayaran" })).toBeDefined();
-      expect(screen.queryByText(/^Dibayar /)).toBeNull();
+      expect(screen.queryByText("Invoice ini sudah ditandai lunas.")).toBeNull();
     });
   });
 

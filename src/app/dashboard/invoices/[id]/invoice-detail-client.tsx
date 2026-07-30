@@ -652,7 +652,7 @@ export default function InvoiceDetailClient({ initialInvoice, now }: { initialIn
         {displayStatus === "PAID" ? (
           <div className="mt-3 rounded-xl bg-paid-tint p-4">
             <p className="text-[14px] font-semibold text-paid">
-              {t("invoice.paidOn", { date: formatDate(invoice.updatedAt, language, t("invoice.notSet")) })}
+              {t("invoice.paidStatusNote")}
             </p>
             <p className="mt-2 text-[15px] font-semibold text-paid">
               {t("invoice.amountReceived", { amount: formatMoneySentence(invoice.subtotalIdr, language) })}
