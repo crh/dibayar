@@ -624,4 +624,123 @@ describe("DashboardClient", () => {
       expect(screen.getByText("Calculated from PPh 23 (2%).")).toBeDefined();
     });
   });
+
+  describe("pipeline rail ordering", () => {
+    function dealFor(status: DealRecord["status"], id: string): DealRecord {
+      return { ...kopiDeal, id, status };
+    }
+
+    function railChildren() {
+      return Array.from(screen.getByTestId("pipeline-rail").children) as HTMLElement[];
+    }
+
+    function classTokens(element: HTMLElement) {
+      return element.className.split(/\s+/);
+    }
+
+    it("keeps a leading empty-stage run in natural (first) DOM position but gives the first populated stage the front mobile visual order", () => {
+      render(
+        <DashboardClient
+          userName="Chris"
+          initialDeals={[dealFor("INVOICE", "d1"), dealFor("DIBAYAR", "d2")]}
+        />,
+      );
+
+      const children = railChildren();
+      expect(children).toHaveLength(3);
+
+      // DOM/tab order is unchanged (natural stage order) — no duplicate tree,
+      // no reordered array, only a mobile-only visual `order-*` override.
+      expect(children[0].textContent).toContain("kosong");
+      expect(within(children[1]).getByRole("heading", { name: "Invoice" })).toBeDefined();
+      expect(within(children[2]).getByRole("heading", { name: "Dibayar" })).toBeDefined();
+
+      // Mobile visual order: Invoice first, then the displaced leading empty
+      // run, then Dibayar. Every group resets to natural DOM order at lg:.
+      expect(classTokens(children[0])).toContain("order-1");
+      expect(classTokens(children[1])).toContain("order-none");
+      expect(classTokens(children[2])).toContain("order-2");
+      for (const child of children) expect(classTokens(child)).toContain("lg:order-none");
+    });
+
+    it("leaves order untouched when every stage is empty", () => {
+      render(<DashboardClient userName="Chris" initialDeals={[]} />);
+
+      const children = railChildren();
+      expect(children).toHaveLength(1);
+      expect(children[0].textContent).toContain("kosong");
+      expect(classTokens(children[0])).toContain("order-none");
+
+      const pipeline = screen.getByRole("heading", { name: "Pipeline deal" }).closest("section")!;
+      for (const stage of ["Masuk", "Nego", "Deal", "Konten", "Invoice", "Dibayar"]) {
+        expect(within(pipeline).getByText(stage)).toBeDefined();
+      }
+    });
+
+    it("is a no-op when the populated stage is already first, with no leading empty run", () => {
+      render(<DashboardClient userName="Chris" initialDeals={[dealFor("MASUK", "d1")]} />);
+
+      const children = railChildren();
+      expect(children).toHaveLength(2);
+      expect(within(children[0]).getByRole("heading", { name: "Masuk" })).toBeDefined();
+      expect(classTokens(children[0])).toContain("order-none");
+      expect(children[1].textContent).toContain("kosong");
+      expect(classTokens(children[1])).toContain("order-1");
+    });
+
+    it("repositions only the leading empty run, leaving an internal empty run between two populated stages untouched", () => {
+      render(
+        <DashboardClient
+          userName="Chris"
+          initialDeals={[dealFor("NEGO", "d1"), dealFor("DIBAYAR", "d2")]}
+        />,
+      );
+
+      const children = railChildren();
+      expect(children).toHaveLength(4);
+
+      // Natural DOM order: [Masuk-empty-run, Nego, Deal/Konten/Invoice-empty-run, Dibayar].
+      expect(children[0].textContent).toContain("kosong");
+      expect(within(children[1]).getByRole("heading", { name: "Nego" })).toBeDefined();
+      expect(children[2].textContent).toContain("kosong");
+      expect(within(children[3]).getByRole("heading", { name: "Dibayar" })).toBeDefined();
+
+      // Mobile visual order: Nego, [leading Masuk run moved here], [internal run stays put], Dibayar.
+      expect(classTokens(children[0])).toContain("order-1");
+      expect(classTokens(children[1])).toContain("order-none");
+      expect(classTokens(children[2])).toContain("order-2");
+      expect(classTokens(children[3])).toContain("order-3");
+    });
+
+    it("gives the collapsed empty-run placeholder a compact width, distinct from a populated stage column", () => {
+      render(<DashboardClient userName="Chris" initialDeals={[dealFor("INVOICE", "d1")]} />);
+
+      const [emptyRun] = railChildren();
+      expect(emptyRun.className).not.toContain("max-w-[280px]");
+      expect(emptyRun.className).toContain("max-w-[160px]");
+    });
+
+    it("keeps a populated StageColumn's mobile and lg: width classes unchanged", () => {
+      render(<DashboardClient userName="Chris" initialDeals={[dealFor("INVOICE", "d1")]} />);
+
+      const invoiceColumn = screen.getByRole("region", { name: "Invoice" });
+      expect(invoiceColumn.className).toContain("w-[78%] max-w-[280px]");
+      expect(invoiceColumn.className).toContain("lg:w-[calc(16.6667%-10px)]");
+    });
+
+    it("resets every rail group to natural DOM order at lg:, with no reordering logic applied there", () => {
+      render(
+        <DashboardClient
+          userName="Chris"
+          initialDeals={[dealFor("NEGO", "d1"), dealFor("DIBAYAR", "d2")]}
+        />,
+      );
+
+      const children = railChildren();
+      for (const child of children) expect(classTokens(child)).toContain("lg:order-none");
+      // DOM order itself (what lg:order-none falls back to) is untouched natural stage order.
+      expect(within(children[1]).getByRole("heading", { name: "Nego" })).toBeDefined();
+      expect(within(children[3]).getByRole("heading", { name: "Dibayar" })).toBeDefined();
+    });
+  });
 });

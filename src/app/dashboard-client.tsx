@@ -49,6 +49,8 @@ type PipelineRailGroup =
 // Folds consecutive zero-deal stages (in PIPELINE_STAGES order) into a single
 // slim placeholder so the mobile scroll rail doesn't render a wall of empty
 // columns. A stage with >=1 deal always breaks a run and gets its own column.
+// DOM order is always this natural stage order — see computeMobileRailOrder
+// below for the mobile-only *visual* reprioritization.
 function groupStagesForRail(stagesWithDeals: StageWithDeals[]): PipelineRailGroup[] {
   const groups: PipelineRailGroup[] = [];
   let emptyRun: Array<(typeof PIPELINE_STAGES)[number]> = [];
@@ -71,6 +73,37 @@ function groupStagesForRail(stagesWithDeals: StageWithDeals[]): PipelineRailGrou
   flushEmptyRun();
 
   return groups;
+}
+
+// Literal (non-interpolated) class names so Tailwind's content scanner can see
+// them; index i is the CSS `order` applied to the group placed i-th in the
+// mobile-priority sequence. 6 entries cover the maximum possible group count
+// (one per pipeline stage).
+const RAIL_ORDER_CLASSES = ["order-none", "order-1", "order-2", "order-3", "order-4", "order-5"] as const;
+
+// Returns, per railGroups index, the CSS `order` position that group should
+// take in the mobile/tablet scrolling rail. If a *leading* empty-run precedes
+// at least one populated stage, it's moved to just after the first populated
+// stage — so the first practical thing a user scrolls to is content, not a
+// placeholder — while every other group keeps its natural relative order.
+// This only ever reassigns *visual* order (via the `order-*` utility, reset
+// with `lg:order-none` at lg:); it never changes DOM order, so it can't be a
+// duplicate tree, and it can't desync keyboard focus order from visual order
+// for any focusable control, because an empty-run group holds no focusable
+// elements (it's static text) — only StageColumns are tab stops, and their
+// relative DOM order (== relative visual order) never changes.
+function computeMobileRailOrder(groups: PipelineRailGroup[]): number[] {
+  const order = groups.map((_, index) => index);
+  if (groups.length === 0 || groups[0].kind !== "empty-run") return order;
+
+  const firstPopulatedIndex = groups.findIndex((group) => group.kind === "stage");
+  if (firstPopulatedIndex === -1) return order; // all-empty pipeline: nothing to prioritize
+
+  let position = 0;
+  for (let i = 1; i <= firstPopulatedIndex; i++) order[i] = position++;
+  order[0] = position++;
+  for (let i = firstPopulatedIndex + 1; i < groups.length; i++) order[i] = position++;
+  return order;
 }
 
 type DashboardClientProps = {
@@ -284,6 +317,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
     deals: deals.filter((deal) => deal.status === stage.value),
   }));
   const railGroups = groupStagesForRail(stagesWithDeals);
+  const mobileRailOrder = computeMobileRailOrder(railGroups);
 
   async function handleStageChange(dealId: string, status: DealRecord["status"]) {
     setError(null);
@@ -615,10 +649,17 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
             column. On mobile this is a horizontally-snapping rail; at lg: it
             reflows into a static, non-scrolling grid (via flex-wrap + a fixed
             column basis) so nothing overflows and there's no duplicate DOM
-            tree to keep in sync between breakpoints. */}
-        <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0">
-          {railGroups.map((group) =>
-            group.kind === "stage" ? (
+            tree to keep in sync between breakpoints. A leading empty-run is
+            additionally given a higher mobile `order-*` (reset via
+            `lg:order-none`) so it doesn't occupy the first scroll position
+            ahead of a populated stage — see computeMobileRailOrder. */}
+        <div
+          data-testid="pipeline-rail"
+          className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0"
+        >
+          {railGroups.map((group, index) => {
+            const orderClassName = `${RAIL_ORDER_CLASSES[mobileRailOrder[index]]} lg:order-none`;
+            return group.kind === "stage" ? (
               <StageColumn
                 key={group.stage.value}
                 stage={group.stage}
@@ -630,19 +671,19 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
                 invoices={invoices}
                 onStageChange={handleStageChange}
                 onCreateInvoice={handleCreateInvoice}
-                className="w-[78%] max-w-[280px] shrink-0 snap-start lg:w-[calc(16.6667%-10px)] lg:max-w-none lg:snap-none"
+                className={`w-[78%] max-w-[280px] shrink-0 snap-start lg:w-[calc(16.6667%-10px)] lg:max-w-none lg:snap-none ${orderClassName}`}
               />
             ) : (
               <div
                 key={group.stages.map((stage) => stage.value).join("-")}
-                className="flex w-[78%] max-w-[280px] shrink-0 snap-start items-center rounded-md border border-dashed border-line bg-bg px-4 py-3 lg:w-[calc(16.6667%-10px)] lg:max-w-none lg:snap-none"
+                className={`flex w-auto min-w-[120px] max-w-[160px] shrink-0 snap-start items-center rounded-md border border-dashed border-line bg-bg px-4 py-3 lg:w-[calc(16.6667%-10px)] lg:max-w-none lg:snap-none ${orderClassName}`}
               >
                 <p className="text-[12px] text-muted">
                   {t("dashboard.emptyStagesRun", { stages: group.stages.map((stage) => t(PIPELINE_STAGE_KEYS[stage.value])).join(" · ") })}
                 </p>
               </div>
-            ),
-          )}
+            );
+          })}
         </div>
       </section>
 
