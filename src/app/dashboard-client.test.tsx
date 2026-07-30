@@ -33,11 +33,12 @@ afterEach(() => {
 });
 
 describe("DashboardClient", () => {
-  it("shows the six pipeline stages and a fast deal capture form", () => {
+  it("shows the six pipeline stages (via the persistent count strip) and a fast deal capture form", () => {
     render(<DashboardClient initialDeals={[]} userName="Chris" />);
 
+    const pipeline = screen.getByRole("heading", { name: "Pipeline deal" }).closest("section")!;
     for (const stage of ["Masuk", "Nego", "Deal", "Konten", "Invoice", "Dibayar"]) {
-      expect(screen.getByRole("heading", { name: stage })).toBeDefined();
+      expect(within(pipeline).getByText(stage)).toBeDefined();
     }
     expect(screen.getByRole("textbox", { name: "Nama brand" })).toBeDefined();
     expect(screen.getByRole("textbox", { name: "Kontak WhatsApp" })).toBeDefined();
@@ -49,7 +50,7 @@ describe("DashboardClient", () => {
     window.localStorage.clear();
     render(<DashboardClient initialDeals={[]} userName="Chris" />);
 
-    expect(screen.getByRole("combobox", { name: "Language" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Account menu" })).toBeDefined();
     expect(screen.getByText("Start here")).toBeDefined();
     expect(screen.queryByText("Mulai dari sini")).toBeNull();
   });
@@ -58,7 +59,8 @@ describe("DashboardClient", () => {
     const user = userEvent.setup();
     render(<DashboardClient initialDeals={[]} userName="Chris" />);
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Bahasa" }), "en");
+    await user.click(screen.getByRole("button", { name: "Menu akun" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "English" }));
 
     expect(screen.getByText("Start here")).toBeDefined();
     expect(screen.getByText("No invoices yet. Move a deal to the Invoice stage, then create a draft from its deal card.")).toBeDefined();
@@ -161,7 +163,7 @@ describe("DashboardClient", () => {
     const user = userEvent.setup();
     render(<DashboardClient initialDeals={[kopiDeal]} userName="Chris" />);
 
-    const toggle = screen.getByRole("button", { name: "+ Tambah deal" });
+    const toggle = screen.getByRole("button", { name: "+ Deal" });
     expect(toggle).toHaveProperty("ariaExpanded", "false");
     const controlsId = toggle.getAttribute("aria-controls");
     expect(controlsId).toBeTruthy();
@@ -318,7 +320,8 @@ describe("DashboardClient", () => {
       />,
     );
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Bahasa" }), "en");
+    await user.click(screen.getByRole("button", { name: "Menu akun" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "English" }));
 
     expect(screen.getByText("Draft")).toBeDefined();
     expect(screen.queryByText("Draf")).toBeNull();
@@ -406,6 +409,219 @@ describe("DashboardClient", () => {
       const invoiceList = screen.getByRole("heading", { name: "Invoice saya" }).closest("section")!;
       expect(within(invoiceList).getByText("Terlambat")).toBeDefined();
       expect(within(invoiceList).queryByText("Terkirim")).toBeNull();
+    });
+  });
+
+  describe("state-aware quick action", () => {
+    it("shows the onboarding card with zero deals", () => {
+      render(<DashboardClient initialDeals={[]} userName="Chris" />);
+
+      expect(screen.getByText("Mulai dari sini")).toBeDefined();
+      expect(screen.getByRole("heading", { name: "Tambah deal pertama kamu" })).toBeDefined();
+      expect(screen.queryByRole("button", { name: "+ Buat invoice" })).toBeNull();
+      expect(screen.queryByRole("link", { name: "+ Buat invoice" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "+ Deal" })).toBeNull();
+    });
+
+    it("shows the two-pill quick action row instead of the onboarding heading once a deal exists", () => {
+      render(<DashboardClient initialDeals={[kopiDeal]} userName="Chris" />);
+
+      expect(screen.queryByText("Mulai dari sini")).toBeNull();
+      expect(screen.queryByRole("heading", { name: "Tambah deal pertama kamu" })).toBeNull();
+      expect(screen.getByRole("link", { name: "+ Buat invoice" })).toBeDefined();
+      expect(screen.getByRole("button", { name: "+ Deal" })).toBeDefined();
+    });
+
+    it("opens the add-deal form from the secondary + Deal pill", async () => {
+      const user = userEvent.setup();
+      render(<DashboardClient initialDeals={[kopiDeal]} userName="Chris" />);
+
+      expect(screen.queryByRole("textbox", { name: "Nama brand" })).toBeNull();
+
+      await user.click(screen.getByRole("button", { name: "+ Deal" }));
+
+      expect(screen.getByRole("textbox", { name: "Nama brand" })).toBeDefined();
+      expect(screen.getByRole("button", { name: "Tutup" })).toBeDefined();
+    });
+
+    it("routes + Buat invoice directly to the single deal that's ready to invoice", async () => {
+      const user = userEvent.setup();
+      const invoiceDeal: DealRecord = { ...kopiDeal, id: "deal-3", status: "INVOICE" };
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({
+          ok: true,
+          status: 201,
+          json: async () => ({
+            invoice: {
+              id: "invoice-9",
+              userId: "user-1",
+              dealId: "deal-3",
+              number: "INV/2026/07/009",
+              subtotalIdr: invoiceDeal.feeIdr,
+              withholdingTaxType: "NONE",
+              status: "DRAFT",
+              dueDate: null,
+              createdAt: new Date("2026-07-15T00:00:00.000Z"),
+              updatedAt: new Date("2026-07-15T00:00:00.000Z"),
+            },
+          }),
+        })),
+      );
+
+      render(<DashboardClient initialDeals={[invoiceDeal]} userName="Chris" />);
+
+      await user.click(screen.getByRole("button", { name: "+ Buat invoice" }));
+
+      expect(await screen.findByRole("status")).toHaveProperty("textContent", "Invoice dibuat");
+    });
+
+    it("falls back to a #pipeline anchor for + Buat invoice when there's no single deal ready to invoice", () => {
+      render(<DashboardClient initialDeals={[kopiDeal]} userName="Chris" />);
+
+      const link = screen.getByRole("link", { name: "+ Buat invoice" });
+      expect(link.getAttribute("href")).toBe("#pipeline");
+    });
+  });
+
+  describe("labeled pipeline summary", () => {
+    it("renders active deal count, stage-group legend counts, and a link to #pipeline", () => {
+      const deals: DealRecord[] = [
+        { ...kopiDeal, id: "d1", status: "MASUK" },
+        { ...kopiDeal, id: "d2", status: "NEGO" },
+        { ...kopiDeal, id: "d3", status: "KONTEN" },
+        { ...kopiDeal, id: "d4", status: "DIBAYAR" },
+      ];
+      const invoices: InvoiceRecord[] = [
+        {
+          id: "inv-1",
+          userId: "user-1",
+          dealId: "d3",
+          number: "INV/2026/07/010",
+          subtotalIdr: 1_000_000,
+          withholdingTaxType: "NONE",
+          status: "SENT",
+          dueDate: new Date("2026-07-01T00:00:00.000Z"),
+          createdAt: new Date("2026-07-01T00:00:00.000Z"),
+          updatedAt: new Date("2026-07-01T00:00:00.000Z"),
+        },
+      ];
+      const now = new Date("2026-07-19T10:00:00.000Z");
+
+      render(<DashboardClient initialDeals={deals} initialInvoices={invoices} userName="Chris" now={now} />);
+
+      expect(screen.getByText("Pipeline · 4 deal aktif")).toBeDefined();
+      const link = screen.getByRole("link", { name: /Pipeline · 4 deal aktif/ });
+      expect(link.getAttribute("href")).toBe("#pipeline");
+      expect(screen.getByText("2 Masuk/Nego")).toBeDefined();
+      expect(screen.getByText("1 siap ditagih")).toBeDefined();
+      const overdueLegend = screen.getByText("1 terlambat");
+      expect(overdueLegend.className).toContain("text-overdue");
+      const paidLegend = screen.getByText("1 dibayar");
+      expect(paidLegend.className).toContain("text-paid");
+    });
+
+    it("shows a zeroed legend when there are no deals or invoices", () => {
+      render(<DashboardClient initialDeals={[]} userName="Chris" />);
+
+      expect(screen.getByText("Pipeline · 0 deal aktif")).toBeDefined();
+      expect(screen.getByText("0 Masuk/Nego")).toBeDefined();
+      expect(screen.getByText("0 siap ditagih")).toBeDefined();
+      expect(screen.getByText("0 terlambat")).toBeDefined();
+      expect(screen.getByText("0 dibayar")).toBeDefined();
+    });
+  });
+
+  describe("Gross → PPh → Net income summary with basis notes", () => {
+    const NOW = new Date("2026-07-19T10:00:00.000Z"); // Jakarta 2026-07-19T17:00, month = July 2026
+
+    function incomeInvoice(overrides: Partial<InvoiceRecord>): InvoiceRecord {
+      return {
+        id: "invoice-1",
+        userId: "user-1",
+        dealId: "deal-1",
+        number: "INV/2026/07/001",
+        subtotalIdr: 1_000_000,
+        withholdingTaxType: "NONE",
+        status: "PAID",
+        dueDate: new Date("2026-07-10T00:00:00.000Z"),
+        createdAt: new Date("2026-07-05T00:00:00.000Z"),
+        updatedAt: new Date("2026-07-05T00:00:00.000Z"),
+        ...overrides,
+      };
+    }
+
+    it("renders Net as the hero figure with Gross and withheld PPh as smaller supporting figures", () => {
+      const invoices = [incomeInvoice({ subtotalIdr: 1_000_000, withholdingTaxType: "PPH23", status: "PAID" })];
+      render(<DashboardClient initialDeals={[]} initialInvoices={invoices} userName="Chris" now={NOW} />);
+
+      const income = screen.getByRole("heading", { name: "Ringkasan pendapatan" }).closest("section")!;
+      // Net (980.000) is the hero-sized figure.
+      const hero = within(income).getByText("Rp980.000");
+      expect(hero.className).toContain("ds-display");
+      expect(within(income).getByText("Rp1.000.000")).toBeDefined();
+      expect(within(income).getByText("-Rp20.000")).toBeDefined();
+    });
+
+    it("states that unpaid/overdue invoices are included in the 'issued this month' basis, with an accurate count", () => {
+      const invoices = [
+        incomeInvoice({ id: "inv-paid", status: "PAID" }),
+        incomeInvoice({ id: "inv-sent", status: "SENT", number: "INV/2026/07/002" }),
+        incomeInvoice({ id: "inv-overdue", status: "OVERDUE", number: "INV/2026/07/003", dueDate: new Date("2026-07-01T00:00:00.000Z") }),
+      ];
+      render(<DashboardClient initialDeals={[]} initialInvoices={invoices} userName="Chris" now={NOW} />);
+
+      expect(screen.getByText("Termasuk 2 invoice belum dibayar (belum masuk rekening).")).toBeDefined();
+    });
+
+    it("does not show an unpaid-invoice note when every included invoice is already paid", () => {
+      const invoices = [incomeInvoice({ status: "PAID" })];
+      render(<DashboardClient initialDeals={[]} initialInvoices={invoices} userName="Chris" now={NOW} />);
+
+      expect(screen.queryByText(/Termasuk \d+ invoice belum dibayar/)).toBeNull();
+    });
+
+    it("explains a zero withholding total truthfully when included invoices have no withholding, without inventing an NPWP reason", () => {
+      const invoices = [incomeInvoice({ withholdingTaxType: "NONE", status: "PAID" })];
+      render(<DashboardClient initialDeals={[]} initialInvoices={invoices} userName="Chris" now={NOW} />);
+
+      expect(screen.getByText("PPh 0 karena invoice bulan ini tidak memakai potongan pajak (PPh: Tidak ada).")).toBeDefined();
+      expect(screen.queryByText(/NPWP/)).toBeNull();
+    });
+
+    it("explains a zero withholding total when there are no invoices this month at all", () => {
+      render(<DashboardClient initialDeals={[]} initialInvoices={[]} userName="Chris" now={NOW} />);
+
+      expect(screen.getByText("PPh 0 karena belum ada invoice bulan ini.")).toBeDefined();
+    });
+
+    it("names the applicable rate when withholding is non-zero from a single tax type", () => {
+      const invoices = [incomeInvoice({ withholdingTaxType: "PPH23", status: "PAID" })];
+      render(<DashboardClient initialDeals={[]} initialInvoices={invoices} userName="Chris" now={NOW} />);
+
+      expect(screen.getByText("Dihitung dari PPh 23 (2%).")).toBeDefined();
+    });
+
+    it("says rates vary per invoice when included invoices mix different withholding types", () => {
+      const invoices = [
+        incomeInvoice({ id: "inv-1", withholdingTaxType: "PPH21", status: "PAID" }),
+        incomeInvoice({ id: "inv-2", withholdingTaxType: "PPH23", status: "PAID", number: "INV/2026/07/002" }),
+      ];
+      render(<DashboardClient initialDeals={[]} initialInvoices={invoices} userName="Chris" now={NOW} />);
+
+      expect(screen.getByText("Dihitung dari beberapa tarif PPh berbeda (bervariasi per invoice).")).toBeDefined();
+    });
+
+    it("localizes the income basis notes in English", () => {
+      window.localStorage.setItem("dibayar-language", "en");
+      const invoices = [
+        incomeInvoice({ id: "inv-paid", status: "PAID" }),
+        incomeInvoice({ id: "inv-sent", status: "SENT", number: "INV/2026/07/002", withholdingTaxType: "PPH23" }),
+      ];
+      render(<DashboardClient initialDeals={[]} initialInvoices={invoices} userName="Chris" now={NOW} />);
+
+      expect(screen.getByText("Includes 1 unpaid invoice(s) (not yet received).")).toBeDefined();
+      expect(screen.getByText("Calculated from PPh 23 (2%).")).toBeDefined();
     });
   });
 });

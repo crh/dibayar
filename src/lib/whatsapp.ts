@@ -50,6 +50,42 @@ export type WhatsAppReminderResult =
   | { kind: "no-share" }
   | { kind: "no-duedate" };
 
+export type WhatsAppShareResult =
+  | { kind: "ok"; href: string }
+  | { kind: "no-contact" }
+  | { kind: "no-share" };
+
+export function buildWhatsAppShareMessage(input: {
+  invoiceNumber: string;
+  totalIdr: number;
+  shareUrl: string;
+}): string {
+  const amount = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(input.totalIdr);
+  return `Halo, berikut invoice ${input.invoiceNumber} sebesar Rp${amount}.\nDetail invoice: ${input.shareUrl}\nTerima kasih.`;
+}
+
+// Distinct from buildWhatsAppReminder below: a plain share of the invoice
+// link with no due-date/overdue framing, so it stays available even when the
+// invoice has no due date yet. Never invents a due date, payment status, or
+// tax detail — those only ever come from the reminder composer.
+export function buildWhatsAppShare(input: {
+  contactWa: string | null;
+  shareUrl: string | null;
+  invoiceNumber: string;
+  totalIdr: number;
+}): WhatsAppShareResult {
+  const normalizedNumber = input.contactWa ? normalizeWhatsAppNumber(input.contactWa) : null;
+  if (!normalizedNumber) return { kind: "no-contact" };
+  if (!input.shareUrl) return { kind: "no-share" };
+
+  const message = buildWhatsAppShareMessage({
+    invoiceNumber: input.invoiceNumber,
+    totalIdr: input.totalIdr,
+    shareUrl: input.shareUrl,
+  });
+  return { kind: "ok", href: buildWhatsAppShareUrl(normalizedNumber, message) };
+}
+
 // Pure composition of the pieces above, with each blocked precondition kept
 // distinguishable (missing contact vs missing share link vs missing due date)
 // so the UI can explain the specific gap instead of a single generic disable.

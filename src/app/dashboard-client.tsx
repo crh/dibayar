@@ -6,8 +6,8 @@ import type { DealRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
 import { deriveInvoiceDisplayStatus, DUE_SOON_WINDOW_DAYS, selectAttentionInvoices } from "@/lib/invoice-date-status";
 import { useLanguage } from "@/components/language-switcher";
-import { LanguageSwitcher } from "@/components/language-switcher";
-import { summarizeMonthlyIncome } from "@/lib/income-summary";
+import { AccountMenu } from "@/components/account-menu";
+import { summarizeMonthlyIncome, getJakartaMonthBounds } from "@/lib/income-summary";
 import type { Language } from "@/lib/i18n";
 import { StatusChip, MoneyDisplay, EmptyState, fieldClassName } from "@/components/design-system";
 
@@ -36,6 +36,43 @@ const PIPELINE_STAGE_KEYS: Record<string, string> = {
   INVOICE: "stage.invoice",
   DIBAYAR: "stage.paid",
 };
+
+type StageWithDeals = {
+  stage: (typeof PIPELINE_STAGES)[number];
+  deals: DealRecord[];
+};
+
+type PipelineRailGroup =
+  | { kind: "stage"; stage: (typeof PIPELINE_STAGES)[number]; deals: DealRecord[] }
+  | { kind: "empty-run"; stages: Array<(typeof PIPELINE_STAGES)[number]> };
+
+// Folds consecutive zero-deal stages (in PIPELINE_STAGES order) into a single
+// slim placeholder so the mobile scroll rail doesn't render a wall of empty
+// columns. A stage with >=1 deal always breaks a run and gets its own column.
+function groupStagesForRail(stagesWithDeals: StageWithDeals[]): PipelineRailGroup[] {
+  const groups: PipelineRailGroup[] = [];
+  let emptyRun: Array<(typeof PIPELINE_STAGES)[number]> = [];
+
+  function flushEmptyRun() {
+    if (emptyRun.length) {
+      groups.push({ kind: "empty-run", stages: emptyRun });
+      emptyRun = [];
+    }
+  }
+
+  for (const { stage, deals: stageDeals } of stagesWithDeals) {
+    if (stageDeals.length === 0) {
+      emptyRun.push(stage);
+      continue;
+    }
+    flushEmptyRun();
+    groups.push({ kind: "stage", stage, deals: stageDeals });
+  }
+  flushEmptyRun();
+
+  return groups;
+}
+
 type DashboardClientProps = {
   initialDeals: DealRecord[];
   initialInvoices?: InvoiceRecord[];
@@ -84,6 +121,39 @@ function statusClass(status: InvoiceRecord["status"]) {
   return "bg-bg text-muted";
 }
 
+// Invoices actually counted into this month's income summary (mirrors
+// summarizeMonthlyIncome's own inclusion rule: non-DRAFT, within the Jakarta
+// calendar month) so the basis notes below describe exactly what's in the total.
+function selectIncludedIncomeInvoices(invoices: InvoiceRecord[], now: Date): InvoiceRecord[] {
+  const bounds = getJakartaMonthBounds(now);
+  return invoices.filter((invoice) => invoice.status !== "DRAFT" && invoice.createdAt >= bounds.start && invoice.createdAt < bounds.end);
+}
+
+const WITHHOLDING_RATE_LABEL: Record<InvoiceRecord["withholdingTaxType"], string> = {
+  NONE: "",
+  PPH21: "PPh 21 (5%)",
+  PPH23: "PPh 23 (2%)",
+};
+
+// Names the actual rate(s) behind a non-zero withholding total, or explains a
+// genuinely zero total, without ever inventing a single false rate when the
+// included invoices use more than one withholding type.
+function withholdingBasisNoteKey(includedInvoices: InvoiceRecord[]): { key: string; values?: Record<string, string> } {
+  if (includedInvoices.length === 0) {
+    return { key: "dashboard.incomeWithholdingZeroNoInvoice" };
+  }
+  const distinctNonZeroTypes = Array.from(
+    new Set(includedInvoices.map((invoice) => invoice.withholdingTaxType).filter((type) => type !== "NONE")),
+  );
+  if (distinctNonZeroTypes.length === 0) {
+    return { key: "dashboard.incomeWithholdingZero" };
+  }
+  if (distinctNonZeroTypes.length > 1) {
+    return { key: "dashboard.incomeWithholdingMixed" };
+  }
+  return { key: "dashboard.incomeWithholdingRate", values: { rate: WITHHOLDING_RATE_LABEL[distinctNonZeroTypes[0]] } };
+}
+
 function AttentionInvoiceCard({ invoice, language, t }: {
   invoice: InvoiceRecord & { displayStatus: InvoiceRecord["status"] };
   language: Language;
@@ -108,6 +178,77 @@ function AttentionInvoiceCard({ invoice, language, t }: {
   );
 }
 
+function StageColumn({
+  stage,
+  stageDeals,
+  language,
+  t,
+  pendingDealId,
+  isSaving,
+  invoices,
+  onStageChange,
+  onCreateInvoice,
+  className = "",
+}: {
+  stage: (typeof PIPELINE_STAGES)[number];
+  stageDeals: DealRecord[];
+  language: Language;
+  t: (key: string, values?: Record<string, string>) => string;
+  pendingDealId: string | null;
+  isSaving: boolean;
+  invoices: InvoiceRecord[];
+  onStageChange: (dealId: string, status: DealRecord["status"]) => void;
+  onCreateInvoice: (dealId: string) => void;
+  className?: string;
+}) {
+  return (
+    <section aria-labelledby={`stage-${stage.value}`} className={`rounded-md border border-line bg-surface p-4 ${className}`}>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 id={`stage-${stage.value}`} className="text-[15px] font-bold text-ink">{t(PIPELINE_STAGE_KEYS[stage.value])}</h3>
+        <span className="rounded-full bg-bg px-2 py-1 text-[12px] font-semibold text-muted">{stageDeals.length}</span>
+      </div>
+      <div className="flex flex-col gap-2">
+        {stageDeals.length ? stageDeals.map((deal) => (
+          <article key={deal.id} className="rounded-xl border border-line bg-bg p-3">
+            <h4 className="font-semibold text-ink">{deal.brand}</h4>
+            <div className="mt-2"><StatusChip status={deal.status} language={language} /></div>
+            <p className="mt-1 text-[15px] font-bold tabular-nums text-primary">{formatIdr(deal.feeIdr, language)}</p>
+            <p className="mt-1 text-[12px] text-muted">{formatDeadline(deal.deadline, language)}</p>
+            <label className="sr-only" htmlFor={`stage-select-${deal.id}`}>
+              {t("dashboard.stageLabel", { brand: deal.brand })}
+            </label>
+            <select
+              id={`stage-select-${deal.id}`}
+              value={deal.status}
+              disabled={pendingDealId === deal.id}
+              onChange={(event) => onStageChange(deal.id, event.target.value as DealRecord["status"])}
+              className="mt-2 h-11 w-full rounded-lg border border-line bg-surface px-2 text-[13px] font-semibold text-ink outline-none focus:border-primary disabled:cursor-wait disabled:opacity-60"
+            >
+              {PIPELINE_STAGES.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {t(PIPELINE_STAGE_KEYS[option.value])}
+                </option>
+              ))}
+            </select>
+            {deal.status === "INVOICE" && !invoices.some((invoice) => invoice.dealId === deal.id) ? (
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={() => onCreateInvoice(deal.id)}
+                className="mt-3 inline-flex h-9 items-center rounded-full bg-primary px-3 text-[13px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
+              >
+                {isSaving ? t("dashboard.saving") : t("dashboard.createInvoice")}
+              </button>
+            ) : null}
+          </article>
+        )) : (
+          <p className="text-[13px] text-muted">{t("dashboard.noDealsInStage")}</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function DashboardClient({ initialDeals, initialInvoices = [], userName, now }: DashboardClientProps) {
   const { language, setLanguage, t } = useLanguage();
   const [deals, setDeals] = useState(initialDeals);
@@ -123,6 +264,26 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
   const overdueTotal = overdue.reduce((total, invoice) => total + invoice.subtotalIdr, 0);
   const dueSoonTotal = dueSoon.reduce((total, invoice) => total + invoice.subtotalIdr, 0);
   const incomeSummary = summarizeMonthlyIncome(invoices, referenceNow);
+  const includedIncomeInvoices = selectIncludedIncomeInvoices(invoices, referenceNow);
+  const unpaidIncludedCount = includedIncomeInvoices.filter((invoice) => invoice.status !== "PAID").length;
+  const withholdingBasisNote = withholdingBasisNoteKey(includedIncomeInvoices);
+  const netShare = incomeSummary.grossIdr > 0 ? Math.max(0, Math.min(1, incomeSummary.netIdr / incomeSummary.grossIdr)) : 1;
+
+  // "Siap ditagih" (ready to invoice) is a UI-only grouping over the existing
+  // stage model, not a data model concept: Konten + Invoice stages are the
+  // deals closest to being billed. "Dibayar" counts deals already marked paid.
+  const inNegoCount = deals.filter((deal) => deal.status === "MASUK" || deal.status === "NEGO").length;
+  const readyToInvoiceCount = deals.filter((deal) => deal.status === "KONTEN" || deal.status === "INVOICE").length;
+  const paidCount = deals.filter((deal) => deal.status === "DIBAYAR").length;
+  const dealsReadyForInvoice = deals.filter(
+    (deal) => deal.status === "INVOICE" && !invoices.some((invoice) => invoice.dealId === deal.id),
+  );
+  const oneDealReadyForInvoice = dealsReadyForInvoice.length === 1 ? dealsReadyForInvoice[0] : null;
+  const stagesWithDeals: StageWithDeals[] = PIPELINE_STAGES.map((stage) => ({
+    stage,
+    deals: deals.filter((deal) => deal.status === stage.value),
+  }));
+  const railGroups = groupStagesForRail(stagesWithDeals);
 
   async function handleStageChange(dealId: string, status: DealRecord["status"]) {
     setError(null);
@@ -205,13 +366,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
           <p className="text-[15px] text-muted">{t("dashboard.subtitle")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <LanguageSwitcher language={language} onChange={setLanguage} compact />
-          <Link
-            href="/api/auth/signout?callbackUrl=/"
-            className="inline-flex h-11 w-fit items-center rounded-full border border-line bg-surface px-4 text-[15px] font-semibold text-ink"
-          >
-            {t("dashboard.signOut")}
-          </Link>
+          <AccountMenu language={language} onChange={setLanguage} />
         </div>
       </header>
 
@@ -221,31 +376,68 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
         </div>
       ) : null}
 
-      <div aria-label={language === "en" ? "Deal progress" : "Progress deal"} className="flex h-2 overflow-hidden rounded-full bg-line">
-        {PIPELINE_STAGES.map((stage) => <div key={stage.value} className={`flex-1 ${stage.value === "DIBAYAR" ? "bg-paid" : stage.value === "INVOICE" ? "bg-due" : stage.value === "KONTEN" ? "bg-due-tint" : stage.value === "MASUK" ? "bg-line" : "bg-primary-tint"}`} />)}
-      </div>
+      <a
+        href="#pipeline"
+        className="flex flex-col gap-2 rounded-lg border border-line bg-surface p-4 outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[15px] font-bold text-ink">
+            {t("dashboard.pipelineSummary", { count: String(deals.length) })}
+          </p>
+          <span className="text-[13px] font-semibold text-primary">{t("dashboard.seeAll")}</span>
+        </div>
+        <div aria-label={language === "en" ? "Deal progress" : "Progress deal"} className="flex h-2 overflow-hidden rounded-full bg-line">
+          {PIPELINE_STAGES.map((stage) => <div key={stage.value} className={`flex-1 ${stage.value === "DIBAYAR" ? "bg-paid" : stage.value === "INVOICE" ? "bg-due" : stage.value === "KONTEN" ? "bg-due-tint" : stage.value === "MASUK" ? "bg-line" : "bg-primary-tint"}`} />)}
+        </div>
+        <p className="text-[12px] text-muted">
+          <span>{t("dashboard.legendInNego", { count: String(inNegoCount) })}</span>
+          {" · "}
+          <span>{t("dashboard.legendReadyToInvoice", { count: String(readyToInvoiceCount) })}</span>
+          {" · "}
+          <span className="font-semibold text-overdue">{t("dashboard.legendOverdue", { count: String(overdue.length) })}</span>
+          {" · "}
+          <span className="font-semibold text-paid">{t("dashboard.legendPaid", { count: String(paidCount) })}</span>
+        </p>
+      </a>
 
-      <section aria-labelledby="tambah-deal" className={`${initialDeals.length ? "rounded-lg border border-line bg-surface p-4" : "rounded-lg border border-primary-tint bg-primary-tint p-5 shadow-sm"}`}>
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="ds-micro text-primary">
-              {initialDeals.length ? t("dashboard.quickAction") : t("dashboard.startHere")}
-            </p>
-            <h2 id="tambah-deal" className="ds-h2 text-ink">{t("dashboard.addDeal")}</h2>
-            <p className="mt-1 ds-small text-muted">{t("dashboard.addDealHint")}</p>
-          </div>
-          {initialDeals.length ? (
+      <section
+        aria-labelledby={deals.length ? undefined : "tambah-deal"}
+        aria-label={deals.length ? t("dashboard.quickAction") : undefined}
+        className={`${deals.length ? "rounded-lg border border-line bg-surface p-4" : "rounded-lg border border-primary-tint bg-primary-tint p-5 shadow-sm"}`}
+      >
+        {deals.length ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {oneDealReadyForInvoice ? (
+              <button
+                type="button"
+                onClick={() => handleCreateInvoice(oneDealReadyForInvoice.id)}
+                disabled={isSaving}
+                className="ds-button ds-button-primary min-h-11 px-4 text-[13px] disabled:cursor-wait disabled:opacity-60"
+              >
+                {t("dashboard.quickActionNewInvoice")}
+              </button>
+            ) : (
+              <a href="#pipeline" className="ds-button ds-button-primary min-h-11 px-4 text-[13px]">
+                {t("dashboard.quickActionNewInvoice")}
+              </a>
+            )}
             <button
               type="button"
               onClick={() => setIsAddDealOpen((open) => !open)}
               aria-expanded={isAddDealOpen}
               aria-controls="tambah-deal-form"
-              className="ds-button ds-button-primary min-h-11 px-4 text-[13px]"
+              className="ds-button ds-button-secondary min-h-11 px-4 text-[13px]"
             >
-              {isAddDealOpen ? t("dashboard.close") : t("dashboard.addDealButton")}
+              {isAddDealOpen ? t("dashboard.close") : t("dashboard.quickActionAddDeal")}
             </button>
-          ) : null}
-        </div>
+          </div>
+        ) : (
+          <div>
+            <p className="ds-micro text-primary">{t("dashboard.startHere")}</p>
+            <h2 id="tambah-deal" className="ds-h2 text-ink">{t("dashboard.addDeal")}</h2>
+            <p className="mt-1 ds-small text-muted">{t("dashboard.addDealHint")}</p>
+          </div>
+        )}
         {isAddDealOpen ? (
         <form id="tambah-deal-form" className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit}>
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
@@ -366,21 +558,39 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
           <h2 id="ringkasan-pendapatan" className="text-[20px] font-bold text-ink">{t("dashboard.income")}</h2>
           <p className="text-[13px] text-muted">{t("dashboard.issued")} · {formatIncomeLabel(incomeSummary.year, incomeSummary.month, language)} · {incomeSummary.invoiceCount}</p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl border border-line bg-surface p-4">
-            <p className="text-[13px] text-muted">{t("dashboard.gross")}</p>
-            <p className="mt-1 text-[20px] font-bold tabular-nums text-ink">{formatIdr(incomeSummary.grossIdr, language)}</p>
+
+        <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5">
+          <p className="text-[13px] text-muted">{t("dashboard.estimated")}</p>
+          <MoneyDisplay value={incomeSummary.netIdr} language={language} tone="primary" size="hero" />
+
+          <div aria-hidden="true" className="mt-3 flex h-2 overflow-hidden rounded-full bg-line">
+            <div className="bg-primary" style={{ width: `${netShare * 100}%` }} />
+            <div className="flex-1 bg-overdue" />
           </div>
-          <div className="rounded-2xl border border-line bg-surface p-4">
-            <p className="text-[13px] text-muted">{t("dashboard.withholding")}</p>
-            <p className="mt-1 text-[20px] font-bold tabular-nums text-overdue">-{formatIdr(incomeSummary.withholdingIdr, language)}</p>
-          </div>
-          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
-            <p className="text-[13px] text-muted">{t("dashboard.estimated")}</p>
-            <p className="mt-1 text-[20px] font-bold tabular-nums text-primary">{formatIdr(incomeSummary.netIdr, language)}</p>
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-[13px] text-muted">{t("dashboard.gross")}</p>
+              <p className="mt-1 text-[16px] font-bold tabular-nums text-ink">{formatIdr(incomeSummary.grossIdr, language)}</p>
+            </div>
+            <div>
+              <p className="text-[13px] text-muted">{t("dashboard.withholding")}</p>
+              <p className="mt-1 text-[16px] font-bold tabular-nums text-overdue">-{formatIdr(incomeSummary.withholdingIdr, language)}</p>
+            </div>
           </div>
         </div>
-        <p className="text-[12px] text-muted">{t("dashboard.taxNote")}</p>
+
+        <div className="flex flex-col gap-1.5">
+          <p className="text-[12px] text-muted">{t("dashboard.taxNote")}</p>
+          <p className="text-[12px] text-muted">
+            {t(withholdingBasisNote.key, withholdingBasisNote.values)}
+          </p>
+          {unpaidIncludedCount > 0 ? (
+            <p className="text-[12px] text-muted">
+              {t("dashboard.incomeUnpaidNote", { count: String(unpaidIncludedCount) })}
+            </p>
+          ) : null}
+        </div>
       </section>
 
       <section aria-labelledby="pipeline" className="flex flex-col gap-4">
@@ -388,56 +598,51 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
           <h2 id="pipeline" className="text-[20px] font-bold text-ink">{t("dashboard.pipeline")}</h2>
           <p className="text-[13px] text-muted">{t("dashboard.pipelineHint")}</p>
         </div>
-        <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2 lg:grid lg:grid-cols-6 lg:overflow-visible">
-          {PIPELINE_STAGES.map((stage) => {
-            const stageDeals = deals.filter((deal) => deal.status === stage.value);
-            return (
-              <section key={stage.value} aria-labelledby={`stage-${stage.value}`} className="min-w-[260px] snap-start rounded-md border border-line bg-surface p-4 lg:min-w-0">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <h3 id={`stage-${stage.value}`} className="text-[15px] font-bold text-ink">{t(PIPELINE_STAGE_KEYS[stage.value])}</h3>
-                  <span className="rounded-full bg-bg px-2 py-1 text-[12px] font-semibold text-muted">{stageDeals.length}</span>
-                </div>
-                <div className="flex flex-col gap-2">
-                  {stageDeals.length ? stageDeals.map((deal) => (
-                    <article key={deal.id} className="rounded-xl border border-line bg-bg p-3">
-                      <h4 className="font-semibold text-ink">{deal.brand}</h4>
-                      <div className="mt-2"><StatusChip status={deal.status} language={language} /></div>
-                      <p className="mt-1 text-[15px] font-bold tabular-nums text-primary">{formatIdr(deal.feeIdr, language)}</p>
-                      <p className="mt-1 text-[12px] text-muted">{formatDeadline(deal.deadline, language)}</p>
-                      <label className="sr-only" htmlFor={`stage-select-${deal.id}`}>
-                        {t("dashboard.stageLabel", { brand: deal.brand })}
-                      </label>
-                      <select
-                        id={`stage-select-${deal.id}`}
-                        value={deal.status}
-                        disabled={pendingDealId === deal.id}
-                        onChange={(event) => handleStageChange(deal.id, event.target.value as DealRecord["status"])}
-                        className="mt-2 h-11 w-full rounded-lg border border-line bg-surface px-2 text-[13px] font-semibold text-ink outline-none focus:border-primary disabled:cursor-wait disabled:opacity-60"
-                      >
-                        {PIPELINE_STAGES.map((stage) => (
-                          <option key={stage.value} value={stage.value}>
-                            {t(PIPELINE_STAGE_KEYS[stage.value])}
-                          </option>
-                        ))}
-                      </select>
-                      {deal.status === "INVOICE" && !invoices.some((invoice) => invoice.dealId === deal.id) ? (
-                        <button
-                          type="button"
-                          disabled={isSaving}
-                          onClick={() => handleCreateInvoice(deal.id)}
-                          className="mt-3 inline-flex h-9 items-center rounded-full bg-primary px-3 text-[13px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
-                        >
-                          {isSaving ? t("dashboard.saving") : t("dashboard.createInvoice")}
-                        </button>
-                      ) : null}
-                    </article>
-                  )) : (
-                    <p className="text-[13px] text-muted">{t("dashboard.noDealsInStage")}</p>
-                  )}
-                </div>
-              </section>
-            );
-          })}
+
+        {/* Persistent stage-count strip: every stage stays visible at a glance,
+            even once the columns below scroll or collapse. */}
+        <div className="flex flex-wrap gap-2">
+          {stagesWithDeals.map(({ stage, deals: stageDeals }) => (
+            <span key={stage.value} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line bg-bg px-3 text-[12px] font-semibold text-ink">
+              {t(PIPELINE_STAGE_KEYS[stage.value])}
+              <span className="text-muted">{stageDeals.length}</span>
+            </span>
+          ))}
+        </div>
+
+        {/* Single tree for every breakpoint: empty-stage runs collapse into a
+            slim placeholder, and a stage with >=1 deal always gets its own
+            column. On mobile this is a horizontally-snapping rail; at lg: it
+            reflows into a static, non-scrolling grid (via flex-wrap + a fixed
+            column basis) so nothing overflows and there's no duplicate DOM
+            tree to keep in sync between breakpoints. */}
+        <div className="-mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0">
+          {railGroups.map((group) =>
+            group.kind === "stage" ? (
+              <StageColumn
+                key={group.stage.value}
+                stage={group.stage}
+                stageDeals={group.deals}
+                language={language}
+                t={t}
+                pendingDealId={pendingDealId}
+                isSaving={isSaving}
+                invoices={invoices}
+                onStageChange={handleStageChange}
+                onCreateInvoice={handleCreateInvoice}
+                className="w-[78%] max-w-[280px] shrink-0 snap-start lg:w-[calc(16.6667%-10px)] lg:max-w-none lg:snap-none"
+              />
+            ) : (
+              <div
+                key={group.stages.map((stage) => stage.value).join("-")}
+                className="flex w-[78%] max-w-[280px] shrink-0 snap-start items-center rounded-md border border-dashed border-line bg-bg px-4 py-3 lg:w-[calc(16.6667%-10px)] lg:max-w-none lg:snap-none"
+              >
+                <p className="text-[12px] text-muted">
+                  {t("dashboard.emptyStagesRun", { stages: group.stages.map((stage) => t(PIPELINE_STAGE_KEYS[stage.value])).join(" · ") })}
+                </p>
+              </div>
+            ),
+          )}
         </div>
       </section>
 

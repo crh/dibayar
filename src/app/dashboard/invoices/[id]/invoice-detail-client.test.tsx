@@ -65,6 +65,11 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  // vi.spyOn(window, "open") / vi.spyOn(navigator.clipboard, ...) leave the
+  // spy in place otherwise, so a later test's spy wraps the previous test's
+  // still-mocked function and inherits its call history (e.g. open.mock.calls[0]
+  // ends up being a stale call from an earlier test, not this test's own click).
+  vi.restoreAllMocks();
   vi.useRealTimers();
   window.localStorage.clear();
   window.sessionStorage.clear();
@@ -77,7 +82,7 @@ describe("InvoiceDetailClient", () => {
     render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
 
     expect(await screen.findByRole("button", { name: "Create sharing link" })).toBeDefined();
-    expect(screen.getByRole("combobox", { name: "Language" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Account menu" })).toBeDefined();
     expect(screen.getByText("Draft")).toBeDefined();
   });
 
@@ -88,7 +93,7 @@ describe("InvoiceDetailClient", () => {
 
     expect(screen.getByRole("heading", { name: "Rp1.500.000" })).toBeDefined();
     expect(screen.getAllByText("INV/2026/07/001")).toHaveLength(2);
-    expect(screen.getByText("PPh 23")).toBeDefined();
+    expect(screen.getByText("PPh 23 (2%)")).toBeDefined();
     expect(screen.getByRole("button", { name: "Tandai sudah dikirim" })).toBeDefined();
     expect(screen.getByRole("link", { name: "Unduh PDF" }).getAttribute("href")).toBe("/api/invoices/invoice-1/pdf");
     expect(screen.queryByRole("button", { name: "Tandai lunas" })).toBeNull();
@@ -181,7 +186,8 @@ describe("InvoiceDetailClient", () => {
     render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
     expect(await screen.findByText("Withholding tax")).toBeDefined();
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Language" }), "id");
+    await user.click(screen.getByRole("button", { name: "Account menu" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "Indonesian" }));
 
     expect(screen.getByText("Pajak potong")).toBeDefined();
     expect(screen.getByText("Nilai invoice")).toBeDefined();
@@ -195,8 +201,45 @@ describe("InvoiceDetailClient", () => {
     render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "PAID" }} />);
     await screen.findByRole("button", { name: "Buat tautan berbagi" });
 
-    expect(screen.getByText("Invoice ini sudah lunas.")).toBeDefined();
+    expect(screen.queryByRole("heading", { name: "Status pembayaran" })).toBeNull();
+    expect(screen.queryByText("Invoice ini sudah lunas.")).toBeNull();
     expect(screen.queryByRole("button", { name: "Tandai sudah dikirim" })).toBeNull();
+  });
+
+  describe("Invoice lunas menyembunyikan pengeditan, menampilkan bukti pembayaran", () => {
+    it("hides the due-date editor and payment-status actions, and shows a truthful paid-proof block, for a PAID invoice", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(
+        <InvoiceDetailClient
+          initialInvoice={{
+            ...draftInvoice,
+            status: "PAID",
+            updatedAt: new Date("2026-07-20T00:00:00.000Z"),
+          }}
+        />,
+      );
+      await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      expect(screen.queryByLabelText("Tanggal jatuh tempo")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Simpan tanggal" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Hapus tanggal" })).toBeNull();
+      expect(screen.queryByRole("heading", { name: "Status pembayaran" })).toBeNull();
+
+      expect(screen.getByText("Dibayar 20 Juli 2026")).toBeDefined();
+      expect(screen.getByText("Rp1.500.000 diterima")).toBeDefined();
+    });
+
+    it("keeps the due-date editor and payment-status actions for a non-PAID invoice (behavior-preserving)", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "SENT" }} />);
+      await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      expect(screen.getByLabelText("Tanggal jatuh tempo")).toBeDefined();
+      expect(screen.getByRole("button", { name: "Simpan tanggal" })).toBeDefined();
+      expect(screen.getByRole("button", { name: "Hapus tanggal" })).toBeDefined();
+      expect(screen.getByRole("heading", { name: "Status pembayaran" })).toBeDefined();
+      expect(screen.queryByText(/^Dibayar /)).toBeNull();
+    });
   });
 
   describe("Status yang ditampilkan (derived, bukan status mentah)", () => {
@@ -876,6 +919,271 @@ describe("InvoiceDetailClient", () => {
       expect(await screen.findByRole("alert")).toBeDefined();
       expect(screen.getByText(/tautan berbagi aktif/i)).toBeDefined();
       expect(screen.getByRole("button", { name: /cabut tautan/i })).toBeDefined();
+    });
+  });
+
+  describe("Bagikan via WhatsApp dipromosikan ke kartu atas", () => {
+    it("shows a primary Share via WhatsApp button above the fold, alongside Download PDF", async () => {
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+        shareGet: { status: 200, body: { active: false } },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      const whatsappButton = await screen.findByRole("button", { name: "Bagikan via WhatsApp" });
+      const downloadLink = screen.getByRole("link", { name: "Unduh PDF" });
+
+      expect(whatsappButton).toBeDefined();
+      expect(downloadLink).toBeDefined();
+      expect(whatsappButton.className).toMatch(/h-11|min-h-\[44px\]/);
+      // Above the fold: both live inside the top hero header, not the share section below.
+      expect(whatsappButton.closest("section")).toBeNull();
+    });
+
+    it("creates a share link first, then opens WhatsApp, when no link exists yet", async () => {
+      const user = userEvent.setup();
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+        shareGet: { status: 200, body: { active: false } },
+        sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      const whatsappButton = await screen.findByRole("button", { name: "Bagikan via WhatsApp" });
+      await user.click(whatsappButton);
+
+      await waitFor(() => expect(open).toHaveBeenCalled());
+      expect(open.mock.calls[0]?.[0]).toContain(encodeURIComponent("INV/2026/07/001"));
+      // The full share section below reflects the same created link (single state machine).
+      expect(await screen.findByText(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
+    });
+
+    it("opens WhatsApp directly, without creating a new link, when a link is already active", async () => {
+      const user = userEvent.setup();
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const fetchMock = makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+        shareGet: { status: 200, body: { active: false } },
+        sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      // Establish an active link via the share section first.
+      await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
+      expect(await screen.findByText(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
+
+      const postCallsBefore = fetchMock.mock.calls.filter((call) => call[1]?.method === "POST").length;
+      await user.click(screen.getByRole("button", { name: "Bagikan via WhatsApp" }));
+
+      await waitFor(() => expect(open).toHaveBeenCalled());
+      const postCallsAfter = fetchMock.mock.calls.filter((call) => call[1]?.method === "POST").length;
+      expect(postCallsAfter).toBe(postCallsBefore);
+      expect(open.mock.calls[0]?.[0]).toContain(encodeURIComponent(`${window.location.origin}/i/deterministic-token`));
+    });
+
+    it("disables the primary WhatsApp button when the contact is unusable", async () => {
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "not-a-phone" } },
+        shareGet: { status: 200, body: { active: false } },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      const whatsappButton = await screen.findByRole("button", { name: "Bagikan via WhatsApp" });
+
+      expect(whatsappButton).toHaveProperty("disabled", true);
+    });
+
+    it("keeps the primary WhatsApp button available when the invoice has no due date, since it shares the invoice rather than sending a due-date reminder", async () => {
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+        shareGet: { status: 200, body: { active: false } },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: null }} />);
+      const whatsappButton = await screen.findByRole("button", { name: "Bagikan via WhatsApp" });
+
+      expect(whatsappButton).toHaveProperty("disabled", false);
+    });
+
+    it("creates a share link and opens a plain WhatsApp share message, without fabricating a due date, payment status, or tax detail, when the invoice has no due date", async () => {
+      const user = userEvent.setup();
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+        shareGet: { status: 200, body: { active: false } },
+        sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: null }} />);
+      const whatsappButton = await screen.findByRole("button", { name: "Bagikan via WhatsApp" });
+      await user.click(whatsappButton);
+
+      await waitFor(() => expect(open).toHaveBeenCalled());
+      const href = open.mock.calls[0]?.[0] as string;
+      expect(href).toContain(encodeURIComponent("INV/2026/07/001"));
+      expect(href).toContain(encodeURIComponent(`${window.location.origin}/i/deterministic-token`));
+      const message = decodeURIComponent(href.split("?text=")[1] ?? "");
+      expect(message).not.toMatch(/jatuh tempo|terlambat|lunas|pph/i);
+      // Same state machine as the full share section below: the created link shows up there too.
+      expect(await screen.findByText(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
+    });
+
+    it("shows the localized English label for the primary WhatsApp button", async () => {
+      window.localStorage.setItem("dibayar-language", "en");
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+        shareGet: { status: 200, body: { active: false } },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+      expect(await screen.findByRole("button", { name: "Share via WhatsApp" })).toBeDefined();
+    });
+  });
+
+  describe("Format tanggal dan kontras tombol Simpan (Task 5)", () => {
+    it("shows a format hint under the due-date field that does not claim a guaranteed visible format", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      expect(
+        screen.getByText("Tanggal disimpan sebagai hari/bulan/tahun; tampilan kalender mengikuti peramban kamu."),
+      ).toBeDefined();
+    });
+
+    it("shows the localized English format hint that does not claim a guaranteed visible format", async () => {
+      window.localStorage.setItem("dibayar-language", "en");
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await screen.findByRole("button", { name: "Create sharing link" });
+
+      expect(
+        screen.getByText("Date is stored as day/month/year; the calendar's display follows your browser."),
+      ).toBeDefined();
+    });
+
+    it("sets lang on the native date input to match the selected locale, since the format hint can't be guaranteed", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      expect(screen.getByLabelText("Tanggal jatuh tempo").getAttribute("lang")).toBe("id-ID");
+    });
+
+    it("sets lang to en-US on the native date input when English is selected", async () => {
+      window.localStorage.setItem("dibayar-language", "en");
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await screen.findByRole("button", { name: "Create sharing link" });
+
+      expect(screen.getByLabelText("Due date").getAttribute("lang")).toBe("en-US");
+    });
+
+    it("disables the Save button with reduced opacity and not-allowed cursor when the field is empty", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: null }} />);
+      await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      const saveButton = screen.getByRole("button", { name: "Simpan tanggal" });
+      expect(saveButton).toHaveProperty("disabled", true);
+      expect(saveButton.className).toContain("ds-button-primary");
+    });
+  });
+
+  describe("Aksesibilitas field tanggal jatuh tempo (Task 9)", () => {
+    it("gives the due-date input both id and name attributes", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      const input = screen.getByLabelText("Tanggal jatuh tempo") as HTMLInputElement;
+      expect(input.id).toBe("invoice-due-date");
+      expect(input.name).toBe("invoice-due-date");
+    });
+  });
+
+  describe("Basis PPh pada rincian invoice (Task 7)", () => {
+    it("names the applicable withholding rate next to a non-zero withholding type", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, withholdingTaxType: "PPH21" }} />);
+      await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      expect(screen.getByText("PPh 21 (5%)")).toBeDefined();
+    });
+
+    it("explains why withholding is None instead of showing a bare label", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, withholdingTaxType: "NONE" }} />);
+      await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      expect(screen.getByText("Tidak ada")).toBeDefined();
+      expect(screen.getByText("Tidak ada potongan pajak untuk invoice ini.")).toBeDefined();
+    });
+
+    it("shows the localized English withholding basis note", async () => {
+      window.localStorage.setItem("dibayar-language", "en");
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, withholdingTaxType: "NONE" }} />);
+      await screen.findByRole("button", { name: "Create sharing link" });
+
+      expect(screen.getByText("No tax withheld on this invoice.")).toBeDefined();
+    });
+  });
+
+  describe("Pemuatan kontak dengan retry (Task 8)", () => {
+    it("shows a retry affordance near the WhatsApp block when the contact fetch fails, and recovers after retry", async () => {
+      const user = userEvent.setup();
+      let contactCallCount = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          const method = init?.method ?? "GET";
+          if (url.endsWith("/contact")) {
+            contactCallCount += 1;
+            if (contactCallCount === 1) return jsonResponse({ status: 500, body: { error: "boom" } });
+            return jsonResponse({ status: 200, body: { contactWa: "0812-3456-7890" } });
+          }
+          if (url.endsWith("/share") && method === "GET") return jsonResponse({ status: 200, body: { active: true } });
+          return jsonResponse({ status: 200, body: {} });
+        }),
+      );
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+      expect(await screen.findByText("Kontak belum bisa dimuat. Coba lagi.")).toBeDefined();
+      const retryButtons = screen.getAllByRole("button", { name: "Coba lagi" });
+      await user.click(retryButtons[retryButtons.length - 1]);
+
+      await waitFor(() => expect(contactCallCount).toBe(2));
+      expect(screen.queryByText("Kontak belum bisa dimuat. Coba lagi.")).toBeNull();
+    });
+
+    it("does not update state after unmount when the contact fetch resolves late (no act() warning)", async () => {
+      let resolveContact: ((value: unknown) => void) | undefined;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          const method = init?.method ?? "GET";
+          if (url.endsWith("/contact")) {
+            return new Promise((resolve) => {
+              resolveContact = resolve;
+            });
+          }
+          if (url.endsWith("/share") && method === "GET") return jsonResponse({ status: 200, body: { active: false } });
+          return jsonResponse({ status: 200, body: {} });
+        }),
+      );
+
+      const { unmount } = render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      unmount();
+
+      await act(async () => {
+        resolveContact?.(jsonResponse({ status: 200, body: { contactWa: "0812-3456-7890" } }));
+      });
+      // Reaching here without a React "state update on an unmounted component" warning is the assertion.
     });
   });
 });

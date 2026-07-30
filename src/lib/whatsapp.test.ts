@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildWhatsAppReminder,
   buildWhatsAppReminderMessage,
+  buildWhatsAppShare,
   buildWhatsAppShareUrl,
   normalizeWhatsAppNumber,
 } from "./whatsapp";
@@ -97,5 +98,42 @@ describe("buildWhatsAppReminder", () => {
 
   it("reports no-duedate distinctly when the due date is missing, even with a valid contact and share link", () => {
     expect(buildWhatsAppReminder({ ...base, dueDate: null })).toEqual({ kind: "no-duedate" });
+  });
+});
+
+describe("buildWhatsAppShare", () => {
+  const base = {
+    contactWa: "0812-3456-7890",
+    shareUrl: "https://dibayar.example/i/token-abc",
+    invoiceNumber: "INV/2026/07/004",
+    totalIdr: 5000000,
+  };
+
+  it("builds a ready wa.me href with the invoice number, amount, and share URL, without requiring a due date", () => {
+    const result = buildWhatsAppShare(base);
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error("expected ok");
+    expect(result.href.startsWith("https://wa.me/6281234567890?text=")).toBe(true);
+    const decoded = decodeURIComponent(result.href.split("?text=")[1]);
+    expect(decoded).toContain("INV/2026/07/004");
+    expect(decoded).toContain("Rp5.000.000");
+    expect(decoded).toContain(base.shareUrl);
+  });
+
+  it("never mentions a due date, overdue status, payment status, or tax detail", () => {
+    const result = buildWhatsAppShare(base);
+    if (result.kind !== "ok") throw new Error("expected ok");
+    const decoded = decodeURIComponent(result.href);
+    expect(decoded).not.toMatch(/jatuh tempo|terlambat|lunas|pph|pajak/i);
+  });
+
+  it("reports no-contact distinctly when the contact number is missing or unusable", () => {
+    expect(buildWhatsAppShare({ ...base, contactWa: null })).toEqual({ kind: "no-contact" });
+    expect(buildWhatsAppShare({ ...base, contactWa: "not-a-phone" })).toEqual({ kind: "no-contact" });
+  });
+
+  it("reports no-share distinctly when there is no active share link, even with a valid contact", () => {
+    expect(buildWhatsAppShare({ ...base, shareUrl: null })).toEqual({ kind: "no-share" });
   });
 });
