@@ -36,9 +36,9 @@ describe("DashboardClient", () => {
   it("shows the six pipeline stages (via the persistent count strip) and a fast deal capture form", () => {
     render(<DashboardClient initialDeals={[]} userName="Chris" />);
 
-    const pipeline = screen.getByRole("heading", { name: "Pipeline deal" }).closest("section")!;
+    const countStrip = screen.getByTestId("pipeline-stage-count-strip");
     for (const stage of ["Masuk", "Nego", "Deal", "Konten", "Invoice", "Dibayar"]) {
-      expect(within(pipeline).getByText(stage)).toBeDefined();
+      expect(within(countStrip).getByText(stage)).toBeDefined();
     }
     expect(screen.getByRole("textbox", { name: "Nama brand" })).toBeDefined();
     expect(screen.getByRole("textbox", { name: "Kontak WhatsApp" })).toBeDefined();
@@ -625,7 +625,9 @@ describe("DashboardClient", () => {
     });
   });
 
-  describe("pipeline rail ordering", () => {
+  describe("responsive pipeline board", () => {
+    const STAGE_NAMES = ["Masuk", "Nego", "Deal", "Konten", "Invoice", "Dibayar"];
+
     function dealFor(status: DealRecord["status"], id: string): DealRecord {
       return { ...kopiDeal, id, status };
     }
@@ -638,57 +640,77 @@ describe("DashboardClient", () => {
       return element.className.split(/\s+/);
     }
 
-    it("keeps a leading empty-stage run in natural (first) DOM position but gives the first populated stage the front mobile visual order", () => {
-      render(
-        <DashboardClient
-          userName="Chris"
-          initialDeals={[dealFor("INVOICE", "d1"), dealFor("DIBAYAR", "d2")]}
-        />,
-      );
+    function expectHiddenBelowLgVisibleAtLg(emptyStage: HTMLElement) {
+      // Below lg an empty stage's lane is `hidden` (no board-height contribution);
+      // at lg: it's restored (`lg:block`) as its own distinct desktop kanban lane.
+      expect(classTokens(emptyStage)).toContain("hidden");
+      expect(classTokens(emptyStage)).toContain("lg:block");
+      expect(emptyStage.textContent).toContain("Belum ada deal");
+    }
+
+    function expectStackedBelowLgFixedWidthAtLg(stageColumn: HTMLElement) {
+      // Below lg the stage column is a full-width stacked section (no fixed
+      // lane width, no horizontal scroll); at lg: it's a fixed-width kanban column.
+      expect(classTokens(stageColumn)).toContain("w-full");
+      expect(classTokens(stageColumn)).not.toContain("hidden");
+      expect(stageColumn.className).toContain("lg:w-[calc(16.6667%-10px)]");
+    }
+
+    // Asserts the board always renders exactly six distinct lanes, one per
+    // pipeline stage in natural order, regardless of how sparse the deals
+    // are — this is the desktop (lg+) contract: no aggregation of empty
+    // stages into a shared placeholder, ever.
+    function expectSixDistinctLanesInNaturalOrder(children: HTMLElement[]) {
+      expect(children).toHaveLength(6);
+      children.forEach((child, index) => {
+        expect(within(child).getByRole("heading", { name: STAGE_NAMES[index] })).toBeDefined();
+      });
+    }
+
+    it("renders six distinct lanes for a sparse desktop pipeline (only Invoice populated), not an aggregated empty run", () => {
+      render(<DashboardClient userName="Chris" initialDeals={[dealFor("INVOICE", "d1")]} />);
 
       const children = railChildren();
-      expect(children).toHaveLength(3);
+      expectSixDistinctLanesInNaturalOrder(children);
 
-      // DOM/tab order is unchanged (natural stage order) — no duplicate tree,
-      // no reordered array, only a mobile-only visual `order-*` override.
-      expect(children[0].textContent).toContain("kosong");
-      expect(within(children[1]).getByRole("heading", { name: "Invoice" })).toBeDefined();
-      expect(within(children[2]).getByRole("heading", { name: "Dibayar" })).toBeDefined();
+      const [masuk, nego, deal, konten, invoice, dibayar] = children;
+      expectHiddenBelowLgVisibleAtLg(masuk);
+      expectHiddenBelowLgVisibleAtLg(nego);
+      expectHiddenBelowLgVisibleAtLg(deal);
+      expectHiddenBelowLgVisibleAtLg(konten);
+      expectStackedBelowLgFixedWidthAtLg(invoice);
+      expectHiddenBelowLgVisibleAtLg(dibayar);
 
-      // Mobile visual order: Invoice first, then the displaced leading empty
-      // run, then Dibayar. Every group resets to natural DOM order at lg:.
-      expect(classTokens(children[0])).toContain("order-1");
-      expect(classTokens(children[1])).toContain("order-none");
-      expect(classTokens(children[2])).toContain("order-2");
-      for (const child of children) expect(classTokens(child)).toContain("lg:order-none");
+      // No stage lane ever shows a joined multi-stage placeholder like "Deal · Konten".
+      children.forEach((child) => expect(child.textContent).not.toContain(" · "));
     });
 
-    it("leaves order untouched when every stage is empty", () => {
+    it("renders six distinct lanes for an all-empty desktop pipeline, while the count strip still lists all six stages", () => {
       render(<DashboardClient userName="Chris" initialDeals={[]} />);
 
       const children = railChildren();
-      expect(children).toHaveLength(1);
-      expect(children[0].textContent).toContain("kosong");
-      expect(classTokens(children[0])).toContain("order-none");
+      expectSixDistinctLanesInNaturalOrder(children);
+      children.forEach((child) => {
+        expectHiddenBelowLgVisibleAtLg(child);
+        expect(child.textContent).not.toContain(" · ");
+      });
 
-      const pipeline = screen.getByRole("heading", { name: "Pipeline deal" }).closest("section")!;
-      for (const stage of ["Masuk", "Nego", "Deal", "Konten", "Invoice", "Dibayar"]) {
-        expect(within(pipeline).getByText(stage)).toBeDefined();
+      const countStrip = screen.getByTestId("pipeline-stage-count-strip");
+      for (const stage of STAGE_NAMES) {
+        expect(within(countStrip).getByText(stage)).toBeDefined();
       }
     });
 
-    it("is a no-op when the populated stage is already first, with no leading empty run", () => {
+    it("puts a populated first stage directly first, with every other stage still rendered as its own hidden-below-lg lane", () => {
       render(<DashboardClient userName="Chris" initialDeals={[dealFor("MASUK", "d1")]} />);
 
       const children = railChildren();
-      expect(children).toHaveLength(2);
-      expect(within(children[0]).getByRole("heading", { name: "Masuk" })).toBeDefined();
-      expect(classTokens(children[0])).toContain("order-none");
-      expect(children[1].textContent).toContain("kosong");
-      expect(classTokens(children[1])).toContain("order-1");
+      expectSixDistinctLanesInNaturalOrder(children);
+      expectStackedBelowLgFixedWidthAtLg(children[0]);
+      for (const emptyChild of children.slice(1)) expectHiddenBelowLgVisibleAtLg(emptyChild);
     });
 
-    it("repositions only the leading empty run, leaving an internal empty run between two populated stages untouched", () => {
+    it("stacks only the populated Nego and Dibayar stages below lg, while both empty runs between them stay individually hidden", () => {
       render(
         <DashboardClient
           userName="Chris"
@@ -697,50 +719,53 @@ describe("DashboardClient", () => {
       );
 
       const children = railChildren();
-      expect(children).toHaveLength(4);
+      expectSixDistinctLanesInNaturalOrder(children);
 
-      // Natural DOM order: [Masuk-empty-run, Nego, Deal/Konten/Invoice-empty-run, Dibayar].
-      expect(children[0].textContent).toContain("kosong");
-      expect(within(children[1]).getByRole("heading", { name: "Nego" })).toBeDefined();
-      expect(children[2].textContent).toContain("kosong");
-      expect(within(children[3]).getByRole("heading", { name: "Dibayar" })).toBeDefined();
-
-      // Mobile visual order: Nego, [leading Masuk run moved here], [internal run stays put], Dibayar.
-      expect(classTokens(children[0])).toContain("order-1");
-      expect(classTokens(children[1])).toContain("order-none");
-      expect(classTokens(children[2])).toContain("order-2");
-      expect(classTokens(children[3])).toContain("order-3");
+      const [masuk, nego, deal, konten, invoice, dibayar] = children;
+      expectHiddenBelowLgVisibleAtLg(masuk);
+      expectStackedBelowLgFixedWidthAtLg(nego);
+      expectHiddenBelowLgVisibleAtLg(deal);
+      expectHiddenBelowLgVisibleAtLg(konten);
+      expectHiddenBelowLgVisibleAtLg(invoice);
+      expectStackedBelowLgFixedWidthAtLg(dibayar);
     });
 
-    it("gives the collapsed empty-run placeholder a compact width, distinct from a populated stage column", () => {
+    it("gives the desktop board container a non-scrolling reflow (row + wrap) at lg, stacked (column) below lg", () => {
       render(<DashboardClient userName="Chris" initialDeals={[dealFor("INVOICE", "d1")]} />);
 
-      const [emptyRun] = railChildren();
-      expect(emptyRun.className).not.toContain("max-w-[280px]");
-      expect(emptyRun.className).toContain("max-w-[160px]");
+      const board = screen.getByTestId("pipeline-rail");
+      expect(board.className).toContain("flex-col");
+      expect(board.className).toContain("lg:flex-row");
+      expect(board.className).toContain("lg:flex-wrap");
+      expect(board.className).not.toContain("overflow-x-auto");
+      expect(board.className).not.toContain("snap-x");
     });
 
-    it("keeps a populated StageColumn's mobile and lg: width classes unchanged", () => {
-      render(<DashboardClient userName="Chris" initialDeals={[dealFor("INVOICE", "d1")]} />);
-
-      const invoiceColumn = screen.getByRole("region", { name: "Invoice" });
-      expect(invoiceColumn.className).toContain("w-[78%] max-w-[280px]");
-      expect(invoiceColumn.className).toContain("lg:w-[calc(16.6667%-10px)]");
-    });
-
-    it("resets every rail group to natural DOM order at lg:, with no reordering logic applied there", () => {
-      render(
-        <DashboardClient
-          userName="Chris"
-          initialDeals={[dealFor("NEGO", "d1"), dealFor("DIBAYAR", "d2")]}
-        />,
-      );
+    it("preserves the full six-stage kanban and natural stage order at lg, with every populated stage always rendered (never board-hidden)", () => {
+      const deals = [
+        dealFor("MASUK", "d1"),
+        dealFor("NEGO", "d2"),
+        dealFor("DEAL", "d3"),
+        dealFor("KONTEN", "d4"),
+        dealFor("INVOICE", "d5"),
+        dealFor("DIBAYAR", "d6"),
+      ];
+      render(<DashboardClient userName="Chris" initialDeals={deals} />);
 
       const children = railChildren();
-      for (const child of children) expect(classTokens(child)).toContain("lg:order-none");
-      // DOM order itself (what lg:order-none falls back to) is untouched natural stage order.
-      expect(within(children[1]).getByRole("heading", { name: "Nego" })).toBeDefined();
-      expect(within(children[3]).getByRole("heading", { name: "Dibayar" })).toBeDefined();
+      expectSixDistinctLanesInNaturalOrder(children);
+      children.forEach((child) => {
+        expect(classTokens(child)).not.toContain("hidden");
+      });
+    });
+
+    it("shows breakpoint-neutral pipeline hint copy in Indonesian and English", () => {
+      render(<DashboardClient userName="Chris" initialDeals={[]} />);
+      expect(screen.getByText("Setiap tahap pipeline ditampilkan di bawah ini.")).toBeDefined();
+
+      window.localStorage.setItem("dibayar-language", "en");
+      render(<DashboardClient userName="Chris" initialDeals={[]} />);
+      expect(screen.getByText("Every pipeline stage is shown below.")).toBeDefined();
     });
   });
 });
