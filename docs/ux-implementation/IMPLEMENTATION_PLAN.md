@@ -48,7 +48,7 @@ Claude Code invocation contract for every product task:
 
 ## 3. Phase-shippability strategy
 
-T-03 cannot expose dead placeholder routes and still satisfy the phase rule. It therefore creates functional compatibility adapters using current owner-scoped data/components. T-04 may activate navigation only after `/`, `/deal`, `/invoice`, and `/pengaturan` have useful compatibility views. T-08–T-11 replace those adapters with the exact IA. The old `/dashboard` and `/dashboard/invoices/[id]` remain explicit 302 redirects throughout this round.
+T-03 cannot expose dead placeholder routes and still satisfy the phase rule. It therefore creates functional compatibility adapters using current owner-scoped data/components. T-04 may activate navigation only after `/`, `/deal`, `/invoice`, and `/pengaturan` have useful compatibility views. T-08–T-11 replace those adapters with the exact IA. The old `/dashboard` is an explicit 302 redirect to `/`; `/dashboard/invoices/[id]` remains a compatibility route until T-19.
 
 Parent-deal behavior is settled: preserve the required relation and `ON DELETE RESTRICT`, drop the detached-parent fixture, and defer the deal-deletion-with-invoices UX gap. Preview remains non-isolated and the Phase 2 gate cannot pass until Preview and Production fingerprints differ.
 
@@ -96,12 +96,12 @@ Parent-deal behavior is settled: preserve the required relation and `ON DELETE R
 - **Files/modules:** `src/app/masuk/*`; `src/app/(app)/layout.tsx`; compatibility pages for `(app)/page.tsx`, `deal/page.tsx`, `deal/[id]/page.tsx`, `invoice/page.tsx`, `invoice/[id]/page.tsx`, `pengaturan/page.tsx`; redirect handlers/pages at old paths; link call sites.
 - **Data:** none.
 - **Dependencies:** T-02.
-- **Claude packet:** move landing without changing content, create protected route group and useful compatibility views, exact explicit 302 redirects, no final IA styling.
+- **Claude packet:** move landing without changing content, create `(app)` protected group and useful compatibility views, exact explicit 302 redirects, no final IA styling.
 - **Tests:** HTTP 302 Location checks; auth redirects; public/landing shell absence; old detail link preservation.
 - **Commit:** `T-03: scaffold owner routes and preserve legacy redirects`.
-- **Evidence:** automated route matrix and no-error navigation artifacts.
-- **Rollback:** old pages can be restored because no permanent redirect/cache or schema change exists.
-- **Status:** pending.
+- **Evidence:** focused route suite 19/19; full 51/51 files and 519/519 tests; typecheck/lint/Prisma/build passed; production HTTP route matrix 8/8 including real 302 query drop, `/masuk` 200/no app menu, protected redirects, legacy invoice compatibility, and invalid public token 404.
+- **Rollback:** restore the prior root/dashboard pages and remove compatibility placeholders/redirect handler.
+- **Status:** accepted in the T-03 task commit; independent staged-diff review passed.
 
 **Phase 0 gate:** T-00–T-03 criteria; canonical gates; baseline comparison; migration artifact review; route HTTP evidence; update `CLAUDE.md`, `STATE.md`, and implementation log. Recommendation may merge to integration without special Chris acknowledgement if no regression/security/migration failure exists.
 

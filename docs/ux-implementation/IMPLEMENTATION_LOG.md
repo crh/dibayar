@@ -286,3 +286,15 @@ Append-only chronological log. Entry types are `STATE`, `DECISION`, and `DEVIATI
 - CSS scope is limited to the Grid rules; no duplicate breakpoint custom properties or palette/radius/shadow/font/typography token changes were introduced. The CSS media threshold is synchronization-tested from `BREAKPOINTS.LG`.
 - Focused tests passed 7/7; full Vitest passed 44/44 files and 508/508 tests; typecheck, lint, and production build passed. No database, migration, Docker, deployment, or unrelated-file action occurred.
 - T-03 has not started.
+
+## 2026-08-06T15:56:10+07:00 — STATE — T-03 implementation and acceptance complete
+
+- T-03 was accepted in its task commit after the final fail-closed staged-diff review.
+- Moved the current public landing to `/masuk`; made `/` the protected `(app)` entry; replaced `/dashboard` with a real 302 redirect that drops query state; preserved `/dashboard/invoices/[id]` as a compatibility route; and added protected placeholders for the new owner paths.
+- Kept `/i/:token` outside the protected group with no app chrome. No AppShell, middleware, database, dependency, or unrelated product behavior was introduced.
+- Focused route tests passed 19/19; full Vitest passed 51/51 files and 519/519 tests; typecheck, lint, Prisma validation, and production build passed. Production HTTP route matrix passed 8/8, including the real 302, `/masuk` 200/no app menu, protected redirects, legacy invoice compatibility, and invalid public token 404.
+- T-04 has not started.
+
+## 2026-08-06T16:10:26+07:00 — DECISION — Legacy invoice route remains compatibility-only until T-19
+
+- The earlier implementation-log decision describing a second 302 from `/dashboard/invoices/[id]` to `/invoice/[id]` is superseded by the T-03 route packet. T-03 applies the real 302 only to `/dashboard`; `/dashboard/invoices/[id]` remains unchanged and compatibility-protected until T-19.

@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 const { cookies } = vi.hoisted(() => ({ cookies: vi.fn() }));
 vi.mock("next/headers", () => ({ cookies }));
 
-import Home from "./page";
+import Home from "./masuk/page";
 
 function cookieJar(value?: string) {
   return {

@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { getLanguage } from "@/lib/i18n";
-import LandingClient from "./landing-client";
+import LandingClient from "../landing-client";
 
 const LANGUAGE_COOKIE = "dibayar-language";
 

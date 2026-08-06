@@ -7,7 +7,7 @@ Status: **SIGNED FOR T-00–T-27; Preview isolation remains a separate Phase 2 g
 
 ## Executive result
 
-The specification is implementable on the current stack, but its paths are indicative and several assumptions are false. The repository is Next.js 16 App Router, not `src/routes`; the current app has only `/`, `/dashboard`, `/dashboard/invoices/[id]`, and `/i/[token]`. The implementation will use App Router route groups and preserve old links with explicit temporary redirects.
+The specification is implementable on the current stack, but its paths are indicative and several assumptions are false. The repository is Next.js 16 App Router, not `src/routes`; the current app has only `/`, `/dashboard`, `/dashboard/invoices/[id]`, and `/i/[token]`. The implementation uses App Router route groups, moves the landing to `/masuk`, redirects `/dashboard` explicitly, and preserves the legacy invoice detail until T-19.
 
 No tax, currency, line-item, stage-enum, payment, rebrand, or non-WhatsApp scope is admitted. No runtime dependency is approved. T-00 may add Playwright as a dev dependency. The current pre-implementation suite has one recorded baseline failure; see `baselines/STEP3_BASELINE.md`.
 
@@ -16,7 +16,7 @@ No tax, currency, line-item, stage-enum, payment, rebrand, or non-WhatsApp scope
 | Spec item or assumption | Repository evidence | Status | Implementation decision |
 | --- | --- | --- | --- |
 | Framework and versions | `package.json`; live tools: Next 16.2.10, React 19.2.4, TS 5.9.3, Tailwind 4.3.2, Prisma 7.8.0, Node 22.22.3 | Confirmed | Keep stack; use App Router conventions and Tailwind v4 tokens in `src/app/globals.css`. |
-| Router and routes | `src/app/page.tsx`, `src/app/dashboard/page.tsx`, `src/app/dashboard/invoices/[id]/page.tsx`, `src/app/i/[token]/page.tsx` | Incorrect | Resolve spec paths to `src/app/(app)/*`, `src/app/masuk`, and existing public group. Add old owner-invoice redirect because the current route is `/dashboard/invoices/[id]`, not `/invoice/[id]`. |
+| Router and routes | `src/app/page.tsx`, `src/app/dashboard/page.tsx`, `src/app/dashboard/invoices/[id]/page.tsx`, `src/app/i/[token]/page.tsx` | Incorrect | Resolve spec paths to `src/app/(app)/*`, `src/app/masuk`, and the existing public group. Add the real `/dashboard` 302 redirect; preserve `/dashboard/invoices/[id]` as a compatibility route until T-19. |
 | Authentication provider | `src/auth.ts`: NextAuth/Auth.js, Google provider, database sessions | Confirmed | Landing copy names Google. Protected route group enforces auth; `/masuk` and `/i/[token]` remain outside app chrome. |
 | Authorization boundaries | `src/lib/deals.ts`, `src/lib/invoices.ts`, owner API routes include `userId`; public routes use token-scoped projections | Confirmed | Preserve service-layer ownership filters and add second-user integration/E2E proof. Route-group auth does not replace service/API ownership checks. |
 | Database/migrations | PostgreSQL + Prisma; six checked-in migrations under `prisma/migrations` | Confirmed | Additive migrations only; never apply Preview/Production migrations automatically. Migration tests use representative local data. |
@@ -45,7 +45,7 @@ No tax, currency, line-item, stage-enum, payment, rebrand, or non-WhatsApp scope
 | --- | --- | --- | --- |
 | T-01 Locale/formatters | Product formatting calls under `src/` are centralized; the unrelated cron guard retains its own Jakarta date calculation; default/fallback is `id`; explicit stored `en` remains valid UI chrome while money/date/document formatting stays Indonesian | Implemented; accepted in the T-01 task commit | `src/lib/locale.ts` is the dependency-free source of truth; `src/lib/format/{money,date,phone}.ts` own fixed Indonesian formatting; the checked-in default-only migration preserves existing preferences. Product-source grep, canonical, migration, production browser, and HTML/PDF parity gates pass. |
 | T-02 breakpoints/grid | Five typed breakpoints and a reusable Grid primitive now exist; CSS adds only the Grid base/large rules with no palette/radius/shadow/font token changes | Implemented; accepted in the T-02 task commit | `src/lib/breakpoints.ts` is runtime-frozen and exactly `320/360/640/1024/1440`; `Grid` is one column below LG and 12-column/24px-gutter at LG+. CSS media synchronization is guarded by a test derived from `BREAKPOINTS.LG`. |
-| T-03 routes/redirect | Root is landing; owner detail lives under `/dashboard/invoices/[id]`; no app route group | Incorrect | Move landing to `/masuk`; create `(app)` protected group and compatibility route adapters. `/dashboard` responds explicit 302 to `/`. Add 302 from `/dashboard/invoices/[id]` to `/invoice/[id]` to preserve real bookmarks. |
+| T-03 routes/redirect | `/masuk` now serves the current landing; `/` is a protected `(app)` entry; `/dashboard` is a real 302 to `/`; new owner paths resolve through protected placeholders; `/i/:token` and the legacy invoice detail remain outside the new group | Implemented; accepted in the T-03 task commit | Keep `/masuk` public and chrome-free; protect the `(app)` group without AppShell; drop `/dashboard` query state on 302; preserve `/dashboard/invoices/[id]` until T-19; keep public token routes outside the group. |
 | T-04 AppShell | No shell; account menu is page-local | Migration needed | Add AppShell/TopBar/SideNav/BottomNav and route metadata. Use compatibility route content so Phase 1 remains shippable before Phase 2 refinement. |
 | T-05 account menu | Existing `account-menu.tsx` is absolute desktop/fixed mobile, contains language switch, lacks backdrop/handle/focus return/route close | Incorrect | Refactor existing file rather than duplicate. Fixed trigger-rect positioning ≥640; sheet <640; focus lifecycle and semantics tested. |
 | T-06 ShareLinkField | Invoice detail renders full URL with `break-all`; session cache stores path | Incorrect | Extract share component; preserve full clipboard/session value, render measured one-line middle truncation, ResizeObserver, accessible error state. |
@@ -106,7 +106,7 @@ No tax, currency, line-item, stage-enum, payment, rebrand, or non-WhatsApp scope
 
 ### Spec vs product
 
-1. **Routes:** root is landing and invoice detail is `/dashboard/invoices/[id]`. Move landing to `/masuk`; preserve both old owner routes with 302 redirects.
+1. **Routes:** root is landing and invoice detail is `/dashboard/invoices/[id]`. T-03 moves landing to `/masuk`, redirects `/dashboard` to `/`, and preserves `/dashboard/invoices/[id]` until T-19.
 2. **Formatting:** English UI currently changes money/date locale. Central formatters remove that coupling.
 3. **Public token states:** current security design intentionally makes expired/invalid uniform. Keep uniform invalid/revoked response; expose expired only after hash lookup, still with no invoice data and rate limiting.
 4. **WhatsApp:** current validator is Indonesia-mobile-only and CTA can be disabled. Replace with spec normalization and repair path.
@@ -117,7 +117,7 @@ No tax, currency, line-item, stage-enum, payment, rebrand, or non-WhatsApp scope
 ### Spec-internal
 
 1. **`/dashboard` “302, permanent once shipped”:** use explicit **302 for this round** to preserve rollback and avoid cached permanent redirects. A 308 is deferred until after release evidence and a separate decision.
-2. **“`/invoice/:id` unchanged”:** false against repository. Preserve `/dashboard/invoices/:id` with a 302 to new `/invoice/:id`.
+2. **“`/invoice/:id` unchanged”:** false against the intended future IA, but T-03 preserves the current `/dashboard/invoices/:id` compatibility route without redirect. T-19 owns the eventual move to `/invoice/:id`.
 3. **Phase shippability vs placeholder routes/nav:** T-03 creates compatibility adapters backed by current data/components. T-04 activates navigation only when each destination has a functional compatibility view. T-08–T-11 then refine/extract exact IA without exposing dead placeholders.
 4. **Shared HTML/PDF component:** React DOM and `@react-pdf/renderer` use incompatible primitives. Share the canonical document model and ordered schema, with two thin renderers.
 5. **Tax “byte-identical”:** whole PDF bytes necessarily change when layout changes. Compare normalized tax-related field output/value/label to the pre-change fixture; do not claim identical binary documents.
