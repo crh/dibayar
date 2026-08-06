@@ -278,3 +278,11 @@ Append-only chronological log. Entry types are `STATE`, `DECISION`, and `DEVIATI
 
 - T-01 was accepted in its task commit after the final fail-closed staged-diff review; the implementation, migration, canonical gates, production browser evidence, and parity evidence are recorded above.
 - T-02 has not started.
+
+## 2026-08-06T15:12:14+07:00 — STATE — T-02 implementation and acceptance complete
+
+- T-02 was accepted in its task commit after the final fail-closed staged-diff review.
+- Added runtime-frozen typed breakpoint tokens for XS/SM/MD/LG/XL at 320/360/640/1024/1440 and a minimal `Grid` primitive. The Grid is one column below 1024px and twelve `minmax(0, 1fr)` columns with 24px gaps at and above 1024px.
+- CSS scope is limited to the Grid rules; no duplicate breakpoint custom properties or palette/radius/shadow/font/typography token changes were introduced. The CSS media threshold is synchronization-tested from `BREAKPOINTS.LG`.
+- Focused tests passed 7/7; full Vitest passed 44/44 files and 508/508 tests; typecheck, lint, and production build passed. No database, migration, Docker, deployment, or unrelated-file action occurred.
+- T-03 has not started.

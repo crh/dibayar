@@ -88,9 +88,9 @@ Parent-deal behavior is settled: preserve the required relation and `ON DELETE R
 - **Claude packet:** named five-band tokens and 12-column Grid; layout tokens only.
 - **Tests:** class/render contracts; computed grid at representative widths; token diff guard.
 - **Commit:** `T-02: add responsive layout primitives`.
-- **Evidence:** unit test + Playwright geometry; palette/radius/shadow/font diff assertion.
+- **Evidence:** focused 7/7 and full 44/44 files, 508/508 tests; typecheck/lint/build passed; exact five-token values and runtime freeze; CSS-only Grid contract with no palette/radius/shadow/font changes.
 - **Rollback:** remove layout variables/components.
-- **Status:** pending.
+- **Status:** accepted in the T-02 task commit; independent staged-diff review passed.
 
 #### T-03 — App Router scaffolding and redirects
 - **Files/modules:** `src/app/masuk/*`; `src/app/(app)/layout.tsx`; compatibility pages for `(app)/page.tsx`, `deal/page.tsx`, `deal/[id]/page.tsx`, `invoice/page.tsx`, `invoice/[id]/page.tsx`, `pengaturan/page.tsx`; redirect handlers/pages at old paths; link call sites.

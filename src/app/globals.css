@@ -87,3 +87,7 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
+.ds-grid { display: grid; grid-template-columns: 1fr; }
+@media (min-width: 1024px) {
+  .ds-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; }
+}
