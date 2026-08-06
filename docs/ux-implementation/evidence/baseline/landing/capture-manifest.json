@@ -8,7 +8,7 @@
       "viewport": "lg1024",
       "language": "en",
       "path": "captures/landing-current__anonymous__lg1024__en.png",
-      "route": "/",
+      "route": "/masuk",
       "width": 1024,
       "height": 900,
       "fullPage": true
@@ -19,7 +19,7 @@
       "viewport": "lg1024",
       "language": "id",
       "path": "captures/landing-current__anonymous__lg1024__id.png",
-      "route": "/",
+      "route": "/masuk",
       "width": 1024,
       "height": 900,
       "fullPage": true
@@ -30,7 +30,7 @@
       "viewport": "md768",
       "language": "en",
       "path": "captures/landing-current__anonymous__md768__en.png",
-      "route": "/",
+      "route": "/masuk",
       "width": 768,
       "height": 1024,
       "fullPage": true
@@ -41,7 +41,7 @@
       "viewport": "md768",
       "language": "id",
       "path": "captures/landing-current__anonymous__md768__id.png",
-      "route": "/",
+      "route": "/masuk",
       "width": 768,
       "height": 1024,
       "fullPage": true
@@ -52,7 +52,7 @@
       "viewport": "sm390",
       "language": "en",
       "path": "captures/landing-current__anonymous__sm390__en.png",
-      "route": "/",
+      "route": "/masuk",
       "width": 390,
       "height": 844,
       "fullPage": true
@@ -63,7 +63,7 @@
       "viewport": "sm390",
       "language": "id",
       "path": "captures/landing-current__anonymous__sm390__id.png",
-      "route": "/",
+      "route": "/masuk",
       "width": 390,
       "height": 844,
       "fullPage": true
@@ -74,7 +74,7 @@
       "viewport": "xl1440",
       "language": "en",
       "path": "captures/landing-current__anonymous__xl1440__en.png",
-      "route": "/",
+      "route": "/masuk",
       "width": 1440,
       "height": 900,
       "fullPage": true
@@ -85,7 +85,7 @@
       "viewport": "xl1440",
       "language": "id",
       "path": "captures/landing-current__anonymous__xl1440__id.png",
-      "route": "/",
+      "route": "/masuk",
       "width": 1440,
       "height": 900,
       "fullPage": true
@@ -96,7 +96,7 @@
       "viewport": "xs320",
       "language": "en",
       "path": "captures/landing-current__anonymous__xs320__en.png",
-      "route": "/",
+      "route": "/masuk",
       "width": 320,
       "height": 800,
       "fullPage": true
@@ -107,7 +107,7 @@
       "viewport": "xs320",
       "language": "id",
       "path": "captures/landing-current__anonymous__xs320__id.png",
-      "route": "/",
+      "route": "/masuk",
       "width": 320,
       "height": 800,
       "fullPage": true

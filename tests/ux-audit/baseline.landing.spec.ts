@@ -48,9 +48,9 @@ test.describe("T-00 current landing baseline", () => {
           path: "/",
           sameSite: "Lax",
         }]);
-        await page.goto("/", { waitUntil: "networkidle" });
+        await page.goto("/masuk", { waitUntil: "networkidle" });
         await expect(page.locator("main")).toBeVisible();
-        artifacts.push(await capturePage(page, path.join(outputRoot, "captures"), "/", {
+        artifacts.push(await capturePage(page, path.join(outputRoot, "captures"), "/masuk", {
           routeKey: "landing-current",
           stateKey: "anonymous",
           viewport,

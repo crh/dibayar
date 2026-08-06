@@ -1,17 +1,21 @@
 {
-  "schemaVersion": 1,
-  "captureCount": 10,
-  "geometryChecks": 10,
-  "overflowFindings": 0,
-  "smallTouchTargetFindings": 10,
-  "consoleErrors": 0,
-  "pageErrors": 0,
-  "hydrationMessages": 0,
+  "route": "/masuk",
+  "matrix": "5 viewports x 2 languages",
   "files": [
     {
       "path": "capture-manifest.json",
-      "bytes": 2915,
-      "sha256": "4e1cae6e1df5792844cf02d54c8583a0d9103e68519493e399b810d04916984f"
+      "bytes": 2965,
+      "sha256": "06d089170eb46565d632721460d8146e211a55f438c61bf90b96cf7800b46e91"
+    },
+    {
+      "path": "detector-findings.json",
+      "bytes": 5108,
+      "sha256": "414e3d469c2c1251c0f3e25845fb9bda4ae184ae1a62555beeca64cb4f81d6db"
+    },
+    {
+      "path": "runtime-diagnostics.json",
+      "bytes": 73,
+      "sha256": "826b8737bead4709a036aba71188ca90ad035e9217dde0733fac4a240589881c"
     },
     {
       "path": "captures/landing-current__anonymous__lg1024__en.png",
@@ -62,16 +66,6 @@
       "path": "captures/landing-current__anonymous__xs320__id.png",
       "bytes": 79946,
       "sha256": "6da372d4eebd9fa4e5c27684db0813b85d311907ad3545a780f7582b48509cde"
-    },
-    {
-      "path": "detector-findings.json",
-      "bytes": 5108,
-      "sha256": "414e3d469c2c1251c0f3e25845fb9bda4ae184ae1a62555beeca64cb4f81d6db"
-    },
-    {
-      "path": "runtime-diagnostics.json",
-      "bytes": 73,
-      "sha256": "826b8737bead4709a036aba71188ca90ad035e9217dde0733fac4a240589881c"
     }
   ]
 }

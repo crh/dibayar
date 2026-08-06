@@ -17,21 +17,22 @@ day_count: 11
 repo_url: git@github.com:crh/dibayar.git
 prod_url: https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/
 last_deploy: 2026-07-24 (relayed, Hermes) — commit `8c35390` (`fix(invoice): preserve owner share link in session`, on top of `ebf8f1a` `fix(design): resolve invoice UAT workflow defects`) pushed to `origin/hermes/design-system`; local/tracking/remote refs equal `8c353909004ba638d7e8fb60c386585edf83f105`; worktree clean. Vercel Preview `dpl_vYFBgjb65J5aCmD8cMRuWP5YwnFx` READY at that commit; stable protected branch alias `https://dibayar-git-hermes-design-system-kenji-iwakura.vercel.app`. Production unchanged; no public/non-SSO access enabled. Supersedes the 2026-07-23 ephemeral OAuth-blocked Preview entry (no longer the operative deploy).
-build_status: green (relayed, Hermes) — local independent final gates on `8c35390`: lint PASS, typecheck PASS, full `npm test` PASS (32 files / 344 tests), build PASS, `npx prisma validate` PASS, `git diff --check` PASS; focused UAT suites 54/54 PASS.
-latest_validation: 2026-07-24 (relayed) — [Claude Code Sonnet browser-UAT] authenticated Chrome UAT on the stable alias: 5/5 PASS — (1) due-date inheritance persists after reload, (2) regenerated share retains the Copy control and enables WhatsApp after reload in the same session, (3) a legacy active share without a cached token stays truthful (no fabricated URL) with an accurate disabled explanation, (4) default locale is Indonesian with correct IDR/date formatting, (5) `Draf` renders in Indonesian and `Draft` in English. Permitted browser mutation: regenerated the existing disposable `UAT Sonnet 20260723` fixture's active share via confirmation only — no data created, no revoke/delete, no WhatsApp opened/sent, no payments. [Hermes-confirmed] independently hard-reloaded the final invoice on the stable alias and observed Indonesian UI, `DRAF`, `Jatuh tempo 5 Agustus 2026`, active share expiry, Copy control, and enabled `Buka WhatsApp`.
+build_status: green (Hermes independent, 2026-08-06) — Phase 0 local gates: T-03 full `npm test` PASS (51 files / 519 tests), lint PASS, typecheck PASS, `npx prisma validate` PASS, production build PASS; T-00–T-02 preceding gates remain recorded in the implementation log.
+latest_validation: 2026-08-06 (Hermes independent) — T-03 production HTTP route matrix 8/8 on the approved local database: real `/dashboard` 302 with query drop, `/masuk` 200/no app menu, protected route redirects, legacy invoice compatibility, and invalid public token 404. No Preview/Production deployment or public-access change.
 stack: Next.js + TS + Tailwind + Postgres + Prisma + Auth.js (Google OAuth) + Vercel
 vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linked to github.com/crh/dibayar)
 
 ## now
-current_milestone: M3 — Payment Chasing — COMPLETE. Phase 1 design-system UAT: all 4 functional/UX defects found 2026-07-23 (draft due-date inheritance, share-link reload, WhatsApp CTA coherence, Indonesian default locale/`Draf` rendering) are now fixed and verified per relayed evidence at commit `8c35390` (local gates + Preview READY + 5/5 authenticated browser UAT + Hermes-confirmed reload). This records code/UAT completion only. Phase 1→2 transition, Production deployment, public/non-SSO recipient access, and M4 creator validation remain Chris-gated and are NOT approved or completed by this entry.
-active_branch: hermes/design-system
-latest_feature_commit: `8c35390` fix(invoice): preserve owner share link in session — pushed to `origin/hermes/design-system`, on top of `ebf8f1a` fix(design): resolve invoice UAT workflow defects, on top of `4da297f` [verified] fix locale consistency across creator flows (2026-07-22), `1ee7304`, `10f1d20`. Local HEAD, tracking, and `origin/hermes/design-system` are synchronized at `8c35390`; worktree clean (relayed, Hermes).
-remote_feature_branch: origin/hermes/design-system synchronized with local HEAD at `8c35390` (relayed, Hermes); source branch `hermes/m3-chasing` remains unchanged.
+current_milestone: UX implementation Phase 0 foundations T-00–T-03 — COMPLETE locally and independently reviewed. T-04 is next. Phase 1→2 transition, Preview/Production deployment, public/non-SSO recipient access, and M4 creator validation remain Chris-gated.
+active_branch: hermes/ux-phase-0
+latest_feature_commit: T-03 `2c42a28` scaffold owner routes and preserve legacy redirects; local only, not pushed or deployed.
+remote_feature_branch: no Phase 0 push performed; `hermes/ux-integration` remains at baseline `8ca6137ea988b57f7a9379b5109b4dc3516290ee`.
 completed_milestones:
   - Phase 0 discovery closed
   - M0 bootstrap and protected production deployment complete
   - M1 auth + deal pipeline accepted on protected Preview
   - M2 invoice (generation, share-link, status tracking) accepted on protected Preview 2026-07-18 — Production/public-access separately gated, not yet decided
+  - UX implementation Phase 0 T-00 baseline, T-01 locale/formatters, T-02 Grid primitives, and T-03 route scaffolding accepted locally on `hermes/ux-phase-0`
 
 today_work (Focus measures approved scope, not task volume, from 2026-07-19):
   - Governance catch-up Task 1: apply the Chris-approved Focus amendment and consistency sweep — done
@@ -48,7 +49,7 @@ today_work (Focus measures approved scope, not task volume, from 2026-07-19):
   - 2026-07-24 design-system UAT closeout (docs-only, STATE.md + DAILY_LOG.md): reconciled all 4 open UAT defects as fixed and verified per relayed evidence (commit `8c35390`, local gates, protected Preview READY, 5/5 authenticated browser UAT, Hermes-confirmed reload); no code/commit/push/migration/config change made by this docs session — done (docs)
   - 2026-07-24 invoice attention follow-up: local uncommitted implementation adds an owner-controlled due-date editor (set/change/clear through same-origin owner-scoped PATCH) and fixes detail-page/WhatsApp raw-status inconsistency via shared Jakarta-aware display-status derivation; Hermes independently ran focused 79/79 tests plus lint/typecheck/full `npm test` 32 files/355 tests/build/`prisma validate`/`git diff --check` PASS; no commit/push/deploy/migration/browser data mutation — pending Chris review and separate commit/push/deploy decision
 
-open_blockers: None remaining on the 4 design-system functional/UX defects logged 2026-07-23 — (relayed) all 4 (draft due-date inheritance, share-link reload, WhatsApp CTA coherence, Indonesian default locale/`Draf` rendering) are fixed and verified at commit `8c35390` with local gates, protected Preview READY, 5/5 authenticated browser UAT, and Hermes-confirmed independent reload. This records code/UAT completion only, evidenced by relayed sources, not first-hand verification by this docs session. Unchanged and still Chris-gated: (1) Phase 1→2 transition and M4 creator-validation go-ahead, (2) Production deployment, (3) public/non-SSO recipient access for share links. Email remains a separate product decision. The 7-day due-soon window is provisional and needs creator feedback. Monthly income uses invoice `createdAt` because no `paidAt` field exists; PPh values are estimates, not tax filing calculations.
+open_blockers: Phase 0 T-00–T-03 has no unresolved implementation, migration, regression, or independent-review blocker. Still gated: (1) T-04 onward implementation, (2) Preview isolation before any Phase 2 migration/capture, (3) Phase 1→2 transition and M4 creator-validation go-ahead, (4) Production deployment, and (5) public/non-SSO recipient access. Existing product findings remain recorded: small touch targets, including the 21px invoice-detail back link and landing language selector; deal-deletion-with-invoices UX remains deferred. The 7-day due-soon window is provisional; monthly income uses invoice `createdAt`; PPh values are estimates, not tax filing calculations.
 
 ## recent_signal_findings
 - No external signal check recorded.
@@ -75,12 +76,12 @@ feedback_logged: 0
 wtp_signals: 0
 
 ## latest_deployment_status
-project_linkage: confirmed by Chris; Google Cloud OAuth client managed through logged-in Chrome MCP session
-preview: 2026-07-24 (relayed, Hermes) — Vercel Preview `dpl_vYFBgjb65J5aCmD8cMRuWP5YwnFx` is READY from commit `8c35390` on `hermes/design-system`; stable protected branch alias `https://dibayar-git-hermes-design-system-kenji-iwakura.vercel.app` unchanged. Production untouched; no public/non-SSO access enabled. Supersedes the 2026-07-23 ephemeral OAuth-blocked Preview entry — UAT ran successfully on the stable alias instead.
-production: URL reachable; Vercel Authentication protected; no new Production deployment this run.
-smoke: 2026-07-24 (relayed) authenticated Chrome-MCP UAT on the stable design-system alias: 5/5 PASS, closing all 4 defects logged 2026-07-23 (due-date inheritance, share/reload, WhatsApp coherence, locale default + `Draf`); Hermes independently hard-reloaded and confirmed the final invoice state. This is code/UAT completion evidence only, not a Chris acceptance record. Earlier M2 full owner/recipient E2E remains recorded in DAILY_LOG.
+project_linkage: confirmed by Chris; no deployment action taken in this Phase 0 run
+preview: not used for T-00–T-03 evidence; Preview is non-isolated from Production per current fingerprint check, so Phase 2 migrations/captures remain blocked.
+production: untouched; no public/non-SSO access enabled; no Production deployment authorized.
+smoke: local production-mode landing and authenticated fixture evidence passed during T-00; T-03 local HTTP route matrix passed 8/8. No remote smoke or public-access claim.
 
 ## next_3_tasks
-1. Design-system UAT closeout is technically complete (commit `8c35390`, verified per relayed evidence — no outstanding code fix identified); present to Chris for review/acceptance of the design-system Preview as demo-ready.
-2. Get Chris's approval to transition Phase 1→2 and begin M4 validation with 5 Indonesian creators — not started.
-3. Get Chris's separate Production deployment and public/non-SSO recipient share-link access decisions — brief available in DEPLOYMENT.md; not made.
+1. T-04 — implement and independently verify the responsive AppShell/top bar/side nav/bottom nav; no Preview/Production deployment.
+2. T-05 — make the account menu responsive and focus-safe after T-04 review.
+3. Recheck the Preview/Production database fingerprints before any Phase 2 migration or capture; request Chris's Phase 2 acknowledgement only if isolation is proven.

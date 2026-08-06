@@ -298,3 +298,13 @@ Append-only chronological log. Entry types are `STATE`, `DECISION`, and `DEVIATI
 ## 2026-08-06T16:10:26+07:00 — DECISION — Legacy invoice route remains compatibility-only until T-19
 
 - The earlier implementation-log decision describing a second 302 from `/dashboard/invoices/[id]` to `/invoice/[id]` is superseded by the T-03 route packet. T-03 applies the real 302 only to `/dashboard`; `/dashboard/invoices/[id]` remains unchanged and compatibility-protected until T-19.
+
+## 2026-08-06T16:37:20+07:00 — STATE — T-00 acceptance status clarified
+
+- T-00 was accepted in commit `0f33310` after the exact frozen staged snapshot passed the final independent fail-closed review. Its fixture, browser, parity, security, checksum, and cleanup evidence are recorded in the preceding entries.
+- The older pre-acceptance line remains historical; current Phase 0 status is T-00 through T-03 accepted locally on `hermes/ux-phase-0`.
+
+## 2026-08-06T16:48:56+07:00 — STATE — T-03 landing evidence retargeted
+
+- The Hermes-owned anonymous landing Playwright baseline now targets `/masuk`, the accepted T-03 public landing route, instead of the protected `/` entry.
+- Production-mode five-viewport/two-language landing capture passed 1/1; durable landing evidence and manifest were refreshed with portable paths, route `/masuk`, and zero checksum mismatches.
