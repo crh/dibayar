@@ -10,6 +10,10 @@ import { AccountMenu } from "@/components/account-menu";
 import { summarizeMonthlyIncome, getJakartaMonthBounds } from "@/lib/income-summary";
 import type { Language } from "@/lib/i18n";
 import { StatusChip, MoneyDisplay, EmptyState, fieldClassName } from "@/components/design-system";
+import { formatMoney } from "@/lib/format/money";
+import { formatDate, formatMonthYearLabel } from "@/lib/format/date";
+
+const JAKARTA_TIME_ZONE = "Asia/Jakarta";
 
 const PIPELINE_STAGES = [
   { value: "MASUK", label: "Masuk" },
@@ -20,12 +24,10 @@ const PIPELINE_STAGES = [
   { value: "DIBAYAR", label: "Dibayar" },
 ] as const;
 
-function formatIncomeLabel(year: number, month: number, language: Language) {
-  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "id-ID", {
-    month: "long",
-    year: "numeric",
-    timeZone: "Asia/Jakarta",
-  }).format(new Date(Date.UTC(year, month - 1, 15)));
+// Always Indonesian regardless of uiLanguage — dates never vary with the UI
+// language (see SPEC_RECONCILIATION.md T-01).
+function formatIncomeLabel(year: number, month: number) {
+  return formatMonthYearLabel(new Date(Date.UTC(year, month - 1, 15)), JAKARTA_TIME_ZONE);
 }
 
 const PIPELINE_STAGE_KEYS: Record<string, string> = {
@@ -68,19 +70,15 @@ const EMPTY_FORM: FormState = {
   paymentTerms: "",
 };
 
-function formatIdr(value: number, language: Language) {
-  const formatter = new Intl.NumberFormat(language === "en" ? "en-US" : "id-ID", { maximumFractionDigits: 0 });
-  return language === "en" ? `IDR ${formatter.format(value)}` : `Rp${formatter.format(value)}`;
+// Always the centralized formatMoney output regardless of uiLanguage (see
+// SPEC_RECONCILIATION.md T-01).
+function formatIdr(value: number) {
+  return formatMoney(value);
 }
 
 function formatDeadline(value: Date | null, language: Language) {
   if (!value) return language === "en" ? "No deadline" : "Tanpa tenggat";
-  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(value));
+  return formatDate(value);
 }
 
 function statusClass(status: InvoiceRecord["status"]) {
@@ -181,7 +179,7 @@ function StageColumn({
           <article key={deal.id} className="rounded-xl border border-line bg-bg p-3">
             <h4 className="font-semibold text-ink">{deal.brand}</h4>
             <div className="mt-2"><StatusChip status={deal.status} language={language} /></div>
-            <p className="mt-1 text-[15px] font-bold tabular-nums text-primary">{formatIdr(deal.feeIdr, language)}</p>
+            <p className="mt-1 text-[15px] font-bold tabular-nums text-primary">{formatIdr(deal.feeIdr)}</p>
             <p className="mt-1 text-[12px] text-muted">{formatDeadline(deal.deadline, language)}</p>
             <label className="sr-only" htmlFor={`stage-select-${deal.id}`}>
               {t("dashboard.stageLabel", { brand: deal.brand })}
@@ -453,7 +451,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
             />
             {form.feeIdr && Number.isFinite(Number(form.feeIdr)) && Number(form.feeIdr) > 0 ? (
               <span className="text-[12px] font-normal text-muted">
-                {t("dashboard.feePreview", { amount: formatIdr(Number(form.feeIdr), language) })}
+                {t("dashboard.feePreview", { amount: formatIdr(Number(form.feeIdr)) })}
               </span>
             ) : null}
           </label>
@@ -497,7 +495,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
                 <div className="flex flex-col gap-4">
                   {overdue.length ? (
                     <div>
-                      <h3 className="text-[15px] font-bold text-overdue">{t("dashboard.overdue")} ({overdue.length}) · {formatIdr(overdueTotal, language)}</h3>
+                      <h3 className="text-[15px] font-bold text-overdue">{t("dashboard.overdue")} ({overdue.length}) · {formatIdr(overdueTotal)}</h3>
                       <div className="mt-2 grid gap-3 sm:grid-cols-2">
                         {overdue.map((invoice) => (
                           <AttentionInvoiceCard key={invoice.id} invoice={invoice} language={language} t={t} />
@@ -507,7 +505,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
                   ) : null}
                   {dueSoon.length ? (
                     <div>
-                      <h3 className="text-[15px] font-bold text-ink">{t("dashboard.dueWithin", { days: String(DUE_SOON_WINDOW_DAYS) })} ({dueSoon.length}) · {formatIdr(dueSoonTotal, language)}</h3>
+                      <h3 className="text-[15px] font-bold text-ink">{t("dashboard.dueWithin", { days: String(DUE_SOON_WINDOW_DAYS) })} ({dueSoon.length}) · {formatIdr(dueSoonTotal)}</h3>
                       <div className="mt-2 grid gap-3 sm:grid-cols-2">
                         {dueSoon.map((invoice) => (
                           <AttentionInvoiceCard key={invoice.id} invoice={invoice} language={language} t={t} />
@@ -524,7 +522,7 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
       <section aria-labelledby="ringkasan-pendapatan" className="flex flex-col gap-4">
         <div>
           <h2 id="ringkasan-pendapatan" className="text-[20px] font-bold text-ink">{t("dashboard.income")}</h2>
-          <p className="text-[13px] text-muted">{t("dashboard.issued")} · {formatIncomeLabel(incomeSummary.year, incomeSummary.month, language)} · {incomeSummary.invoiceCount}</p>
+          <p className="text-[13px] text-muted">{t("dashboard.issued")} · {formatIncomeLabel(incomeSummary.year, incomeSummary.month)} · {incomeSummary.invoiceCount}</p>
         </div>
 
         <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5">
@@ -539,11 +537,11 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div>
               <p className="text-[13px] text-muted">{t("dashboard.gross")}</p>
-              <p className="mt-1 text-[16px] font-bold tabular-nums text-ink">{formatIdr(incomeSummary.grossIdr, language)}</p>
+              <p className="mt-1 text-[16px] font-bold tabular-nums text-ink">{formatIdr(incomeSummary.grossIdr)}</p>
             </div>
             <div>
               <p className="text-[13px] text-muted">{t("dashboard.withholding")}</p>
-              <p className="mt-1 text-[16px] font-bold tabular-nums text-overdue">-{formatIdr(incomeSummary.withholdingIdr, language)}</p>
+              <p className="mt-1 text-[16px] font-bold tabular-nums text-overdue">{formatIdr(-incomeSummary.withholdingIdr)}</p>
             </div>
           </div>
         </div>

@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { ReactNode } from "react";
 import { InvoicePdf } from "./invoice-pdf";
 
+// This test walks the raw React element tree (no DOM), so the real NBSP
+// (U+00A0) money separator is checked byte-for-byte, not normalized.
+const NBSP = String.fromCharCode(0x00a0);
+
 // InvoicePdf takes no language input at all (see the InvoicePdfInvoice /
 // InvoicePdfDeal prop types) — this suite pins that contract down so a future
 // change can't quietly thread the creator's UI language into the recipient's
@@ -43,7 +47,7 @@ describe("InvoicePdf", () => {
     expect(text).toContain("Jasa kolaborasi");
     expect(text).toContain("Pajak potong");
     expect(text).toContain("Total invoice");
-    expect(text).toContain("Rp1.500.000");
+    expect(text).toContain(`Rp${NBSP}1.500.000`);
     expect(text).not.toMatch(/billed to|due date|withholding|total invoice amount|thank you/i);
   });
 

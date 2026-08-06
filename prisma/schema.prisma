@@ -36,7 +36,7 @@ model User {
   email            String?           @unique
   emailVerified    DateTime?
   image            String?
-  language         String            @default("en")
+  language         String            @default("id")
   accounts         Account[]
   sessions         Session[]
   deals            Deal[]

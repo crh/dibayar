@@ -19,11 +19,11 @@ beforeEach(() => {
 });
 
 describe("RootLayout metadata", () => {
-  it("defaults to English metadata with no language cookie", async () => {
+  it("defaults to Indonesian metadata with no language cookie", async () => {
     const metadata = await generateMetadata();
 
     expect(metadata.title).toContain("Dibayar");
-    expect(metadata.description).toMatch(/creators/i);
+    expect(metadata.description).toMatch(/kreator/i);
   });
 
   it("returns Indonesian metadata when the language cookie is id", async () => {
@@ -34,6 +34,14 @@ describe("RootLayout metadata", () => {
     expect(metadata.description).toMatch(/kreator/i);
   });
 
+  it("returns English metadata when the language cookie is en", async () => {
+    cookies.mockResolvedValue(cookieJar("en"));
+
+    const metadata = await generateMetadata();
+
+    expect(metadata.description).toMatch(/creators/i);
+  });
+
   it("exposes bilingual alternate language links", async () => {
     const metadata = await generateMetadata();
 
@@ -42,13 +50,13 @@ describe("RootLayout metadata", () => {
 });
 
 describe("RootLayout", () => {
-  it("renders the document in English by default with no language cookie", async () => {
+  it("renders the document in Indonesian by default with no language cookie", async () => {
     const element = (await RootLayout({ children: null })) as ReactElement<{
       lang?: string;
       className?: string;
     }>;
 
-    expect(element.props.lang).toBe("en");
+    expect(element.props.lang).toBe("id");
     expect(element.props.className).not.toMatch(/font-geist/i);
   });
 
@@ -58,5 +66,13 @@ describe("RootLayout", () => {
     const element = (await RootLayout({ children: null })) as ReactElement<{ lang?: string }>;
 
     expect(element.props.lang).toBe("id");
+  });
+
+  it("renders the document in English when the language cookie is en", async () => {
+    cookies.mockResolvedValue(cookieJar("en"));
+
+    const element = (await RootLayout({ children: null })) as ReactElement<{ lang?: string }>;
+
+    expect(element.props.lang).toBe("en");
   });
 });

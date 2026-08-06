@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 import { getLanguage, translate, type Language } from "./i18n";
 
 describe("i18n", () => {
-  it("defaults unknown values to English", () => {
-    expect(getLanguage("fr")).toBe("en");
-    expect(getLanguage(null)).toBe("en");
+  it("defaults unknown or missing values to Indonesian", () => {
+    expect(getLanguage("fr")).toBe("id");
+    expect(getLanguage(null)).toBe("id");
   });
 
-  it("selects Indonesian only for the explicit id value", () => {
+  it("preserves an explicit stored value of id or en", () => {
     expect(getLanguage("id")).toBe("id");
+    expect(getLanguage("en")).toBe("en");
   });
 
   it("returns English translations by default", () => {

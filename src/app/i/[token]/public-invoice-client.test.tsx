@@ -50,7 +50,7 @@ describe("PublicInvoiceClient", () => {
     render(<PublicInvoiceClient token="token-abc" />);
 
     await waitFor(() => expect(screen.getAllByText("INV/2026/07/001").length).toBeGreaterThan(0));
-    expect(screen.getAllByText("Rp1.500.000").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Rp 1.500.000").length).toBeGreaterThan(0);
     expect(screen.getByText(/Brand Kopi/)).toBeDefined();
     expect(screen.getByText("PPh 23")).toBeDefined();
     expect(screen.getByText(/Kenji/)).toBeDefined();

@@ -7,7 +7,7 @@ export type UserLanguageDb = {
   };
 };
 
-// Returns the default English language (not a throw) when the user row is
+// Returns the default Indonesian language (not a throw) when the user row is
 // missing, so a caller never has to special-case a not-found lookup here.
 export async function getUserLanguage(db: UserLanguageDb, userId: string): Promise<Language> {
   const user = await db.user.findUnique({ where: { id: userId }, select: { language: true } });

@@ -20,12 +20,12 @@ beforeEach(() => {
 });
 
 describe("Home (landing page)", () => {
-  it("shows the Dibayar coming-soon message in English by default", async () => {
+  it("shows the Dibayar coming-soon message in Indonesian by default", async () => {
     render(await Home());
 
-    expect(screen.getByText("Coming soon")).toBeDefined();
+    expect(screen.getByText("Segera hadir")).toBeDefined();
     expect(
-      screen.getByText("Manage brand deals, invoices, and payments in one place"),
+      screen.getByText("Kelola deal brand, invoice, dan pembayaran di satu tempat"),
     ).toBeDefined();
   });
 
@@ -40,11 +40,11 @@ describe("Home (landing page)", () => {
   it("renders the brand-deal pipeline stages in order", async () => {
     render(await Home());
     const pipeline = screen.getByRole("list", {
-      name: "Your brand-deal workflow",
+      name: "Alur kerja deal brand kamu",
     });
     const text = pipeline.textContent ?? "";
 
-    const stages = ["Inbox", "Negotiation", "Deal", "Content", "Invoice", "Paid"];
+    const stages = ["Masuk", "Nego", "Deal", "Konten", "Invoice", "Dibayar"];
     let lastIndex = -1;
     for (const stage of stages) {
       const index = text.indexOf(stage);
@@ -53,10 +53,10 @@ describe("Home (landing page)", () => {
     }
   });
 
-  it("uses an explicit English action label instead of a generic submit button", async () => {
+  it("uses an explicit Indonesian action label instead of a generic submit button", async () => {
     render(await Home());
 
-    expect(screen.getByRole("link", { name: "See how it works" })).toBeDefined();
+    expect(screen.getByRole("link", { name: "Lihat cara kerja" })).toBeDefined();
     expect(screen.queryByText(/^submit$/i)).toBeNull();
   });
 
@@ -64,7 +64,7 @@ describe("Home (landing page)", () => {
     render(await Home());
 
     expect(
-      screen.getByRole("link", { name: "Sign in with Google" }).getAttribute("href"),
+      screen.getByRole("link", { name: "Masuk dengan Google" }).getAttribute("href"),
     ).toBe("/api/auth/signin?callbackUrl=%2Fdashboard");
   });
 
@@ -79,13 +79,24 @@ describe("Home (landing page)", () => {
     ).toBeDefined();
   });
 
-  it("exposes a working language switcher that renders Indonesian on toggle", async () => {
+  it("renders English content when the language cookie is en", async () => {
+    cookies.mockResolvedValue(cookieJar("en"));
+
+    render(await Home());
+
+    expect(screen.getByText("Coming soon")).toBeDefined();
+    expect(
+      screen.getByText("Manage brand deals, invoices, and payments in one place"),
+    ).toBeDefined();
+  });
+
+  it("exposes a working language switcher that renders English on toggle", async () => {
     const user = userEvent.setup();
     render(await Home());
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Language" }), "id");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Bahasa" }), "en");
 
-    expect(screen.getByText("Segera hadir")).toBeDefined();
-    expect(screen.queryByText("Coming soon")).toBeNull();
+    expect(screen.getByText("Coming soon")).toBeDefined();
+    expect(screen.queryByText("Segera hadir")).toBeNull();
   });
 });

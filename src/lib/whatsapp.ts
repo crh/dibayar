@@ -1,3 +1,6 @@
+import { formatMoney } from "./format/money";
+import { formatDate } from "./format/date";
+
 export type WhatsAppReminderKind = "due-soon" | "overdue";
 
 export function normalizeWhatsAppNumber(raw: string): string | null {
@@ -16,12 +19,7 @@ export function normalizeWhatsAppNumber(raw: string): string | null {
 }
 
 export function formatWhatsAppDate(value: Date | string): string {
-  return new Intl.DateTimeFormat("id-ID", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(value));
+  return formatDate(value);
 }
 
 export function buildWhatsAppReminderMessage(input: {
@@ -31,11 +29,11 @@ export function buildWhatsAppReminderMessage(input: {
   dueDate: Date | string;
   shareUrl: string;
 }): string {
-  const amount = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(input.totalIdr);
+  const amount = formatMoney(input.totalIdr);
   const dueDate = formatWhatsAppDate(input.dueDate);
   const opening = input.kind === "overdue"
-    ? `Halo, ini pengingat invoice ${input.invoiceNumber} sebesar Rp${amount} yang sudah melewati jatuh tempo ${dueDate}.`
-    : `Halo, ini pengingat invoice ${input.invoiceNumber} sebesar Rp${amount} yang jatuh tempo pada ${dueDate}.`;
+    ? `Halo, ini pengingat invoice ${input.invoiceNumber} sebesar ${amount} yang sudah melewati jatuh tempo ${dueDate}.`
+    : `Halo, ini pengingat invoice ${input.invoiceNumber} sebesar ${amount} yang jatuh tempo pada ${dueDate}.`;
 
   return `${opening}\nDetail invoice: ${input.shareUrl}\nTerima kasih.`;
 }
@@ -60,8 +58,8 @@ export function buildWhatsAppShareMessage(input: {
   totalIdr: number;
   shareUrl: string;
 }): string {
-  const amount = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(input.totalIdr);
-  return `Halo, berikut invoice ${input.invoiceNumber} sebesar Rp${amount}.\nDetail invoice: ${input.shareUrl}\nTerima kasih.`;
+  const amount = formatMoney(input.totalIdr);
+  return `Halo, berikut invoice ${input.invoiceNumber} sebesar ${amount}.\nDetail invoice: ${input.shareUrl}\nTerima kasih.`;
 }
 
 // Distinct from buildWhatsAppReminder below: a plain share of the invoice

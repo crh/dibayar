@@ -1,6 +1,8 @@
 import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import type { DealRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
+import { formatMoney } from "@/lib/format/money";
+import { formatDateLong } from "@/lib/format/date";
 
 // Narrowed to exactly the fields this component renders, so callers (including the
 // public token-scoped PDF route) can supply a minimal safe projection instead of a
@@ -21,15 +23,13 @@ const styles = StyleSheet.create({
   footer: { marginTop: 40, color: "#6b7280", fontSize: 9 },
 });
 
-const idr = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 });
-
 function formatIdr(value: number) {
-  return `Rp${idr.format(value)}`;
+  return formatMoney(value);
 }
 
 function formatDate(value: Date | null) {
   if (!value) return "Belum ditentukan";
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date(value));
+  return formatDateLong(value);
 }
 
 export function InvoicePdf({ invoice, deal }: { invoice: InvoicePdfInvoice; deal: InvoicePdfDeal | null }) {

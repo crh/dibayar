@@ -7,6 +7,10 @@ import {
   normalizeWhatsAppNumber,
 } from "./whatsapp";
 
+// Message bodies are raw strings (not DOM), so the money formatter's real
+// NBSP (U+00A0) separator is checked byte-for-byte here, not normalized.
+const NBSP = String.fromCharCode(0x00a0);
+
 describe("normalizeWhatsAppNumber", () => {
   it.each([
     ["0812 3456 7890", "6281234567890"],
@@ -34,8 +38,8 @@ describe("WhatsApp reminders", () => {
   it("builds an Indonesian due-soon message with required fields", () => {
     const message = buildWhatsAppReminderMessage({ ...base, kind: "due-soon" });
     expect(message).toContain("INV/2026/07/004");
-    expect(message).toContain("Rp5.000.000");
-    expect(message).toContain("19 Juli 2026");
+    expect(message).toContain(`Rp${NBSP}5.000.000`);
+    expect(message).toContain("19 Jul 2026");
     expect(message).toContain(base.shareUrl);
   });
 
@@ -75,8 +79,8 @@ describe("buildWhatsAppReminder", () => {
     expect(result.href.startsWith("https://wa.me/6281234567890?text=")).toBe(true);
     const decoded = decodeURIComponent(result.href.split("?text=")[1]);
     expect(decoded).toContain("INV/2026/07/004");
-    expect(decoded).toContain("Rp5.000.000");
-    expect(decoded).toContain("19 Juli 2026");
+    expect(decoded).toContain(`Rp${NBSP}5.000.000`);
+    expect(decoded).toContain("19 Jul 2026");
     expect(decoded).toContain(base.shareUrl);
   });
 
@@ -117,7 +121,7 @@ describe("buildWhatsAppShare", () => {
     expect(result.href.startsWith("https://wa.me/6281234567890?text=")).toBe(true);
     const decoded = decodeURIComponent(result.href.split("?text=")[1]);
     expect(decoded).toContain("INV/2026/07/004");
-    expect(decoded).toContain("Rp5.000.000");
+    expect(decoded).toContain(`Rp${NBSP}5.000.000`);
     expect(decoded).toContain(base.shareUrl);
   });
 

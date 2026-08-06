@@ -11,7 +11,8 @@ import { MoneyDisplay, StatusChip, Button, fieldClassName } from "@/components/d
 import { triggerPaidHaptic } from "@/lib/haptics";
 import { fetchWithTimeout } from "@/lib/http";
 import { PPH_RATES } from "@/lib/income-summary";
-import type { Language } from "@/lib/i18n";
+import { formatMoney } from "@/lib/format/money";
+import { formatDate as formatDateCentral } from "@/lib/format/date";
 
 // Fetch responses round-trip dueDate through JSON (a string), while the
 // server-rendered initial invoice carries a real Date; normalize both to a
@@ -34,23 +35,20 @@ const NEXT_ACTIONS: Record<InvoiceRecord["status"], Array<{ status: InvoiceRecor
   PAID: [],
 };
 
-// dueDate is a date-only business date stored as UTC midnight; formatting
-// without timeZone: "UTC" would shift the shown day on a non-UTC server clock.
-function formatDate(value: Date | null, language: Language, emptyLabel: string) {
+// dueDate is a date-only business date stored as UTC midnight; the
+// centralized formatDate always reads it in UTC so the shown day never
+// shifts on a non-UTC server clock. Always Indonesian short form
+// regardless of uiLanguage (see SPEC_RECONCILIATION.md T-01) — only the
+// empty-state label is translated chrome copy.
+function formatDate(value: Date | null, emptyLabel: string) {
   if (!value) return emptyLabel;
-  return new Intl.DateTimeFormat(language === "en" ? "en-US" : "id-ID", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(value));
+  return formatDateCentral(value);
 }
 
 // Mirrors MoneyDisplay's own formatting so the "{amount} diterima" sentence
-// can interpolate the same locale-correct string MoneyDisplay renders.
-function formatMoneySentence(value: number, language: Language) {
-  const formatted = new Intl.NumberFormat(language === "en" ? "en-US" : "id-ID", { maximumFractionDigits: 0 }).format(value);
-  return language === "en" ? `IDR ${formatted}` : `Rp${formatted}`;
+// interpolates the same centralized, language-independent string.
+function formatMoneySentence(value: number) {
+  return formatMoney(value);
 }
 
 const SHARE_LOAD_ERROR = "invoice.shareLoadError";
@@ -133,15 +131,9 @@ function clearMutationError(prev: ShareState): ShareState {
   return prev;
 }
 
-function formatShareExpiry(expiresAt: string | null, language: Language, t: (key: string, values?: Record<string, string>) => string): string {
+function formatShareExpiry(expiresAt: string | null, t: (key: string, values?: Record<string, string>) => string): string {
   if (!expiresAt) return t("invoice.activeNoExpiry");
-  const date = new Intl.DateTimeFormat(language === "en" ? "en-US" : "id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(expiresAt));
-  return t("invoice.activeUntil", { date });
+  return t("invoice.activeUntil", { date: formatDateCentral(expiresAt) });
 }
 
 type ShareConfirm = "regenerate" | "revoke" | null;
@@ -271,7 +263,6 @@ function ShareSection({
   createOrRegenerate,
   revoke,
   t,
-  language,
 }: {
   invoice: InvoiceRecord;
   displayStatus: InvoiceRecord["status"];
@@ -285,7 +276,6 @@ function ShareSection({
   createOrRegenerate: () => Promise<string | null>;
   revoke: () => Promise<void>;
   t: (key: string, values?: Record<string, string>) => string;
-  language: Language;
 }) {
   const [confirm, setConfirm] = useState<ShareConfirm>(null);
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
@@ -359,7 +349,7 @@ function ShareSection({
         <>
           {share.error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{t(share.error)}</p> : null}
           <p className="mt-3 text-[14px] font-semibold text-paid">{t("invoice.active")}</p>
-          <p className="mt-1 text-[13px] text-muted">{formatShareExpiry(share.expiresAt, language, t)}</p>
+          <p className="mt-1 text-[13px] text-muted">{formatShareExpiry(share.expiresAt, t)}</p>
           {share.link ? (
             <>
               <p className="mt-2 break-all text-[13px] text-muted">{share.link}</p>
@@ -655,12 +645,12 @@ export default function InvoiceDetailClient({ initialInvoice, now }: { initialIn
               {t("invoice.paidStatusNote")}
             </p>
             <p className="mt-2 text-[15px] font-semibold text-paid">
-              {t("invoice.amountReceived", { amount: formatMoneySentence(invoice.subtotalIdr, language) })}
+              {t("invoice.amountReceived", { amount: formatMoneySentence(invoice.subtotalIdr) })}
             </p>
           </div>
         ) : (
           <>
-            <p className="mt-3 text-[14px] text-muted">{t("invoice.dueLabel", { date: formatDate(normalizedDueDate, language, t("invoice.notSet")) })}</p>
+            <p className="mt-3 text-[14px] text-muted">{t("invoice.dueLabel", { date: formatDate(normalizedDueDate, t("invoice.notSet")) })}</p>
 
             <div className="mt-3">
               <label htmlFor="invoice-due-date" className="text-[13px] font-semibold text-ink">
@@ -785,7 +775,6 @@ export default function InvoiceDetailClient({ initialInvoice, now }: { initialIn
         createOrRegenerate={shareState.createOrRegenerate}
         revoke={shareState.revoke}
         t={t}
-        language={language}
       />
     </main>
   );

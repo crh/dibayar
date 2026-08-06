@@ -19,16 +19,16 @@ describe("getUserLanguage", () => {
     expect(db.user.findUnique).toHaveBeenCalledWith({ where: { id: "user-1" }, select: { language: true } });
   });
 
-  it("defaults to English for an unrecognized stored value", async () => {
+  it("defaults to Indonesian for an unrecognized stored value", async () => {
     const db = makeDb({ findUnique: vi.fn(async () => ({ language: "fr" })) });
 
-    expect(await getUserLanguage(db, "user-1")).toBe("en");
+    expect(await getUserLanguage(db, "user-1")).toBe("id");
   });
 
-  it("defaults to English when the user row is missing", async () => {
+  it("defaults to Indonesian when the user row is missing", async () => {
     const db = makeDb({ findUnique: vi.fn(async () => null) });
 
-    expect(await getUserLanguage(db, "user-x")).toBe("en");
+    expect(await getUserLanguage(db, "user-x")).toBe("id");
   });
 });
 

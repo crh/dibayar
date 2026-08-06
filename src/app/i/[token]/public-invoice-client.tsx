@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatMoney } from "@/lib/format/money";
+import { formatDateLong } from "@/lib/format/date";
 
 type PublicInvoiceStatus = "DRAFT" | "SENT" | "DUE" | "OVERDUE" | "PAID";
 
@@ -25,15 +27,13 @@ const STATUS_LABEL: Record<PublicInvoiceStatus, string> = {
   PAID: "Lunas",
 };
 
-const idr = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 });
-
 function formatIdr(value: number) {
-  return `Rp${idr.format(value)}`;
+  return formatMoney(value);
 }
 
 function formatDate(value: string | null) {
   if (!value) return "Belum ditentukan";
-  return new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "long", year: "numeric" }).format(new Date(value));
+  return formatDateLong(value);
 }
 
 export default function PublicInvoiceClient({ token, publicFontClass = "" }: { token: string; publicFontClass?: string }) {

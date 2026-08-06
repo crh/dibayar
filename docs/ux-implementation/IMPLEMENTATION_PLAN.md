@@ -77,9 +77,9 @@ Parent-deal behavior is settled: preserve the required relation and `ON DELETE R
 - **Claude packet:** centralize formatting, make UI language independent from ID money/date/document constants, migrate call sites only; no copy/layout/tax change.
 - **Tests:** formatter boundary tables; existing UI under EN still ID formatting; repository grep allowlist.
 - **Commit:** `T-01: centralize Indonesian money date and phone formatting`.
-- **Evidence:** focused unit tests; grep output; 390/1440 ID+EN captures.
+- **Evidence:** 501/501 Vitest; zero product formatting API calls outside `src/lib/format` within `src/`; production landing matrix and authenticated 320/390/768/1024/1440 ID+EN captures; owner/public PDF parity; approved-local migration/default probe with zero residue.
 - **Rollback:** restore call sites/default; existing rows unchanged.
-- **Status:** pending.
+- **Status:** accepted in the T-01 task commit; canonical, migration, and production-mode browser acceptance gates passed; independent staged-diff review passed.
 
 #### T-02 — Breakpoint tokens and layout primitives
 - **Files/modules:** `src/app/globals.css`, new `src/lib/breakpoints.ts`, `src/components/layout/grid.tsx` and tests.

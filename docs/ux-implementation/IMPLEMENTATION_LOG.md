@@ -259,3 +259,22 @@ Append-only chronological log. Entry types are `STATE`, `DECISION`, and `DEVIATI
 - Corrected fixture suite passed 6/6; landing suite passed; exact-ID cleanup read-back returned zero and removed the manifest.
 - Updated evidence packages and checksums are staged for a fresh fail-closed review.
 - Stale T-17/T-22 reconciliation blockers were removed: both tasks now explicitly preserve the required invoice parent and `ON DELETE RESTRICT`, with no snapshot, nullable parent, or `SET NULL` behavior.
+
+## 2026-08-06T13:06:45+07:00 — STATE — T-01 implementation and acceptance gates complete
+
+- Claude Code/Sonnet implemented T-01 in two bounded packets plus one date-contract correction; Hermes reviewed the actual diffs and independently reran all acceptance evidence.
+- Added dependency-free locale constants and centralized pure money, date, phone, calendar-date, and year/month helpers. Product-source search under `src/` finds zero `Intl.NumberFormat`, `Intl.DateTimeFormat`, `toLocaleString`, or `toLocaleDateString` calls outside `src/lib/format`; the unchanged `scripts/cron-guard.mjs` retains its separate Jakarta date calculation.
+- UI language now defaults to Indonesian for new, invalid, or missing values while explicit stored `id` and `en` remain valid. English changes chrome only; money remains `Rp` plus non-breaking space and Indonesian grouping, and standard app/message dates remain short Indonesian.
+- Public invoice HTML and PDF retain long Indonesian document dates and passed six-field owner/public HTML/PDF value/order parity. WhatsApp normalization, validation, link construction, and message meaning remain unchanged apart from centralized money/date formatting.
+- Added migration `20260806113950_user_language_default_id`, containing only `ALTER COLUMN ... SET DEFAULT 'id'`. It was applied only to approved `127.0.0.1:55432/dibayar_test`; all seven migrations are current.
+- Transactional representative migration proof preserved explicit legacy `en` and `id`, gave a new row default `id`, rolled back with zero probe residue, and left the live default at `id`.
+- Independent canonical gates: Vitest 42/42 files and 501/501 tests; typecheck, lint, Prisma validation, production build, full audit, and production-only audit passed with zero vulnerabilities.
+- Production-mode landing matrix passed across five viewports and both languages. Guarded authenticated fixtures seeded/verified, Playwright passed 6/6 including owner isolation/token behavior/PDF parity, and exact cleanup returned zero fixture users with no manifest.
+- Geometry remained free of page-level horizontal overflow. The previously accepted 21px invoice-detail back-link touch finding remains; T-01 introduced no new geometry regression.
+- An initial authenticated-suite command used a nonexistent npm alias and stopped after seed; exact cleanup was run immediately and verified zero residue before the suite was correctly invoked directly. No Docker, Preview, Production, public deployment, or unrelated-file action occurred.
+- T-01 is ready for final fail-closed staged-diff review and its task-scoped commit. T-02 has not started.
+
+## 2026-08-06T14:14:34+07:00 — STATE — T-01 commit accepted
+
+- T-01 was accepted in its task commit after the final fail-closed staged-diff review; the implementation, migration, canonical gates, production browser evidence, and parity evidence are recorded above.
+- T-02 has not started.

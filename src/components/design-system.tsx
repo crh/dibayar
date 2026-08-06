@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { DealRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
 import { translate, type Language } from "@/lib/i18n";
+import { formatMoney } from "@/lib/format/money";
 
 export type PipelineStage = DealRecord["status"];
 export type InvoiceStatus = InvoiceRecord["status"];
@@ -54,11 +55,12 @@ export function StatusChip({ status, language = "id" }: { status: PipelineStage 
   return <span className={`inline-flex min-h-7 items-center rounded-full border px-3 text-[11px] font-bold uppercase tracking-wide ${item.className}`}>{label}{status === "DIBAYAR" || status === "PAID" ? " ✓" : ""}</span>;
 }
 
-export function MoneyDisplay({ value, language = "id", tone = "default", size = "card" }: { value: number; language?: "id" | "en"; tone?: "default" | "paid" | "negative" | "primary"; size?: "card" | "hero" }) {
-  const formatted = new Intl.NumberFormat(language === "en" ? "en-US" : "id-ID", { maximumFractionDigits: 0 }).format(value);
-  const prefix = language === "en" ? "IDR " : "Rp";
+// `language` stays in the prop API for call-site compatibility, but money is
+// always the centralized formatMoney output — never IDR/comma grouping, even
+// under an English UI (see SPEC_RECONCILIATION.md T-01).
+export function MoneyDisplay({ value, tone = "default", size = "card" }: { value: number; language?: "id" | "en"; tone?: "default" | "paid" | "negative" | "primary"; size?: "card" | "hero" }) {
   const toneClass = tone === "paid" ? "text-paid" : tone === "negative" ? "text-overdue" : tone === "primary" ? "text-primary" : "text-ink";
-  return <span className={`ds-money ${size === "hero" ? "ds-display" : "text-[20px] font-bold"} ${toneClass}`}>{prefix}{formatted}</span>;
+  return <span className={`ds-money ${size === "hero" ? "ds-display" : "text-[20px] font-bold"} ${toneClass}`}>{formatMoney(value)}</span>;
 }
 
 export function EmptyState({ children, action }: { children: ReactNode; action?: ReactNode }) {

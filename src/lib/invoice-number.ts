@@ -1,3 +1,5 @@
+import { getCalendarYearMonth } from "./format/date";
+
 const INVOICE_NUMBER_PATTERN = /^INV\/(\d{4})\/(0[1-9]|1[0-2])\/(\d{3,})$/;
 
 const DEFAULT_INVOICE_TIME_ZONE = "Asia/Jakarta";
@@ -27,14 +29,7 @@ export function invoiceYearMonth(
   date: Date,
   timeZone: string = DEFAULT_INVOICE_TIME_ZONE,
 ): { year: number; month: number } {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(date);
-  const year = Number(parts.find((part) => part.type === "year")?.value);
-  const month = Number(parts.find((part) => part.type === "month")?.value);
-  return { year, month };
+  return getCalendarYearMonth(date, timeZone);
 }
 
 export function invoiceNumberPrefix(

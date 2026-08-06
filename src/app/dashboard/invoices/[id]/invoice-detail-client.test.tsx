@@ -3,6 +3,11 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import InvoiceDetailClient from "./invoice-detail-client";
 
+// getByRole's accessible-name matching preserves the money formatter's real
+// NBSP separator (U+00A0) as-is, unlike getByText which collapses it to a
+// plain space — so accessible-name queries need the actual NBSP character.
+const NBSP = String.fromCharCode(0x00a0);
+
 const draftInvoice = {
   id: "invoice-1",
   userId: "user-1",
@@ -55,9 +60,9 @@ function makeFetchMock(
   });
 }
 
-// The app now defaults to English (see src/lib/i18n.ts). This suite exercises
-// Dibayar's Indonesian-language behavior in depth, so it seeds an explicit
-// "id" preference by default; the English-default behavior itself is covered
+// This suite exercises Dibayar's Indonesian-language behavior in depth, so it
+// seeds an explicit "id" preference by default; the Indonesian default and
+// explicit English behavior are covered by the focused tests below.
 // by the dedicated test below.
 beforeEach(() => {
   window.localStorage.setItem("dibayar-language", "id");
@@ -76,14 +81,25 @@ afterEach(() => {
 });
 
 describe("InvoiceDetailClient", () => {
-  it("defaults to English when no language preference is stored", async () => {
+  it("defaults to Indonesian when no language preference is stored", async () => {
     window.localStorage.clear();
     vi.stubGlobal("fetch", makeFetchMock());
     render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
 
-    expect(await screen.findByRole("button", { name: "Create sharing link" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Account menu" })).toBeDefined();
-    expect(screen.getByText("Draft")).toBeDefined();
+    expect(await screen.findByRole("button", { name: "Buat tautan berbagi" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Menu akun" })).toBeDefined();
+    expect(screen.getByText("Draf")).toBeDefined();
+  });
+
+  it("keeps money formatting identical when English is selected (chrome-only translation)", async () => {
+    window.localStorage.setItem("dibayar-language", "en");
+    vi.stubGlobal("fetch", makeFetchMock());
+    render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+    await screen.findByRole("button", { name: "Create sharing link" });
+
+    expect(screen.getByRole("heading", { name: `Rp${NBSP}1.500.000` })).toBeDefined();
+    expect(screen.queryByText(/IDR/)).toBeNull();
+    expect(screen.queryByText(/1,500,000/)).toBeNull();
   });
 
   it("renders invoice detail and only the legal next action for a draft", async () => {
@@ -91,7 +107,7 @@ describe("InvoiceDetailClient", () => {
     render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
     await screen.findByRole("button", { name: "Buat tautan berbagi" });
 
-    expect(screen.getByRole("heading", { name: "Rp1.500.000" })).toBeDefined();
+    expect(screen.getByRole("heading", { name: `Rp${NBSP}1.500.000` })).toBeDefined();
     expect(screen.getAllByText("INV/2026/07/001")).toHaveLength(2);
     expect(screen.getByText("PPh 23 (2%)")).toBeDefined();
     expect(screen.getByRole("button", { name: "Tandai sudah dikirim" })).toBeDefined();
@@ -226,7 +242,7 @@ describe("InvoiceDetailClient", () => {
       expect(screen.queryByRole("heading", { name: "Status pembayaran" })).toBeNull();
 
       expect(screen.getByText("Invoice ini sudah ditandai lunas.")).toBeDefined();
-      expect(screen.getByText("Rp1.500.000 diterima")).toBeDefined();
+      expect(screen.getByText("Rp 1.500.000 diterima")).toBeDefined();
       expect(screen.queryByText(/20 Juli 2026/)).toBeNull();
     });
 
@@ -327,7 +343,7 @@ describe("InvoiceDetailClient", () => {
       fireEvent.change(input, { target: { value: "2026-08-15" } });
       await user.click(screen.getByRole("button", { name: "Simpan tanggal" }));
 
-      await screen.findByText(/15 Agustus 2026/);
+      await screen.findByText(/15 Agu 2026/);
       const patchCall = calls.find((call) => call.init?.method === "PATCH");
       expect(patchCall?.url).toBe("/api/invoices/invoice-1");
       expect(JSON.parse(patchCall!.init!.body as string)).toEqual({ dueDate: "2026-08-15" });

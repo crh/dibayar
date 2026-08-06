@@ -5,10 +5,9 @@ import DashboardClient from "./dashboard-client";
 import type { DealRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
 
-// The app now defaults to English (see src/lib/i18n.ts). This suite exercises
-// Dibayar's Indonesian-language behavior in depth, so it seeds an explicit
-// "id" preference by default; the English-default behavior itself is covered
-// by the dedicated test below.
+// This suite exercises Dibayar's Indonesian-language behavior in depth, so it
+// seeds an explicit "id" preference by default; the Indonesian default and
+// explicit English behavior are covered by the focused tests below.
 beforeEach(() => {
   window.localStorage.setItem("dibayar-language", "id");
 });
@@ -46,13 +45,28 @@ describe("DashboardClient", () => {
     expect(screen.getByRole("button", { name: "Simpan deal" })).toBeDefined();
   });
 
-  it("defaults to English when no language preference is stored", () => {
+  it("defaults to Indonesian when no language preference is stored", () => {
     window.localStorage.clear();
     render(<DashboardClient initialDeals={[]} userName="Chris" />);
 
-    expect(screen.getByRole("button", { name: "Account menu" })).toBeDefined();
-    expect(screen.getByText("Start here")).toBeDefined();
-    expect(screen.queryByText("Mulai dari sini")).toBeNull();
+    expect(screen.getByRole("button", { name: "Menu akun" })).toBeDefined();
+    expect(screen.getByText("Mulai dari sini")).toBeDefined();
+    expect(screen.queryByText("Start here")).toBeNull();
+  });
+
+  it("keeps money formatting identical when English is selected (chrome-only translation)", async () => {
+    const user = userEvent.setup();
+    render(<DashboardClient userName="Chris" initialDeals={[kopiDeal]} />);
+
+    await user.click(screen.getByRole("button", { name: "Menu akun" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "English" }));
+
+    // Chrome copy switches to English…
+    expect(screen.getByRole("combobox", { name: "Deal stage for Kopi Nusantara" })).toBeDefined();
+    // …but money stays the exact centralized Indonesian format, never IDR/comma grouping.
+    expect(screen.getByText("Rp 1.500.000")).toBeDefined();
+    expect(screen.queryByText(/IDR/)).toBeNull();
+    expect(screen.queryByText(/1,500,000/)).toBeNull();
   });
 
   it("localizes the first-run microcopy and empty invoice guidance in English", async () => {
@@ -101,7 +115,7 @@ describe("DashboardClient", () => {
     await user.type(feeInput, "1500000");
 
     expect((feeInput as HTMLInputElement).value).toBe("1500000");
-    expect(screen.getByText("≈ Rp1.500.000")).toBeDefined();
+    expect(screen.getByText("≈ Rp 1.500.000")).toBeDefined();
   });
 
   it("shows a bounded success confirmation after a deal is saved", async () => {
@@ -200,7 +214,7 @@ describe("DashboardClient", () => {
     );
 
     expect(screen.getByText("Kopi Nusantara")).toBeDefined();
-    expect(screen.getByText("Rp1.500.000")).toBeDefined();
+    expect(screen.getByText("Rp 1.500.000")).toBeDefined();
     const negoStage = screen.getByRole("region", { name: "Nego" });
     expect(negoStage.textContent).toContain("Kopi Nusantara");
   });
@@ -365,9 +379,9 @@ describe("DashboardClient", () => {
       render(<DashboardClient initialDeals={[]} initialInvoices={[overdue]} userName="Chris" now={NOW} />);
 
       const attention = screen.getByRole("region", { name: "Perlu dikejar" });
-      expect(within(attention).getByText("Terlambat (1) · Rp2.000.000")).toBeDefined();
+      expect(within(attention).getByText("Terlambat (1) · Rp 2.000.000")).toBeDefined();
       expect(within(attention).getByText("INV/2026/07/002")).toBeDefined();
-      expect(within(attention).getByText("Rp2.000.000")).toBeDefined();
+      expect(within(attention).getByText("Rp 2.000.000")).toBeDefined();
       expect(within(attention).getByText("Terlambat")).toBeDefined();
       expect(within(attention).getByRole("link", { name: /INV\/2026\/07\/002/ }).getAttribute("href")).toBe(
         "/dashboard/invoices/invoice-late",
@@ -557,10 +571,10 @@ describe("DashboardClient", () => {
 
       const income = screen.getByRole("heading", { name: "Ringkasan pendapatan" }).closest("section")!;
       // Net (980.000) is the hero-sized figure.
-      const hero = within(income).getByText("Rp980.000");
+      const hero = within(income).getByText("Rp 980.000");
       expect(hero.className).toContain("ds-display");
-      expect(within(income).getByText("Rp1.000.000")).toBeDefined();
-      expect(within(income).getByText("-Rp20.000")).toBeDefined();
+      expect(within(income).getByText("Rp 1.000.000")).toBeDefined();
+      expect(within(income).getByText("−Rp 20.000")).toBeDefined();
     });
 
     it("states that unpaid/overdue invoices are included in the 'issued this month' basis, with an accurate count", () => {

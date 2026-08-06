@@ -1,5 +1,9 @@
-export const LANGUAGES = ["id", "en"] as const;
-export type Language = (typeof LANGUAGES)[number];
+import { DEFAULT_UI_LANGUAGE, UI_LANGUAGES, type UiLanguage } from "./locale";
+
+// Backward-compatible names: locale.ts is the source of truth, this module
+// never re-defines the value set (see the note in locale.ts on avoiding a cycle).
+export const LANGUAGES = UI_LANGUAGES;
+export type Language = UiLanguage;
 
 type TranslationValue = string | ((values: Record<string, string>) => string);
 
@@ -307,7 +311,9 @@ const translations: Record<Language, Record<string, TranslationValue>> = {
 };
 
 export function getLanguage(value: unknown): Language {
-  return value === "id" ? "id" : "en";
+  if (value === "en") return "en";
+  if (value === "id") return "id";
+  return DEFAULT_UI_LANGUAGE;
 }
 
 export function translate(language: Language, key: string, values: Record<string, string> = {}) {

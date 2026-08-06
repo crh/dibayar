@@ -1,4 +1,5 @@
 import type { InvoiceStatus } from "./invoices";
+import { getCalendarDate } from "./format/date";
 
 export const JAKARTA_TIME_ZONE = "Asia/Jakarta";
 
@@ -8,23 +9,9 @@ export const DUE_SOON_WINDOW_DAYS = 7;
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-const jakartaCalendarFormatter = new Intl.DateTimeFormat("en-CA", {
-  timeZone: JAKARTA_TIME_ZONE,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-
-const utcCalendarFormatter = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "UTC",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-
 // Asia/Jakarta calendar date (YYYY-MM-DD) for a real instant, e.g. "now".
 export function getJakartaCalendarDate(instant: Date): string {
-  return jakartaCalendarFormatter.format(instant);
+  return getCalendarDate(instant, JAKARTA_TIME_ZONE);
 }
 
 // dueDate is a date-only business date stored as UTC midnight (from an HTML
@@ -32,7 +19,7 @@ export function getJakartaCalendarDate(instant: Date): string {
 // the UTC calendar fields recovers the exact date the user picked, regardless
 // of server timezone.
 export function getDueDateCalendarDate(dueDate: Date): string {
-  return utcCalendarFormatter.format(dueDate);
+  return getCalendarDate(dueDate, "UTC");
 }
 
 function calendarDateToUtcMs(calendarDate: string): number {
