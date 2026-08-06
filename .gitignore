@@ -21,6 +21,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# test and capture artifacts
+/test-results/
+/playwright-report/
+/blob-report/
+
 # vercel
 .vercel
 

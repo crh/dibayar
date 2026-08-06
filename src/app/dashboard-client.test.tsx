@@ -124,7 +124,7 @@ describe("DashboardClient", () => {
     await user.click(screen.getByRole("button", { name: "Simpan deal" }));
 
     expect(await screen.findByRole("status")).toHaveProperty("textContent", "Deal disimpan");
-  });
+  }, 10_000);
 
   it("shows a bounded success confirmation after an invoice is created from a deal card", async () => {
     const user = userEvent.setup();

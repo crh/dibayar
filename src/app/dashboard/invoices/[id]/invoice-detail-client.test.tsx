@@ -463,7 +463,12 @@ describe("InvoiceDetailClient", () => {
       sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
     }));
 
-    render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "OVERDUE" }} />);
+    render(
+      <InvoiceDetailClient
+        initialInvoice={{ ...draftInvoice, status: "OVERDUE" }}
+        now={new Date("2026-07-24T00:00:00.000Z")}
+      />,
+    );
     expect(await screen.findByRole("button", { name: "Create sharing link" })).toBeDefined();
     await user.click(screen.getByRole("button", { name: "Create sharing link" }));
     const button = await screen.findByRole("button", { name: "Open WhatsApp" });

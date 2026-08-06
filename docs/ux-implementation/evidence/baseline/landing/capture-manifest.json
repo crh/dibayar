@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "count": 10,
+  "artifacts": [
+    {
+      "routeKey": "landing-current",
+      "stateKey": "anonymous",
+      "viewport": "lg1024",
+      "language": "en",
+      "path": "captures/landing-current__anonymous__lg1024__en.png",
+      "route": "/",
+      "width": 1024,
+      "height": 900,
+      "fullPage": true
+    },
+    {
+      "routeKey": "landing-current",
+      "stateKey": "anonymous",
+      "viewport": "lg1024",
+      "language": "id",
+      "path": "captures/landing-current__anonymous__lg1024__id.png",
+      "route": "/",
+      "width": 1024,
+      "height": 900,
+      "fullPage": true
+    },
+    {
+      "routeKey": "landing-current",
+      "stateKey": "anonymous",
+      "viewport": "md768",
+      "language": "en",
+      "path": "captures/landing-current__anonymous__md768__en.png",
+      "route": "/",
+      "width": 768,
+      "height": 1024,
+      "fullPage": true
+    },
+    {
+      "routeKey": "landing-current",
+      "stateKey": "anonymous",
+      "viewport": "md768",
+      "language": "id",
+      "path": "captures/landing-current__anonymous__md768__id.png",
+      "route": "/",
+      "width": 768,
+      "height": 1024,
+      "fullPage": true
+    },
+    {
+      "routeKey": "landing-current",
+      "stateKey": "anonymous",
+      "viewport": "sm390",
+      "language": "en",
+      "path": "captures/landing-current__anonymous__sm390__en.png",
+      "route": "/",
+      "width": 390,
+      "height": 844,
+      "fullPage": true
+    },
+    {
+      "routeKey": "landing-current",
+      "stateKey": "anonymous",
+      "viewport": "sm390",
+      "language": "id",
+      "path": "captures/landing-current__anonymous__sm390__id.png",
+      "route": "/",
+      "width": 390,
+      "height": 844,
+      "fullPage": true
+    },
+    {
+      "routeKey": "landing-current",
+      "stateKey": "anonymous",
+      "viewport": "xl1440",
+      "language": "en",
+      "path": "captures/landing-current__anonymous__xl1440__en.png",
+      "route": "/",
+      "width": 1440,
+      "height": 900,
+      "fullPage": true
+    },
+    {
+      "routeKey": "landing-current",
+      "stateKey": "anonymous",
+      "viewport": "xl1440",
+      "language": "id",
+      "path": "captures/landing-current__anonymous__xl1440__id.png",
+      "route": "/",
+      "width": 1440,
+      "height": 900,
+      "fullPage": true
+    },
+    {
+      "routeKey": "landing-current",
+      "stateKey": "anonymous",
+      "viewport": "xs320",
+      "language": "en",
+      "path": "captures/landing-current__anonymous__xs320__en.png",
+      "route": "/",
+      "width": 320,
+      "height": 800,
+      "fullPage": true
+    },
+    {
+      "routeKey": "landing-current",
+      "stateKey": "anonymous",
+      "viewport": "xs320",
+      "language": "id",
+      "path": "captures/landing-current__anonymous__xs320__id.png",
+      "route": "/",
+      "width": 320,
+      "height": 800,
+      "fullPage": true
+    }
+  ]
+}

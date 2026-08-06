@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "captureCount": 15,
+  "geometryChecks": 15,
+  "overflowFindings": 0,
+  "smallTouchTargetFindings": 3,
+  "htmlPdfParityEqual": true,
+  "ownerPublicPdfTextEqual": true,
+  "anonymousPublicPdf": true,
+  "pdfSourceLabels": [
+    "DIBAYAR",
+    "Ditagihkan kepada",
+    "Jatuh tempo",
+    "Jasa kolaborasi",
+    "Pajak potong",
+    "Total invoice"
+  ],
+  "files": [
+    {
+      "path": "capture-manifest.json",
+      "bytes": 4689,
+      "sha256": "cdad283ff0bc5751e0750e41afb6b2919ee15df92d48e9da1dd460e3f29c9a1a"
+    },
+    {
+      "path": "captures/dashboard-current__populated__lg1024__en.png",
+      "bytes": 214375,
+      "sha256": "3b070bf353a723530b9e30036bf1667f3c90dff93bc5edab5780067fdc533079"
+    },
+    {
+      "path": "captures/dashboard-current__populated__lg1024__id.png",
+      "bytes": 214586,
+      "sha256": "50b2c453774154c1840585ebc09da5949833a7f74c071eb508209236c56c7b37"
+    },
+    {
+      "path": "captures/dashboard-current__populated__md768__en.png",
+      "bytes": 233408,
+      "sha256": "86f5e78dd566c1435f7200a95b1a533f20fdc5970ff680bff733ab337a621dea"
+    },
+    {
+      "path": "captures/dashboard-current__populated__md768__id.png",
+      "bytes": 233450,
+      "sha256": "3431059d2e99671ac8b42d37f58a626d18f6a60c313da2a557067381f844a05e"
+    },
+    {
+      "path": "captures/dashboard-current__populated__sm390__en.png",
+      "bytes": 231330,
+      "sha256": "ff01020aa863e0c048b588d35e86b2e59ec96052f091b87927e45b628c3528fd"
+    },
+    {
+      "path": "captures/dashboard-current__populated__sm390__id.png",
+      "bytes": 230629,
+      "sha256": "c10672091e894d814450320e5938e12df890ce775bb7a529d28200d169227f86"
+    },
+    {
+      "path": "captures/dashboard-current__populated__xl1440__en.png",
+      "bytes": 226784,
+      "sha256": "f85828bbfc463b170d2897e34d7b5573aa68420b9bd564f9387b242a23460116"
+    },
+    {
+      "path": "captures/dashboard-current__populated__xl1440__id.png",
+      "bytes": 225795,
+      "sha256": "6889cdedb150793783bc7a4cb6543c16aadfe8da1f32b51da4db1c0cdf2d3205"
+    },
+    {
+      "path": "captures/dashboard-current__populated__xs320__en.png",
+      "bytes": 228808,
+      "sha256": "525db652a7c85fe764deacb5bd8b5fe6d61e39a8a892df74bbbf6be6d723172a"
+    },
+    {
+      "path": "captures/dashboard-current__populated__xs320__id.png",
+      "bytes": 227917,
+      "sha256": "7517b0286f4af2c29fcc221b00b75a4c4cd7bd43fd5d1dfe52cbd968b216f0bf"
+    },
+    {
+      "path": "captures/dashboard-current__zero-state__sm390__id.png",
+      "bytes": 109977,
+      "sha256": "e335b3c7be1dd7502875a4ea67f31e4ad4479f00b9c34e5c7d56840dc0cf7491"
+    },
+    {
+      "path": "captures/invoice-detail-current__draft-no-tax-empty-date-invalid-phone__sm390__id.png",
+      "bytes": 80532,
+      "sha256": "21dfb15ba48818840310c0fbf0adc11f3ccdbf44c76323b468b93a3c0a006d88"
+    },
+    {
+      "path": "captures/invoice-detail-current__sent-tax__sm390__id.png",
+      "bytes": 103309,
+      "sha256": "a044a80476020cdaa374cc795c850106472559dde5aa89f0cccc558ed33a350c"
+    },
+    {
+      "path": "captures/invoice-detail-current__sent-tax__xl1440__en.png",
+      "bytes": 107532,
+      "sha256": "b5d5ce2ad05becf0c9265486697f73d12f727484fb91093cc63948f52bc5f97c"
+    },
+    {
+      "path": "captures/public-invoice-current__active-long-content__sm390__id.png",
+      "bytes": 56515,
+      "sha256": "cb7355debb9730a2bf612b817474cef1e3b7aa249c4ed73e4ca93fecf3f9d1ec"
+    },
+    {
+      "path": "geometry-findings.json",
+      "bytes": 5183,
+      "sha256": "c93f4b6c90037c50c738331145620f376da120b76d614377d5225d11b80bf000"
+    },
+    {
+      "path": "pdf/owner-overdue.pdf",
+      "bytes": 2942,
+      "sha256": "1dcafb65f8de61b7fa9b90227696598b9610d8621b5ddf961819868be405fa8a"
+    },
+    {
+      "path": "pdf/parity-report.json",
+      "bytes": 1495,
+      "sha256": "9d3b45ab5b27c005a5bc3f49aab78ac59438d5120ffa692f1a261f7c7d139344"
+    },
+    {
+      "path": "pdf/public-overdue.pdf",
+      "bytes": 2942,
+      "sha256": "06d8ab9b3595e8f48681af149852172abe305823b87741b986f04d82f367daad"
+    }
+  ]
+}

@@ -1,0 +1,236 @@
+[
+  {
+    "routeKey": "dashboard-current",
+    "viewport": "xs320",
+    "language": "id",
+    "overflow": {
+      "viewportWidth": 320,
+      "documentClientWidth": 320,
+      "documentScrollWidth": 320,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": []
+  },
+  {
+    "routeKey": "dashboard-current",
+    "viewport": "sm390",
+    "language": "id",
+    "overflow": {
+      "viewportWidth": 390,
+      "documentClientWidth": 390,
+      "documentScrollWidth": 390,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": []
+  },
+  {
+    "routeKey": "dashboard-current",
+    "viewport": "md768",
+    "language": "id",
+    "overflow": {
+      "viewportWidth": 768,
+      "documentClientWidth": 768,
+      "documentScrollWidth": 768,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": []
+  },
+  {
+    "routeKey": "dashboard-current",
+    "viewport": "lg1024",
+    "language": "id",
+    "overflow": {
+      "viewportWidth": 1024,
+      "documentClientWidth": 1024,
+      "documentScrollWidth": 1024,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": []
+  },
+  {
+    "routeKey": "dashboard-current",
+    "viewport": "xl1440",
+    "language": "id",
+    "overflow": {
+      "viewportWidth": 1440,
+      "documentClientWidth": 1440,
+      "documentScrollWidth": 1440,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": []
+  },
+  {
+    "routeKey": "dashboard-current",
+    "viewport": "xs320",
+    "language": "en",
+    "overflow": {
+      "viewportWidth": 320,
+      "documentClientWidth": 320,
+      "documentScrollWidth": 320,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": []
+  },
+  {
+    "routeKey": "dashboard-current",
+    "viewport": "sm390",
+    "language": "en",
+    "overflow": {
+      "viewportWidth": 390,
+      "documentClientWidth": 390,
+      "documentScrollWidth": 390,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": []
+  },
+  {
+    "routeKey": "dashboard-current",
+    "viewport": "md768",
+    "language": "en",
+    "overflow": {
+      "viewportWidth": 768,
+      "documentClientWidth": 768,
+      "documentScrollWidth": 768,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": []
+  },
+  {
+    "routeKey": "dashboard-current",
+    "viewport": "lg1024",
+    "language": "en",
+    "overflow": {
+      "viewportWidth": 1024,
+      "documentClientWidth": 1024,
+      "documentScrollWidth": 1024,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": []
+  },
+  {
+    "routeKey": "dashboard-current",
+    "viewport": "xl1440",
+    "language": "en",
+    "overflow": {
+      "viewportWidth": 1440,
+      "documentClientWidth": 1440,
+      "documentScrollWidth": 1440,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": []
+  },
+  {
+    "routeKey": "dashboard-current",
+    "viewport": "sm390",
+    "language": "id",
+    "overflow": {
+      "viewportWidth": 390,
+      "documentClientWidth": 390,
+      "documentScrollWidth": 390,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": []
+  },
+  {
+    "routeKey": "invoice-detail-current",
+    "viewport": "sm390",
+    "language": "id",
+    "overflow": {
+      "viewportWidth": 390,
+      "documentClientWidth": 390,
+      "documentScrollWidth": 390,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": [
+      {
+        "selector": "a",
+        "tag": "a",
+        "text": "← Kembali ke dashboard",
+        "rect": {
+          "x": 20,
+          "y": 32,
+          "width": 166.546875,
+          "height": 21
+        },
+        "required": 44
+      }
+    ]
+  },
+  {
+    "routeKey": "invoice-detail-current",
+    "viewport": "sm390",
+    "language": "id",
+    "overflow": {
+      "viewportWidth": 390,
+      "documentClientWidth": 390,
+      "documentScrollWidth": 390,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": [
+      {
+        "selector": "a",
+        "tag": "a",
+        "text": "← Kembali ke dashboard",
+        "rect": {
+          "x": 20,
+          "y": 32,
+          "width": 166.546875,
+          "height": 21
+        },
+        "required": 44
+      }
+    ]
+  },
+  {
+    "routeKey": "invoice-detail-current",
+    "viewport": "xl1440",
+    "language": "en",
+    "overflow": {
+      "viewportWidth": 1440,
+      "documentClientWidth": 1440,
+      "documentScrollWidth": 1440,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": [
+      {
+        "selector": "a",
+        "tag": "a",
+        "text": "← Back to dashboard",
+        "rect": {
+          "x": 392,
+          "y": 32,
+          "width": 144.140625,
+          "height": 21
+        },
+        "required": 44
+      }
+    ]
+  },
+  {
+    "routeKey": "public-invoice-current",
+    "viewport": "sm390",
+    "language": "id",
+    "overflow": {
+      "viewportWidth": 390,
+      "documentClientWidth": 390,
+      "documentScrollWidth": 390,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": []
+  }
+]
