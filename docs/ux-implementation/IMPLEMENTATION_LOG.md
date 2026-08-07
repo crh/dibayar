@@ -308,3 +308,17 @@ Append-only chronological log. Entry types are `STATE`, `DECISION`, and `DEVIATI
 
 - The Hermes-owned anonymous landing Playwright baseline now targets `/masuk`, the accepted T-03 public landing route, instead of the protected `/` entry.
 - Production-mode five-viewport/two-language landing capture passed 1/1; durable landing evidence and manifest were refreshed with portable paths, route `/masuk`, and zero checksum mismatches.
+
+## 2026-08-07T08:47:12+07:00 — STATE — Phase 0 checkpoint closeout re-verified and accepted
+
+- Phase 0 remains T-00–T-03 accepted on `hermes/ux-phase-0`: T-01 `6d4e360` (centralize Indonesian money date and phone formatting), T-02 `f4a8d25` (add responsive layout primitives), T-03 `2c42a28` (scaffold owner routes and preserve legacy redirects), with phase endpoint `5fe3cf3` (refresh landing evidence and close Phase 0 governance).
+- A temporary detached verification worktree checked out at the phase endpoint was clean throughout re-verification and has been removed; it left no residue.
+- The dirty implementation worktree and its partial T-04 tests/docs (`src/components/layout/{app-shell,bottom-nav,side-nav,top-bar}.test.tsx`, `uat/`, `.hermes/`, and the associated in-progress edits) are preserved untouched. T-04 has not started.
+- Production HTTP route matrix passed 8/8: exact `/dashboard` 302 with query state dropped, `/masuk` 200 with no AppShell present, protected routes redirecting unauthenticated requests, legacy `/dashboard/invoices/[id]` compatibility preserved, and an invalid public token returning 404.
+- Focused route/formatter suites passed 53/53. A diagnostic full-suite run at a 10-second per-test timeout passed 51 files / 519 tests.
+- `npx prisma validate`, `npm run lint`, `npm run typecheck`, `npm run build`, and `git diff --check` all passed.
+- The default (unqualified) `npm test` invocation showed two separate timeout-only flakes in pre-existing tests at the default timeout; each affected test passed independently when rerun alone. This rerun is not being cited as an unqualified green full-suite result — see the focused and diagnostic-timeout results above for the qualifying evidence.
+- Google OAuth provider initiation was independently re-verified locally: the expected client ID was present and the callback URI matched exactly; no secret, token, or credential value was logged or printed. Full OAuth callback/session completion was not exercised.
+- The approved local database (`127.0.0.1:55432/dibayar_test`) was empty of any deal/invoice/public-token fixture at verification time; it was not reseeded, so authenticated route and public-token behavior could not be exercised end-to-end in this check.
+- No Preview, Production, public-access, or migration change occurred in this closeout.
+- Chris approved this checkpoint. T-04 remains not started and must begin only in a fresh Phase 1 Hermes session.

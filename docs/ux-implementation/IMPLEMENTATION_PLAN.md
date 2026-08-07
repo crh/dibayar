@@ -2,7 +2,7 @@
 
 Source of truth: `dibayar-implementation-spec.md` + `SPEC_RECONCILIATION.md`
 Baseline: `8ca6137ea988b57f7a9379b5109b4dc3516290ee`
-Status: **T-00 COMPLETE; T-01 begins only after the T-00 task commit**
+Status: **T-00–T-03 COMPLETE; Phase 0 checkpoint manually approved by Chris (2026-08-07) at phase endpoint `5fe3cf3`; evidence at `docs/ux-implementation/evidence/phase-0/GATE.md`; T-04 pending, to start only in a fresh Phase 1 Hermes session**
 
 ## 1. Branch, commit, and gate model
 
@@ -101,9 +101,11 @@ Parent-deal behavior is settled: preserve the required relation and `ON DELETE R
 - **Commit:** `T-03: scaffold owner routes and preserve legacy redirects`.
 - **Evidence:** focused route suite 19/19; full 51/51 files and 519/519 tests; typecheck/lint/Prisma/build passed; production HTTP route matrix 8/8 including real 302 query drop, `/masuk` 200/no app menu, protected redirects, legacy invoice compatibility, and invalid public token 404.
 - **Rollback:** restore the prior root/dashboard pages and remove compatibility placeholders/redirect handler.
-- **Status:** accepted in the T-03 task commit; independent staged-diff review passed.
+- **Status:** accepted in the T-03 task commit; independent staged-diff review passed. Phase 0 checkpoint manually approved by Chris (2026-08-07); evidence at `docs/ux-implementation/evidence/phase-0/GATE.md`.
 
 **Phase 0 gate:** T-00–T-03 criteria; canonical gates; baseline comparison; migration artifact review; route HTTP evidence; update `CLAUDE.md`, `STATE.md`, and implementation log. Recommendation may merge to integration without special Chris acknowledgement if no regression/security/migration failure exists.
+
+**Phase 0 gate status:** `complete — checkpoint approved`. T-00 through T-03 are each accepted in their task commits; phase endpoint `5fe3cf3` closes governance/evidence on top of T-03. Chris manually approved the Phase 0 checkpoint on 2026-08-07. Full evidence package: `docs/ux-implementation/evidence/phase-0/GATE.md`. Not merged to `hermes/ux-integration` and not pushed/deployed by this closeout. T-04 is pending and must begin only in a fresh Phase 1 Hermes session.
 
 ### Phase 1 — Shell and blocking findings
 
