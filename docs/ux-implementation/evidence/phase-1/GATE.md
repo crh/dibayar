@@ -122,3 +122,13 @@ T-08 (Beranda focused money view) is the next pending task per `IMPLEMENTATION_P
 ### Side effects
 
 None. This addendum is documentation-only and confined to this file: no commit, push, deploy, migration, reseed, reset, stash, clean, credential access, or source/test/`package.json` change occurred.
+
+---
+
+## Post-commit status — 2026-08-09
+
+This section is appended without altering the T-04/T-05 ledger, manual checkpoint record, worktree snapshot, or Final Phase 1 Addendum above, all of which remain unchanged as historical evidence.
+
+The approved Phase 1 implementation/documentation commit now exists on `hermes/ux-phase-0` and is HEAD: exact hash `68ef5a4b7b0b7adf075ae2ab9a609ad26c220487`, parent `7846f20b0932bee8b1c99f2df000f26e480e1be7`, subject `T-04-T-07: complete Phase 1 responsive shell and actions`, 33 approved files committed. T-04, T-05, T-06, and T-07 are no longer uncommitted.
+
+No push, deploy, migration, or public-access action occurred. T-08 remains the next pending task and must start only in a fresh Hermes session. Tests were not rerun for this status update; the automated and manual evidence recorded above and in the Final Phase 1 Addendum remains the acceptance evidence for the committed content. Preserved unrelated worktree state, untouched: `DAILY_LOG.md` modified (tracked); `.hermes/` and `uat/` untracked.
