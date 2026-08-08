@@ -87,7 +87,6 @@ describe("InvoiceDetailClient", () => {
     render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
 
     expect(await screen.findByRole("button", { name: "Buat tautan berbagi" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Menu akun" })).toBeDefined();
     expect(screen.getByText("Draf")).toBeDefined();
   });
 
@@ -194,18 +193,13 @@ describe("InvoiceDetailClient", () => {
     expect(screen.queryByText(/belum ada tautan berbagi/i)).toBeNull();
   });
 
-  it("updates all invoice copy when switching from English back to Indonesian", async () => {
-    const user = userEvent.setup();
-    window.localStorage.setItem("dibayar-language", "en");
+  it("renders Indonesian invoice copy when Indonesian is the stored language", async () => {
+    window.localStorage.setItem("dibayar-language", "id");
     vi.stubGlobal("fetch", makeFetchMock({ shareGet: { status: 200, body: { active: false } } }));
 
     render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
-    expect(await screen.findByText("Withholding tax")).toBeDefined();
 
-    await user.click(screen.getByRole("button", { name: "Account menu" }));
-    await user.click(screen.getByRole("menuitemradio", { name: "Indonesian" }));
-
-    expect(screen.getByText("Pajak potong")).toBeDefined();
+    expect(await screen.findByText("Pajak potong")).toBeDefined();
     expect(screen.getByText("Nilai invoice")).toBeDefined();
     expect(screen.getByText("Belum ada tautan berbagi untuk invoice ini.")).toBeDefined();
     expect(screen.queryByText("Withholding tax")).toBeNull();
@@ -441,11 +435,14 @@ describe("InvoiceDetailClient", () => {
       await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
 
       const expectedLink = `${window.location.origin}/i/deterministic-token`;
-      expect(await screen.findByText(expectedLink)).toBeDefined();
+      expect(await screen.findByTitle(expectedLink)).toBeDefined();
 
-      await user.click(screen.getByRole("button", { name: /salin tautan/i }));
+      const copyButton = screen.getByRole("button", { name: /salin tautan/i });
+      await user.click(copyButton);
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expectedLink);
-      expect(await screen.findByRole("status")).toHaveProperty("textContent", expect.stringMatching(/disalin/i));
+      expect(await screen.findByText("Tersalin")).toBeDefined();
+      // The accessible name stays fixed on the action, not the transient state.
+      expect(copyButton.getAttribute("aria-label")).toBe("Salin tautan invoice");
     });
 
     it("opens a prefilled WhatsApp reminder after a share link exists", async () => {
@@ -538,14 +535,21 @@ describe("InvoiceDetailClient", () => {
     await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
 
     const expectedLink = `${window.location.origin}/i/deterministic-token`;
-    expect(await screen.findByText(expectedLink)).toBeDefined();
+    expect(await screen.findByTitle(expectedLink)).toBeDefined();
 
     await user.click(screen.getByRole("button", { name: /salin tautan/i }));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expectedLink);
     expect(await screen.findByRole("alert")).toHaveProperty(
       "textContent",
-      expect.stringMatching(/tautan tidak bisa disalin/i),
+      "Gagal menyalin. Tekan lama untuk salin manual.",
     );
+    // Manual copy fallback: the full URL becomes selectable via a native
+    // read-only input, still clipped to one line.
+    const manualCopyInput = (await screen.findByTestId("share-link-manual-copy")) as HTMLInputElement;
+    expect(manualCopyInput.tagName).toBe("INPUT");
+    expect(manualCopyInput.value).toBe(expectedLink);
+    expect(manualCopyInput.readOnly).toBe(true);
+    expect(manualCopyInput.className).toMatch(/select-all/);
   });
 
 
@@ -583,7 +587,7 @@ describe("InvoiceDetailClient", () => {
       const { unmount } = render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
       await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
       const expectedLink = `${window.location.origin}/i/deterministic-token`;
-      expect(await screen.findByText(expectedLink)).toBeDefined();
+      expect(await screen.findByTitle(expectedLink)).toBeDefined();
       unmount();
 
       // Simulate a reload: same tab (sessionStorage persists), fresh component mount,
@@ -594,7 +598,7 @@ describe("InvoiceDetailClient", () => {
       }));
 
       render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
-      expect(await screen.findByText(expectedLink)).toBeDefined();
+      expect(await screen.findByTitle(expectedLink)).toBeDefined();
 
       await user.click(screen.getByRole("button", { name: /salin tautan/i }));
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expectedLink);
@@ -625,7 +629,7 @@ describe("InvoiceDetailClient", () => {
 
       render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
       await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
-      expect(await screen.findByText(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
+      expect(await screen.findByTitle(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
       expect(window.sessionStorage.getItem("dibayar-share-path:invoice-1")).toBe("/i/deterministic-token");
 
       await user.click(screen.getByRole("button", { name: /cabut tautan/i }));
@@ -687,7 +691,7 @@ describe("InvoiceDetailClient", () => {
       await user.click(screen.getByRole("button", { name: "Ya, buat tautan baru" }));
 
       const expectedLink = `${window.location.origin}/i/new-token`;
-      expect(await screen.findByText(expectedLink)).toBeDefined();
+      expect(await screen.findByTitle(expectedLink)).toBeDefined();
     });
 
     it("requires explicit confirmation with destructive wording before revoking, then returns to inactive", async () => {
@@ -894,7 +898,7 @@ describe("InvoiceDetailClient", () => {
       expect(await screen.findByRole("alert")).toBeDefined();
 
       await user.click(screen.getByRole("button", { name: "Buat tautan berbagi" }));
-      expect(await screen.findByText(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
+      expect(await screen.findByTitle(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
       expect(screen.queryByRole("alert")).toBeNull();
     });
 
@@ -978,7 +982,7 @@ describe("InvoiceDetailClient", () => {
       await waitFor(() => expect(open).toHaveBeenCalled());
       expect(open.mock.calls[0]?.[0]).toContain(encodeURIComponent("INV/2026/07/001"));
       // The full share section below reflects the same created link (single state machine).
-      expect(await screen.findByText(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
+      expect(await screen.findByTitle(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
     });
 
     it("opens WhatsApp directly, without creating a new link, when a link is already active", async () => {
@@ -994,7 +998,7 @@ describe("InvoiceDetailClient", () => {
       render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
       // Establish an active link via the share section first.
       await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
-      expect(await screen.findByText(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
+      expect(await screen.findByTitle(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
 
       const postCallsBefore = fetchMock.mock.calls.filter((call) => call[1]?.method === "POST").length;
       await user.click(screen.getByRole("button", { name: "Bagikan via WhatsApp" }));
@@ -1049,7 +1053,7 @@ describe("InvoiceDetailClient", () => {
       const message = decodeURIComponent(href.split("?text=")[1] ?? "");
       expect(message).not.toMatch(/jatuh tempo|terlambat|lunas|pph/i);
       // Same state machine as the full share section below: the created link shows up there too.
-      expect(await screen.findByText(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
+      expect(await screen.findByTitle(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
     });
 
     it("shows the localized English label for the primary WhatsApp button", async () => {

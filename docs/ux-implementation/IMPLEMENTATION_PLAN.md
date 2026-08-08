@@ -2,7 +2,7 @@
 
 Source of truth: `dibayar-implementation-spec.md` + `SPEC_RECONCILIATION.md`
 Baseline: `8ca6137ea988b57f7a9379b5109b4dc3516290ee`
-Status: **T-00–T-03 COMPLETE; Phase 0 checkpoint manually approved by Chris (2026-08-07) at phase endpoint `5fe3cf3`; evidence at `docs/ux-implementation/evidence/phase-0/GATE.md`; T-04 pending, to start only in a fresh Phase 1 Hermes session**
+Status: **T-00–T-03 COMPLETE; Phase 0 checkpoint manually approved by Chris (2026-08-07) at phase endpoint `5fe3cf3`; evidence at `docs/ux-implementation/evidence/phase-0/GATE.md`. T-04 and T-05 COMPLETE (independently verified locally, uncommitted); Phase 1 (shell and blocking-findings) checkpoint manually approved and closed by Chris (2026-08-08); evidence at `docs/ux-implementation/evidence/phase-1/GATE.md`. T-06 accepted locally (independently verified, uncommitted; evidence at `docs/ux-implementation/evidence/phase-1/t-06-browser-acceptance.md`) and T-07 accepted locally (independently verified, uncommitted; evidence at `docs/ux-implementation/evidence/phase-1/t-07-browser-acceptance.md`) — neither reopens the closed T-04/T-05 checkpoint. No commit/push/deploy occurred for T-04/T-05, the Phase 1 closeout, T-06, or T-07. Phase 1 final closeout approved and closed (2026-08-08; addendum at `docs/ux-implementation/evidence/phase-1/GATE.md`). T-08 pending, to start only in a fresh Hermes session**
 
 ## 1. Branch, commit, and gate model
 
@@ -116,7 +116,7 @@ Parent-deal behavior is settled: preserve the required relation and `ON DELETE R
 - **Tests/evidence:** component accessibility tests; all five width geometry; `aria-current`; content-width ratio; bottom clearance.
 - **Commit:** `T-04: add responsive application shell`.
 - **Rollback:** protected layout returns children directly.
-- **Status:** pending.
+- **Status:** accepted — implemented and independently verified locally (automated gates: full `npm test` 57 files/556 tests, typecheck, lint, build, `git diff --check`, all PASS); Phase 1 checkpoint manually approved and closed by Chris on 2026-08-08 covering T-04/T-05 scope. No task commit yet — remains uncommitted in the dirty worktree; see `docs/ux-implementation/evidence/phase-1/GATE.md`.
 
 #### T-05 — Account menu
 - **Files/modules:** existing `src/components/account-menu.tsx` and test, top bar.
@@ -125,7 +125,7 @@ Parent-deal behavior is settled: preserve the required relation and `ON DELETE R
 - **Tests/evidence:** Esc/outside/route/item dismissal; focus return; overlap detector and five-width screenshots.
 - **Commit:** `T-05: make account menu responsive and focus safe`.
 - **Rollback:** restore prior menu while shell stays.
-- **Status:** pending.
+- **Status:** accepted — implemented and independently verified locally (focused T-05 suite 29/29 PASS plus the full canonical gates above); manual browser checkpoint PASS reported by Chris (mobile bottom sheet, desktop popover, 639/640px breakpoint transition, focus entry, Tab/Shift+Tab trapping, Escape dismissal, focus restoration, Settings/navigation dismissal, no duplicate account trigger, correct menu contents, no obvious console regression — Chris-reported manual browser checkpoint, not Hermes-captured). Phase 1 checkpoint manually approved and closed by Chris on 2026-08-08. No task commit yet — remains uncommitted in the dirty worktree; see `docs/ux-implementation/evidence/phase-1/GATE.md`.
 
 #### T-06 — ShareLinkField
 - **Files/modules:** new `src/components/invoices/share-link-field.tsx`; invoice detail adapter; share tests.
@@ -134,7 +134,7 @@ Parent-deal behavior is settled: preserve the required relation and `ON DELETE R
 - **Tests/evidence:** fake ResizeObserver unit tests; clipboard success/failure; five widths × two languages; intermediate resize detector.
 - **Commit:** `T-06: constrain and truncate invoice share links`.
 - **Rollback:** component can revert without API/schema changes.
-- **Status:** pending.
+- **Status:** accepted — implemented and independently verified locally (focused `share-link-field.test.tsx` 16/16 and focused invoice-detail integration 64/64 PASS, plus the full canonical gates: `npm test` 58 files/572 tests, direct ESLint, typecheck, build, `prisma validate`, `git diff --check`, all PASS). Browser correction pass (Hermes-captured, not the original baseline): 390px Indonesian/English failure-alert contract and manual-fallback selectability rechecked, English clipboard success rechecked; no screenshot captured, no screenshot claim made. Full evidence: `docs/ux-implementation/evidence/phase-1/t-06-browser-acceptance.md`. No task commit yet — remains uncommitted in the dirty worktree. This does not reopen the already-closed T-04/T-05 Phase 1 checkpoint.
 
 #### T-07 — Retire inline action card and add FAB
 - **Files/modules:** remove equivalent quick-action block from current composite/compatibility view; new `floating-action-button.tsx`; top bar.
@@ -143,9 +143,11 @@ Parent-deal behavior is settled: preserve the required relation and `ON DELETE R
 - **Tests/evidence:** DOM absence of old block; geometry at 320/390/768/1024/1440; nav/FAB clearance.
 - **Commit:** `T-07: move global actions into shell and phone FAB`.
 - **Rollback:** re-enable inline block and remove FAB.
-- **Status:** pending.
+- **Status:** accepted — implemented and independently verified locally (focused T-07-related suites 59/59 — dashboard-client 38, TopBar 9, FloatingActionButton 2, AppShell 5, protected layout 5 — plus the full canonical gates: `npm test` 59 files/572 tests, direct ESLint, typecheck, `prisma validate`, build, `git diff --check`, and new-file `diff --no-index` checks, all PASS). Browser recheck (Hermes-captured, Chrome DevTools MCP, authenticated local `http://localhost:3103/`): FAB present/correctly placed and global actions absent from the phone band at 320/390px, top-bar actions present and FAB/bottom-nav absent at 768/1024/1440px, no horizontal overflow at any of the five widths, FAB/top-bar invoice action routes to `/deal?tahap=INVOICE`, general deal action routes to `/deal`, no console errors/warnings; no screenshot artifact captured, no screenshot claim made. Full evidence: `docs/ux-implementation/evidence/phase-1/t-07-browser-acceptance.md`. No task commit yet — remains uncommitted in the dirty worktree. This does not reopen the already-closed T-04/T-05 Phase 1 checkpoint.
 
 **Phase 1 gate:** complete criteria/evidence, canonical gates, five-width shell captures, accessibility focus/menu procedure, route compatibility smoke, instructions updated. No unresolved regression.
+
+**Phase 1 gate status:** `shell/blocking-findings checkpoint approved and closed — 2026-08-08`. The checkpoint Chris approved and closed on 2026-08-08 covers the T-04 (AppShell) and T-05 (account menu) scope: independent automated gates (full `npm test` 57 files/556 tests, focused T-05 29/29, typecheck, lint, build, `git diff --check`, all PASS) plus a Chris-reported manual browser checkpoint PASS. Provenance: Chris-reported manual browser checkpoint, not Hermes-captured; no screenshots were captured as part of this closeout. Full evidence package: `docs/ux-implementation/evidence/phase-1/GATE.md`. T-04/T-05 remain uncommitted in the dirty worktree — no commit/push/deploy occurred. This closed T-04/T-05 checkpoint is unchanged and not reopened by later work. T-06 (ShareLinkField) is separately accepted locally (2026-08-08, documentation-only correction pass), also uncommitted; evidence at `docs/ux-implementation/evidence/phase-1/t-06-browser-acceptance.md`. T-07 (FAB) is separately accepted locally (2026-08-08, independently verified, uncommitted); evidence at `docs/ux-implementation/evidence/phase-1/t-07-browser-acceptance.md`. This does not reopen the already-closed T-04/T-05 Phase 1 checkpoint. **T-08 remains `pending` and must begin only in a fresh Hermes session.**
 
 ### Phase 2 — IA split (**Chris acknowledgement before merge**)
 

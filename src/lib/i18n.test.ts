@@ -26,4 +26,23 @@ describe("i18n", () => {
     expect(translate("id" as Language, "missing.key")).toBe("missing.key");
     expect(translate("en", "missing.key")).toBe("missing.key");
   });
+
+  it("has Indonesian labels for the four shell nav items", () => {
+    expect(translate("id", "nav.home")).toBe("Beranda");
+    expect(translate("id", "nav.deals")).toBe("Deal");
+    expect(translate("id", "nav.invoices")).toBe("Invoice");
+    expect(translate("id", "nav.settings")).toBe("Pengaturan");
+  });
+
+  it("has English labels for the four shell nav items", () => {
+    expect(translate("en", "nav.home")).toBe("Home");
+    expect(translate("en", "nav.deals")).toBe("Deals");
+    expect(translate("en", "nav.invoices")).toBe("Invoices");
+    expect(translate("en", "nav.settings")).toBe("Settings");
+  });
+
+  it("has a bilingual label for the shell navigation landmark", () => {
+    expect(translate("id", "nav.label")).toBe("Navigasi utama");
+    expect(translate("en", "nav.label")).toBe("Main navigation");
+  });
 });

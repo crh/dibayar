@@ -49,17 +49,13 @@ describe("DashboardClient", () => {
     window.localStorage.clear();
     render(<DashboardClient initialDeals={[]} userName="Chris" />);
 
-    expect(screen.getByRole("button", { name: "Menu akun" })).toBeDefined();
     expect(screen.getByText("Mulai dari sini")).toBeDefined();
     expect(screen.queryByText("Start here")).toBeNull();
   });
 
-  it("keeps money formatting identical when English is selected (chrome-only translation)", async () => {
-    const user = userEvent.setup();
+  it("keeps money formatting identical when English is selected (chrome-only translation)", () => {
+    window.localStorage.setItem("dibayar-language", "en");
     render(<DashboardClient userName="Chris" initialDeals={[kopiDeal]} />);
-
-    await user.click(screen.getByRole("button", { name: "Menu akun" }));
-    await user.click(screen.getByRole("menuitemradio", { name: "English" }));
 
     // Chrome copy switches to English…
     expect(screen.getByRole("combobox", { name: "Deal stage for Kopi Nusantara" })).toBeDefined();
@@ -69,12 +65,9 @@ describe("DashboardClient", () => {
     expect(screen.queryByText(/1,500,000/)).toBeNull();
   });
 
-  it("localizes the first-run microcopy and empty invoice guidance in English", async () => {
-    const user = userEvent.setup();
+  it("localizes the first-run microcopy and empty invoice guidance in English", () => {
+    window.localStorage.setItem("dibayar-language", "en");
     render(<DashboardClient initialDeals={[]} userName="Chris" />);
-
-    await user.click(screen.getByRole("button", { name: "Menu akun" }));
-    await user.click(screen.getByRole("menuitemradio", { name: "English" }));
 
     expect(screen.getByText("Start here")).toBeDefined();
     expect(screen.getByText("No invoices yet. Move a deal to the Invoice stage, then create a draft from its deal card.")).toBeDefined();
@@ -171,24 +164,6 @@ describe("DashboardClient", () => {
     await user.click(within(invoiceStage).getByRole("button", { name: "Buat invoice" }));
 
     expect(await screen.findByRole("status")).toHaveProperty("textContent", "Invoice dibuat");
-  });
-
-  it("exposes accessible disclosure state on the Add deal / Close toggle", async () => {
-    const user = userEvent.setup();
-    render(<DashboardClient initialDeals={[kopiDeal]} userName="Chris" />);
-
-    const toggle = screen.getByRole("button", { name: "+ Deal" });
-    expect(toggle).toHaveProperty("ariaExpanded", "false");
-    const controlsId = toggle.getAttribute("aria-controls");
-    expect(controlsId).toBeTruthy();
-    expect(document.getElementById(controlsId!)).toBeNull();
-
-    await user.click(toggle);
-
-    const closeToggle = screen.getByRole("button", { name: "Tutup" });
-    expect(closeToggle.getAttribute("aria-controls")).toBe(controlsId);
-    expect(closeToggle).toHaveProperty("ariaExpanded", "true");
-    expect(document.getElementById(controlsId!)).toBe(screen.getByRole("textbox", { name: "Nama brand" }).closest("form"));
   });
 
   it("renders an existing deal in its pipeline stage", async () => {
@@ -312,8 +287,8 @@ describe("DashboardClient", () => {
     expect(screen.getByRole("link", { name: /INV\/2026\/07\/001/ }).getAttribute("href")).toBe("/dashboard/invoices/invoice-1");
   });
 
-  it("still renders the English Draft label for a draft invoice when English is selected", async () => {
-    const user = userEvent.setup();
+  it("still renders the English Draft label for a draft invoice when English is selected", () => {
+    window.localStorage.setItem("dibayar-language", "en");
     render(
       <DashboardClient
         initialDeals={[]}
@@ -333,9 +308,6 @@ describe("DashboardClient", () => {
         ]}
       />,
     );
-
-    await user.click(screen.getByRole("button", { name: "Menu akun" }));
-    await user.click(screen.getByRole("menuitemradio", { name: "English" }));
 
     expect(screen.getByText("Draft")).toBeDefined();
     expect(screen.queryByText("Draf")).toBeNull();
@@ -426,75 +398,20 @@ describe("DashboardClient", () => {
     });
   });
 
-  describe("state-aware quick action", () => {
-    it("shows the onboarding card with zero deals", () => {
-      render(<DashboardClient initialDeals={[]} userName="Chris" />);
+  describe("zero-deal onboarding", () => {
+    it("shows the onboarding heading and form with zero deals, and hides it once a deal exists", () => {
+      const { unmount } = render(<DashboardClient initialDeals={[]} userName="Chris" />);
 
       expect(screen.getByText("Mulai dari sini")).toBeDefined();
       expect(screen.getByRole("heading", { name: "Tambah deal pertama kamu" })).toBeDefined();
-      expect(screen.queryByRole("button", { name: "+ Buat invoice" })).toBeNull();
-      expect(screen.queryByRole("link", { name: "+ Buat invoice" })).toBeNull();
-      expect(screen.queryByRole("button", { name: "+ Deal" })).toBeNull();
-    });
+      expect(screen.getByRole("textbox", { name: "Nama brand" })).toBeDefined();
+      unmount();
 
-    it("shows the two-pill quick action row instead of the onboarding heading once a deal exists", () => {
       render(<DashboardClient initialDeals={[kopiDeal]} userName="Chris" />);
 
       expect(screen.queryByText("Mulai dari sini")).toBeNull();
       expect(screen.queryByRole("heading", { name: "Tambah deal pertama kamu" })).toBeNull();
-      expect(screen.getByRole("link", { name: "+ Buat invoice" })).toBeDefined();
-      expect(screen.getByRole("button", { name: "+ Deal" })).toBeDefined();
-    });
-
-    it("opens the add-deal form from the secondary + Deal pill", async () => {
-      const user = userEvent.setup();
-      render(<DashboardClient initialDeals={[kopiDeal]} userName="Chris" />);
-
       expect(screen.queryByRole("textbox", { name: "Nama brand" })).toBeNull();
-
-      await user.click(screen.getByRole("button", { name: "+ Deal" }));
-
-      expect(screen.getByRole("textbox", { name: "Nama brand" })).toBeDefined();
-      expect(screen.getByRole("button", { name: "Tutup" })).toBeDefined();
-    });
-
-    it("routes + Buat invoice directly to the single deal that's ready to invoice", async () => {
-      const user = userEvent.setup();
-      const invoiceDeal: DealRecord = { ...kopiDeal, id: "deal-3", status: "INVOICE" };
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(async () => ({
-          ok: true,
-          status: 201,
-          json: async () => ({
-            invoice: {
-              id: "invoice-9",
-              userId: "user-1",
-              dealId: "deal-3",
-              number: "INV/2026/07/009",
-              subtotalIdr: invoiceDeal.feeIdr,
-              withholdingTaxType: "NONE",
-              status: "DRAFT",
-              dueDate: null,
-              createdAt: new Date("2026-07-15T00:00:00.000Z"),
-              updatedAt: new Date("2026-07-15T00:00:00.000Z"),
-            },
-          }),
-        })),
-      );
-
-      render(<DashboardClient initialDeals={[invoiceDeal]} userName="Chris" />);
-
-      await user.click(screen.getByRole("button", { name: "+ Buat invoice" }));
-
-      expect(await screen.findByRole("status")).toHaveProperty("textContent", "Invoice dibuat");
-    });
-
-    it("falls back to a #pipeline anchor for + Buat invoice when there's no single deal ready to invoice", () => {
-      render(<DashboardClient initialDeals={[kopiDeal]} userName="Chris" />);
-
-      const link = screen.getByRole("link", { name: "+ Buat invoice" });
-      expect(link.getAttribute("href")).toBe("#pipeline");
     });
   });
 

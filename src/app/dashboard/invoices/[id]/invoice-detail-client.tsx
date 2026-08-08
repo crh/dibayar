@@ -6,8 +6,9 @@ import type { InvoiceRecord } from "@/lib/invoices";
 import { deriveInvoiceDisplayStatus, getDueDateCalendarDate } from "@/lib/invoice-date-status";
 import { buildWhatsAppReminder, buildWhatsAppShare, normalizeWhatsAppNumber } from "@/lib/whatsapp";
 import { useLanguage } from "@/components/language-switcher";
-import { AccountMenu } from "@/components/account-menu";
 import { MoneyDisplay, StatusChip, Button, fieldClassName } from "@/components/design-system";
+import { ShareLinkField } from "@/components/invoices/share-link-field";
+import type { Language } from "@/lib/i18n";
 import { triggerPaidHaptic } from "@/lib/haptics";
 import { fetchWithTimeout } from "@/lib/http";
 import { PPH_RATES } from "@/lib/income-summary";
@@ -54,7 +55,6 @@ function formatMoneySentence(value: number) {
 const SHARE_LOAD_ERROR = "invoice.shareLoadError";
 const SHARE_CREATE_ERROR = "invoice.shareCreateError";
 const SHARE_REVOKE_ERROR = "invoice.shareRevokeError";
-const COPY_LINK_ERROR = "invoice.copyError";
 
 const SHARE_PATH_PATTERN = /^\/i\/[A-Za-z0-9_-]+$/;
 
@@ -137,8 +137,6 @@ function formatShareExpiry(expiresAt: string | null, t: (key: string, values?: R
 }
 
 type ShareConfirm = "regenerate" | "revoke" | null;
-
-type CopyFeedback = { kind: "success" | "error"; message: string };
 
 type ContactStatus = "loading" | "loaded" | "error";
 
@@ -262,6 +260,7 @@ function ShareSection({
   retryLoad,
   createOrRegenerate,
   revoke,
+  language,
   t,
 }: {
   invoice: InvoiceRecord;
@@ -275,30 +274,19 @@ function ShareSection({
   retryLoad: () => void;
   createOrRegenerate: () => Promise<string | null>;
   revoke: () => Promise<void>;
+  language: Language;
   t: (key: string, values?: Record<string, string>) => string;
 }) {
   const [confirm, setConfirm] = useState<ShareConfirm>(null);
-  const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
 
   async function handleCreateOrRegenerate() {
     setConfirm(null);
-    setCopyFeedback(null);
     await createOrRegenerate();
   }
 
   async function handleRevoke() {
     setConfirm(null);
-    setCopyFeedback(null);
     await revoke();
-  }
-
-  async function copyLink(link: string) {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopyFeedback({ kind: "success", message: "invoice.copySuccess" });
-    } catch {
-      setCopyFeedback({ kind: "error", message: COPY_LINK_ERROR });
-    }
   }
 
   const reminder = buildWhatsAppReminder({
@@ -351,24 +339,9 @@ function ShareSection({
           <p className="mt-3 text-[14px] font-semibold text-paid">{t("invoice.active")}</p>
           <p className="mt-1 text-[13px] text-muted">{formatShareExpiry(share.expiresAt, t)}</p>
           {share.link ? (
-            <>
-              <p className="mt-2 break-all text-[13px] text-muted">{share.link}</p>
-              <button
-                type="button"
-                onClick={() => copyLink(share.link!)}
-                className="mt-3 inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
-              >
-                {t("invoice.copy")}
-              </button>
-              {copyFeedback ? (
-                <p
-                  role={copyFeedback.kind === "error" ? "alert" : "status"}
-                  className={`mt-2 text-[13px] font-semibold ${copyFeedback.kind === "error" ? "text-overdue" : "text-paid"}`}
-                >
-                  {t(copyFeedback.message)}
-                </p>
-              ) : null}
-            </>
+            <div className="mt-3">
+              <ShareLinkField url={share.link} language={language} />
+            </div>
           ) : null}
           <div className="mt-3 rounded-xl bg-bg p-3">
             <p className="text-[13px] font-semibold text-ink">{t("invoice.whatsapp")}</p>
@@ -479,7 +452,7 @@ function ShareSection({
 }
 
 export default function InvoiceDetailClient({ initialInvoice, now }: { initialInvoice: InvoiceRecord; now?: Date }) {
-  const { language, setLanguage, t } = useLanguage();
+  const { language, t } = useLanguage();
   const [invoice, setInvoice] = useState(initialInvoice);
   const [contactWa, setContactWa] = useState<string | null>(null);
   const [contactStatus, setContactStatus] = useState<ContactStatus>("loading");
@@ -626,11 +599,7 @@ export default function InvoiceDetailClient({ initialInvoice, now }: { initialIn
         ← {t("invoice.back")}
       </Link>
 
-      <header className="flex items-center justify-end">
-        <AccountMenu language={language} onChange={setLanguage} />
-      </header>
-
-      {paidMoment ? <div role="status" aria-live="polite" className="rounded-md border border-paid/30 bg-paid-tint px-4 py-3 text-[14px] font-semibold text-paid">{t("invoice.paidMoment")}</div> : null}
+      {paidMoment ?<div role="status" aria-live="polite" className="rounded-md border border-paid/30 bg-paid-tint px-4 py-3 text-[14px] font-semibold text-paid">{t("invoice.paidMoment")}</div> : null}
 
       <header className="rounded-md border border-line border-t-[3px] border-t-primary bg-surface p-6 shadow-md">
         <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
@@ -774,6 +743,7 @@ export default function InvoiceDetailClient({ initialInvoice, now }: { initialIn
         retryLoad={shareState.retryLoad}
         createOrRegenerate={shareState.createOrRegenerate}
         revoke={shareState.revoke}
+        language={language}
         t={t}
       />
     </main>

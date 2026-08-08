@@ -6,7 +6,6 @@ import type { DealRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
 import { deriveInvoiceDisplayStatus, DUE_SOON_WINDOW_DAYS, selectAttentionInvoices } from "@/lib/invoice-date-status";
 import { useLanguage } from "@/components/language-switcher";
-import { AccountMenu } from "@/components/account-menu";
 import { summarizeMonthlyIncome, getJakartaMonthBounds } from "@/lib/income-summary";
 import type { Language } from "@/lib/i18n";
 import { StatusChip, MoneyDisplay, EmptyState, fieldClassName } from "@/components/design-system";
@@ -217,7 +216,7 @@ function StageColumn({
 }
 
 export default function DashboardClient({ initialDeals, initialInvoices = [], userName, now }: DashboardClientProps) {
-  const { language, setLanguage, t } = useLanguage();
+  const { language, t } = useLanguage();
   const [deals, setDeals] = useState(initialDeals);
   const [invoices, setInvoices] = useState(initialInvoices);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -225,7 +224,6 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingDealId, setPendingDealId] = useState<string | null>(null);
-  const [isAddDealOpen, setIsAddDealOpen] = useState(initialDeals.length === 0);
   const referenceNow = now ?? new Date();
   const { overdue, dueSoon } = selectAttentionInvoices(invoices, referenceNow);
   const overdueTotal = overdue.reduce((total, invoice) => total + invoice.subtotalIdr, 0);
@@ -242,10 +240,6 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
   const inNegoCount = deals.filter((deal) => deal.status === "MASUK" || deal.status === "NEGO").length;
   const readyToInvoiceCount = deals.filter((deal) => deal.status === "KONTEN" || deal.status === "INVOICE").length;
   const paidCount = deals.filter((deal) => deal.status === "DIBAYAR").length;
-  const dealsReadyForInvoice = deals.filter(
-    (deal) => deal.status === "INVOICE" && !invoices.some((invoice) => invoice.dealId === deal.id),
-  );
-  const oneDealReadyForInvoice = dealsReadyForInvoice.length === 1 ? dealsReadyForInvoice[0] : null;
   const stagesWithDeals: StageWithDeals[] = PIPELINE_STAGES.map((stage) => ({
     stage,
     deals: deals.filter((deal) => deal.status === stage.value),
@@ -331,9 +325,6 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
           <h1 className="text-[26px] font-bold text-ink">{t("dashboard.greeting", { name: userName ?? "" })}</h1>
           <p className="text-[15px] text-muted">{t("dashboard.subtitle")}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <AccountMenu language={language} onChange={setLanguage} />
-        </div>
       </header>
 
       {successMessage ? (
@@ -341,6 +332,8 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
           {t(successMessage)}
         </div>
       ) : null}
+
+      {error ? <p role="alert" className="ds-small text-overdue">{t(error)}</p> : null}
 
       <a
         href="#pipeline"
@@ -366,125 +359,95 @@ export default function DashboardClient({ initialDeals, initialInvoices = [], us
         </p>
       </a>
 
-      <section
-        aria-labelledby={deals.length ? undefined : "tambah-deal"}
-        aria-label={deals.length ? t("dashboard.quickAction") : undefined}
-        className={`${deals.length ? "rounded-lg border border-line bg-surface p-4" : "rounded-lg border border-primary-tint bg-primary-tint p-5 shadow-sm"}`}
-      >
-        {deals.length ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {oneDealReadyForInvoice ? (
-              <button
-                type="button"
-                onClick={() => handleCreateInvoice(oneDealReadyForInvoice.id)}
-                disabled={isSaving}
-                className="ds-button ds-button-primary min-h-11 px-4 text-[13px] disabled:cursor-wait disabled:opacity-60"
-              >
-                {t("dashboard.quickActionNewInvoice")}
-              </button>
-            ) : (
-              <a href="#pipeline" className="ds-button ds-button-primary min-h-11 px-4 text-[13px]">
-                {t("dashboard.quickActionNewInvoice")}
-              </a>
-            )}
-            <button
-              type="button"
-              onClick={() => setIsAddDealOpen((open) => !open)}
-              aria-expanded={isAddDealOpen}
-              aria-controls="tambah-deal-form"
-              className="ds-button ds-button-secondary min-h-11 px-4 text-[13px]"
-            >
-              {isAddDealOpen ? t("dashboard.close") : t("dashboard.quickActionAddDeal")}
-            </button>
-          </div>
-        ) : (
+      {deals.length === 0 ? (
+        <section
+          aria-labelledby="tambah-deal"
+          className="rounded-lg border border-primary-tint bg-primary-tint p-5 shadow-sm"
+        >
           <div>
             <p className="ds-micro text-primary">{t("dashboard.startHere")}</p>
             <h2 id="tambah-deal" className="ds-h2 text-ink">{t("dashboard.addDeal")}</h2>
             <p className="mt-1 ds-small text-muted">{t("dashboard.addDealHint")}</p>
           </div>
-        )}
-        {isAddDealOpen ? (
-        <form id="tambah-deal-form" className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit}>
-          <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
-            {t("dashboard.brand")}
-            <input
-              required
-              name="brand"
-              value={form.brand}
-              onChange={(event) => setForm({ ...form, brand: event.target.value })}
-              className={fieldClassName}
-            />
-          </label>
-          <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
-            {t("dashboard.whatsapp")}
-            <input
-              required
-              name="contactWa"
-              inputMode="tel"
-              value={form.contactWa}
-              onChange={(event) => setForm({ ...form, contactWa: event.target.value })}
-              className={fieldClassName}
-            />
-          </label>
-          <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink sm:col-span-2">
-            {t("dashboard.scope")}
-            <textarea
-              required
-              name="scope"
-              value={form.scope}
-              onChange={(event) => setForm({ ...form, scope: event.target.value })}
-              className="min-h-20 rounded-xl border border-line bg-bg px-3 py-2 text-[15px] font-normal outline-none focus:border-primary"
-            />
-          </label>
-          <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
-            {t("dashboard.fee")}
-            <input
-              required
-              min="0"
-              name="feeIdr"
-              type="number"
-              inputMode="numeric"
-              value={form.feeIdr}
-              onChange={(event) => setForm({ ...form, feeIdr: event.target.value })}
-              className={fieldClassName}
-            />
-            {form.feeIdr && Number.isFinite(Number(form.feeIdr)) && Number(form.feeIdr) > 0 ? (
-              <span className="text-[12px] font-normal text-muted">
-                {t("dashboard.feePreview", { amount: formatIdr(Number(form.feeIdr)) })}
-              </span>
-            ) : null}
-          </label>
-          <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
-            {t("dashboard.deadline")}
-            <input
-              name="deadline"
-              type="date"
-              value={form.deadline}
-              onChange={(event) => setForm({ ...form, deadline: event.target.value })}
-              className={fieldClassName}
-            />
-          </label>
-          <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink sm:col-span-2">
-            {t("dashboard.paymentTerms")}
-            <input
-              name="paymentTerms"
-              value={form.paymentTerms}
-              onChange={(event) => setForm({ ...form, paymentTerms: event.target.value })}
-              className={fieldClassName}
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={isSaving}
-            className="inline-flex h-11 items-center justify-center rounded-full bg-primary px-5 text-[15px] font-semibold text-surface hover:bg-primary-d disabled:cursor-wait disabled:opacity-60 sm:col-span-2 sm:w-fit"
-          >
-            {isSaving ? t("dashboard.saving") : t("dashboard.saveDeal")}
-          </button>
-        </form>
-        ) : null}
-        {error ? <p role="alert" className="mt-3 ds-small text-overdue">{t(error)}</p> : null}
-      </section>
+          <form id="tambah-deal-form" className="mt-5 grid gap-4 sm:grid-cols-2" onSubmit={handleSubmit}>
+            <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
+              {t("dashboard.brand")}
+              <input
+                required
+                name="brand"
+                value={form.brand}
+                onChange={(event) => setForm({ ...form, brand: event.target.value })}
+                className={fieldClassName}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
+              {t("dashboard.whatsapp")}
+              <input
+                required
+                name="contactWa"
+                inputMode="tel"
+                value={form.contactWa}
+                onChange={(event) => setForm({ ...form, contactWa: event.target.value })}
+                className={fieldClassName}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink sm:col-span-2">
+              {t("dashboard.scope")}
+              <textarea
+                required
+                name="scope"
+                value={form.scope}
+                onChange={(event) => setForm({ ...form, scope: event.target.value })}
+                className="min-h-20 rounded-xl border border-line bg-bg px-3 py-2 text-[15px] font-normal outline-none focus:border-primary"
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
+              {t("dashboard.fee")}
+              <input
+                required
+                min="0"
+                name="feeIdr"
+                type="number"
+                inputMode="numeric"
+                value={form.feeIdr}
+                onChange={(event) => setForm({ ...form, feeIdr: event.target.value })}
+                className={fieldClassName}
+              />
+              {form.feeIdr && Number.isFinite(Number(form.feeIdr)) && Number(form.feeIdr) > 0 ? (
+                <span className="text-[12px] font-normal text-muted">
+                  {t("dashboard.feePreview", { amount: formatIdr(Number(form.feeIdr)) })}
+                </span>
+              ) : null}
+            </label>
+            <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
+              {t("dashboard.deadline")}
+              <input
+                name="deadline"
+                type="date"
+                value={form.deadline}
+                onChange={(event) => setForm({ ...form, deadline: event.target.value })}
+                className={fieldClassName}
+              />
+            </label>
+            <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink sm:col-span-2">
+              {t("dashboard.paymentTerms")}
+              <input
+                name="paymentTerms"
+                value={form.paymentTerms}
+                onChange={(event) => setForm({ ...form, paymentTerms: event.target.value })}
+                className={fieldClassName}
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="inline-flex h-11 items-center justify-center rounded-full bg-primary px-5 text-[15px] font-semibold text-surface hover:bg-primary-d disabled:cursor-wait disabled:opacity-60 sm:col-span-2 sm:w-fit"
+            >
+              {isSaving ? t("dashboard.saving") : t("dashboard.saveDeal")}
+            </button>
+          </form>
+        </section>
+      ) : null}
 
       <section aria-labelledby="perlu-dikejar" className="flex flex-col gap-4">
               <div>
