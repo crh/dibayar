@@ -1,0 +1,167 @@
+"use client";
+
+import { useCallback, useRef, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import type { DealRecord } from "@/lib/deals";
+import type { InvoiceRecord } from "@/lib/invoices";
+import { useLanguage } from "@/components/language-switcher";
+import { DealBoard } from "@/components/deals/deal-board";
+import { StageFilter } from "@/components/deals/stage-filter";
+import { AddDealDialog } from "@/components/deals/add-deal-dialog";
+import { DealForm, EMPTY_DEAL_FORM, type DealFormState } from "@/components/deals/deal-form";
+import { type StageValue } from "@/components/deals/deal-stages";
+
+type DealClientProps = {
+  initialDeals: DealRecord[];
+  initialInvoices: InvoiceRecord[];
+  initialStageFilter: StageValue | null;
+  initialDialogOpen: boolean;
+};
+
+export default function DealClient({
+  initialDeals,
+  initialInvoices,
+  initialStageFilter,
+  initialDialogOpen,
+}: DealClientProps) {
+  const router = useRouter();
+  const { language, t } = useLanguage();
+  const [deals, setDeals] = useState(initialDeals);
+  const [invoices, setInvoices] = useState(initialInvoices);
+  const [stageFilter, setStageFilter] = useState<StageValue | null>(initialStageFilter);
+  const [isDialogOpen, setIsDialogOpen] = useState(initialDialogOpen);
+  const [form, setForm] = useState<DealFormState>(EMPTY_DEAL_FORM);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [pendingDealId, setPendingDealId] = useState<string | null>(null);
+  const hasStrippedDialogParam = useRef(false);
+
+  // The dialog-open URL flag (?tambah=1) from the global "+ Deal" action is a
+  // one-shot trigger, not durable state: strip it once so reload/back don't
+  // reopen the dialog on their own.
+  if (initialDialogOpen && !hasStrippedDialogParam.current) {
+    hasStrippedDialogParam.current = true;
+    router.replace(stageFilter ? `/deal?tahap=${stageFilter}` : "/deal");
+  }
+
+  const closeDialog = useCallback(() => {
+    setIsDialogOpen(false);
+    setError(null);
+    setForm(EMPTY_DEAL_FORM);
+  }, []);
+
+  function handleStageFilterChange(next: StageValue | null) {
+    setStageFilter(next);
+    router.replace(next ? `/deal?tahap=${next}` : "/deal");
+  }
+
+  async function handleStageChange(dealId: string, status: DealRecord["status"]) {
+    setError(null);
+    setSuccessMessage(null);
+    setPendingDealId(dealId);
+
+    try {
+      const response = await fetch(`/api/deals/${dealId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error("dashboard.dealError");
+      setDeals((current) => current.map((deal) => (deal.id === dealId ? payload.deal : deal)));
+    } catch {
+      setError("dashboard.dealError");
+    } finally {
+      setPendingDealId(null);
+    }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSuccessMessage(null);
+    setIsSaving(true);
+
+    try {
+      const response = await fetch("/api/deals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          feeIdr: Number(form.feeIdr),
+          deadline: form.deadline || undefined,
+          paymentTerms: form.paymentTerms || undefined,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error("dashboard.saveError");
+      setDeals((current) => [payload.deal, ...current]);
+      setForm(EMPTY_DEAL_FORM);
+      setSuccessMessage("dashboard.dealSaved");
+      setIsDialogOpen(false);
+    } catch {
+      setError("dashboard.saveError");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleCreateInvoice(dealId: string) {
+    setError(null);
+    setSuccessMessage(null);
+    setIsSaving(true);
+
+    try {
+      const response = await fetch("/api/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dealId, withholdingTaxType: "NONE" }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error("dashboard.invoiceError");
+      setInvoices((current) => [payload.invoice, ...current]);
+      setSuccessMessage("dashboard.invoiceCreated");
+    } catch {
+      setError("dashboard.invoiceError");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <main className="mx-auto flex w-full max-w-[1100px] flex-col gap-5 px-5 py-6 min-[640px]:px-8 min-[640px]:py-8">
+      {successMessage ? (
+        <div role="status" aria-live="polite" className="rounded-md border border-paid/30 bg-paid-tint px-4 py-3 text-[14px] font-semibold text-paid">
+          {t(successMessage)}
+        </div>
+      ) : null}
+      {error && !isDialogOpen ? <p role="alert" className="ds-small text-overdue">{t(error)}</p> : null}
+
+      <StageFilter stageFilter={stageFilter} t={t} onChange={handleStageFilterChange} />
+
+      <DealBoard
+        deals={deals}
+        invoices={invoices}
+        language={language}
+        t={t}
+        pendingDealId={pendingDealId}
+        isSaving={isSaving}
+        stageFilter={stageFilter}
+        onStageChange={handleStageChange}
+        onCreateInvoice={handleCreateInvoice}
+      />
+
+      <AddDealDialog
+        open={isDialogOpen}
+        onClose={closeDialog}
+        title={t("deal.addDealTitle")}
+        description={t("dashboard.addDealHint")}
+        closeLabel={t("dashboard.close")}
+      >
+        {error && isDialogOpen ? <p role="alert" className="mb-3 ds-small text-overdue">{t(error)}</p> : null}
+        <DealForm formId="tambah-deal-form" form={form} onChange={setForm} onSubmit={handleSubmit} isSaving={isSaving} t={t} />
+      </AddDealDialog>
+    </main>
+  );
+}
