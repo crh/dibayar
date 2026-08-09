@@ -2,7 +2,7 @@
 
 Source of truth: `dibayar-implementation-spec.md` + `SPEC_RECONCILIATION.md`
 Baseline: `8ca6137ea988b57f7a9379b5109b4dc3516290ee`
-Status: **T-00–T-03 COMPLETE; Phase 0 checkpoint manually approved by Chris (2026-08-07) at phase endpoint `5fe3cf3`; evidence at `docs/ux-implementation/evidence/phase-0/GATE.md`. T-04, T-05, T-06, and T-07 COMPLETE (independently verified locally); Phase 1 (shell and blocking-findings) checkpoint manually approved and closed by Chris (2026-08-08); evidence at `docs/ux-implementation/evidence/phase-1/GATE.md`. T-04–T-07 are committed in `68ef5a4` (`T-04-T-07: complete Phase 1 responsive shell and actions`, parent `7846f20`, 33 files) on `hermes/ux-phase-1`, committed 2026-08-09 — local only, not pushed or deployed. Phase 1 final closeout approved and closed (2026-08-08; addendum at `docs/ux-implementation/evidence/phase-1/GATE.md`). Branch normalization performed 2026-08-09T06:58:34+07:00 (documentation-only, no history rewrite/rebase/squash/amend/push): current branch `hermes/ux-phase-2` at baseline `e7dda43`; `hermes/ux-phase-1` also points to `e7dda43`; `hermes/ux-phase-0` unchanged at `7846f20`. Current Phase 2 baseline: `e7dda43`. T-08 pending, to start only in a fresh Hermes session**
+Status: **T-00–T-03 COMPLETE; Phase 0 checkpoint manually approved by Chris (2026-08-07) at phase endpoint `5fe3cf3`; evidence at `docs/ux-implementation/evidence/phase-0/GATE.md`. T-04, T-05, T-06, and T-07 COMPLETE (independently verified locally); Phase 1 (shell and blocking-findings) checkpoint manually approved and closed by Chris (2026-08-08); evidence at `docs/ux-implementation/evidence/phase-1/GATE.md`. T-04–T-07 are committed in `68ef5a4` (`T-04-T-07: complete Phase 1 responsive shell and actions`, parent `7846f20`, 33 files) on `hermes/ux-phase-1`, committed 2026-08-09 — local only, not pushed or deployed. Phase 1 final closeout approved and closed (2026-08-08; addendum at `docs/ux-implementation/evidence/phase-1/GATE.md`). Branch normalization performed 2026-08-09T06:58:34+07:00 (documentation-only, no history rewrite/rebase/squash/amend/push): current branch `hermes/ux-phase-2` at baseline `e7dda43`; `hermes/ux-phase-1` also points to `e7dda43`; `hermes/ux-phase-0` unchanged at `7846f20`. Current Phase 2 baseline was `e7dda43`. Phase 2: T-08 accepted (`7633904`), T-09 accepted (`0bb2f57`), T-10 accepted (`261ef05`, preceded by pre-T-10 correction `878d077`); current HEAD `261ef05`. T-11 and T-12 pending.**
 
 ## 1. Branch, commit, and gate model
 
@@ -158,7 +158,7 @@ Parent-deal behavior is settled: preserve the required relation and `ON DELETE R
 - **Tests/evidence:** server/component feature tests; populated/zero captures; section DOM allowlist; sticky rail geometry.
 - **Commit:** `T-08: build focused Beranda money view`.
 - **Rollback:** compatibility root remains recoverable until T-12.
-- **Status:** pending.
+- **Status:** accepted — implemented and committed in `7633904` (`T-08: build focused Beranda money view`); focused and canonical gates plus the documented browser recheck passed. Evidence: `docs/ux-implementation/evidence/phase-2/t-08-report.md`.
 
 #### T-09 — Deal route extraction
 - **Files/modules:** `deal/page.tsx`; `components/deals/{deal-board,deal-card,add-deal-dialog}.tsx`; existing deal APIs.
@@ -167,7 +167,7 @@ Parent-deal behavior is settled: preserve the required relation and `ON DELETE R
 - **Tests/evidence:** route content exclusion; dialog/sheet keyboard tests; zero/populated captures.
 - **Commit:** `T-09: extract deal board and add-deal dialog`.
 - **Rollback:** use compatibility adapter.
-- **Status:** pending.
+- **Status:** accepted — implemented and independently verified in commit `0bb2f57` (`T-09: extract deal board and add-deal dialog`). Focused T-09 suite passed 11/11; typecheck and diff checks passed. Route tests cover auth render, invalid `tahap` fallback, and unauthenticated redirect; AddDealDialog tests cover keyboard/focus/dismissal behavior. Evidence: `docs/ux-implementation/evidence/phase-2/t-09-report.md`.
 
 #### T-10 — Invoice list route
 - **Files/modules:** `invoice/page.tsx`; `components/invoices/invoice-list.tsx`; owner list projection in `invoices.ts`.
@@ -176,7 +176,7 @@ Parent-deal behavior is settled: preserve the required relation and `ON DELETE R
 - **Tests/evidence:** all statuses, empty groups, second owner excluded, row route links, typography floor.
 - **Commit:** `T-10: extract grouped owner invoice list`.
 - **Rollback:** compatibility adapter/list projection removable.
-- **Status:** pending.
+- **Status:** accepted — the preserved partial implementation was recovered (not rewritten) and independently verified in commit `261ef05` (`T-10: extract grouped owner invoice list`), preceded by pre-T-10 correction `878d077` (`fix: defer deal dialog URL cleanup`, T-09-scope lint fix, not T-10 scope). The prior blocking failure at `src/components/invoices/invoice-list.test.tsx:116` was root-caused to an unescaped jsdom/nwsapi selector plus a real `StatusChip` 11px violation of the 12px typography floor; both were fixed, and independent review additionally corrected a governing-spec mismatch by omitting empty status groups from the DOM, with focused regression coverage. Isolated `invoice-list.test.tsx` passed 10/10; exact focused T-10 files passed 37/37; broader invoice-area passed 55/55; typecheck, `git diff --check`, direct ESLint (post-`878d077`), and direct `prisma validate` all passed. Browser acceptance remains deferred to the comprehensive Phase 2 pass after T-12. Evidence: `docs/ux-implementation/evidence/phase-2/t-10-report.md`.
 
 #### T-11 — Settings, issuer, bank, templates
 - **Files/modules:** `pengaturan/page.tsx`; `components/settings/*`; new settings service/validation/API; Prisma schema + additive migration.
