@@ -71,3 +71,10 @@ export const userLanguageRateLimiter = new RateLimiter({
   limit: 10,
   windowMs: 60_000,
 });
+
+// Same per-session-id rationale as userLanguageRateLimiter, for PATCH/GET
+// /api/me/settings.
+export const userSettingsRateLimiter = new RateLimiter({
+  limit: 20,
+  windowMs: 60_000,
+});

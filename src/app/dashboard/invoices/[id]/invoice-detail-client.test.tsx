@@ -1212,4 +1212,47 @@ describe("InvoiceDetailClient", () => {
       // Reaching here without a React "state update on an unmounted component" warning is the assertion.
     });
   });
+
+  describe("settings dependency notice", () => {
+    it("shows the Indonesian notice above the share block when issuer/bank details are incomplete", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} hasIncompleteIssuer />);
+
+      const notice = await screen.findByText(
+        "Lengkapi identitas penerbit dan rekening di Pengaturan agar invoice lengkap.",
+      );
+      const shareHeading = screen.getByRole("heading", { name: "Bagikan invoice" });
+      expect(notice.compareDocumentPosition(shareHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("shows the English notice when English is selected", async () => {
+      window.localStorage.setItem("dibayar-language", "en");
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} hasIncompleteIssuer />);
+
+      expect(
+        await screen.findByText("Complete issuer and bank details in Settings so the invoice is complete."),
+      ).toBeDefined();
+    });
+
+    it("does not render the notice when issuer/bank details are complete", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} hasIncompleteIssuer={false} />);
+      await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      expect(
+        screen.queryByText("Lengkapi identitas penerbit dan rekening di Pengaturan agar invoice lengkap."),
+      ).toBeNull();
+    });
+
+    it("does not render the notice by default when the prop is omitted (existing call sites unaffected)", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      expect(
+        screen.queryByText("Lengkapi identitas penerbit dan rekening di Pengaturan agar invoice lengkap."),
+      ).toBeNull();
+    });
+  });
 });

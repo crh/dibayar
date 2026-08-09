@@ -43,8 +43,30 @@ model User {
   invoices         Invoice[]
   invoiceSequences InvoiceSequence[]
   authEvents       AuthEvent[]
+  settings         UserSettings?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
+}
+
+// Issuer identity, bank details, and WhatsApp templates the invoice document
+// needs (see T-11). No NPWP/tax fields and no automatic-apply behavior here.
+// A missing row means the user has not saved any settings yet; every field
+// stays nullable so partial saves never require the others to be present.
+model UserSettings {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  issuerName        String?
+  issuerAddress     String?  @db.Text
+  issuerWhatsapp    String?
+  issuerEmail       String?
+  bankName          String?
+  bankAccountNumber String?
+  bankAccountHolder String?
+  templateSend      String?  @db.Text
+  templateChase     String?  @db.Text
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Account {

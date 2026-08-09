@@ -451,7 +451,15 @@ function ShareSection({
   );
 }
 
-export default function InvoiceDetailClient({ initialInvoice, now }: { initialInvoice: InvoiceRecord; now?: Date }) {
+export default function InvoiceDetailClient({
+  initialInvoice,
+  now,
+  hasIncompleteIssuer = false,
+}: {
+  initialInvoice: InvoiceRecord;
+  now?: Date;
+  hasIncompleteIssuer?: boolean;
+}) {
   const { language, t } = useLanguage();
   const [invoice, setInvoice] = useState(initialInvoice);
   const [contactWa, setContactWa] = useState<string | null>(null);
@@ -729,6 +737,12 @@ export default function InvoiceDetailClient({ initialInvoice, now }: { initialIn
             <p className="mt-4 rounded-xl bg-paid/10 px-3 py-2 text-[14px] font-semibold text-paid">{t("invoice.alreadyPaid")}</p>
           )}
         </section>
+      ) : null}
+
+      {hasIncompleteIssuer ? (
+        <div role="status" className="rounded-md border border-due bg-due-tint px-4 py-3 text-[14px] text-ink">
+          {t("invoice.settingsDependencyNotice")}
+        </div>
       ) : null}
 
       <ShareSection
