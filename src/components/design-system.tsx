@@ -52,7 +52,7 @@ const INVOICE_CHIP: Record<InvoiceStatus, { key: string; className: string }> = 
 export function StatusChip({ status, language = "id" }: { status: PipelineStage | InvoiceStatus; language?: Language }) {
   const item = status in PIPELINE_CHIP ? PIPELINE_CHIP[status as PipelineStage] : INVOICE_CHIP[status as InvoiceStatus];
   const label = translate(language, item.key);
-  return <span className={`inline-flex min-h-7 items-center rounded-full border px-3 text-[11px] font-bold uppercase tracking-wide ${item.className}`}>{label}{status === "DIBAYAR" || status === "PAID" ? " ✓" : ""}</span>;
+  return <span className={`inline-flex min-h-7 items-center rounded-full border px-3 text-[12px] font-bold uppercase tracking-wide ${item.className}`}>{label}{status === "DIBAYAR" || status === "PAID" ? " ✓" : ""}</span>;
 }
 
 // `language` stays in the prop API for call-site compatibility, but money is

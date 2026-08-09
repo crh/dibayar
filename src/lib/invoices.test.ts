@@ -3,12 +3,15 @@ import {
   createInvoice,
   getOwnedInvoice,
   listInvoices,
+  listInvoicesWithDealBrand,
   updateInvoiceStatus,
   type InvoiceCreateDb,
+  type InvoiceListDb,
   type InvoiceReadDb,
   type InvoiceRecord,
   type InvoiceStatusDb,
   type InvoiceTransactionClient,
+  type InvoiceWithDealBrand,
 } from "./invoices";
 
 const ownedDeal = { id: "deal-1", userId: "user-1", feeIdr: 1_500_000, deadline: null as Date | null };
@@ -256,6 +259,44 @@ describe("listInvoices", () => {
       where: { userId: "user-1" },
       orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
     });
+  });
+});
+
+function makeListWithBrandDb(records: InvoiceWithDealBrand[] = []): InvoiceListDb {
+  return {
+    invoice: {
+      findMany: vi.fn(async ({ where }: { where: { userId: string } }) =>
+        records.filter((invoice) => invoice.userId === where.userId),
+      ),
+    },
+  };
+}
+
+describe("listInvoicesWithDealBrand", () => {
+  it("lists only invoices owned by the current user, including the related deal's brand", async () => {
+    const owned: InvoiceWithDealBrand = { ...existingInvoice, deal: { brand: "Acme" } };
+    const other: InvoiceWithDealBrand = { ...existingInvoice, id: "invoice-2", userId: "user-2", deal: { brand: "Other Co" } };
+    const db = makeListWithBrandDb([owned, other]);
+
+    const invoices = await listInvoicesWithDealBrand(db, "user-1");
+
+    expect(invoices).toHaveLength(1);
+    expect(invoices[0].userId).toBe("user-1");
+    expect(invoices[0].deal.brand).toBe("Acme");
+    expect(db.invoice.findMany).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+      orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
+      include: { deal: { select: { brand: true } } },
+    });
+  });
+
+  it("excludes a second owner's invoices entirely", async () => {
+    const other: InvoiceWithDealBrand = { ...existingInvoice, id: "invoice-2", userId: "user-2", deal: { brand: "Other Co" } };
+    const db = makeListWithBrandDb([other]);
+
+    const invoices = await listInvoicesWithDealBrand(db, "user-1");
+
+    expect(invoices).toHaveLength(0);
   });
 });
 

@@ -61,6 +61,29 @@ export async function listInvoices(db: InvoiceReadDb, userId: string) {
   });
 }
 
+export type InvoiceWithDealBrand = InvoiceRecord & { deal: { brand: string } };
+
+export type InvoiceListDb = {
+  invoice: {
+    findMany(args: {
+      where: { userId: string };
+      orderBy: Array<Record<string, "asc" | "desc">>;
+      include: { deal: { select: { brand: true } } };
+    }): Promise<InvoiceWithDealBrand[]>;
+  };
+};
+
+// Same owner-scoped projection as listInvoices, additionally carrying the
+// related deal's brand for the invoice list route — kept as a separate
+// export so listInvoices's existing callers/return shape stay untouched.
+export async function listInvoicesWithDealBrand(db: InvoiceListDb, userId: string) {
+  return db.invoice.findMany({
+    where: { userId },
+    orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
+    include: { deal: { select: { brand: true } } },
+  });
+}
+
 // Returns null (not a throw) for missing or cross-tenant records so callers can respond 404 uniformly.
 export async function getOwnedInvoice(db: InvoiceReadDb, id: string, userId: string) {
   return db.invoice.findFirst({ where: { id, userId } });
