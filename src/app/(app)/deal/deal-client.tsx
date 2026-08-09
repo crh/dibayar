@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { DealRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
@@ -40,10 +40,12 @@ export default function DealClient({
   // The dialog-open URL flag (?tambah=1) from the global "+ Deal" action is a
   // one-shot trigger, not durable state: strip it once so reload/back don't
   // reopen the dialog on their own.
-  if (initialDialogOpen && !hasStrippedDialogParam.current) {
-    hasStrippedDialogParam.current = true;
-    router.replace(stageFilter ? `/deal?tahap=${stageFilter}` : "/deal");
-  }
+  useEffect(() => {
+    if (initialDialogOpen && !hasStrippedDialogParam.current) {
+      hasStrippedDialogParam.current = true;
+      router.replace(stageFilter ? `/deal?tahap=${stageFilter}` : "/deal");
+    }
+  }, [initialDialogOpen, router, stageFilter]);
 
   const closeDialog = useCallback(() => {
     setIsDialogOpen(false);
