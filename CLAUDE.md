@@ -32,6 +32,17 @@ Verified top-level documents:
 - `DEPLOYMENT.md` — local verification and deployment approval boundaries
 - `BACKLOG.md` and `DAILY_LOG.md` — project work tracking
 
+## Hermes multi-agent roles
+
+The Dibayar workflow uses three explicitly separated roles. Read `docs/ux-implementation/HERMES_CONTROLLER.md` before continuing autonomous work and `docs/ux-implementation/AGENT_ROLES.md` for the role contract.
+
+- **Luna** — Hermes default-profile orchestrator (`gpt-5.6-luna`); recovers state, delegates, independently verifies, manages evidence/Git, and controls approval boundaries.
+- **Klaus** — Claude Code implementation worker invoked by `/home/kenji/.local/bin/run-dibayar-claude`; default `CLAUDE_MAX_TURNS=100`; implements only the bounded packet and reports exact evidence; does not approve architecture or phase gates.
+- **Archie** — Hermes `archie` profile using the exact supported model `gpt-5.6-sol`; independent read-only-by-policy architect/reviewer; returns the structured ARCHIE REVIEW verdict and recommends corrections for Klaus rather than editing them.
+
+Luna remains the main orchestrator. Worker reports are evidence and do not override independent verification or approval gates.
+
+
 Application directories:
 
 - `src/app/` — Next.js App Router page, layout, global styles, and M0 tests

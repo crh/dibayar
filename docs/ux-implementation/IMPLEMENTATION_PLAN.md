@@ -35,16 +35,20 @@ git diff --check
 
 Focused tests run first. Schema tasks also run `npx prisma generate` and migration tests against representative local data. Security-sensitive tasks add owner/non-owner and public-token checks. UI tasks add T-00 detector and capture checks.
 
-Claude Code invocation contract for every product task:
+Claude Code invocation contract for every product task (worker name: Klaus):
 
+- Worker name: **Klaus** (Claude Code implementation worker).
 - CLI: Claude Code 2.1.197.
-- Explicit model pin: `claude --model sonnet` (current CLI's latest-Sonnet selector; task records command and version).
+- Explicit model pin: `claude --model sonnet` / the installed wrapper's `claude-sonnet-5` selector (task records command and version).
 - Fixed repository: `/home/kenji/code/dibayar` only.
+- Default worker budget: `CLAUDE_MAX_TURNS=100`; smaller bounds may be used for deliberately narrow packets.
 - No commit/push/deploy/migration apply/dependency install/secret or `.env` access unless separately authorized.
 - Packet contains only one task or a predeclared tightly coupled sub-packet.
 - Claude adds/updates feature tests and reports changed files/tests/concerns.
 - Hermes freezes writers, inspects actual diff before the report, then reads/reconciles the report and independently verifies.
 - Maximum two correction rounds. Third failure stops the task and triggers diagnosis/escalation.
+
+Archie is the separate `archie` Hermes profile using `gpt-5.6-sol`; it reviews independently at phase/risk gates and does not implement or approve its own findings.
 
 ## 3. Phase-shippability strategy
 
