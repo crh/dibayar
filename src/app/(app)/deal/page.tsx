@@ -3,7 +3,6 @@ import { auth } from "@/auth";
 import { listDeals, type DealDb } from "@/lib/deals";
 import { listInvoices, type InvoiceReadDb } from "@/lib/invoices";
 import { prisma } from "@/lib/prisma";
-import { isStageValue } from "@/components/deals/deal-stages";
 import DealClient from "./deal-client";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +21,6 @@ export default async function DealPage({ searchParams }: DealPageProps) {
   }
 
   const params = await searchParams;
-  const tahapParam = Array.isArray(params.tahap) ? params.tahap[0] : params.tahap;
   const tambahParam = Array.isArray(params.tambah) ? params.tambah[0] : params.tambah;
 
   const [deals, invoices] = await Promise.all([
@@ -34,7 +32,6 @@ export default async function DealPage({ searchParams }: DealPageProps) {
     <DealClient
       initialDeals={deals}
       initialInvoices={invoices}
-      initialStageFilter={isStageValue(tahapParam) ? tahapParam : null}
       initialDialogOpen={tambahParam === "1"}
     />
   );

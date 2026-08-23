@@ -19,11 +19,14 @@ vi.mock("@/lib/invoices", async () => {
   return { ...actual, listInvoices: vi.fn() };
 });
 
+const mockedUseSearchParams = vi.fn(() => new URLSearchParams());
+
 vi.mock("next/navigation", () => ({
   redirect: vi.fn((url: string) => {
     throw new Error(`REDIRECT:${url}`);
   }),
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useSearchParams: () => mockedUseSearchParams(),
 }));
 
 const mockedAuth = vi.mocked(auth);
@@ -61,6 +64,7 @@ describe("/deal route", () => {
     } as never);
     mockedListDeals.mockResolvedValue([dealFixture]);
     mockedListInvoices.mockResolvedValue([]);
+    mockedUseSearchParams.mockReturnValue(new URLSearchParams());
 
     const page = await DealPage({ searchParams: Promise.resolve({}) });
     render(page);
@@ -76,11 +80,29 @@ describe("/deal route", () => {
     } as never);
     mockedListDeals.mockResolvedValue([dealFixture]);
     mockedListInvoices.mockResolvedValue([]);
+    mockedUseSearchParams.mockReturnValue(new URLSearchParams("tahap=BUKAN_TAHAP"));
 
     const page = await DealPage({ searchParams: Promise.resolve({ tahap: "BUKAN_TAHAP" }) });
     render(page);
 
     expect(screen.getByRole("button", { name: "Semua" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getAllByRole("region")).toHaveLength(6);
+  });
+
+  it("renders only the requested stage column when tahap is a valid stage value", async () => {
+    mockedAuth.mockResolvedValue({
+      user: { id: "user-1", name: "Chris", email: "chris@example.com" },
+      expires: "2099-01-01T00:00:00.000Z",
+    } as never);
+    mockedListDeals.mockResolvedValue([dealFixture]);
+    mockedListInvoices.mockResolvedValue([]);
+    mockedUseSearchParams.mockReturnValue(new URLSearchParams("tahap=NEGO"));
+
+    const page = await DealPage({ searchParams: Promise.resolve({ tahap: "NEGO" }) });
+    render(page);
+
+    expect(screen.getByRole("button", { name: "Nego" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Semua" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getAllByRole("region")).toHaveLength(1);
   });
 });

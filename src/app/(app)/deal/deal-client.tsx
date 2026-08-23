@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { DealRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
 import { useLanguage } from "@/components/language-switcher";
@@ -9,26 +9,29 @@ import { DealBoard } from "@/components/deals/deal-board";
 import { StageFilter } from "@/components/deals/stage-filter";
 import { AddDealDialog } from "@/components/deals/add-deal-dialog";
 import { DealForm, EMPTY_DEAL_FORM, type DealFormState } from "@/components/deals/deal-form";
-import { type StageValue } from "@/components/deals/deal-stages";
+import { isStageValue } from "@/components/deals/deal-stages";
 
 type DealClientProps = {
   initialDeals: DealRecord[];
   initialInvoices: InvoiceRecord[];
-  initialStageFilter: StageValue | null;
   initialDialogOpen: boolean;
 };
 
 export default function DealClient({
   initialDeals,
   initialInvoices,
-  initialStageFilter,
   initialDialogOpen,
 }: DealClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { language, t } = useLanguage();
   const [deals, setDeals] = useState(initialDeals);
   const [invoices, setInvoices] = useState(initialInvoices);
-  const [stageFilter, setStageFilter] = useState<StageValue | null>(initialStageFilter);
+  // Derived directly from the URL (not local state seeded once) so reload,
+  // back/forward, and any other navigation always reflect the real filter —
+  // no separate state to fall out of sync with it.
+  const tahapParam = searchParams.get("tahap");
+  const stageFilter = isStageValue(tahapParam) ? tahapParam : null;
   const [isDialogOpen, setIsDialogOpen] = useState(initialDialogOpen);
   const [form, setForm] = useState<DealFormState>(EMPTY_DEAL_FORM);
   const [error, setError] = useState<string | null>(null);
@@ -53,9 +56,10 @@ export default function DealClient({
     setForm(EMPTY_DEAL_FORM);
   }, []);
 
-  function handleStageFilterChange(next: StageValue | null) {
-    setStageFilter(next);
-    router.replace(next ? `/deal?tahap=${next}` : "/deal");
+  function handleStageFilterChange(next: DealRecord["status"] | null) {
+    // push (not replace): each filter choice is a real navigation step so
+    // browser back/forward can step through the stages the user visited.
+    router.push(next ? `/deal?tahap=${next}` : "/deal");
   }
 
   async function handleStageChange(dealId: string, status: DealRecord["status"]) {
