@@ -66,7 +66,22 @@ The target accepts TCP connections, and the protected handoff URL matches this i
 - Earlier normalized Preview and Production database fingerprints matched.
 - No migration, fixture seed, or capture may run against Vercel Preview.
 - Isolation remediation is a separate work track.
-- **Phase 2 is blocked until normalized Preview and Production fingerprints differ.**
+- **Phase 2 is blocked until normalized Preview and Production fingerprints differ**, or until Chris explicitly accepts equivalent evidence for a specific gate instance (see §5a).
+
+### 5a. Chris-authorized equivalent-evidence acceptance (2026-08-17)
+
+The literal fingerprint rule above is **preserved unchanged** as the technical standard: normalized `host|port|database` SHA-256 fingerprints for Preview and Production must differ, and no raw `DATABASE_URL` value may be read or logged to prove it.
+
+That literal fingerprint pair was never produced for Preview vs. Production. On 2026-08-17, Chris explicitly authorized a governed exception for the Phase 2 gate: *"I accept the exact Vercel `DATABASE_URL` environment scopes plus distinct Neon endpoint identifiers as equivalent evidence for the Phase 2 isolation criterion."*
+
+Evidence accepted under this exception (full record: `docs/ux-implementation/evidence/phase-2/GATE.md`, 2026-08-17 addendum):
+
+- Production `DATABASE_URL` present under exact Production environment scope; Preview `DATABASE_URL` present under exact Preview scope restricted to `hermes/ux-phase-2`.
+- Distinct Neon endpoint identifiers: Production/`main` `ep-nameless-salad-aoa0saz5`; Preview/`hermes/ux-phase-2` `ep-sparkling-sea-aon2xrb8`.
+- Raw `DATABASE_URL` values were not accessed or recorded to produce this evidence.
+- The Vercel/Neon configuration and the Production deployment were performed by Chris outside Hermes.
+
+This is a scoped, owner-authorized exception to how the Phase 2 isolation criterion may be satisfied for this specific gate. It does **not** change the general security principle that raw secret values must never be read, logged, or reproduced, and it does not retroactively claim that a literal fingerprint pair was produced. Any future re-litigation of this gate, or any other gate invoking the fingerprint rule in §5, must default back to the literal standard above unless Chris grants an equivalent, explicitly recorded exception again.
 
 ## 6. Parent-deal integrity decision
 
@@ -98,4 +113,4 @@ Accepted T-00 browser evidence:
 
 ## 9. Current gate
 
-T-00 is accepted. Subsequent fixture work may use the verified local target only and must repeat cleanup/read-back. No Production, public deployment, Vercel Preview mutation, Docker lifecycle action, or Docker privilege change is authorized. Phase 2 remains blocked until Preview and Production fingerprints differ.
+T-00 is accepted. Subsequent fixture work may use the verified local target only and must repeat cleanup/read-back. No Production, public deployment, Vercel Preview mutation, Docker lifecycle action, or Docker privilege change is authorized. The specific 2026-08-17 Phase 2 isolation criterion is satisfied by the Chris-authorized equivalent evidence recorded in §5a; the literal fingerprint standard in §5 remains the default for any future gate absent an explicit owner exception. Migrations, Vercel Preview mutation, and other external actions remain separately unauthorized regardless of this gate's status.
