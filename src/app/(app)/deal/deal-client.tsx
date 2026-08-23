@@ -63,9 +63,14 @@ export default function DealClient({
   }
 
   async function handleStageChange(dealId: string, status: DealRecord["status"]) {
+    const previousDeal = deals.find((deal) => deal.id === dealId);
+    if (!previousDeal || previousDeal.status === status) return; // no-op: already there, or unknown deal
+
     setError(null);
     setSuccessMessage(null);
     setPendingDealId(dealId);
+    // Optimistic: move it immediately, keep the prior record to restore on failure.
+    setDeals((current) => current.map((deal) => (deal.id === dealId ? { ...deal, status } : deal)));
 
     try {
       const response = await fetch(`/api/deals/${dealId}`, {
@@ -77,6 +82,7 @@ export default function DealClient({
       if (!response.ok) throw new Error("dashboard.dealError");
       setDeals((current) => current.map((deal) => (deal.id === dealId ? payload.deal : deal)));
     } catch {
+      setDeals((current) => current.map((deal) => (deal.id === dealId ? previousDeal : deal)));
       setError("dashboard.dealError");
     } finally {
       setPendingDealId(null);

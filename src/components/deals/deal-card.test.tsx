@@ -131,18 +131,73 @@ describe("DealCard", () => {
     const user = userEvent.setup();
     renderCard({ deal: makeDeal({ status: "INVOICE" }), hasInvoice: true });
 
-    const overflow = screen.getByRole("button", { name: "Aksi lain untuk deal Kopi Nusantara" });
-    expect(overflow.getAttribute("aria-haspopup")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Kopi Nusantara" }));
+    expect(screen.queryByRole("menuitem", { name: "Buat invoice" })).toBeNull();
+  });
 
-    await user.click(overflow);
+  it("does not offer Create Invoice from the overflow menu outside the Invoice stage", async () => {
+    const user = userEvent.setup();
+    renderCard({ deal: makeDeal({ status: "NEGO" }) });
+
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Kopi Nusantara" }));
+    expect(screen.queryByRole("menuitem", { name: "Buat invoice" })).toBeNull();
+  });
+
+  it("offers adjacent-stage move items (T-15), moving to the previous or next stage", async () => {
+    const user = userEvent.setup();
+    const { onStageChange } = renderCard({ deal: makeDeal({ status: "NEGO" }) });
+
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Kopi Nusantara" }));
+    expect(screen.getByRole("menuitem", { name: "Kembali ke Masuk" })).toBeDefined();
+
+    await user.click(screen.getByRole("menuitem", { name: "Lanjut ke Deal" }));
+    expect(onStageChange).toHaveBeenCalledWith("deal-1", "DEAL");
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("does not offer Create Invoice from the overflow menu outside the Invoice stage", () => {
-    renderCard({ deal: makeDeal({ status: "NEGO" }) });
+  it("moving to the previous stage calls onStageChange with the previous stage value", async () => {
+    const user = userEvent.setup();
+    const { onStageChange } = renderCard({ deal: makeDeal({ status: "NEGO" }) });
 
-    const overflow = screen.getByRole("button", { name: "Aksi lain untuk deal Kopi Nusantara" });
-    expect(overflow.getAttribute("aria-haspopup")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Kopi Nusantara" }));
+    await user.click(screen.getByRole("menuitem", { name: "Kembali ke Masuk" }));
+
+    expect(onStageChange).toHaveBeenCalledWith("deal-1", "MASUK");
+  });
+
+  it("omits the previous-stage move item at the first stage", async () => {
+    const user = userEvent.setup();
+    renderCard({ deal: makeDeal({ status: "MASUK" }) });
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Kopi Nusantara" }));
+    expect(screen.queryByRole("menuitem", { name: /Kembali ke/ })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Lanjut ke Nego" })).toBeDefined();
+  });
+
+  it("omits the next-stage move item at the last stage", async () => {
+    const user = userEvent.setup();
+    renderCard({ deal: makeDeal({ status: "DIBAYAR" }) });
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Kopi Nusantara" }));
+    expect(screen.getByRole("menuitem", { name: "Kembali ke Invoice" })).toBeDefined();
+    expect(screen.queryByRole("menuitem", { name: /Lanjut ke/ })).toBeNull();
+  });
+
+  it("uses the English move labels under the English UI", async () => {
+    const user = userEvent.setup();
+    renderCard({ deal: makeDeal({ status: "NEGO" }) }, "en");
+
+    await user.click(screen.getByRole("button", { name: "More actions for deal Kopi Nusantara" }));
+    expect(screen.getByRole("menuitem", { name: "Back to Inbox" })).toBeDefined();
+    expect(screen.getByRole("menuitem", { name: "Move to Deal" })).toBeDefined();
+  });
+
+  it("is draggable and puts its own id on the drag data when not disabled", () => {
+    const { container } = renderCard({ disabled: false });
+    expect(container.querySelector("article")?.getAttribute("draggable")).toBe("true");
+  });
+
+  it("is not draggable while a mutation for this deal is pending", () => {
+    const { container } = renderCard({ disabled: true });
+    expect(container.querySelector("article")?.getAttribute("draggable")).toBe("false");
   });
 
   it("disables the overflow button while a mutation for this deal is pending", () => {

@@ -1,7 +1,8 @@
+import { useState } from "react";
 import type { DealRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
 import type { Language } from "@/lib/i18n";
-import { DealCard } from "./deal-card";
+import { DealCard, DEAL_DRAG_MIME } from "./deal-card";
 import { PIPELINE_STAGES, PIPELINE_STAGE_KEYS, type StageValue } from "./deal-stages";
 
 function StageColumn({
@@ -27,8 +28,33 @@ function StageColumn({
   onCreateInvoice: (dealId: string) => void;
   className?: string;
 }) {
+  const [isDropTarget, setIsDropTarget] = useState(false);
+
   return (
-    <section aria-labelledby={`stage-${stage.value}`} className={`rounded-md border border-line bg-surface p-4 ${className}`}>
+    <section
+      aria-labelledby={`stage-${stage.value}`}
+      onDragOver={(event) => {
+        if (!event.dataTransfer.types.includes(DEAL_DRAG_MIME)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+      }}
+      onDragEnter={(event) => {
+        if (!event.dataTransfer.types.includes(DEAL_DRAG_MIME)) return;
+        setIsDropTarget(true);
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+        setIsDropTarget(false);
+      }}
+      onDrop={(event) => {
+        if (!event.dataTransfer.types.includes(DEAL_DRAG_MIME)) return;
+        event.preventDefault();
+        setIsDropTarget(false);
+        const dealId = event.dataTransfer.getData(DEAL_DRAG_MIME);
+        if (dealId) onStageChange(dealId, stage.value);
+      }}
+      className={`rounded-md border p-4 ${isDropTarget ? "border-primary bg-primary/5" : "border-line bg-surface"} ${className}`}
+    >
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 id={`stage-${stage.value}`} className="text-[15px] font-bold text-ink">{t(PIPELINE_STAGE_KEYS[stage.value])}</h3>
         <span className="rounded-full bg-bg px-2 py-1 text-[12px] font-semibold text-muted">{stageDeals.length}</span>

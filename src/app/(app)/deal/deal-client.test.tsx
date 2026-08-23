@@ -1,7 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { DealRecord } from "@/lib/deals";
+import { DEAL_DRAG_MIME } from "@/components/deals/deal-card";
 import DealClient from "./deal-client";
 
 const mockPush = vi.fn();
@@ -69,5 +70,62 @@ describe("DealClient stage filter (T-14)", () => {
 
     expect(screen.getByRole("button", { name: "Semua" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getAllByRole("region")).toHaveLength(6);
+  });
+});
+
+describe("DealClient stage movement (T-15)", () => {
+  function jsonResponse(status: number, body: unknown) {
+    return { ok: status >= 200 && status < 300, status, json: async () => body };
+  }
+
+  it("moves the card immediately (optimistic), before the request resolves", async () => {
+    let resolveFetch: (value: unknown) => void = () => {};
+    const fetchMock = vi.fn(() => new Promise((resolve) => { resolveFetch = resolve; }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Acme" }));
+    await user.click(screen.getByRole("menuitem", { name: "Lanjut ke Nego" }));
+
+    // Moved immediately client-side, before the in-flight PATCH resolves.
+    expect(screen.getAllByRole("region", { name: "Nego" })[0].textContent).toContain("Acme");
+
+    resolveFetch(jsonResponse(200, { deal: { ...dealFixture, status: "NEGO" } }));
+    vi.unstubAllGlobals();
+  });
+
+  it("rolls back to the prior stage and shows an error when the move request fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(500, {}))));
+
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Acme" }));
+    await user.click(screen.getByRole("menuitem", { name: "Lanjut ke Nego" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Deal belum bisa diperbarui. Coba lagi.");
+    expect(screen.getAllByRole("region", { name: "Masuk" })[0].textContent).toContain("Acme");
+    expect(screen.getAllByRole("region", { name: "Nego" })[0].textContent).not.toContain("Acme");
+
+    vi.unstubAllGlobals();
+  });
+
+  it("does not issue a request when a card is dropped back onto the column it is already in", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    // dealFixture is already at MASUK; dropping it on the MASUK column is a no-op.
+    const masukColumn = screen.getByRole("region", { name: "Masuk" });
+    fireEvent.drop(masukColumn, {
+      dataTransfer: { types: [DEAL_DRAG_MIME], getData: () => dealFixture.id, setData: vi.fn() },
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
   });
 });
