@@ -8,6 +8,7 @@ import { formatMoney } from "@/lib/format/money";
 import { formatDate } from "@/lib/format/date";
 import type { DealRecord, DealStageTransitionRecord } from "@/lib/deals";
 import { PIPELINE_STAGE_KEYS } from "@/components/deals/deal-stages";
+import { buildDealWhatsApp } from "@/lib/whatsapp";
 
 export default function DealDetailClient({
   initialDeal,
@@ -21,6 +22,11 @@ export default function DealDetailClient({
   const [contactName, setContactName] = useState(deal.contactName ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+
+  const [contactWaDraft, setContactWaDraft] = useState(deal.contactWa);
+  const [isSavingContactWa, setIsSavingContactWa] = useState(false);
+  const [contactWaMessage, setContactWaMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const whatsapp = buildDealWhatsApp({ contactWa: deal.contactWa, brand: deal.brand, contactName: deal.contactName });
 
   async function handleSaveContactName() {
     setIsSaving(true);
@@ -41,6 +47,30 @@ export default function DealDetailClient({
       setMessage({ kind: "error", text: t("deal.detailContactNameError") });
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  // Repairing the number never opens WhatsApp itself -- it only unblocks the
+  // separate "Buka WhatsApp" button above, which the user still has to click.
+  async function handleSaveContactWa() {
+    setIsSavingContactWa(true);
+    setContactWaMessage(null);
+
+    try {
+      const response = await fetch(`/api/deals/${deal.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactWa: contactWaDraft }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error("deal.detailWhatsAppNumberError");
+      setDeal(payload.deal);
+      setContactWaDraft(payload.deal.contactWa);
+      setContactWaMessage({ kind: "success", text: t("deal.detailWhatsAppNumberSaved") });
+    } catch {
+      setContactWaMessage({ kind: "error", text: t("deal.detailWhatsAppNumberError") });
+    } finally {
+      setIsSavingContactWa(false);
     }
   }
 
@@ -108,6 +138,59 @@ export default function DealDetailClient({
               className={`mt-2 text-[13px] ${message.kind === "error" ? "text-overdue" : "text-paid"}`}
             >
               {message.text}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mt-4 border-t border-line pt-4">
+          <p className="text-[13px] font-semibold text-ink">{t("deal.detailWhatsAppTitle")}</p>
+
+          {whatsapp.kind === "ok" ? (
+            <button
+              type="button"
+              onClick={() => window.open(whatsapp.href, "_blank", "noopener,noreferrer")}
+              className="mt-2 inline-flex h-11 items-center rounded-full bg-primary px-4 text-[13px] font-semibold text-surface hover:bg-primary-d"
+            >
+              {t("deal.detailWhatsAppOpen")}
+            </button>
+          ) : (
+            <>
+              <p role="alert" className="mt-1 text-[13px] text-overdue">
+                {t("deal.detailWhatsAppInvalid")}
+              </p>
+              <label className="mt-2 flex flex-col gap-1.5 text-[13px] font-semibold text-ink" htmlFor="contactWa">
+                {t("deal.detailWhatsAppRepairLabel")}
+              </label>
+              <div className="mt-1.5 flex items-center gap-2">
+                <input
+                  id="contactWa"
+                  inputMode="tel"
+                  value={contactWaDraft}
+                  onChange={(event) => setContactWaDraft(event.target.value)}
+                  className={fieldClassName}
+                />
+                <button
+                  type="button"
+                  disabled={isSavingContactWa}
+                  onClick={handleSaveContactWa}
+                  className="inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-primary px-4 text-[13px] font-semibold text-surface hover:bg-primary-d disabled:cursor-wait disabled:opacity-60"
+                >
+                  {isSavingContactWa ? t("dashboard.saving") : t("deal.detailWhatsAppRepairSave")}
+                </button>
+              </div>
+            </>
+          )}
+          {/* Rendered regardless of which branch is currently active: a
+              successful repair flips `whatsapp.kind` to "ok" on the same
+              render that sets this message, and the repair form (which
+              this used to live inside) would otherwise unmount right as
+              the message appears, hiding it before anyone could read it. */}
+          {contactWaMessage ? (
+            <p
+              role={contactWaMessage.kind === "error" ? "alert" : "status"}
+              className={`mt-2 text-[13px] ${contactWaMessage.kind === "error" ? "text-overdue" : "text-paid"}`}
+            >
+              {contactWaMessage.text}
             </p>
           ) : null}
         </div>

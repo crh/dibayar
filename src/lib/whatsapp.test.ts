@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildDealWhatsApp,
+  buildDealWhatsAppMessage,
   buildWhatsAppReminder,
   buildWhatsAppReminderMessage,
   buildWhatsAppShare,
@@ -139,5 +141,37 @@ describe("buildWhatsAppShare", () => {
 
   it("reports no-share distinctly when there is no active share link, even with a valid contact", () => {
     expect(buildWhatsAppShare({ ...base, shareUrl: null })).toEqual({ kind: "no-share" });
+  });
+});
+
+describe("buildDealWhatsAppMessage (T-18)", () => {
+  it("greets the contact by name when one is set", () => {
+    const message = buildDealWhatsAppMessage({ brand: "Kopi Nusantara", contactName: "Budi" });
+    expect(message).toBe("Halo Budi, saya ingin follow up terkait deal dengan Kopi Nusantara. Terima kasih.");
+  });
+
+  it("falls back to a plain greeting when there is no contact name", () => {
+    const message = buildDealWhatsAppMessage({ brand: "Kopi Nusantara", contactName: null });
+    expect(message).toBe("Halo, saya ingin follow up terkait deal dengan Kopi Nusantara. Terima kasih.");
+  });
+});
+
+describe("buildDealWhatsApp (T-18)", () => {
+  it("builds a ready wa.me href for a valid contact number", () => {
+    const result = buildDealWhatsApp({ contactWa: "+62 812-3456-7890", brand: "Kopi Nusantara", contactName: null });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error("expected ok");
+    expect(result.href.startsWith("https://wa.me/6281234567890?text=")).toBe(true);
+    expect(decodeURIComponent(result.href)).toContain("Kopi Nusantara");
+  });
+
+  it("reports invalid-number for an unusable phone number, never throwing or auto-sending anything", () => {
+    expect(buildDealWhatsApp({ contactWa: "not-a-phone", brand: "Kopi Nusantara", contactName: null })).toEqual({
+      kind: "invalid-number",
+    });
+    expect(buildDealWhatsApp({ contactWa: "", brand: "Kopi Nusantara", contactName: null })).toEqual({
+      kind: "invalid-number",
+    });
   });
 });

@@ -109,3 +109,27 @@ export function buildWhatsAppReminder(input: {
   });
   return { kind: "ok", href: buildWhatsAppShareUrl(normalizedNumber, message) };
 }
+
+// T-18: the deal-contact follow-up action, distinct from the invoice-share/
+// reminder messages above -- no invoice, amount, or due date exists yet at
+// deal stage, just the brand and (optionally) who to ask for.
+export function buildDealWhatsAppMessage(input: { brand: string; contactName: string | null }): string {
+  const greeting = input.contactName ? `Halo ${input.contactName}` : "Halo";
+  return `${greeting}, saya ingin follow up terkait deal dengan ${input.brand}. Terima kasih.`;
+}
+
+export type DealWhatsAppResult = { kind: "ok"; href: string } | { kind: "invalid-number" };
+
+// The caller is responsible for offering a way to correct contactWa when
+// this returns "invalid-number" -- see the repair form in deal-detail-client.
+export function buildDealWhatsApp(input: {
+  contactWa: string;
+  brand: string;
+  contactName: string | null;
+}): DealWhatsAppResult {
+  const normalizedNumber = normalizeWhatsAppNumber(input.contactWa);
+  if (!normalizedNumber) return { kind: "invalid-number" };
+
+  const message = buildDealWhatsAppMessage({ brand: input.brand, contactName: input.contactName });
+  return { kind: "ok", href: buildWhatsAppShareUrl(normalizedNumber, message) };
+}

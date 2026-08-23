@@ -92,3 +92,60 @@ describe("DealDetailClient", () => {
     expect(screen.getByLabelText("Nama kontak")).toHaveProperty("value", "Budi");
   });
 });
+
+describe("DealDetailClient WhatsApp action (T-18)", () => {
+  it("offers a Buka WhatsApp button for a valid contact number, and never opens it on its own", () => {
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    render(<DealDetailClient initialDeal={dealFixture} history={[]} />);
+
+    expect(screen.getByRole("button", { name: "Buka WhatsApp" })).toBeDefined();
+    expect(openSpy).not.toHaveBeenCalled();
+    openSpy.mockRestore();
+  });
+
+  it("opens wa.me with the deal's brand in the message only when the button is clicked", async () => {
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={dealFixture} history={[]} />);
+
+    await user.click(screen.getByRole("button", { name: "Buka WhatsApp" }));
+
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    const [href, target, features] = openSpy.mock.calls[0];
+    expect(href).toMatch(/^https:\/\/wa\.me\/6281234567890\?text=/);
+    expect(decodeURIComponent(String(href))).toContain("Kopi Nusantara");
+    expect(target).toBe("_blank");
+    expect(features).toBe("noopener,noreferrer");
+    openSpy.mockRestore();
+  });
+
+  it("shows a repair form instead of the WhatsApp button when the contact number is invalid", () => {
+    render(<DealDetailClient initialDeal={{ ...dealFixture, contactWa: "not-a-phone" }} history={[]} />);
+
+    expect(screen.getByRole("alert").textContent).toBe("Nomor WhatsApp ini sepertinya tidak valid. Perbaiki dulu di bawah.");
+    expect(screen.getByLabelText("Perbaiki nomor WhatsApp")).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Buka WhatsApp" })).toBeNull();
+  });
+
+  it("repairing the number only unblocks the WhatsApp button -- saving never opens WhatsApp by itself", async () => {
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(jsonResponse(200, { deal: { ...dealFixture, contactWa: "+6281234567890" } })),
+      ),
+    );
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={{ ...dealFixture, contactWa: "not-a-phone" }} history={[]} />);
+
+    const input = screen.getByLabelText("Perbaiki nomor WhatsApp");
+    await user.clear(input);
+    await user.type(input, "+6281234567890");
+    await user.click(screen.getByRole("button", { name: "Simpan nomor" }));
+
+    expect(await screen.findByRole("status")).toHaveProperty("textContent", "Nomor WhatsApp disimpan");
+    expect(screen.getByRole("button", { name: "Buka WhatsApp" })).toBeDefined();
+    expect(openSpy).not.toHaveBeenCalled();
+    openSpy.mockRestore();
+  });
+});
