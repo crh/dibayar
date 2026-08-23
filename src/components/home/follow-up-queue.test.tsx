@@ -22,6 +22,7 @@ function makeDeal(overrides: Partial<DealRecord> = {}): DealRecord {
     userId: "user-1",
     brand: "Brand",
     contactWa: "+6281234567890",
+    contactName: null,
     scope: "1 video Reels",
     feeIdr: 1_000_000,
     deadline: null,

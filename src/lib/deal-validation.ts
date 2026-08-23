@@ -12,6 +12,7 @@ export const DEAL_STATUSES = [
 export const dealInputSchema = z.object({
   brand: z.string().trim().min(1, "Nama brand wajib diisi").max(120),
   contactWa: z.string().trim().min(6, "Nomor WhatsApp tidak valid").max(32),
+  contactName: z.string().trim().max(120).optional(),
   scope: z.string().trim().min(1, "Scope deal wajib diisi").max(500),
   feeIdr: z.coerce.number().int().min(0).max(10_000_000_000),
   deadline: z.coerce.date().optional(),

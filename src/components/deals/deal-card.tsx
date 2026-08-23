@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import type { DealRecord } from "@/lib/deals";
 import type { Language } from "@/lib/i18n";
 import { formatMoney } from "@/lib/format/money";
@@ -133,6 +134,14 @@ export function DealCard({
                   {isSaving ? t("dashboard.saving") : t("dashboard.createInvoice")}
                 </button>
               ) : null}
+              <Link
+                href={`/deal/${deal.id}`}
+                role="menuitem"
+                onClick={() => setMenuOpen(false)}
+                className="flex h-11 w-full items-center rounded-md px-3 text-left text-[13px] font-semibold text-ink"
+              >
+                {t("dashboard.viewDetail")}
+              </Link>
             </div>
           ) : null}
         </div>

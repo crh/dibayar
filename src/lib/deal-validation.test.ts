@@ -42,4 +42,23 @@ describe("dealInputSchema", () => {
     expect(result.paymentTerms).toBeUndefined();
     expect(result.status).toBe("MASUK");
   });
+
+  it("accepts an optional contact name (T-17)", () => {
+    const withName = dealInputSchema.parse({
+      brand: "Brand Baru",
+      contactWa: "628123456789",
+      contactName: "Budi Santoso",
+      scope: "Satu video",
+      feeIdr: 500000,
+    });
+    expect(withName.contactName).toBe("Budi Santoso");
+
+    const withoutName = dealInputSchema.parse({
+      brand: "Brand Baru",
+      contactWa: "628123456789",
+      scope: "Satu video",
+      feeIdr: 500000,
+    });
+    expect(withoutName.contactName).toBeUndefined();
+  });
 });

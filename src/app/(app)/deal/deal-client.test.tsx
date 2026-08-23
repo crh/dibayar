@@ -19,6 +19,7 @@ const dealFixture: DealRecord = {
   userId: "user-1",
   brand: "Acme",
   contactWa: "6281234567890",
+  contactName: null,
   scope: "Video promosi",
   feeIdr: 1500000,
   deadline: null,

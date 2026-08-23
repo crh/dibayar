@@ -37,6 +37,7 @@ const deal = {
   userId: "user-1",
   brand: "Kopi Nusantara",
   contactWa: "6281234567890",
+  contactName: null,
   scope: "Video kampanye",
   feeIdr: 1_500_000,
   status: "INVOICE" as const,

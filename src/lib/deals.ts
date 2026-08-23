@@ -8,6 +8,7 @@ export type DealRecord = {
   userId: string;
   brand: string;
   contactWa: string;
+  contactName: string | null;
   scope: string;
   feeIdr: number;
   deadline: Date | null;
@@ -30,19 +31,58 @@ type DealModel = {
   delete(args: { where: { id: string } }): Promise<DealRecord>;
 };
 
-export type DealDb = { deal: DealModel };
+// T-17: a durable, best-effort audit trail of pipeline moves, written
+// alongside (not inside the same transaction as) the Deal row -- see
+// recordDealStageTransition. fromStatus is null only for the entry
+// recorded at deal creation.
+export type DealStageTransitionRecord = {
+  id: string;
+  dealId: string;
+  fromStatus: DealStatus | null;
+  toStatus: DealStatus;
+  createdAt: Date;
+};
+
+type DealStageTransitionModel = {
+  create(args: {
+    data: { dealId: string; fromStatus: DealStatus | null; toStatus: DealStatus };
+  }): Promise<DealStageTransitionRecord>;
+  findMany(args: {
+    where: { dealId: string };
+    orderBy: Array<Record<string, "asc" | "desc">>;
+  }): Promise<DealStageTransitionRecord[]>;
+};
+
+export type DealDb = { deal: DealModel; dealStageTransition: DealStageTransitionModel };
 
 function toCreateData(userId: string, input: DealInput): DealCreateData {
   return {
     userId,
     brand: input.brand,
     contactWa: input.contactWa,
+    contactName: input.contactName ?? null,
     scope: input.scope,
     feeIdr: input.feeIdr,
     deadline: input.deadline ?? null,
     paymentTerms: input.paymentTerms ?? null,
     status: input.status,
   };
+}
+
+async function recordDealStageTransition(
+  db: DealDb,
+  dealId: string,
+  fromStatus: DealStatus | null,
+  toStatus: DealStatus,
+) {
+  await db.dealStageTransition.create({ data: { dealId, fromStatus, toStatus } });
+}
+
+export async function listDealStageTransitions(db: DealDb, dealId: string) {
+  return db.dealStageTransition.findMany({
+    where: { dealId },
+    orderBy: [{ createdAt: "desc" }],
+  });
 }
 
 function toPatchData(input: DealPatch): Partial<DealCreateData> {
@@ -60,7 +100,9 @@ export async function listDeals(db: DealDb, userId: string) {
 
 export async function createDeal(db: DealDb, userId: string, input: unknown) {
   const validated = dealInputSchema.parse(input);
-  return db.deal.create({ data: toCreateData(userId, validated) });
+  const deal = await db.deal.create({ data: toCreateData(userId, validated) });
+  await recordDealStageTransition(db, deal.id, null, deal.status);
+  return deal;
 }
 
 export async function getOwnedDeal(db: DealDb, id: string, userId: string) {
@@ -73,9 +115,18 @@ export async function updateDeal(
   userId: string,
   input: unknown,
 ) {
-  if (!(await getOwnedDeal(db, id, userId))) return null;
+  const existing = await getOwnedDeal(db, id, userId);
+  if (!existing) return null;
+  // Snapshot as a primitive: db.deal.update below may mutate `existing` in
+  // place depending on the underlying implementation, and a string can't be
+  // affected by that the way a shared object reference could be.
+  const previousStatus = existing.status;
   const validated = dealPatchSchema.parse(input);
-  return db.deal.update({ where: { id }, data: toPatchData(validated) });
+  const deal = await db.deal.update({ where: { id }, data: toPatchData(validated) });
+  if (validated.status !== undefined && validated.status !== previousStatus) {
+    await recordDealStageTransition(db, id, previousStatus, validated.status);
+  }
+  return deal;
 }
 
 export type DeleteDealResult =

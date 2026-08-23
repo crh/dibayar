@@ -51,6 +51,7 @@ const deal: DealRecord = {
   userId: "user-1",
   brand: "Kopi Nusantara",
   contactWa: "6281212345678",
+  contactName: null,
   scope: "3 video TikTok",
   feeIdr: 1_500_000,
   deadline: null,

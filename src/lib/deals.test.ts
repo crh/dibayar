@@ -5,9 +5,11 @@ import {
   deleteDeal,
   getOwnedDeal,
   listDeals,
+  listDealStageTransitions,
   updateDeal,
   type DealDb,
   type DealRecord,
+  type DealStageTransitionRecord,
 } from "./deals";
 
 const input = {
@@ -19,7 +21,11 @@ const input = {
 };
 
 function makeDb(records: DealRecord[] = []): DealDb {
-  const data = [...records];
+  // Copy each record, not just the array: db.deal.update below mutates in
+  // place, and several tests share the module-level `existing` fixture --
+  // without this, one test's update would leak into every later test.
+  const data = records.map((record) => ({ ...record }));
+  const transitions: DealStageTransitionRecord[] = [];
   return {
     deal: {
       findMany: vi.fn(async ({ where }: { where: { userId: string } }) =>
@@ -50,6 +56,22 @@ function makeDb(records: DealRecord[] = []): DealDb {
         return data.splice(index, 1)[0];
       }),
     },
+    dealStageTransition: {
+      create: vi.fn(async ({ data: values }) => {
+        const record: DealStageTransitionRecord = {
+          id: `transition-${transitions.length + 1}`,
+          createdAt: new Date(Date.UTC(2026, 6, 13, 0, 0, transitions.length)),
+          ...values,
+        };
+        transitions.push(record);
+        return record;
+      }),
+      findMany: vi.fn(async ({ where }: { where: { dealId: string } }) =>
+        transitions
+          .filter((transition) => transition.dealId === where.dealId)
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+      ),
+    },
   };
 }
 
@@ -58,6 +80,7 @@ const existing: DealRecord = {
   userId: "user-1",
   brand: "Brand Lama",
   contactWa: "628123456789",
+  contactName: null,
   scope: "Satu konten",
   feeIdr: 800000,
   deadline: null,
@@ -91,6 +114,16 @@ describe("deal repository", () => {
     expect(db.deal.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ userId: "user-1", brand: "Kopi Nusantara" }),
     });
+  });
+
+  it("stores an optional contact name, defaulting to null when omitted (T-17)", async () => {
+    const db = makeDb();
+
+    const withName = await createDeal(db, "user-1", { ...input, contactName: "Budi Santoso" });
+    expect(withName.contactName).toBe("Budi Santoso");
+
+    const withoutName = await createDeal(db, "user-1", input);
+    expect(withoutName.contactName).toBeNull();
   });
 
   it("queries by deal ID and owner together", async () => {
@@ -149,5 +182,53 @@ describe("deal repository", () => {
     });
 
     await expect(deleteDeal(db, "deal-1", "user-1")).rejects.toThrow("connection lost");
+  });
+});
+
+describe("deal stage history (T-17)", () => {
+  it("records the initial stage as a transition when a deal is created", async () => {
+    const db = makeDb();
+
+    const deal = await createDeal(db, "user-1", input);
+    const history = await listDealStageTransitions(db, deal.id);
+
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({ dealId: deal.id, fromStatus: null, toStatus: "MASUK" });
+  });
+
+  it("records a transition when a deal's status changes", async () => {
+    const db = makeDb([existing]);
+
+    await updateDeal(db, "deal-1", "user-1", { status: "NEGO" });
+    const history = await listDealStageTransitions(db, "deal-1");
+
+    expect(history).toHaveLength(1);
+    expect(history[0]).toMatchObject({ dealId: "deal-1", fromStatus: "MASUK", toStatus: "NEGO" });
+  });
+
+  it("does not record a transition for a non-status update", async () => {
+    const db = makeDb([existing]);
+
+    await updateDeal(db, "deal-1", "user-1", { brand: "Brand Baru" });
+
+    expect(db.dealStageTransition.create).not.toHaveBeenCalled();
+  });
+
+  it("does not record a transition when the status patch matches the current status", async () => {
+    const db = makeDb([existing]);
+
+    await updateDeal(db, "deal-1", "user-1", { status: "MASUK" });
+
+    expect(db.dealStageTransition.create).not.toHaveBeenCalled();
+  });
+
+  it("lists a deal's transitions newest first", async () => {
+    const db = makeDb([existing]);
+
+    await updateDeal(db, "deal-1", "user-1", { status: "NEGO" });
+    await updateDeal(db, "deal-1", "user-1", { status: "DEAL" });
+    const history = await listDealStageTransitions(db, "deal-1");
+
+    expect(history.map((entry) => entry.toStatus)).toEqual(["DEAL", "NEGO"]);
   });
 });

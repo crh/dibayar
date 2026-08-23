@@ -89,9 +89,9 @@ model Account {
 
 model Session {
   sessionToken String   @unique
-  userId      String
-  expires     DateTime
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -105,22 +105,47 @@ model VerificationToken {
 }
 
 model Deal {
-  id           String     @id @default(cuid())
-  userId       String
-  brand        String
-  contactWa    String
-  scope        String     @db.Text
-  feeIdr       Int
-  deadline     DateTime?
-  paymentTerms String?    @db.Text
-  status       DealStatus @default(MASUK)
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  invoices     Invoice[]
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id               String                @id @default(cuid())
+  userId           String
+  brand            String
+  contactWa        String
+  contactName      String?
+  scope            String                @db.Text
+  feeIdr           Int
+  deadline         DateTime?
+  paymentTerms     String?               @db.Text
+  status           DealStatus            @default(MASUK)
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoices         Invoice[]
+  stageTransitions DealStageTransition[]
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
 
   @@index([userId, status])
   @@index([userId, deadline])
+}
+
+// Durable audit trail of pipeline moves (T-15's menu/drag-drop moves and the
+// deal's initial stage both land here). Best-effort, written alongside the
+// Deal row rather than in the same transaction -- see recordDealStageTransition.
+// fromStatus is null only for the entry recorded at deal creation.
+model DealStageTransition {
+  id         String      @id @default(cuid())
+  dealId     String
+  fromStatus DealStatus?
+  toStatus   DealStatus
+  // @db.Timestamptz, unlike every other DateTime in this schema: this is the
+  // first column whose time-of-day (not just calendar date) is rendered to
+  // users (the stage-history list), and a plain `timestamp without time
+  // zone` round-tripped incorrectly here (~7h shift matching Asia/Jakarta,
+  // confirmed live). The other bookkeeping createdAt/updatedAt columns never
+  // exercise that path since they're not displayed with time-of-day
+  // precision, so they're left as-is -- migrating them is a separate,
+  // broader concern outside this task's scope.
+  createdAt  DateTime    @default(now()) @db.Timestamptz
+  deal       Deal        @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId, createdAt])
 }
 
 // Numbered per user per calendar month as INV/YYYY/MM/NNN (Asia/Jakarta boundary).

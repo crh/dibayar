@@ -103,6 +103,7 @@ export default function DealClient({
           ...form,
           feeIdr: Number(form.feeIdr),
           deadline: form.deadline || undefined,
+          contactName: form.contactName || undefined,
           paymentTerms: form.paymentTerms || undefined,
         }),
       });

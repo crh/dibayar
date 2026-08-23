@@ -5,6 +5,7 @@ import { formatMoney } from "@/lib/format/money";
 export type DealFormState = {
   brand: string;
   contactWa: string;
+  contactName: string;
   scope: string;
   feeIdr: string;
   deadline: string;
@@ -14,6 +15,7 @@ export type DealFormState = {
 export const EMPTY_DEAL_FORM: DealFormState = {
   brand: "",
   contactWa: "",
+  contactName: "",
   scope: "",
   feeIdr: "",
   deadline: "",
@@ -58,6 +60,15 @@ export function DealForm({
           inputMode="tel"
           value={form.contactWa}
           onChange={(event) => onChange({ ...form, contactWa: event.target.value })}
+          className={fieldClassName}
+        />
+      </label>
+      <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
+        {t("dashboard.contactName")}
+        <input
+          name="contactName"
+          value={form.contactName}
+          onChange={(event) => onChange({ ...form, contactName: event.target.value })}
           className={fieldClassName}
         />
       </label>

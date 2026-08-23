@@ -11,6 +11,7 @@ function makeDeal(overrides: Partial<DealRecord> = {}): DealRecord {
     userId: "user-1",
     brand: "Kopi Nusantara",
     contactWa: "+6281234567890",
+    contactName: null,
     scope: "1 Reel + 2 Story",
     feeIdr: 2_500_000,
     deadline: new Date("2026-09-01T00:00:00.000Z"),
@@ -211,5 +212,15 @@ describe("DealCard", () => {
 
     await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Kopi Nusantara" }));
     expect(screen.getByRole("menuitem", { name: "Menyimpan…" })).toBeDefined();
+  });
+
+  it("offers a link to the deal's detail page (T-17)", async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Kopi Nusantara" }));
+    const detailLink = screen.getByRole("menuitem", { name: "Lihat detail" });
+
+    expect(detailLink.getAttribute("href")).toBe("/deal/deal-1");
   });
 });
