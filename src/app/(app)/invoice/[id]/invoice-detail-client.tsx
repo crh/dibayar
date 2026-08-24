@@ -6,8 +6,9 @@ import type { InvoiceRecord } from "@/lib/invoices";
 import { deriveInvoiceDisplayStatus, getDueDateCalendarDate } from "@/lib/invoice-date-status";
 import { buildWhatsAppReminder, buildWhatsAppShare, normalizeWhatsAppNumber } from "@/lib/whatsapp";
 import { useLanguage } from "@/components/language-switcher";
-import { MoneyDisplay, StatusChip, Button, fieldClassName } from "@/components/design-system";
+import { MoneyDisplay, StatusChip, Button } from "@/components/design-system";
 import { ShareLinkField } from "@/components/invoices/share-link-field";
+import { DateField, type DateFieldCommitResult } from "@/components/date-field";
 import type { Language } from "@/lib/i18n";
 import { triggerPaidHaptic } from "@/lib/haptics";
 import { fetchWithTimeout } from "@/lib/http";
@@ -146,8 +147,8 @@ type ContactStatus = "loading" | "loaded" | "error";
 
 // Extracted so the share state machine (load/create/regenerate/revoke) is
 // owned in exactly one place, but can drive both the primary WhatsApp action
-// promoted into the top invoice card (Task 2) and the full share detail
-// section below it, without either owning a duplicate copy of the state.
+// promoted into the top invoice card and the full share detail section
+// below it, without either owning a duplicate copy of the state.
 function useShareState(invoiceId: string) {
   const [share, setShare] = useState<ShareState>({ kind: "loading" });
   const [pendingAction, setPendingAction] = useState<"create" | "revoke" | null>(null);
@@ -252,12 +253,12 @@ function useShareState(invoiceId: string) {
   return { share, setShare, isBusy, pendingAction, retryLoad, createOrRegenerate, revoke };
 }
 
+// §4.5 item 3: just the link field + copy/regenerate/revoke management. The
+// per-share WhatsApp button that used to live here is gone -- the header's
+// primary action (Kirim lewat WhatsApp / Kirim pengingat) now owns that job
+// for both the plain-share and overdue-reminder cases, so this section never
+// duplicates it.
 function ShareSection({
-  invoice,
-  displayStatus,
-  contactWa,
-  contactStatus,
-  onRetryContact,
   share,
   isBusy,
   pendingAction,
@@ -267,11 +268,6 @@ function ShareSection({
   language,
   t,
 }: {
-  invoice: InvoiceRecord;
-  displayStatus: InvoiceRecord["status"];
-  contactWa: string | null;
-  contactStatus: ContactStatus;
-  onRetryContact: () => void;
   share: ShareState;
   isBusy: boolean;
   pendingAction: "create" | "revoke" | null;
@@ -292,16 +288,6 @@ function ShareSection({
     setConfirm(null);
     await revoke();
   }
-
-  const reminder = buildWhatsAppReminder({
-    contactWa,
-    shareUrl: share.kind === "active" ? share.link : null,
-    invoiceNumber: invoice.number,
-    totalIdr: invoice.subtotalIdr,
-    dueDate: invoice.dueDate,
-    isOverdue: displayStatus === "OVERDUE",
-  });
-  const whatsappHref = reminder.kind === "ok" ? reminder.href : null;
 
   return (
     <section aria-labelledby="bagikan-invoice" className="rounded-2xl border border-line bg-surface p-5">
@@ -347,39 +333,6 @@ function ShareSection({
               <ShareLinkField url={share.link} language={language} />
             </div>
           ) : null}
-          <div className="mt-3 rounded-xl bg-bg p-3">
-            <p className="text-[13px] font-semibold text-ink">{t("invoice.whatsapp")}</p>
-            {contactStatus === "error" ? (
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <p role="alert" className="text-[13px] text-overdue">{t("invoice.contactLoadError")}</p>
-                <button
-                  type="button"
-                  onClick={onRetryContact}
-                  className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
-                >
-                  {t("invoice.retry")}
-                </button>
-              </div>
-            ) : (
-              <p className="mt-1 text-[13px] text-muted">
-                {reminder.kind === "no-contact"
-                  ? t("invoice.noContact")
-                  : reminder.kind === "no-share"
-                    ? t("invoice.shareLinkUnavailable")
-                    : reminder.kind === "no-duedate"
-                      ? t("invoice.needDueDate")
-                      : t("invoice.bahasaReady")}
-              </p>
-            )}
-            <button
-              type="button"
-              disabled={!whatsappHref}
-              onClick={() => whatsappHref && window.open(whatsappHref, "_blank", "noopener,noreferrer")}
-              className="mt-3 inline-flex h-11 items-center rounded-full bg-primary px-4 text-[14px] font-semibold text-surface disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {t("invoice.openWhatsApp")}
-            </button>
-          </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
             <button
@@ -471,16 +424,11 @@ export default function InvoiceDetailClient({
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [paidMoment, setPaidMoment] = useState(false);
-  const [dueDateInput, setDueDateInput] = useState(() => {
-    const normalized = normalizeDueDate(initialInvoice.dueDate);
-    return normalized ? getDueDateCalendarDate(normalized) : "";
-  });
-  const [dueDateError, setDueDateError] = useState<string | null>(null);
-  const [isSavingDueDate, setIsSavingDueDate] = useState(false);
 
   const referenceNow = now ?? new Date();
   const normalizedDueDate = normalizeDueDate(invoice.dueDate);
   const displayStatus = deriveInvoiceDisplayStatus({ status: invoice.status, dueDate: normalizedDueDate }, referenceNow);
+  const isOverdue = displayStatus === "OVERDUE";
   const shareState = useShareState(invoice.id);
   const [isSharingToWhatsApp, setIsSharingToWhatsApp] = useState(false);
 
@@ -546,9 +494,7 @@ export default function InvoiceDetailClient({
     }
   }
 
-  async function saveDueDate(nextValue: string | null) {
-    setDueDateError(null);
-    setIsSavingDueDate(true);
+  async function saveDueDate(nextValue: string | null): Promise<DateFieldCommitResult> {
     try {
       const response = await fetchWithTimeout(`/api/invoices/${invoice.id}`, {
         method: "PATCH",
@@ -556,45 +502,48 @@ export default function InvoiceDetailClient({
         body: JSON.stringify({ dueDate: nextValue }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error("invoice.dueDateUpdateError");
+      if (!response.ok) return { ok: false };
       setInvoice(payload.invoice);
-      setDueDateInput(nextValue ?? "");
+      return { ok: true };
     } catch {
-      setDueDateError("invoice.dueDateUpdateError");
-    } finally {
-      setIsSavingDueDate(false);
+      return { ok: false };
     }
   }
 
-  // Primary top-card action: a plain "here's my invoice" share, distinct
-  // from the overdue-reminder composer in ShareSection below. It never
-  // fabricates a due date, payment status, or tax detail, so it stays
-  // available even before the invoice has a due date set.
-  function openWhatsAppShare(shareUrl: string) {
-    const share = buildWhatsAppShare({
-      contactWa,
-      shareUrl,
-      invoiceNumber: invoice.number,
-      totalIdr: invoice.subtotalIdr,
-    });
-    if (share.kind === "ok") {
-      window.open(share.href, "_blank", "noopener,noreferrer");
-    }
-  }
-
-  // When a link is already active and usable, share immediately; otherwise
-  // create one first, then share. This never duplicates the ShareSection
-  // state machine — it drives the same useShareState hook the section below
-  // renders from.
-  async function handleShareViaWhatsApp() {
+  // The header's single primary action (§4.5 item 2): a plain "here's my
+  // invoice" share normally, or the due-date-aware reminder composer once
+  // the invoice is overdue. Both branches ensure a share link exists first
+  // (creating one on demand), so this is always usable as the entry point
+  // to the invoice's public link -- it never duplicates the share
+  // management state in ShareSection below, it just drives the same hook.
+  async function handlePrimaryWhatsApp() {
     setIsSharingToWhatsApp(true);
     try {
-      if (shareState.share.kind === "active" && shareState.share.link) {
-        openWhatsAppShare(shareState.share.link);
+      const link = shareState.share.kind === "active" && shareState.share.link
+        ? shareState.share.link
+        : await shareState.createOrRegenerate();
+      if (!link) return;
+
+      if (isOverdue) {
+        const reminder = buildWhatsAppReminder({
+          contactWa,
+          shareUrl: link,
+          invoiceNumber: invoice.number,
+          totalIdr: invoice.subtotalIdr,
+          dueDate: invoice.dueDate,
+          isOverdue: true,
+        });
+        if (reminder.kind === "ok") window.open(reminder.href, "_blank", "noopener,noreferrer");
         return;
       }
-      const link = await shareState.createOrRegenerate();
-      if (link) openWhatsAppShare(link);
+
+      const share = buildWhatsAppShare({
+        contactWa,
+        shareUrl: link,
+        invoiceNumber: invoice.number,
+        totalIdr: invoice.subtotalIdr,
+      });
+      if (share.kind === "ok") window.open(share.href, "_blank", "noopener,noreferrer");
     } finally {
       setIsSharingToWhatsApp(false);
     }
@@ -605,84 +554,161 @@ export default function InvoiceDetailClient({
     !(shareState.share.kind === "active" && !shareState.share.link) &&
     Boolean(normalizeWhatsAppNumber(contactWa ?? ""));
 
+  const dueDateValue = invoice.dueDate ? getDueDateCalendarDate(normalizeDueDate(invoice.dueDate)!) : "";
+
   return (
-    <main className="mx-auto flex w-full max-w-[720px] flex-col gap-6 px-5 py-8 sm:px-8">
+    <main className="mx-auto flex w-full max-w-[720px] flex-col gap-6 px-5 py-8 sm:px-8 lg:max-w-[1120px]">
       <Link href="/dashboard" className="inline-flex w-fit text-[14px] font-semibold text-primary">
         ← {t("invoice.back")}
       </Link>
 
       {paidMoment ?<div role="status" aria-live="polite" className="rounded-md border border-paid/30 bg-paid-tint px-4 py-3 text-[14px] font-semibold text-paid">{t("invoice.paidMoment")}</div> : null}
 
-      <header className="rounded-md border border-line border-t-[3px] border-t-primary bg-surface p-6 shadow-md">
-        <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1><MoneyDisplay value={invoice.subtotalIdr} language={language} size="hero" /></h1>
-          <StatusChip status={displayStatus} language={language} />
+      {/* §4.5 content order (F9): 1 header, 2 primary actions, 3 share
+          (right rail at LG/XL, inline after 2 below that), 4 details
+          (including the due-date field), 5 PDF download. Grid placement is
+          purely visual (see globals.css .ds-grid, single column below the
+          1024 LG breakpoint) -- DOM order always stays 1/2/3/4/5, which is
+          also the order interactive elements receive focus in. */}
+      <div className="ds-grid gap-6">
+        <header className="lg:col-start-1 lg:col-end-9 lg:row-start-1 rounded-md border border-line border-t-[3px] border-t-primary bg-surface p-6 shadow-md">
+          <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1><MoneyDisplay value={invoice.subtotalIdr} language={language} size="hero" /></h1>
+            <StatusChip status={displayStatus} language={language} />
+          </div>
+
+          {displayStatus === "PAID" ? (
+            <div className="mt-3 rounded-xl bg-paid-tint p-4">
+              <p className="text-[14px] font-semibold text-paid">
+                {t("invoice.paidStatusNote")}
+              </p>
+              <p className="mt-2 text-[15px] font-semibold text-paid">
+                {t("invoice.amountReceived", { amount: formatMoneySentence(invoice.subtotalIdr) })}
+              </p>
+            </div>
+          ) : (
+            <p className="mt-3 text-[14px] text-muted">{t("invoice.dueLabel", { date: formatDate(normalizedDueDate, t("invoice.notSet")) })}</p>
+          )}
+        </header>
+
+        <section
+          aria-labelledby="status-invoice"
+          className="lg:col-start-1 lg:col-end-9 lg:row-start-2 rounded-2xl border border-line bg-surface p-5"
+        >
+          <h2 id="status-invoice" className="text-[18px] font-bold text-ink">{t("invoice.paymentStatus")}</h2>
+          <p className="mt-1 text-[13px] text-muted">{t("invoice.paymentStatusHint")}</p>
+          {error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{t(error)}</p> : null}
+          {contactStatus === "error" ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <p role="alert" className="text-[13px] text-overdue">{t("invoice.contactLoadError")}</p>
+              <button
+                type="button"
+                onClick={retryContact}
+                className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
+              >
+                {t("invoice.retry")}
+              </button>
+            </div>
+          ) : null}
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <Button
+              type="button"
+              disabled={!canShareViaWhatsApp || isSharingToWhatsApp || shareState.isBusy}
+              loading={isSharingToWhatsApp}
+              loadingLabel={t("invoice.creating")}
+              onClick={handlePrimaryWhatsApp}
+              className="w-full sm:w-auto"
+            >
+              {isOverdue ? t("invoice.sendReminder") : t("invoice.shareViaWhatsApp")}
+            </Button>
+            {NEXT_ACTIONS[invoice.status].map((action) => (
+              <Button
+                key={action.status}
+                type="button"
+                variant={action.variant}
+                disabled={isSaving}
+                loading={isSaving}
+                loadingLabel={t("invoice.saving")}
+                onClick={() => updateStatus(action.status)}
+                className="w-full sm:w-auto"
+              >
+                {t(action.labelKey)}
+              </Button>
+            ))}
+          </div>
+          {!canShareViaWhatsApp && contactStatus === "loaded" ? (
+            <p className="mt-2 text-[12px] text-muted">
+              {shareState.share.kind === "active" && !shareState.share.link
+                ? t("invoice.shareLinkUnavailable")
+                : t("invoice.noContact")}
+            </p>
+          ) : null}
+        </section>
+
+        <div className="lg:col-start-9 lg:col-end-13 lg:row-start-1 lg:row-end-5">
+          <ShareSection
+            share={shareState.share}
+            isBusy={shareState.isBusy}
+            pendingAction={shareState.pendingAction}
+            retryLoad={shareState.retryLoad}
+            createOrRegenerate={shareState.createOrRegenerate}
+            revoke={shareState.revoke}
+            language={language}
+            t={t}
+          />
         </div>
 
-        {displayStatus === "PAID" ? (
-          <div className="mt-3 rounded-xl bg-paid-tint p-4">
-            <p className="text-[14px] font-semibold text-paid">
-              {t("invoice.paidStatusNote")}
-            </p>
-            <p className="mt-2 text-[15px] font-semibold text-paid">
-              {t("invoice.amountReceived", { amount: formatMoneySentence(invoice.subtotalIdr) })}
-            </p>
-          </div>
-        ) : (
-          <>
-            <p className="mt-3 text-[14px] text-muted">{t("invoice.dueLabel", { date: formatDate(normalizedDueDate, t("invoice.notSet")) })}</p>
-
-            <div className="mt-3">
-              <label htmlFor="invoice-due-date" className="text-[13px] font-semibold text-ink">
-                {t("invoice.dueDateFieldLabel")}
-              </label>
-              <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                <input
-                  id="invoice-due-date"
-                  name="invoice-due-date"
-                  type="date"
-                  lang={language === "id" ? "id-ID" : "en-US"}
-                  value={dueDateInput}
-                  onChange={(event) => setDueDateInput(event.target.value)}
-                  className={fieldClassName}
-                />
-                <Button
-                  type="button"
-                  disabled={isSavingDueDate || !dueDateInput}
-                  loading={isSavingDueDate}
-                  loadingLabel={t("invoice.saving")}
-                  onClick={() => saveDueDate(dueDateInput)}
-                >
-                  {t("invoice.dueDateSave")}
-                </Button>
-                {invoice.dueDate ? (
-                  <button
-                    type="button"
-                    disabled={isSavingDueDate}
-                    onClick={() => saveDueDate(null)}
-                    className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60"
-                  >
-                    {t("invoice.dueDateClear")}
-                  </button>
-                ) : null}
-              </div>
-              <p className="mt-1.5 text-[12px] text-muted">{t("invoice.dueDateFormatHint")}</p>
-              {dueDateError ? <p role="alert" className="mt-2 text-[13px] text-overdue">{t(dueDateError)}</p> : null}
+        <section
+          aria-labelledby="rincian-invoice"
+          className="lg:col-start-1 lg:col-end-9 lg:row-start-3 rounded-2xl border border-line bg-surface p-5"
+        >
+          <h2 id="rincian-invoice" className="text-[18px] font-bold text-ink">{t("invoice.details")}</h2>
+          <dl className="mt-4 grid gap-3 text-[15px]">
+            <div className="flex items-center justify-between gap-4 border-b border-line pb-3">
+              <dt className="text-muted">{t("invoice.number")}</dt>
+              <dd className="font-semibold text-ink">{invoice.number}</dd>
             </div>
-          </>
-        )}
+            <div className="flex items-center justify-between gap-4 border-b border-line pb-3">
+              <dt className="text-muted">{t("invoice.withholdingTax")}</dt>
+              <dd className="font-semibold text-ink">
+                {invoice.withholdingTaxType === "NONE"
+                  ? t("invoice.none")
+                  : `${invoice.withholdingTaxType.replace("PPH", "PPh ")} ${t("invoice.withholdingRate", { rate: `${PPH_RATES[invoice.withholdingTaxType] * 100}%` })}`}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <dt className="text-muted">{t("invoice.amount")}</dt>
+              <dd><MoneyDisplay value={invoice.subtotalIdr} language={language} size="card" /></dd>
+            </div>
+          </dl>
+          {invoice.withholdingTaxType === "NONE" ? (
+            <p className="mt-3 text-[12px] text-muted">{t("invoice.withholdingNone")}</p>
+          ) : null}
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={!canShareViaWhatsApp || isSharingToWhatsApp || shareState.isBusy}
-            aria-busy={isSharingToWhatsApp || undefined}
-            onClick={handleShareViaWhatsApp}
-            className="inline-flex h-11 items-center rounded-full bg-primary px-4 text-[14px] font-semibold text-surface disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSharingToWhatsApp ? t("invoice.creating") : t("invoice.shareViaWhatsApp")}
-          </button>
+          <div className="mt-4 border-t border-line pt-4">
+            <DateField
+              id="invoice-due-date"
+              label={t("invoice.dueDateFieldLabel")}
+              value={dueDateValue}
+              lang={language === "id" ? "id-ID" : "en-US"}
+              emptyLabel={t("invoice.notSet")}
+              clearLabel={t("invoice.dueDateClear")}
+              savingLabel={t("invoice.saving")}
+              savedLabel={t("invoice.dueDateSaved")}
+              errorLabel={t("invoice.dueDateUpdateError")}
+              onCommit={saveDueDate}
+            />
+          </div>
+
+          {hasIncompleteIssuer ? (
+            <div role="status" className="mt-4 rounded-md border border-due bg-due-tint px-4 py-3 text-[14px] text-ink">
+              {t("invoice.settingsDependencyNotice")}
+            </div>
+          ) : null}
+        </section>
+
+        <div className="lg:col-start-1 lg:col-end-9 lg:row-start-4">
           <a
             href={`/api/invoices/${invoice.id}/pdf`}
             className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
@@ -690,79 +716,7 @@ export default function InvoiceDetailClient({
             {t("invoice.downloadPdf")}
           </a>
         </div>
-      </header>
-
-      {/* T-19: payment actions ahead of read-only details -- this is the
-          reason someone opens an already-issued invoice. Every status
-          (including PAID, via the undo action) now has at least one entry
-          in NEXT_ACTIONS, so this section is never empty. */}
-      <section aria-labelledby="status-invoice" className="rounded-2xl border border-line bg-surface p-5">
-        <h2 id="status-invoice" className="text-[18px] font-bold text-ink">{t("invoice.paymentStatus")}</h2>
-        <p className="mt-1 text-[13px] text-muted">{t("invoice.paymentStatusHint")}</p>
-        {error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{t(error)}</p> : null}
-        <div className="mt-4 flex flex-wrap gap-2">
-          {NEXT_ACTIONS[invoice.status].map((action) => (
-            <Button
-              key={action.status}
-              type="button"
-              variant={action.variant}
-              disabled={isSaving}
-              loading={isSaving}
-              loadingLabel={t("invoice.saving")}
-              onClick={() => updateStatus(action.status)}
-            >
-              {t(action.labelKey)}
-            </Button>
-          ))}
-        </div>
-      </section>
-
-      <section aria-labelledby="rincian-invoice" className="rounded-2xl border border-line bg-surface p-5">
-        <h2 id="rincian-invoice" className="text-[18px] font-bold text-ink">{t("invoice.details")}</h2>
-        <dl className="mt-4 grid gap-3 text-[15px]">
-          <div className="flex items-center justify-between gap-4 border-b border-line pb-3">
-            <dt className="text-muted">{t("invoice.number")}</dt>
-            <dd className="font-semibold text-ink">{invoice.number}</dd>
-          </div>
-          <div className="flex items-center justify-between gap-4 border-b border-line pb-3">
-            <dt className="text-muted">{t("invoice.withholdingTax")}</dt>
-            <dd className="font-semibold text-ink">
-              {invoice.withholdingTaxType === "NONE"
-                ? t("invoice.none")
-                : `${invoice.withholdingTaxType.replace("PPH", "PPh ")} ${t("invoice.withholdingRate", { rate: `${PPH_RATES[invoice.withholdingTaxType] * 100}%` })}`}
-            </dd>
-          </div>
-          <div className="flex items-center justify-between gap-4">
-            <dt className="text-muted">{t("invoice.amount")}</dt>
-            <dd><MoneyDisplay value={invoice.subtotalIdr} language={language} size="card" /></dd>
-          </div>
-        </dl>
-        {invoice.withholdingTaxType === "NONE" ? (
-          <p className="mt-3 text-[12px] text-muted">{t("invoice.withholdingNone")}</p>
-        ) : null}
-      </section>
-
-      {hasIncompleteIssuer ? (
-        <div role="status" className="rounded-md border border-due bg-due-tint px-4 py-3 text-[14px] text-ink">
-          {t("invoice.settingsDependencyNotice")}
-        </div>
-      ) : null}
-
-      <ShareSection
-        invoice={invoice}
-        displayStatus={displayStatus}
-        contactWa={contactWa}
-        contactStatus={contactStatus}
-        onRetryContact={retryContact}
-        share={shareState.share}
-        isBusy={shareState.isBusy}
-        pendingAction={shareState.pendingAction}
-        retryLoad={shareState.retryLoad}
-        createOrRegenerate={shareState.createOrRegenerate}
-        revoke={shareState.revoke}
-        language={language}
-        t={t}
-      />
+      </div>
     </main>
   );
 }
