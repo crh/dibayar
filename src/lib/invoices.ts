@@ -117,7 +117,11 @@ const ALLOWED_STATUS_TRANSITIONS: Record<InvoiceStatus, readonly InvoiceStatus[]
   SENT: ["DUE", "OVERDUE", "PAID"],
   DUE: ["OVERDUE", "PAID"],
   OVERDUE: ["PAID"],
-  PAID: [],
+  // T-19: undo a mistaken/reversed "paid" mark. Back to SENT specifically
+  // (not DUE/OVERDUE) since those are date-derived states the invoice will
+  // naturally re-enter on its own once dueDate is re-evaluated if it's
+  // actually overdue -- SENT is the neutral "awaiting payment" state.
+  PAID: ["SENT"],
 };
 
 export type UpdateInvoiceStatusResult =

@@ -206,18 +206,19 @@ describe("InvoiceDetailClient", () => {
     expect(screen.queryByText("No sharing link exists for this invoice yet.")).toBeNull();
   });
 
-  it("shows no further transition control for a paid invoice", async () => {
+  it("offers only the undo action (T-19) for a paid invoice, no forward transitions", async () => {
     vi.stubGlobal("fetch", makeFetchMock());
     render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "PAID" }} />);
     await screen.findByRole("button", { name: "Buat tautan berbagi" });
 
-    expect(screen.queryByRole("heading", { name: "Status pembayaran" })).toBeNull();
-    expect(screen.queryByText("Invoice ini sudah lunas.")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Status pembayaran" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Batalkan status lunas" })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Tandai sudah dikirim" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Tandai lunas" })).toBeNull();
   });
 
   describe("Invoice lunas menyembunyikan pengeditan, menampilkan bukti pembayaran", () => {
-    it("hides the due-date editor and payment-status actions, and shows a truthful paid-proof block, for a PAID invoice", async () => {
+    it("hides the due-date editor but shows the undo action (T-19) and a truthful paid-proof block, for a PAID invoice", async () => {
       vi.stubGlobal("fetch", makeFetchMock());
       render(
         <InvoiceDetailClient
@@ -233,7 +234,7 @@ describe("InvoiceDetailClient", () => {
       expect(screen.queryByLabelText("Tanggal jatuh tempo")).toBeNull();
       expect(screen.queryByRole("button", { name: "Simpan tanggal" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Hapus tanggal" })).toBeNull();
-      expect(screen.queryByRole("heading", { name: "Status pembayaran" })).toBeNull();
+      expect(screen.getByRole("button", { name: "Batalkan status lunas" })).toBeDefined();
 
       expect(screen.getByText("Invoice ini sudah ditandai lunas.")).toBeDefined();
       expect(screen.getByText("Rp 1.500.000 diterima")).toBeDefined();
@@ -251,6 +252,37 @@ describe("InvoiceDetailClient", () => {
       expect(screen.getByRole("heading", { name: "Status pembayaran" })).toBeDefined();
       expect(screen.queryByText("Invoice ini sudah ditandai lunas.")).toBeNull();
     });
+  });
+
+  it("puts the payment-status section before the invoice-details section (T-19 reorder)", async () => {
+    vi.stubGlobal("fetch", makeFetchMock());
+    render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "SENT" }} />);
+    await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+    const paymentStatusHeading = screen.getByRole("heading", { name: "Status pembayaran" });
+    const detailsHeading = screen.getByRole("heading", { name: "Rincian invoice" });
+    expect(paymentStatusHeading.compareDocumentPosition(detailsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("undoing a paid invoice (T-19) sends the PAID→SENT transition and shows the SENT actions afterward", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      makeFetchMock({
+        statusPatch: { status: 200, body: { invoice: { ...draftInvoice, status: "SENT" } } },
+      }),
+    );
+    render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "PAID" }} />);
+
+    await user.click(await screen.findByRole("button", { name: "Batalkan status lunas" }));
+
+    // Back to SENT's own actions, not DRAFT's "mark as sent" (that action
+    // moves DRAFT to SENT; it isn't SENT's own next step).
+    expect(await screen.findByRole("button", { name: "Tandai jatuh tempo" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Tandai lunas" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Batalkan status lunas" })).toBeNull();
+    // Undoing is not a "just marked paid" moment -- no celebration banner.
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   describe("Status yang ditampilkan (derived, bukan status mentah)", () => {

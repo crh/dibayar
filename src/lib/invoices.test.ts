@@ -381,4 +381,25 @@ describe("updateInvoiceStatus", () => {
     expect(result).toEqual({ kind: "not-found" });
     expect(update).not.toHaveBeenCalled();
   });
+
+  it("allows undoing a PAID invoice back to SENT (T-19)", async () => {
+    const { db, update } = makeStatusDb({ ...existingInvoice, status: "PAID" });
+
+    const result = await updateInvoiceStatus(db, "invoice-1", "user-1", "SENT");
+
+    expect(result).toMatchObject({ kind: "updated", invoice: { status: "SENT" } });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "invoice-1", userId: "user-1" },
+      data: { status: "SENT" },
+    });
+  });
+
+  it("rejects PAID to any status other than SENT (T-19 undo is the only PAID transition)", async () => {
+    const { db, update } = makeStatusDb({ ...existingInvoice, status: "PAID" });
+
+    const result = await updateInvoiceStatus(db, "invoice-1", "user-1", "DUE");
+
+    expect(result).toEqual({ kind: "invalid-transition" });
+    expect(update).not.toHaveBeenCalled();
+  });
 });

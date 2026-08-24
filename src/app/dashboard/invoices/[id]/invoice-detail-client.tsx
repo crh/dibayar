@@ -22,7 +22,9 @@ function normalizeDueDate(value: InvoiceRecord["dueDate"]): Date | null {
   return value ? new Date(value) : null;
 }
 
-const NEXT_ACTIONS: Record<InvoiceRecord["status"], Array<{ status: InvoiceRecord["status"]; labelKey: string }>> = {
+type NextAction = { status: InvoiceRecord["status"]; labelKey: string; variant?: "primary" | "secondary" };
+
+const NEXT_ACTIONS: Record<InvoiceRecord["status"], NextAction[]> = {
   DRAFT: [{ status: "SENT", labelKey: "invoice.markSent" }],
   SENT: [
     { status: "DUE", labelKey: "invoice.markDue" },
@@ -33,7 +35,9 @@ const NEXT_ACTIONS: Record<InvoiceRecord["status"], Array<{ status: InvoiceRecor
     { status: "PAID", labelKey: "invoice.markPaid" },
   ],
   OVERDUE: [{ status: "PAID", labelKey: "invoice.markPaid" }],
-  PAID: [],
+  // T-19: undo, not a forward step -- kept visually distinct (secondary
+  // variant) so it doesn't read as just another "mark as..." action.
+  PAID: [{ status: "SENT", labelKey: "invoice.undoMarkPaid", variant: "secondary" }],
 };
 
 // dueDate is a date-only business date stored as UTC midnight; the
@@ -688,6 +692,31 @@ export default function InvoiceDetailClient({
         </div>
       </header>
 
+      {/* T-19: payment actions ahead of read-only details -- this is the
+          reason someone opens an already-issued invoice. Every status
+          (including PAID, via the undo action) now has at least one entry
+          in NEXT_ACTIONS, so this section is never empty. */}
+      <section aria-labelledby="status-invoice" className="rounded-2xl border border-line bg-surface p-5">
+        <h2 id="status-invoice" className="text-[18px] font-bold text-ink">{t("invoice.paymentStatus")}</h2>
+        <p className="mt-1 text-[13px] text-muted">{t("invoice.paymentStatusHint")}</p>
+        {error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{t(error)}</p> : null}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {NEXT_ACTIONS[invoice.status].map((action) => (
+            <Button
+              key={action.status}
+              type="button"
+              variant={action.variant}
+              disabled={isSaving}
+              loading={isSaving}
+              loadingLabel={t("invoice.saving")}
+              onClick={() => updateStatus(action.status)}
+            >
+              {t(action.labelKey)}
+            </Button>
+          ))}
+        </div>
+      </section>
+
       <section aria-labelledby="rincian-invoice" className="rounded-2xl border border-line bg-surface p-5">
         <h2 id="rincian-invoice" className="text-[18px] font-bold text-ink">{t("invoice.details")}</h2>
         <dl className="mt-4 grid gap-3 text-[15px]">
@@ -712,32 +741,6 @@ export default function InvoiceDetailClient({
           <p className="mt-3 text-[12px] text-muted">{t("invoice.withholdingNone")}</p>
         ) : null}
       </section>
-
-      {displayStatus !== "PAID" ? (
-        <section aria-labelledby="status-invoice" className="rounded-2xl border border-line bg-surface p-5">
-          <h2 id="status-invoice" className="text-[18px] font-bold text-ink">{t("invoice.paymentStatus")}</h2>
-          <p className="mt-1 text-[13px] text-muted">{t("invoice.paymentStatusHint")}</p>
-          {error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{t(error)}</p> : null}
-          {NEXT_ACTIONS[invoice.status].length ? (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {NEXT_ACTIONS[invoice.status].map((action) => (
-                <Button
-                  key={action.status}
-                  type="button"
-                  disabled={isSaving}
-                  loading={isSaving}
-                  loadingLabel={t("invoice.saving")}
-                  onClick={() => updateStatus(action.status)}
-                >
-                  {t(action.labelKey)}
-                </Button>
-              ))}
-            </div>
-          ) : (
-            <p className="mt-4 rounded-xl bg-paid/10 px-3 py-2 text-[14px] font-semibold text-paid">{t("invoice.alreadyPaid")}</p>
-          )}
-        </section>
-      ) : null}
 
       {hasIncompleteIssuer ? (
         <div role="status" className="rounded-md border border-due bg-due-tint px-4 py-3 text-[14px] text-ink">
