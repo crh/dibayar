@@ -310,11 +310,11 @@ describe("InvoiceDetailClient", () => {
   });
 
   describe("Aksi utama WhatsApp (header)", () => {
-    it("creates a share link first, then opens a plain share message, when not overdue", async () => {
+    it("creates a share link first, then opens the send-template message, when not overdue", async () => {
       const user = userEvent.setup();
       const open = vi.spyOn(window, "open").mockImplementation(() => null);
       vi.stubGlobal("fetch", makeFetchMock({
-        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
         shareGet: { status: 200, body: { active: false } },
         sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
       }));
@@ -327,7 +327,8 @@ describe("InvoiceDetailClient", () => {
       const href = open.mock.calls[0]?.[0] as string;
       expect(href).toContain(encodeURIComponent("INV/2026/07/001"));
       const message = decodeURIComponent(href.split("?text=")[1] ?? "");
-      expect(message).not.toMatch(/jatuh tempo|terlambat/i);
+      expect(message).toContain("Kopi Nusantara");
+      expect(message).toContain("Jatuh tempo 31 Jul 2026.");
       expect(await screen.findByTitle(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
     });
 
@@ -353,11 +354,11 @@ describe("InvoiceDetailClient", () => {
       expect(postCallsAfter).toBe(postCallsBefore);
     });
 
-    it("sends the overdue reminder message, mentioning the due date, when Kirim pengingat is clicked", async () => {
+    it("sends the chase-template message (not the send template) once overdue, mentioning the due date", async () => {
       const user = userEvent.setup();
       const open = vi.spyOn(window, "open").mockImplementation(() => null);
       vi.stubGlobal("fetch", makeFetchMock({
-        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
         shareGet: { status: 200, body: { active: false } },
         sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
       }));
@@ -373,7 +374,49 @@ describe("InvoiceDetailClient", () => {
       await waitFor(() => expect(open).toHaveBeenCalled());
       const href = open.mock.calls[0]?.[0] as string;
       const message = decodeURIComponent(href.split("?text=")[1] ?? "");
-      expect(message).toContain("melewati jatuh tempo");
+      expect(message).toContain("izin mengingatkan");
+      expect(message).toContain("jatuh tempo 1 Jul 2026");
+    });
+
+    it("uses a custom chase template from Settings instead of the default when overdue", async () => {
+      const user = userEvent.setup();
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
+        shareGet: { status: 200, body: { active: false } },
+        sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
+      }));
+
+      render(
+        <InvoiceDetailClient
+          initialInvoice={{ ...draftInvoice, status: "OVERDUE", dueDate: new Date("2026-07-01T00:00:00.000Z") }}
+          now={new Date("2026-07-24T00:00:00.000Z")}
+          templateChase="Tolong segera lunasi {nomor_invoice}, {brand}. Link: {tautan}"
+        />,
+      );
+      await user.click(await screen.findByRole("button", { name: "Kirim pengingat" }));
+
+      await waitFor(() => expect(open).toHaveBeenCalled());
+      const message = decodeURIComponent((open.mock.calls[0]?.[0] as string).split("?text=")[1] ?? "");
+      expect(message).toBe("Tolong segera lunasi INV/2026/07/001, Kopi Nusantara. Link: https://dibayar.example/i/deterministic-token".replace("https://dibayar.example", window.location.origin));
+    });
+
+    it("drops the due-date line entirely when the invoice has no due date, even using the default send template", async () => {
+      const user = userEvent.setup();
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
+        shareGet: { status: 200, body: { active: false } },
+        sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: null }} />);
+      await user.click(await screen.findByRole("button", { name: "Kirim lewat WhatsApp" }));
+
+      await waitFor(() => expect(open).toHaveBeenCalled());
+      const message = decodeURIComponent((open.mock.calls[0]?.[0] as string).split("?text=")[1] ?? "");
+      expect(message).not.toContain("Jatuh tempo");
+      expect(message).not.toContain("Jatuh tempo .");
     });
 
     it("sends an Indonesian-only WhatsApp message even when the creator's UI language is English", async () => {
@@ -395,16 +438,46 @@ describe("InvoiceDetailClient", () => {
       expect(message).not.toMatch(/reminder|overdue|thank you|due date/i);
     });
 
-    it("disables the primary WhatsApp button, with a reason, when the deal contact is unusable", async () => {
+    it("disables the primary WhatsApp button and shows a repair block naming the deal, when the deal contact is unusable", async () => {
       vi.stubGlobal("fetch", makeFetchMock({
-        contactGet: { status: 200, body: { contactWa: "not-a-phone" } },
+        contactGet: { status: 200, body: { contactWa: "not-a-phone", brand: "Kopi Nusantara" } },
       }));
 
       render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
       const whatsappButton = await screen.findByRole("button", { name: "Kirim lewat WhatsApp" });
 
       await waitFor(() => expect(whatsappButton).toHaveProperty("disabled", true));
-      expect(screen.getByText(/nomor whatsapp belum bisa dipakai/i)).toBeDefined();
+      expect(screen.getByText(/nomor whatsapp untuk kopi nusantara sepertinya tidak valid/i)).toBeDefined();
+      expect(screen.getByLabelText("Perbaiki nomor WhatsApp")).toHaveProperty("value", "not-a-phone");
+    });
+
+    it("writes a fixed contact number back to the deal, unblocking the primary button afterward", async () => {
+      const user = userEvent.setup();
+      const calls: Array<{ url: string; init?: RequestInit }> = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          calls.push({ url, init });
+          const method = init?.method ?? "GET";
+          if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: { contactWa: "not-a-phone", brand: "Kopi Nusantara" } });
+          if (url.endsWith("/share") && method === "GET") return jsonResponse({ status: 200, body: { active: false } });
+          if (url.includes("/api/deals/") && method === "PATCH") {
+            return jsonResponse({ status: 200, body: { deal: { id: "deal-1", contactWa: "6281234567890" } } });
+          }
+          return jsonResponse({ status: 200, body: {} });
+        }),
+      );
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      const repairInput = await screen.findByLabelText("Perbaiki nomor WhatsApp");
+      fireEvent.change(repairInput, { target: { value: "0812-3456-7890" } });
+      await user.click(screen.getByRole("button", { name: "Simpan nomor" }));
+
+      expect(await screen.findByText("Nomor WhatsApp disimpan")).toBeDefined();
+      const patchCall = calls.find((call) => call.url.includes("/api/deals/") && call.init?.method === "PATCH");
+      expect(patchCall?.url).toBe("/api/deals/deal-1");
+      expect(JSON.parse(patchCall!.init!.body as string)).toEqual({ contactWa: "0812-3456-7890" });
+      await waitFor(() => expect(screen.getByRole("button", { name: "Kirim lewat WhatsApp" })).toHaveProperty("disabled", false));
     });
 
     it("keeps the primary WhatsApp button available when the invoice has no due date, since a plain share never fabricates one", async () => {

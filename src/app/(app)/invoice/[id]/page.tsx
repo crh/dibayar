@@ -36,7 +36,12 @@ export default async function InvoiceDetailPage({ params }: InvoiceDetailPagePro
 
   return (
     <LanguageProvider initialLanguage={language} authenticated>
-      <InvoiceDetailClient initialInvoice={invoice} hasIncompleteIssuer={hasIncompleteIssuer} />
+      <InvoiceDetailClient
+        initialInvoice={invoice}
+        hasIncompleteIssuer={hasIncompleteIssuer}
+        templateSend={settings.templateSend}
+        templateChase={settings.templateChase}
+      />
     </LanguageProvider>
   );
 }

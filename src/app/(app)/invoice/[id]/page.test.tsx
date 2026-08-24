@@ -34,9 +34,19 @@ const { notFound, redirect } = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ notFound, redirect }));
 
 vi.mock("./invoice-detail-client", () => ({
-  default: ({ initialInvoice, hasIncompleteIssuer }: { initialInvoice: InvoiceRecord; hasIncompleteIssuer: boolean }) => (
+  default: ({
+    initialInvoice,
+    hasIncompleteIssuer,
+    templateSend,
+    templateChase,
+  }: {
+    initialInvoice: InvoiceRecord;
+    hasIncompleteIssuer: boolean;
+    templateSend: string;
+    templateChase: string;
+  }) => (
     <div data-testid="invoice-detail-client">
-      {initialInvoice.number} · {String(hasIncompleteIssuer)}
+      {initialInvoice.number} · {String(hasIncompleteIssuer)} · {templateSend} · {templateChase}
     </div>
   ),
 }));
@@ -67,8 +77,8 @@ const completeSettings = {
   bankName: "BCA",
   bankAccountNumber: "1234567890",
   bankAccountHolder: "Aulia Rahma",
-  templateSend: "",
-  templateChase: "",
+  templateSend: "Halo {brand}, invoice terlampir.",
+  templateChase: "Halo {brand}, mohon dicek invoicenya.",
   updatedAt: null,
 };
 
@@ -106,7 +116,9 @@ describe("/invoice/:id", () => {
     const page = await InvoiceDetailPage({ params: Promise.resolve({ id: "invoice-1" }) });
     render(page);
 
-    expect(screen.getByTestId("invoice-detail-client").textContent).toBe("INV-2026-001 · false");
+    expect(screen.getByTestId("invoice-detail-client").textContent).toBe(
+      "INV-2026-001 · false · Halo {brand}, invoice terlampir. · Halo {brand}, mohon dicek invoicenya.",
+    );
   });
 
   it("flags an incomplete issuer profile so the client can warn before sending", async () => {
@@ -117,6 +129,8 @@ describe("/invoice/:id", () => {
     const page = await InvoiceDetailPage({ params: Promise.resolve({ id: "invoice-1" }) });
     render(page);
 
-    expect(screen.getByTestId("invoice-detail-client").textContent).toBe("INV-2026-001 · true");
+    expect(screen.getByTestId("invoice-detail-client").textContent).toBe(
+      "INV-2026-001 · true · Halo {brand}, invoice terlampir. · Halo {brand}, mohon dicek invoicenya.",
+    );
   });
 });

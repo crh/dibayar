@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   buildDealWhatsApp,
   buildDealWhatsAppMessage,
-  buildWhatsAppReminder,
+  buildInvoiceWhatsApp,
   buildWhatsAppReminderMessage,
-  buildWhatsAppShare,
   buildWhatsAppShareUrl,
   normalizeWhatsAppNumber,
+  resolveWhatsAppTemplate,
 } from "./whatsapp";
 
 // Message bodies are raw strings (not DOM), so the money formatter's real
@@ -63,84 +63,89 @@ describe("WhatsApp reminders", () => {
   });
 });
 
-describe("buildWhatsAppReminder", () => {
+describe("resolveWhatsAppTemplate (T-21)", () => {
+  const defaultSend =
+    "Halo {brand}, berikut invoice {nomor_invoice} sebesar {jumlah}.\n" +
+    "Jatuh tempo {jatuh_tempo}.\n" +
+    "Detail dan unduh PDF: {tautan}\n" +
+    "Terima kasih!";
+
+  const tokens = {
+    brand: "Kopi Nusantara",
+    jumlah: `Rp${NBSP}5.000.000`,
+    jatuh_tempo: "19 Jul 2026",
+    nomor_invoice: "INV/2026/07/004",
+    tautan: "https://dibayar.example/i/token-abc",
+  };
+
+  it("substitutes every token", () => {
+    const message = resolveWhatsAppTemplate(defaultSend, tokens);
+    expect(message).toBe(
+      "Halo Kopi Nusantara, berikut invoice INV/2026/07/004 sebesar Rp 5.000.000.\n" +
+        "Jatuh tempo 19 Jul 2026.\n" +
+        "Detail dan unduh PDF: https://dibayar.example/i/token-abc\n" +
+        "Terima kasih!",
+    );
+  });
+
+  it("drops the whole due-date line, not just the token, when jatuh_tempo is null", () => {
+    const message = resolveWhatsAppTemplate(defaultSend, { ...tokens, jatuh_tempo: null });
+    expect(message).not.toContain("Jatuh tempo");
+    expect(message).not.toContain("Jatuh tempo .");
+  });
+
+  it("drops a due-date line anywhere in a custom template, not just the default layout", () => {
+    const custom = "Halo {brand}!\nSilakan bayar sebelum {jatuh_tempo} ya.\nLink: {tautan}";
+    const message = resolveWhatsAppTemplate(custom, { ...tokens, jatuh_tempo: null });
+    expect(message).toBe("Halo Kopi Nusantara!\nLink: https://dibayar.example/i/token-abc");
+  });
+
+  it("leaves a template with no jatuh_tempo token untouched by the empty-due-date rule", () => {
+    const custom = "Halo {brand}, invoice {nomor_invoice} sudah siap: {tautan}";
+    const message = resolveWhatsAppTemplate(custom, { ...tokens, jatuh_tempo: null });
+    expect(message).toBe("Halo Kopi Nusantara, invoice INV/2026/07/004 sudah siap: https://dibayar.example/i/token-abc");
+  });
+});
+
+describe("buildInvoiceWhatsApp (T-21)", () => {
   const base = {
     contactWa: "0812-3456-7890",
     shareUrl: "https://dibayar.example/i/token-abc",
+    template: "Halo {brand}, invoice {nomor_invoice} sebesar {jumlah}. Jatuh tempo {jatuh_tempo}. Link: {tautan}",
+    brand: "Kopi Nusantara",
     invoiceNumber: "INV/2026/07/004",
     totalIdr: 5000000,
     dueDate: "2026-07-19T00:00:00.000Z" as Date | string | null,
-    isOverdue: false,
   };
 
-  it("builds a ready wa.me href with the normalized number, invoice number, amount, due date, and share URL", () => {
-    const result = buildWhatsAppReminder(base);
+  it("builds a ready wa.me href with the normalized number and resolved template", () => {
+    const result = buildInvoiceWhatsApp(base);
 
     expect(result.kind).toBe("ok");
     if (result.kind !== "ok") throw new Error("expected ok");
     expect(result.href.startsWith("https://wa.me/6281234567890?text=")).toBe(true);
     const decoded = decodeURIComponent(result.href.split("?text=")[1]);
+    expect(decoded).toContain("Kopi Nusantara");
     expect(decoded).toContain("INV/2026/07/004");
     expect(decoded).toContain(`Rp${NBSP}5.000.000`);
     expect(decoded).toContain("19 Jul 2026");
     expect(decoded).toContain(base.shareUrl);
   });
 
-  it("selects the overdue opening line when isOverdue is true", () => {
-    const result = buildWhatsAppReminder({ ...base, isOverdue: true });
+  it("stays usable, dropping the due-date line, when the invoice has no due date", () => {
+    const result = buildInvoiceWhatsApp({ ...base, dueDate: null });
     expect(result.kind).toBe("ok");
     if (result.kind !== "ok") throw new Error("expected ok");
-    expect(decodeURIComponent(result.href)).toContain("sudah melewati jatuh tempo");
+    expect(decodeURIComponent(result.href)).not.toContain("Jatuh tempo");
   });
 
   it("reports no-contact distinctly when the contact number is missing or unusable", () => {
-    expect(buildWhatsAppReminder({ ...base, contactWa: null })).toEqual({ kind: "no-contact" });
-    expect(buildWhatsAppReminder({ ...base, contactWa: "not-a-phone" })).toEqual({ kind: "no-contact" });
-  });
-
-  it("reports no-share distinctly when there is no active share link, even with a valid contact and due date", () => {
-    expect(buildWhatsAppReminder({ ...base, shareUrl: null })).toEqual({ kind: "no-share" });
-  });
-
-  it("reports no-duedate distinctly when the due date is missing, even with a valid contact and share link", () => {
-    expect(buildWhatsAppReminder({ ...base, dueDate: null })).toEqual({ kind: "no-duedate" });
-  });
-});
-
-describe("buildWhatsAppShare", () => {
-  const base = {
-    contactWa: "0812-3456-7890",
-    shareUrl: "https://dibayar.example/i/token-abc",
-    invoiceNumber: "INV/2026/07/004",
-    totalIdr: 5000000,
-  };
-
-  it("builds a ready wa.me href with the invoice number, amount, and share URL, without requiring a due date", () => {
-    const result = buildWhatsAppShare(base);
-
-    expect(result.kind).toBe("ok");
-    if (result.kind !== "ok") throw new Error("expected ok");
-    expect(result.href.startsWith("https://wa.me/6281234567890?text=")).toBe(true);
-    const decoded = decodeURIComponent(result.href.split("?text=")[1]);
-    expect(decoded).toContain("INV/2026/07/004");
-    expect(decoded).toContain(`Rp${NBSP}5.000.000`);
-    expect(decoded).toContain(base.shareUrl);
-  });
-
-  it("never mentions a due date, overdue status, payment status, or tax detail", () => {
-    const result = buildWhatsAppShare(base);
-    if (result.kind !== "ok") throw new Error("expected ok");
-    const decoded = decodeURIComponent(result.href);
-    expect(decoded).not.toMatch(/jatuh tempo|terlambat|lunas|pph|pajak/i);
-  });
-
-  it("reports no-contact distinctly when the contact number is missing or unusable", () => {
-    expect(buildWhatsAppShare({ ...base, contactWa: null })).toEqual({ kind: "no-contact" });
-    expect(buildWhatsAppShare({ ...base, contactWa: "not-a-phone" })).toEqual({ kind: "no-contact" });
+    expect(buildInvoiceWhatsApp({ ...base, contactWa: null })).toEqual({ kind: "no-contact" });
+    expect(buildInvoiceWhatsApp({ ...base, contactWa: "not-a-phone" })).toEqual({ kind: "no-contact" });
   });
 
   it("reports no-share distinctly when there is no active share link, even with a valid contact", () => {
-    expect(buildWhatsAppShare({ ...base, shareUrl: null })).toEqual({ kind: "no-share" });
+    expect(buildInvoiceWhatsApp({ ...base, shareUrl: null })).toEqual({ kind: "no-share" });
   });
 });
 

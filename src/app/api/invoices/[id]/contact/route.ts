@@ -16,7 +16,10 @@ export async function GET(_request: Request, context: RouteContext) {
     const result = await getOwnedInvoiceContact(db, id, session.user.id);
     if (!result) return NextResponse.json({ error: "Invoice tidak ditemukan." }, { status: 404 });
 
-    return NextResponse.json({ contactWa: result.deal.contactWa }, { headers: { "Cache-Control": "private, no-store" } });
+    return NextResponse.json(
+      { contactWa: result.deal.contactWa, brand: result.deal.brand },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   } catch {
     return NextResponse.json({ error: "Kontak invoice belum bisa dimuat. Coba lagi." }, { status: 500 });
   }

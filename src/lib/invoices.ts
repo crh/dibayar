@@ -93,15 +93,18 @@ export type InvoiceContactDb = {
   invoice: {
     findFirst(args: {
       where: { id: string; userId: string };
-      select: { deal: { select: { contactWa: true } } };
-    }): Promise<{ deal: { contactWa: string } } | null>;
+      select: { deal: { select: { contactWa: true; brand: true } } };
+    }): Promise<{ deal: { contactWa: string; brand: string } } | null>;
   };
 };
 
+// T-21: also carries the deal's brand, needed both for the {brand} WhatsApp
+// template token and for naming the deal in the invoice-side contact repair
+// note (see dibayar-implementation-spec.md T-21 acceptance).
 export async function getOwnedInvoiceContact(db: InvoiceContactDb, id: string, userId: string) {
   return db.invoice.findFirst({
     where: { id, userId },
-    select: { deal: { select: { contactWa: true } } },
+    select: { deal: { select: { contactWa: true, brand: true } } },
   });
 }
 

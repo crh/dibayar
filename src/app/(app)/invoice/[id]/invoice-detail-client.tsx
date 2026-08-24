@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { InvoiceRecord } from "@/lib/invoices";
 import { deriveInvoiceDisplayStatus, getDueDateCalendarDate } from "@/lib/invoice-date-status";
-import { buildWhatsAppReminder, buildWhatsAppShare, normalizeWhatsAppNumber } from "@/lib/whatsapp";
+import { buildInvoiceWhatsApp, normalizeWhatsAppNumber } from "@/lib/whatsapp";
 import { useLanguage } from "@/components/language-switcher";
-import { MoneyDisplay, StatusChip, Button } from "@/components/design-system";
+import { MoneyDisplay, StatusChip, Button, fieldClassName } from "@/components/design-system";
 import { ShareLinkField } from "@/components/invoices/share-link-field";
 import { DateField, type DateFieldCommitResult } from "@/components/date-field";
 import type { Language } from "@/lib/i18n";
@@ -15,6 +15,7 @@ import { fetchWithTimeout } from "@/lib/http";
 import { PPH_RATES } from "@/lib/income-summary";
 import { formatMoney } from "@/lib/format/money";
 import { formatDate as formatDateCentral } from "@/lib/format/date";
+import { DEFAULT_TEMPLATE_SEND, DEFAULT_TEMPLATE_CHASE } from "@/lib/user-settings-validation";
 
 // Fetch responses round-trip dueDate through JSON (a string), while the
 // server-rendered initial invoice carries a real Date; normalize both to a
@@ -412,15 +413,23 @@ export default function InvoiceDetailClient({
   initialInvoice,
   now,
   hasIncompleteIssuer = false,
+  templateSend = DEFAULT_TEMPLATE_SEND,
+  templateChase = DEFAULT_TEMPLATE_CHASE,
 }: {
   initialInvoice: InvoiceRecord;
   now?: Date;
   hasIncompleteIssuer?: boolean;
+  templateSend?: string;
+  templateChase?: string;
 }) {
   const { language, t } = useLanguage();
   const [invoice, setInvoice] = useState(initialInvoice);
   const [contactWa, setContactWa] = useState<string | null>(null);
+  const [brand, setBrand] = useState<string | null>(null);
   const [contactStatus, setContactStatus] = useState<ContactStatus>("loading");
+  const [contactWaDraft, setContactWaDraft] = useState("");
+  const [isSavingContactWa, setIsSavingContactWa] = useState(false);
+  const [contactWaMessage, setContactWaMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [paidMoment, setPaidMoment] = useState(false);
@@ -443,8 +452,10 @@ export default function InvoiceDetailClient({
       .then((response) => response.json().then((payload) => ({ response, payload })))
       .then(({ response, payload }) => {
         if (cancelled) return;
+        if (typeof payload.brand === "string") setBrand(payload.brand);
         if (response.ok && typeof payload.contactWa === "string") {
           setContactWa(payload.contactWa);
+          setContactWaDraft(payload.contactWa);
           setContactStatus("loaded");
         } else if (response.ok) {
           // No contact on the deal is a legitimate loaded state, not an error.
@@ -469,6 +480,31 @@ export default function InvoiceDetailClient({
     setContactStatus("loading");
     fetchContact();
   }, [fetchContact]);
+
+  // T-21: writes back to the deal, mirroring deal-detail-client's own
+  // repair flow -- the invoice's contact IS the deal's contact, there is no
+  // separate copy. Never opens WhatsApp itself; it only unblocks the
+  // primary action above, which the owner still has to click.
+  async function handleSaveContactWa() {
+    setIsSavingContactWa(true);
+    setContactWaMessage(null);
+    try {
+      const response = await fetchWithTimeout(`/api/deals/${invoice.dealId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactWa: contactWaDraft }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error("invoice.contactRepairError");
+      setContactWa(payload.deal.contactWa);
+      setContactWaDraft(payload.deal.contactWa);
+      setContactWaMessage({ kind: "success", text: t("invoice.contactRepairSaved") });
+    } catch {
+      setContactWaMessage({ kind: "error", text: t("invoice.contactRepairError") });
+    } finally {
+      setIsSavingContactWa(false);
+    }
+  }
 
   async function updateStatus(status: InvoiceRecord["status"]) {
     setError(null);
@@ -510,12 +546,13 @@ export default function InvoiceDetailClient({
     }
   }
 
-  // The header's single primary action (§4.5 item 2): a plain "here's my
-  // invoice" share normally, or the due-date-aware reminder composer once
-  // the invoice is overdue. Both branches ensure a share link exists first
-  // (creating one on demand), so this is always usable as the entry point
-  // to the invoice's public link -- it never duplicates the share
-  // management state in ShareSection below, it just drives the same hook.
+  // The header's single primary action (§4.5 item 2): the owner's own
+  // Settings template (templateSend normally, templateChase once the
+  // invoice is overdue -- T-21), resolved with the real invoice/deal
+  // tokens. Ensures a share link exists first (creating one on demand), so
+  // this is always usable as the entry point to the invoice's public link
+  // -- it never duplicates the share management state in ShareSection
+  // below, it just drives the same hook.
   async function handlePrimaryWhatsApp() {
     setIsSharingToWhatsApp(true);
     try {
@@ -524,26 +561,16 @@ export default function InvoiceDetailClient({
         : await shareState.createOrRegenerate();
       if (!link) return;
 
-      if (isOverdue) {
-        const reminder = buildWhatsAppReminder({
-          contactWa,
-          shareUrl: link,
-          invoiceNumber: invoice.number,
-          totalIdr: invoice.subtotalIdr,
-          dueDate: invoice.dueDate,
-          isOverdue: true,
-        });
-        if (reminder.kind === "ok") window.open(reminder.href, "_blank", "noopener,noreferrer");
-        return;
-      }
-
-      const share = buildWhatsAppShare({
+      const result = buildInvoiceWhatsApp({
         contactWa,
         shareUrl: link,
+        template: isOverdue ? templateChase : templateSend,
+        brand: brand ?? "",
         invoiceNumber: invoice.number,
         totalIdr: invoice.subtotalIdr,
+        dueDate: invoice.dueDate,
       });
-      if (share.kind === "ok") window.open(share.href, "_blank", "noopener,noreferrer");
+      if (result.kind === "ok") window.open(result.href, "_blank", "noopener,noreferrer");
     } finally {
       setIsSharingToWhatsApp(false);
     }
@@ -637,11 +664,47 @@ export default function InvoiceDetailClient({
               </Button>
             ))}
           </div>
-          {!canShareViaWhatsApp && contactStatus === "loaded" ? (
-            <p className="mt-2 text-[12px] text-muted">
-              {shareState.share.kind === "active" && !shareState.share.link
-                ? t("invoice.shareLinkUnavailable")
-                : t("invoice.noContact")}
+          {!canShareViaWhatsApp && contactStatus === "loaded" && shareState.share.kind === "active" && !shareState.share.link ? (
+            <p className="mt-2 text-[12px] text-muted">{t("invoice.shareLinkUnavailable")}</p>
+          ) : null}
+          {!canShareViaWhatsApp && contactStatus === "loaded" && !(shareState.share.kind === "active" && !shareState.share.link) ? (
+            <div className="mt-3 rounded-xl bg-bg p-3">
+              <p className="text-[13px] text-ink">{t("invoice.contactInvalidNote", { brand: brand ?? "" })}</p>
+              <label className="mt-2 flex flex-col gap-1.5 text-[13px] font-semibold text-ink" htmlFor="invoice-contact-wa">
+                {t("invoice.contactRepairLabel")}
+              </label>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <input
+                  id="invoice-contact-wa"
+                  name="invoice-contact-wa"
+                  type="tel"
+                  value={contactWaDraft}
+                  onChange={(event) => setContactWaDraft(event.target.value)}
+                  className={fieldClassName}
+                />
+                <Button
+                  type="button"
+                  disabled={isSavingContactWa}
+                  loading={isSavingContactWa}
+                  loadingLabel={t("invoice.saving")}
+                  onClick={handleSaveContactWa}
+                >
+                  {t("invoice.contactRepairSave")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+          {/* Rendered regardless of the repair block above: a successful
+              repair flips canShareViaWhatsApp to true on the same render
+              that sets this message, and the repair block (which this used
+              to live inside) would otherwise unmount right as the message
+              appears, hiding it before anyone could read it. */}
+          {contactWaMessage ? (
+            <p
+              role={contactWaMessage.kind === "error" ? "alert" : "status"}
+              className={`mt-2 text-[13px] ${contactWaMessage.kind === "error" ? "text-overdue" : "text-paid"}`}
+            >
+              {contactWaMessage.text}
             </p>
           ) : null}
         </section>

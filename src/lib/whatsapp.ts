@@ -42,70 +42,55 @@ export function buildWhatsAppShareUrl(number: string, message: string): string {
   return `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
 }
 
-export type WhatsAppReminderResult =
-  | { kind: "ok"; href: string }
-  | { kind: "no-contact" }
-  | { kind: "no-share" }
-  | { kind: "no-duedate" };
+// T-21: substitutes the settings-editable template tokens
+// ({brand}/{jumlah}/{jatuh_tempo}/{nomor_invoice}/{tautan}, see
+// dibayar-implementation-spec.md §4.7). A null jatuh_tempo drops every line
+// containing that token entirely (checked before substitution, so it works
+// for any template text, not just the shipped defaults) rather than
+// substituting an empty string in place, which would leave a dangling
+// "Jatuh tempo ." fragment on the line.
+export function resolveWhatsAppTemplate(
+  template: string,
+  tokens: { brand: string; jumlah: string; jatuh_tempo: string | null; nomor_invoice: string; tautan: string },
+): string {
+  const lines = template.split("\n");
+  const kept = tokens.jatuh_tempo === null ? lines.filter((line) => !line.includes("{jatuh_tempo}")) : lines;
 
-export type WhatsAppShareResult =
-  | { kind: "ok"; href: string }
-  | { kind: "no-contact" }
-  | { kind: "no-share" };
-
-export function buildWhatsAppShareMessage(input: {
-  invoiceNumber: string;
-  totalIdr: number;
-  shareUrl: string;
-}): string {
-  const amount = formatMoney(input.totalIdr);
-  return `Halo, berikut invoice ${input.invoiceNumber} sebesar ${amount}.\nDetail invoice: ${input.shareUrl}\nTerima kasih.`;
+  return kept
+    .join("\n")
+    .replaceAll("{brand}", tokens.brand)
+    .replaceAll("{jumlah}", tokens.jumlah)
+    .replaceAll("{jatuh_tempo}", tokens.jatuh_tempo ?? "")
+    .replaceAll("{nomor_invoice}", tokens.nomor_invoice)
+    .replaceAll("{tautan}", tokens.tautan);
 }
 
-// Distinct from buildWhatsAppReminder below: a plain share of the invoice
-// link with no due-date/overdue framing, so it stays available even when the
-// invoice has no due date yet. Never invents a due date, payment status, or
-// tax detail — those only ever come from the reminder composer.
-export function buildWhatsAppShare(input: {
+export type InvoiceWhatsAppResult = { kind: "ok"; href: string } | { kind: "no-contact" } | { kind: "no-share" };
+
+// T-21: the invoice detail page's single WhatsApp composer, driven by the
+// owner's own Settings template (send or chase, chosen by the caller) rather
+// than a hardcoded message. Never blocks on a missing due date -- an empty
+// one just drops that line from the template (see resolveWhatsAppTemplate)
+// -- so this stays usable for invoices that never had one.
+export function buildInvoiceWhatsApp(input: {
   contactWa: string | null;
   shareUrl: string | null;
-  invoiceNumber: string;
-  totalIdr: number;
-}): WhatsAppShareResult {
-  const normalizedNumber = input.contactWa ? normalizeWhatsAppNumber(input.contactWa) : null;
-  if (!normalizedNumber) return { kind: "no-contact" };
-  if (!input.shareUrl) return { kind: "no-share" };
-
-  const message = buildWhatsAppShareMessage({
-    invoiceNumber: input.invoiceNumber,
-    totalIdr: input.totalIdr,
-    shareUrl: input.shareUrl,
-  });
-  return { kind: "ok", href: buildWhatsAppShareUrl(normalizedNumber, message) };
-}
-
-// Pure composition of the pieces above, with each blocked precondition kept
-// distinguishable (missing contact vs missing share link vs missing due date)
-// so the UI can explain the specific gap instead of a single generic disable.
-export function buildWhatsAppReminder(input: {
-  contactWa: string | null;
-  shareUrl: string | null;
+  template: string;
+  brand: string;
   invoiceNumber: string;
   totalIdr: number;
   dueDate: Date | string | null;
-  isOverdue: boolean;
-}): WhatsAppReminderResult {
+}): InvoiceWhatsAppResult {
   const normalizedNumber = input.contactWa ? normalizeWhatsAppNumber(input.contactWa) : null;
   if (!normalizedNumber) return { kind: "no-contact" };
   if (!input.shareUrl) return { kind: "no-share" };
-  if (!input.dueDate) return { kind: "no-duedate" };
 
-  const message = buildWhatsAppReminderMessage({
-    kind: input.isOverdue ? "overdue" : "due-soon",
-    invoiceNumber: input.invoiceNumber,
-    totalIdr: input.totalIdr,
-    dueDate: input.dueDate,
-    shareUrl: input.shareUrl,
+  const message = resolveWhatsAppTemplate(input.template, {
+    brand: input.brand,
+    jumlah: formatMoney(input.totalIdr),
+    jatuh_tempo: input.dueDate ? formatWhatsAppDate(input.dueDate) : null,
+    nomor_invoice: input.invoiceNumber,
+    tautan: input.shareUrl,
   });
   return { kind: "ok", href: buildWhatsAppShareUrl(normalizedNumber, message) };
 }

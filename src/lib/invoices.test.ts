@@ -2,9 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createInvoice,
   getOwnedInvoice,
+  getOwnedInvoiceContact,
   listInvoices,
   listInvoicesWithDealBrand,
   updateInvoiceStatus,
+  type InvoiceContactDb,
   type InvoiceCreateDb,
   type InvoiceListDb,
   type InvoiceReadDb,
@@ -338,6 +340,41 @@ describe("getOwnedInvoice", () => {
     const invoice = await getOwnedInvoice(db, "invoice-x", "user-1");
 
     expect(invoice).toBeNull();
+  });
+});
+
+describe("getOwnedInvoiceContact", () => {
+  function makeContactDb(record: { deal: { contactWa: string; brand: string } } | null) {
+    const findFirst = vi.fn(async () => record);
+    const db = { invoice: { findFirst } } as unknown as InvoiceContactDb;
+    return { db, findFirst };
+  }
+
+  it("returns the deal's WhatsApp contact and brand together (T-21: brand feeds the {brand} template token)", async () => {
+    const { db } = makeContactDb({ deal: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } });
+
+    const result = await getOwnedInvoiceContact(db, "invoice-1", "user-1");
+
+    expect(result).toEqual({ deal: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } });
+  });
+
+  it("queries by invoice ID and owner together, selecting only contactWa and brand", async () => {
+    const { db, findFirst } = makeContactDb(null);
+
+    await getOwnedInvoiceContact(db, "invoice-1", "user-2");
+
+    expect(findFirst).toHaveBeenCalledWith({
+      where: { id: "invoice-1", userId: "user-2" },
+      select: { deal: { select: { contactWa: true, brand: true } } },
+    });
+  });
+
+  it("returns null without leaking data for a missing or another user's invoice", async () => {
+    const { db } = makeContactDb(null);
+
+    const result = await getOwnedInvoiceContact(db, "invoice-1", "user-2");
+
+    expect(result).toBeNull();
   });
 });
 
