@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getPublicInvoicePdfDataByToken } from "@/lib/invoice-share";
+import { getPublicInvoiceDocumentByToken } from "@/lib/invoice-share";
 import { publicInvoicePdfRateLimiter } from "@/lib/rate-limit";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { GET } from "./route";
 
-vi.mock("@/lib/invoice-share", () => ({
-  getPublicInvoicePdfDataByToken: vi.fn(),
-}));
+vi.mock("@/lib/invoice-share", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/invoice-share")>();
+  return { ...actual, getPublicInvoiceDocumentByToken: vi.fn() };
+});
 
 vi.mock("@/lib/rate-limit", () => ({
   publicInvoicePdfRateLimiter: { check: vi.fn() },
@@ -19,7 +20,7 @@ vi.mock("@react-pdf/renderer", async (importOriginal) => {
   return { ...actual, renderToBuffer: vi.fn() };
 });
 
-const mockedLookup = vi.mocked(getPublicInvoicePdfDataByToken);
+const mockedLookup = vi.mocked(getPublicInvoiceDocumentByToken);
 const mockedCheck = vi.mocked(publicInvoicePdfRateLimiter.check);
 const mockedRenderToBuffer = vi.mocked(renderToBuffer);
 
@@ -33,15 +34,28 @@ function req(token: string, forwardedFor?: string) {
   return new Request(`http://localhost/api/public/invoices/${token}/pdf`, { headers });
 }
 
-const pdfData = {
-  invoice: {
-    number: "INV/2026/07/001",
-    subtotalIdr: 1_500_000,
-    withholdingTaxType: "PPH23" as const,
-    status: "SENT" as const,
-    dueDate: new Date("2026-07-31T00:00:00.000Z"),
+const okLookup = {
+  kind: "ok" as const,
+  input: {
+    invoice: {
+      id: "invoice-1",
+      number: "INV/2026/07/001",
+      subtotalIdr: 1_500_000,
+      withholdingTaxType: "PPH23" as const,
+      dueDate: new Date("2026-07-31T00:00:00.000Z"),
+      createdAt: new Date("2026-07-15T00:00:00.000Z"),
+    },
+    deal: { brand: "Brand Kopi", contactName: null, scope: "1 reel + 2 story", paymentTerms: null },
+    settings: {
+      issuerName: "",
+      issuerAddress: "",
+      issuerWhatsapp: "",
+      issuerEmail: "",
+      bankName: "",
+      bankAccountNumber: "",
+      bankAccountHolder: "",
+    },
   },
-  deal: { brand: "Brand Kopi", scope: "1 reel + 2 story" },
 };
 
 beforeEach(() => {
@@ -53,7 +67,7 @@ beforeEach(() => {
 
 describe("GET /api/public/invoices/[token]/pdf", () => {
   it("streams the PDF for a valid token without requiring authentication", async () => {
-    mockedLookup.mockResolvedValue(pdfData);
+    mockedLookup.mockResolvedValue(okLookup);
     mockedRenderToBuffer.mockResolvedValue(Buffer.from("%PDF-1.7 test"));
 
     const response = await GET(req("valid-token"), makeContext("valid-token"));
@@ -65,7 +79,7 @@ describe("GET /api/public/invoices/[token]/pdf", () => {
   });
 
   it("applies recipient-safe headers on a successful response", async () => {
-    mockedLookup.mockResolvedValue(pdfData);
+    mockedLookup.mockResolvedValue(okLookup);
     mockedRenderToBuffer.mockResolvedValue(Buffer.from("%PDF-1.7 test"));
 
     const response = await GET(req("valid-token"), makeContext("valid-token"));
@@ -75,8 +89,8 @@ describe("GET /api/public/invoices/[token]/pdf", () => {
     expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
   });
 
-  it("returns 404 for an unknown token", async () => {
-    mockedLookup.mockResolvedValue(null);
+  it("returns 404 for an unknown (invalid) token", async () => {
+    mockedLookup.mockResolvedValue({ kind: "invalid" });
 
     const response = await GET(req("unknown-token"), makeContext("unknown-token"));
 
@@ -85,7 +99,7 @@ describe("GET /api/public/invoices/[token]/pdf", () => {
   });
 
   it("returns the same 404 for an expired token", async () => {
-    mockedLookup.mockResolvedValue(null);
+    mockedLookup.mockResolvedValue({ kind: "expired" });
 
     const response = await GET(req("expired-token"), makeContext("expired-token"));
 
@@ -94,7 +108,7 @@ describe("GET /api/public/invoices/[token]/pdf", () => {
   });
 
   it("keys the rate limiter by endpoint plus the first trusted x-forwarded-for address", async () => {
-    mockedLookup.mockResolvedValue(pdfData);
+    mockedLookup.mockResolvedValue(okLookup);
     mockedRenderToBuffer.mockResolvedValue(Buffer.from("%PDF"));
 
     await GET(req("valid-token", "203.0.113.7, 10.0.0.1"), makeContext("valid-token"));
@@ -113,7 +127,7 @@ describe("GET /api/public/invoices/[token]/pdf", () => {
   });
 
   it("returns a controlled 500 when PDF rendering fails, without leaking details", async () => {
-    mockedLookup.mockResolvedValue(pdfData);
+    mockedLookup.mockResolvedValue(okLookup);
     mockedRenderToBuffer.mockRejectedValue(new Error("renderer details must not leak"));
 
     const response = await GET(req("valid-token"), makeContext("valid-token"));

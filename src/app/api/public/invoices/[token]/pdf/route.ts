@@ -1,15 +1,16 @@
 import { createElement, type ReactElement } from "react";
 import { NextResponse } from "next/server";
 import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
-import { getPublicInvoicePdfDataByToken, type PublicInvoiceLookupDb } from "@/lib/invoice-share";
-import { InvoicePdf } from "@/lib/invoice-pdf";
+import { getPublicInvoiceDocumentByToken, type PublicInvoiceDocumentLookupDb } from "@/lib/invoice-share";
+import { buildInvoiceDocumentModel } from "@/components/documents/invoice-document/model";
+import { InvoiceDocumentPdf } from "@/components/documents/invoice-document/pdf";
 import { publicInvoicePdfRateLimiter } from "@/lib/rate-limit";
 import { bestEffortClientIp } from "@/lib/request-ip";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
 
-const db = prisma as unknown as PublicInvoiceLookupDb;
+const db = prisma as unknown as PublicInvoiceDocumentLookupDb;
 
 const RECIPIENT_SAFE_HEADERS = {
   "Cache-Control": "private, no-store",
@@ -45,16 +46,21 @@ export async function GET(request: Request, context: RouteContext) {
 
   try {
     const { token } = await context.params;
-    const data = await getPublicInvoicePdfDataByToken(db, token);
-    if (!data) {
+    const lookup = await getPublicInvoiceDocumentByToken(db, token);
+    // Both "invalid" and "expired" return the same 404 here (unlike the
+    // page, which gives "expired" its own typed state) -- this is a JSON
+    // API response, not a UI, and the two cases have identical practical
+    // meaning to a caller: no PDF is available for this token right now.
+    if (lookup.kind !== "ok") {
       return jsonError("Invoice tidak ditemukan.", 404);
     }
 
-    const document = createElement(InvoicePdf, data) as unknown as ReactElement<DocumentProps>;
+    const model = buildInvoiceDocumentModel(lookup.input);
+    const document = createElement(InvoiceDocumentPdf, { model }) as unknown as ReactElement<DocumentProps>;
     const pdf = await renderToBuffer(document);
     const pdfBytes = new Uint8Array(pdf.length);
     pdfBytes.set(pdf);
-    const fileName = `${safeFileName(data.invoice.number)}.pdf`;
+    const fileName = `${safeFileName(model.header.number)}.pdf`;
 
     return new NextResponse(pdfBytes, {
       headers: {

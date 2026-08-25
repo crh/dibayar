@@ -4,14 +4,12 @@ import {
   createOrRegenerateShare,
   generateShareToken,
   getPublicInvoiceDocumentByToken,
-  getPublicInvoicePdfDataByToken,
   getShareState,
   hashShareToken,
   revokeShare,
   type InvoiceShareDb,
   type InvoiceShareRecord,
   type PublicInvoiceDocumentLookupDb,
-  type PublicInvoiceLookupDb,
 } from "./invoice-share";
 import type { InvoiceRecord } from "./invoices";
 
@@ -378,94 +376,5 @@ describe("getPublicInvoiceDocumentByToken", () => {
     const result = await getPublicInvoiceDocumentByToken(db, "legacy-token", new Date("2030-01-01T00:00:00.000Z"));
 
     expect(result.kind).toBe("ok");
-  });
-});
-
-describe("getPublicInvoicePdfDataByToken", () => {
-  function makeLookupDb(row: unknown) {
-    const findUnique = vi.fn<PublicInvoiceLookupDb["invoiceShare"]["findUnique"]>(
-      async () => row as Awaited<ReturnType<PublicInvoiceLookupDb["invoiceShare"]["findUnique"]>>,
-    );
-    const db = { invoiceShare: { findUnique } } as unknown as PublicInvoiceLookupDb;
-    return { db, findUnique };
-  }
-
-  it("returns null for an unknown token", async () => {
-    const { db } = makeLookupDb(null);
-
-    expect(await getPublicInvoicePdfDataByToken(db, "unknown-token")).toBeNull();
-  });
-
-  it("looks up by the SHA-256 hash of the presented token", async () => {
-    const { db, findUnique } = makeLookupDb(null);
-
-    await getPublicInvoicePdfDataByToken(db, "some-plaintext-token");
-
-    expect(findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { tokenHash: hashShareToken("some-plaintext-token") } }),
-    );
-  });
-
-  it("queries with an exact select projection, never a full-relation include", async () => {
-    const { db, findUnique } = makeLookupDb(null);
-
-    await getPublicInvoicePdfDataByToken(db, "some-plaintext-token");
-
-    const call = findUnique.mock.calls[0][0] as unknown as Record<string, unknown>;
-    expect(call).not.toHaveProperty("include");
-    expect(call.select).toEqual({
-      expiresAt: true,
-      invoice: {
-        select: {
-          number: true,
-          subtotalIdr: true,
-          withholdingTaxType: true,
-          status: true,
-          dueDate: true,
-          deal: { select: { brand: true, scope: true } },
-          user: { select: { name: true } },
-        },
-      },
-    });
-  });
-
-  it("returns only the fields InvoicePdf renders, nothing more", async () => {
-    const { db } = makeLookupDb({
-      expiresAt: new Date("2026-10-17T00:00:00.000Z"),
-      invoice: {
-        number: "INV/2026/07/001",
-        subtotalIdr: 1_500_000,
-        withholdingTaxType: "PPH23",
-        status: "SENT",
-        dueDate: new Date("2026-07-31T00:00:00.000Z"),
-        deal: { brand: "Brand Kopi", scope: "1 reel + 2 story" },
-        user: { name: "Kenji" },
-      },
-    });
-
-    const data = await getPublicInvoicePdfDataByToken(db, "token");
-
-    expect(data).toEqual({
-      invoice: {
-        number: "INV/2026/07/001",
-        subtotalIdr: 1_500_000,
-        withholdingTaxType: "PPH23",
-        status: "SENT",
-        dueDate: new Date("2026-07-31T00:00:00.000Z"),
-      },
-      deal: { brand: "Brand Kopi", scope: "1 reel + 2 story" },
-    });
-  });
-
-  it("returns null for an expired token", async () => {
-    const { db } = makeLookupDb({
-      expiresAt: new Date("2026-07-19T00:00:00.000Z"),
-      invoice: {
-        number: "INV/2026/07/001", subtotalIdr: 1_500_000, withholdingTaxType: "PPH23",
-        status: "SENT", dueDate: null, deal: { brand: "Brand", scope: "Scope" }, user: { name: "Kenji" },
-      },
-    });
-
-    expect(await getPublicInvoicePdfDataByToken(db, "expired-token", new Date("2026-07-19T00:00:00.000Z"))).toBeNull();
   });
 });

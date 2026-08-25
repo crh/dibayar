@@ -3,11 +3,13 @@ import { GET } from "./route";
 import { auth } from "@/auth";
 import { getOwnedInvoice } from "@/lib/invoices";
 import { getOwnedDeal } from "@/lib/deals";
+import { getUserSettings } from "@/lib/user-settings";
 import { renderToBuffer } from "@react-pdf/renderer";
 
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/invoices", () => ({ getOwnedInvoice: vi.fn() }));
 vi.mock("@/lib/deals", () => ({ getOwnedDeal: vi.fn() }));
+vi.mock("@/lib/user-settings", () => ({ getUserSettings: vi.fn() }));
 vi.mock("@react-pdf/renderer", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@react-pdf/renderer")>();
   return { ...actual, renderToBuffer: vi.fn() };
@@ -16,6 +18,7 @@ vi.mock("@react-pdf/renderer", async (importOriginal) => {
 const mockedAuth = vi.mocked(auth);
 const mockedGetOwnedInvoice = vi.mocked(getOwnedInvoice);
 const mockedGetOwnedDeal = vi.mocked(getOwnedDeal);
+const mockedGetUserSettings = vi.mocked(getUserSettings);
 const mockedRenderToBuffer = vi.mocked(renderToBuffer);
 const context = { params: Promise.resolve({ id: "invoice-1" }) };
 
@@ -47,11 +50,26 @@ const deal = {
   updatedAt: new Date(),
 };
 
+const emptySettings = {
+  issuerName: "",
+  issuerAddress: "",
+  issuerWhatsapp: "",
+  issuerEmail: "",
+  bankName: "",
+  bankAccountNumber: "",
+  bankAccountHolder: "",
+  templateSend: "",
+  templateChase: "",
+  updatedAt: null,
+};
+
 describe("GET /api/invoices/[id]/pdf", () => {
   beforeEach(() => {
     mockedAuth.mockReset();
     mockedGetOwnedInvoice.mockReset();
     mockedGetOwnedDeal.mockReset();
+    mockedGetUserSettings.mockReset();
+    mockedGetUserSettings.mockResolvedValue(emptySettings);
     mockedRenderToBuffer.mockReset();
   });
 
@@ -68,6 +86,15 @@ describe("GET /api/invoices/[id]/pdf", () => {
     expect(response.status).toBe(404);
   });
 
+  it("returns 404 rather than crashing when the invoice's deal is somehow missing", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedGetOwnedInvoice.mockResolvedValue(invoice);
+    mockedGetOwnedDeal.mockResolvedValue(null as never);
+    const response = await GET(new Request("http://localhost/api/invoices/invoice-1/pdf"), context);
+    expect(response.status).toBe(404);
+    expect(mockedRenderToBuffer).not.toHaveBeenCalled();
+  });
+
   it("streams an owned invoice as a PDF attachment", async () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
     mockedGetOwnedInvoice.mockResolvedValue(invoice);
@@ -81,6 +108,23 @@ describe("GET /api/invoices/[id]/pdf", () => {
     expect(response.headers.get("content-disposition")).toContain('filename="INV-2026-07-001.pdf"');
     expect(await response.text()).toBe("%PDF-1.7 test");
     expect(mockedRenderToBuffer).toHaveBeenCalledOnce();
+  });
+
+  it("builds the canonical document model from the owner's real settings, not empty defaults", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedGetOwnedInvoice.mockResolvedValue(invoice);
+    mockedGetOwnedDeal.mockResolvedValue(deal);
+    mockedGetUserSettings.mockResolvedValue({ ...emptySettings, issuerName: "Aulia Rahma", bankName: "BCA" });
+    mockedRenderToBuffer.mockResolvedValue(Buffer.from("%PDF"));
+
+    await GET(new Request("http://localhost/api/invoices/invoice-1/pdf"), context);
+
+    expect(mockedGetUserSettings).toHaveBeenCalledWith(expect.anything(), "user-1");
+    const documentElement = mockedRenderToBuffer.mock.calls[0][0] as unknown as {
+      props: { model: { issuer: { name: string }; bank: { bankName: string } } };
+    };
+    expect(documentElement.props.model.issuer.name).toBe("Aulia Rahma");
+    expect(documentElement.props.model.bank.bankName).toBe("BCA");
   });
 
   it("returns a controlled 500 when the owned PDF cannot be generated", async () => {

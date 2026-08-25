@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { getOwnedInvoice, type InvoiceReadDb, type InvoiceRecord, type InvoiceStatus, type WithholdingTaxType } from "./invoices";
+import { getOwnedInvoice, type InvoiceReadDb, type WithholdingTaxType } from "./invoices";
 import type { InvoiceDocumentInput } from "@/components/documents/invoice-document/model";
 
 const TOKEN_BYTES = 32;
@@ -96,43 +96,6 @@ export async function revokeShare(
   return { kind: "revoked" };
 }
 
-type PublicInvoiceJoin = {
-  expiresAt: Date | null;
-  invoice: {
-    number: string;
-    subtotalIdr: number;
-    withholdingTaxType: WithholdingTaxType;
-    status: InvoiceStatus;
-    dueDate: Date | null;
-    deal: { brand: string; scope: string };
-    user: { name: string | null };
-  };
-};
-
-const PUBLIC_INVOICE_SELECT = {
-  expiresAt: true,
-  invoice: {
-    select: {
-      number: true,
-      subtotalIdr: true,
-      withholdingTaxType: true,
-      status: true,
-      dueDate: true,
-      deal: { select: { brand: true, scope: true } },
-      user: { select: { name: true } },
-    },
-  },
-} as const;
-
-export type PublicInvoiceLookupDb = {
-  invoiceShare: {
-    findUnique(args: {
-      where: { tokenHash: string };
-      select: typeof PUBLIC_INVOICE_SELECT;
-    }): Promise<PublicInvoiceJoin | null>;
-  };
-};
-
 // Exported so the canonical InvoiceDocument model (T-22) can reuse this exact
 // label instead of reimplementing it, guaranteeing the "Tax: unchanged from
 // current behaviour" parity the spec requires.
@@ -142,8 +105,8 @@ export function withholdingTaxLabel(type: WithholdingTaxType): string {
 
 // T-23: extended select carrying every field the canonical InvoiceDocument
 // (T-22) needs -- issuer/bank settings, deal contact name/payment terms,
-// and the invoice's issue date -- none of which the JSON-view select above
-// (kept only for the PDF adapter, see below) projects.
+// and the invoice's issue date. Also the sole select used by the PDF route
+// since T-24: one query shape for both document renderers now, not two.
 type PublicInvoiceDocumentJoin = {
   expiresAt: Date | null;
   invoice: {
@@ -263,35 +226,4 @@ export async function getPublicInvoiceDocumentByToken(
   if (!row) return { kind: "invalid" };
   if (row.expiresAt !== null && row.expiresAt.getTime() <= now.getTime()) return { kind: "expired" };
   return { kind: "ok", input: toDocumentInput(row.invoice) };
-}
-
-export type PublicInvoicePdfData = {
-  invoice: Pick<InvoiceRecord, "number" | "subtotalIdr" | "withholdingTaxType" | "status" | "dueDate">;
-  deal: { brand: string; scope: string };
-};
-
-// Same token->hash->lookup path as getPublicInvoiceByToken, projected to exactly
-// what InvoicePdf renders instead of the JSON view shape.
-export async function getPublicInvoicePdfDataByToken(
-  db: PublicInvoiceLookupDb,
-  token: string,
-  now: Date = new Date(),
-): Promise<PublicInvoicePdfData | null> {
-  const tokenHash = hashShareToken(token);
-  const row = await db.invoiceShare.findUnique({
-    where: { tokenHash },
-    select: PUBLIC_INVOICE_SELECT,
-  });
-  if (!row || (row.expiresAt !== null && row.expiresAt.getTime() <= now.getTime())) return null;
-
-  return {
-    invoice: {
-      number: row.invoice.number,
-      subtotalIdr: row.invoice.subtotalIdr,
-      withholdingTaxType: row.invoice.withholdingTaxType,
-      status: row.invoice.status,
-      dueDate: row.invoice.dueDate,
-    },
-    deal: { brand: row.invoice.deal.brand, scope: row.invoice.deal.scope },
-  };
 }
