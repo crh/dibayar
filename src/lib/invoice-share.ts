@@ -143,7 +143,10 @@ export type PublicInvoiceLookupDb = {
   };
 };
 
-function withholdingTaxLabel(type: WithholdingTaxType): string {
+// Exported so the canonical InvoiceDocument model (T-22) can reuse this exact
+// label instead of reimplementing it, guaranteeing the "Tax: unchanged from
+// current behaviour" parity the spec requires.
+export function withholdingTaxLabel(type: WithholdingTaxType): string {
   return type === "NONE" ? "Tidak ada" : type.replace("PPH", "PPh ");
 }
 
