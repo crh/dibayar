@@ -136,6 +136,17 @@ describe("InvoiceDocumentHtml", () => {
     expect(screen.queryByText("Detail rekening belum lengkap.")).toBeNull();
   });
 
+  it("wraps long unbreakable payment-terms and scope-description text instead of letting it overflow the page (T-27)", () => {
+    const longUrl = "https://example.invalid/a/very/long/path/for/layout/testing/that/has/no/spaces";
+    renderDoc({
+      ...fullInput,
+      deal: { ...fullInput.deal, paymentTerms: `Referensi: ${longUrl}`, scope: longUrl },
+    });
+
+    expect(screen.getByText(`Referensi: ${longUrl}`).className).toMatch(/break-words/);
+    expect(screen.getByText(longUrl).className).toMatch(/break-words/);
+  });
+
   it("uses serif styling for every currency figure", () => {
     renderDoc();
     const amounts = screen.getAllByText("Rp 3.200.000");

@@ -217,7 +217,7 @@ export function AccountMenu({ language, email }: { language: Language; email?: s
                 <button
                   type="button"
                   onClick={() => closeMenu()}
-                  className="text-ink hover:text-primary"
+                  className="flex h-11 w-11 items-center justify-center text-ink hover:text-primary"
                   aria-label={translate(language, "dashboard.close")}
                 >
                   ×

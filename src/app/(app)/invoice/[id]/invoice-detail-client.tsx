@@ -585,7 +585,7 @@ export default function InvoiceDetailClient({
 
   return (
     <main className="mx-auto flex w-full max-w-[720px] flex-col gap-6 px-5 py-8 sm:px-8 lg:max-w-[1120px]">
-      <Link href="/dashboard" className="inline-flex w-fit text-[14px] font-semibold text-primary">
+      <Link href="/dashboard" className="ds-tap-target inline-flex w-fit text-[14px] font-semibold text-primary">
         ← {t("invoice.back")}
       </Link>
 

@@ -139,6 +139,23 @@ describe("AccountMenu", () => {
     expect(screen.getByRole("menuitem", { name: "Keluar" }).className).toContain("h-11");
   });
 
+  it("gives the mobile sheet's close button a genuine 44x44 hit target, not just an enlarged glyph (T-27)", async () => {
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: 390 });
+    window.dispatchEvent(new Event("resize"));
+
+    const user = userEvent.setup();
+    render(<AccountMenu language="id" />);
+    await user.click(screen.getByRole("button", { name: "Menu akun" }));
+
+    const closeButton = screen.getByRole("button", { name: "Tutup" });
+    expect(closeButton.className).toContain("h-11");
+    expect(closeButton.className).toContain("w-11");
+    expect(closeButton.textContent).toBe("×");
+
+    Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: originalWidth });
+  });
+
   it("closes and focuses trigger when a menu item is clicked", async () => {
     const user = userEvent.setup();
     render(<AccountMenu language="id" />);

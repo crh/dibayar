@@ -38,7 +38,7 @@ export function NearestDeals({ deals, loading = false, error = false, onRetry }:
       <div className="flex items-center justify-between gap-3">
         <h2 id="home-deal-terdekat" className="text-[16px] font-semibold text-ink">{t("home.nearestDeals")}</h2>
         {!loading && !error ? (
-          <Link href="/deal" className="text-[13px] font-semibold text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary">
+          <Link href="/deal" className="ds-tap-target text-[13px] font-semibold text-primary outline-none focus-visible:ring-2 focus-visible:ring-primary">
             {t("action.seeAll")}
           </Link>
         ) : null}

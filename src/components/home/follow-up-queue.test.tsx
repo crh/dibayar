@@ -139,4 +139,10 @@ describe("FollowUpQueue — selection and rendering", () => {
     expect(screen.getByText("Tidak ada yang perlu dikejar.")).toBeDefined();
     expect(screen.queryByRole("list")).toBeNull();
   });
+
+  it("gives the 'Lihat semua' link a >=44px hit target without growing its visible size (T-27)", () => {
+    renderQueue([], []);
+
+    expect(screen.getByRole("link", { name: "Lihat semua →" }).className).toMatch(/ds-tap-target/);
+  });
 });

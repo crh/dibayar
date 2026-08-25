@@ -150,6 +150,34 @@ describe("DealDetailClient WhatsApp action (T-18)", () => {
   });
 });
 
+describe("DealDetailClient T-27 overflow fixes", () => {
+  it("wraps long unbreakable payment-terms and scope text instead of letting it force the page wider", () => {
+    const longUrl = "https://example.invalid/a/very/long/path/for/layout/testing/that/has/no/spaces";
+    render(
+      <DealDetailClient
+        initialDeal={{ ...dealFixture, paymentTerms: `Referensi: ${longUrl}`, scope: longUrl }}
+        history={[]}
+      />,
+    );
+
+    const paymentTermsValue = screen.getByText(`Referensi: ${longUrl}`);
+    expect(paymentTermsValue.className).toMatch(/break-words/);
+    const scopeValue = screen.getByText(longUrl);
+    expect(scopeValue.className).toMatch(/break-words/);
+  });
+
+  it("gives the fields grid an explicit single-column base track so it cannot grow past its container on narrow viewports", () => {
+    const { container } = render(<DealDetailClient initialDeal={dealFixture} history={[]} />);
+    const dl = container.querySelector("dl")!;
+    expect(dl.className).toMatch(/grid-cols-1/);
+  });
+
+  it("gives the back link a >=44px hit target without changing its visible size", () => {
+    render(<DealDetailClient initialDeal={dealFixture} history={[]} />);
+    expect(screen.getByRole("link", { name: /Kembali ke papan deal/ }).className).toMatch(/ds-tap-target/);
+  });
+});
+
 describe("DealDetailClient XS band (T-26)", () => {
   it("stacks the contact-name input and Save button full-width below 360px, side by side at and above it", () => {
     render(<DealDetailClient initialDeal={dealFixture} history={[]} />);

@@ -76,7 +76,7 @@ export default function DealDetailClient({
 
   return (
     <main className="mx-auto flex w-full max-w-[720px] flex-col gap-5 px-5 py-6 min-[640px]:px-8 min-[640px]:py-8">
-      <Link href="/deal" className="text-[13px] font-semibold text-primary">
+      <Link href="/deal" className="ds-tap-target inline-flex w-fit text-[13px] font-semibold text-primary">
         ← {t("deal.detailBack")}
       </Link>
 
@@ -86,7 +86,7 @@ export default function DealDetailClient({
           {t("deal.detailStatus")}: {t(PIPELINE_STAGE_KEYS[deal.status])}
         </p>
 
-        <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+        <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <dt className="text-[12px] font-semibold text-muted">{t("deal.detailFee")}</dt>
             <dd className="text-[15px] font-bold tabular-nums text-primary">{formatMoney(deal.feeIdr)}</dd>
@@ -103,11 +103,11 @@ export default function DealDetailClient({
           </div>
           <div>
             <dt className="text-[12px] font-semibold text-muted">{t("deal.detailPaymentTerms")}</dt>
-            <dd className="text-[14px] text-ink">{deal.paymentTerms || t("deal.detailPaymentTermsEmpty")}</dd>
+            <dd className="break-words text-[14px] text-ink">{deal.paymentTerms || t("deal.detailPaymentTermsEmpty")}</dd>
           </div>
           <div className="sm:col-span-2">
             <dt className="text-[12px] font-semibold text-muted">{t("deal.detailScope")}</dt>
-            <dd className="whitespace-pre-wrap text-[14px] text-ink">{deal.scope}</dd>
+            <dd className="whitespace-pre-wrap break-words text-[14px] text-ink">{deal.scope}</dd>
           </div>
         </dl>
 

@@ -304,4 +304,13 @@ describe("SettingsForm — sign out", () => {
     expect(row.className).toMatch(/flex-col/);
     expect(row.className).toMatch(/min-\[360px\]:flex-row/);
   });
+
+  it("gives the initial 'Keluar' button a minimum 44px width as well as height (T-27)", () => {
+    vi.stubGlobal("fetch", makeFetchMock());
+    renderForm();
+
+    const button = screen.getByRole("button", { name: "Keluar" });
+    expect(button.className).toContain("h-11");
+    expect(button.className).toContain("min-w-11");
+  });
 });

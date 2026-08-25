@@ -28,7 +28,7 @@ describe("TopBar", () => {
     expect(links.map((link) => link.getAttribute("href"))).toEqual(["/", "/deal", "/invoice", "/pengaturan"]);
   });
 
-  it("gives each inline nav link a 44px-tall touch target", () => {
+  it("gives each inline nav link a 44px-tall touch target, expanded to 44px wide via an invisible hit area (T-27)", () => {
     render(<TopBar pathname="/" />);
 
     const nav = screen.getByTestId("top-bar-nav");
@@ -37,6 +37,9 @@ describe("TopBar", () => {
       expect(link.className).toContain("h-11");
       expect(link.className).toContain("flex");
       expect(link.className).toContain("items-center");
+      // Some labels ("Deal") render narrower than 44px; ds-tap-target grows
+      // the click area to the 44px floor without visually widening the link.
+      expect(link.className).toContain("ds-tap-target");
     }
   });
 

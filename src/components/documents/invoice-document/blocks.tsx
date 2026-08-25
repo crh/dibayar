@@ -47,9 +47,9 @@ export function ClientBlock({ client }: { client: InvoiceDocumentModel["client"]
 export function ScopeBlock({ scope }: { scope: InvoiceDocumentModel["scope"] }) {
   return (
     <div className="flex items-start justify-between gap-4">
-      <div>
+      <div className="min-w-0">
         <p className="text-[12px] font-semibold text-muted">Deskripsi</p>
-        <p className="mt-0.5 text-[15px] text-ink">{scope.description}</p>
+        <p className="mt-0.5 break-words text-[15px] text-ink">{scope.description}</p>
       </div>
       <div className="text-right">
         <p className="text-[12px] font-semibold text-muted">Jumlah</p>
@@ -81,7 +81,7 @@ export function TermsBlock({ terms }: { terms: NonNullable<InvoiceDocumentModel[
   return (
     <div>
       <h2 className="text-[13px] font-bold text-muted">Syarat pembayaran</h2>
-      <p className="mt-1 text-[14px] text-ink">{terms.text}</p>
+      <p className="mt-1 break-words text-[14px] text-ink">{terms.text}</p>
       {terms.dueDateLabel ? (
         <p className="mt-1 text-[14px] text-ink">
           <span className="text-muted">Jatuh tempo: </span>

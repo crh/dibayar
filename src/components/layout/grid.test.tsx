@@ -34,7 +34,13 @@ describe("Grid", () => {
 
     const baseRuleMatch = css.match(/\.ds-grid\s*\{[^}]*\}/);
     expect(baseRuleMatch).not.toBeNull();
-    expect(baseRuleMatch![0]).toMatch(/grid-template-columns:\s*1fr/);
+    // minmax(0, 1fr) rather than a bare 1fr: a bare `1fr` track's minimum
+    // sizing function is `auto`, which grows the track (and the page) to
+    // fit the widest child's min-content/max-content size instead of
+    // shrinking to the viewport -- the root cause of a real page-overflow
+    // bug (T-27). minmax(0, 1fr) caps the automatic minimum at 0 so
+    // content wraps/shrinks inside the track instead of expanding it.
+    expect(baseRuleMatch![0]).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)/);
 
     const lgQueryMatch = css.match(new RegExp(`@media \\(min-width:\\s*${BREAKPOINTS.LG}px\\)\\s*\\{[\\s\\S]*?\\.ds-grid\\s*\\{[^}]*\\}`));
     expect(lgQueryMatch).not.toBeNull();
@@ -46,5 +52,15 @@ describe("Grid", () => {
     const css = readFileSync(path.resolve(__dirname, "../../app/globals.css"), "utf8");
 
     expect(css).not.toMatch(/--bp-(xs|sm|md|lg|xl)\s*:/);
+  });
+
+  it("declares a reusable 44px minimum tap-target overlay (T-27)", () => {
+    const css = readFileSync(path.resolve(__dirname, "../../app/globals.css"), "utf8");
+
+    expect(css).toMatch(/\.ds-tap-target\s*\{[^}]*position:\s*relative/);
+    const overlayMatch = css.match(/\.ds-tap-target::before\s*\{[^}]*\}/);
+    expect(overlayMatch).not.toBeNull();
+    expect(overlayMatch![0]).toMatch(/width:\s*max\(100%,\s*44px\)/);
+    expect(overlayMatch![0]).toMatch(/height:\s*max\(100%,\s*44px\)/);
   });
 });

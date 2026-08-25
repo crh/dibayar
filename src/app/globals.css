@@ -94,7 +94,23 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
-.ds-grid { display: grid; grid-template-columns: 1fr; }
+.ds-grid { display: grid; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 1024px) {
   .ds-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; }
+}
+
+/* Expands a link/button's clickable area to the 44x44 CSS-pixel minimum via
+   an invisible, centered overlay, without growing the element's own visual
+   footprint. The element needs `position: relative` (this class provides
+   it); the overlay is a generated pseudo-box, so clicks on it still land on
+   the element itself. */
+.ds-tap-target { position: relative; }
+.ds-tap-target::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: max(100%, 44px);
+  height: max(100%, 44px);
 }

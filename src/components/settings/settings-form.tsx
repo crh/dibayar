@@ -371,7 +371,7 @@ export function SettingsForm({
           <button
             type="button"
             onClick={() => setSignOutConfirming(true)}
-            className="mt-3 inline-flex h-11 items-center text-[14px] font-semibold text-overdue outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="mt-3 inline-flex h-11 min-w-11 items-center justify-center text-[14px] font-semibold text-overdue outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             {t("dashboard.signOut")}
           </button>

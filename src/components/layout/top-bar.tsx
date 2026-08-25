@@ -32,7 +32,7 @@ export function TopBar({ pathname, email }: { pathname: string; email?: string |
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`flex h-11 items-center text-[14px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                className={`ds-tap-target flex h-11 items-center text-[14px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                   active ? "text-primary" : "text-ink"
                 }`}
               >

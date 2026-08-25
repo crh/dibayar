@@ -934,4 +934,13 @@ describe("InvoiceDetailClient", () => {
       expect(detailsSection.className).toMatch(/min-\[360px\]:p-5/);
     });
   });
+
+  describe("T-27 overflow fixes", () => {
+    it("gives the back link a >=44px hit target without changing its visible size", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+      expect(screen.getByRole("link", { name: /Kembali ke dashboard/ }).className).toMatch(/ds-tap-target/);
+    });
+  });
 });
