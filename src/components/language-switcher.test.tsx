@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { renderToString } from "react-dom/server";
 import { hydrateRoot } from "react-dom/client";
-import { LanguageProvider, LanguageSwitcher, useLanguage } from "./language-switcher";
+import { LanguageProvider, useLanguage } from "./language-switcher";
 
 const STORAGE_KEY = "dibayar-language";
 
@@ -24,7 +24,7 @@ function Harness() {
   return (
     <div>
       <span data-testid="language">{language}</span>
-      <span data-testid="label">{t("language.label")}</span>
+      <span data-testid="label">{t("account.menu")}</span>
       <button onClick={() => setLanguage("id")}>set-id</button>
       <button onClick={() => setLanguage("en")}>set-en</button>
     </div>
@@ -126,7 +126,7 @@ describe("useLanguage / LanguageProvider", () => {
     expect(window.localStorage.getItem(STORAGE_KEY)).toBe("id");
     expect(readCookie(STORAGE_KEY)).toBe("id");
     expect(document.documentElement.lang).toBe("id");
-    expect(screen.getByTestId("label").textContent).toBe("Bahasa");
+    expect(screen.getByTestId("label").textContent).toBe("Menu akun");
   });
 
   it("does not call the persistence API for an unauthenticated switch", async () => {
@@ -178,19 +178,5 @@ describe("useLanguage / LanguageProvider", () => {
 
     await expect(user.click(screen.getByRole("button", { name: "set-id" }))).resolves.not.toThrow();
     expect(window.localStorage.getItem(STORAGE_KEY)).toBe("id");
-  });
-});
-
-describe("LanguageSwitcher", () => {
-  it("exposes both languages and reports a sanitized selection", async () => {
-    const user = userEvent.setup();
-    const onChange = vi.fn();
-    render(<LanguageSwitcher language="en" onChange={onChange} />);
-
-    const select = screen.getByRole("combobox", { name: "Language" });
-    expect(select).toBeDefined();
-    await user.selectOptions(select, "id");
-
-    expect(onChange).toHaveBeenCalledWith("id");
   });
 });

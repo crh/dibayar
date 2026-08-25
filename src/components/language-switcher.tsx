@@ -130,24 +130,3 @@ export function useLanguage() {
   const t = (key: string, values?: Record<string, string>) => translate(language, key, values);
   return { language, setLanguage, t };
 }
-
-export function LanguageSwitcher({ language, onChange, compact = false }: {
-  language: Language;
-  onChange: (language: Language) => void;
-  compact?: boolean;
-}) {
-  return (
-    <label className={`inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 ${compact ? "h-9 text-[12px]" : "h-11 text-[13px]"}`}>
-      <span className="font-semibold text-muted">{translate(language, "language.label")}</span>
-      <select
-        aria-label={translate(language, "language.label")}
-        value={language}
-        onChange={(event) => onChange(getLanguage(event.target.value))}
-        className="bg-transparent font-semibold text-ink outline-none"
-      >
-        <option value="id">{translate(language, "language.indonesian")}</option>
-        <option value="en">{translate(language, "language.english")}</option>
-      </select>
-    </label>
-  );
-}

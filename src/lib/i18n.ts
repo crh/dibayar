@@ -9,9 +9,6 @@ type TranslationValue = string | ((values: Record<string, string>) => string);
 
 const translations: Record<Language, Record<string, TranslationValue>> = {
   id: {
-    "language.label": "Bahasa",
-    "language.indonesian": "Indonesia",
-    "language.english": "English",
     "account.menu": "Menu akun",
     "nav.home": "Beranda",
     "nav.deals": "Deal",
@@ -238,13 +235,12 @@ const translations: Record<Language, Record<string, TranslationValue>> = {
     "settings.invalidEmail": "Email tidak valid.",
     "settings.signOut.confirmTitle": "Yakin ingin keluar?",
     "settings.signOut.confirmAction": "Ya, keluar",
-    "landing.comingSoon": "Segera hadir",
+    "landing.accessNotice": "Dibayar masih dalam uji terbatas. Masuk dengan akun Google untuk mencoba.",
     "landing.signInGoogle": "Masuk dengan Google",
     "landing.heroHeading": "Kelola deal brand, invoice, dan pembayaran di satu tempat",
     "landing.heroSubtitle":
       "Dibayar sedang disiapkan untuk kreator Indonesia yang capek nego dan nagih pembayaran lewat chat WhatsApp yang berantakan.",
     "landing.workflowHeading": "Alur kerja deal brand kamu",
-    "landing.seeHowItWorks": "Lihat cara kerja",
     "landing.howItWorksHeading": "Cara kerjanya",
     "landing.step1Title": "Catat deal dalam hitungan detik",
     "landing.step1Detail": "Simpan brand, fee, dan tenggat langsung dari chat WhatsApp atau DM, tanpa formulir panjang.",
@@ -252,12 +248,8 @@ const translations: Record<Language, Record<string, TranslationValue>> = {
     "landing.step2Detail": "Lihat setiap deal bergerak dari Masuk sampai Dibayar, tanpa scroll chat lama.",
     "landing.step3Title": "Kirim pengingat sebelum telat bayar",
     "landing.step3Detail": "Tandai invoice jatuh tempo dan kirim tindak lanjut yang sopan lewat WhatsApp.",
-    "landing.footer": "Dibayar — belum tersedia untuk umum. Dibuat untuk kreator Indonesia.",
   },
   en: {
-    "language.label": "Language",
-    "language.indonesian": "Indonesian",
-    "language.english": "English",
     "account.menu": "Account menu",
     "nav.home": "Home",
     "nav.deals": "Deals",
@@ -484,13 +476,12 @@ const translations: Record<Language, Record<string, TranslationValue>> = {
     "settings.invalidEmail": "Invalid email.",
     "settings.signOut.confirmTitle": "Are you sure you want to sign out?",
     "settings.signOut.confirmAction": "Yes, sign out",
-    "landing.comingSoon": "Coming soon",
+    "landing.accessNotice": "Dibayar is in limited testing. Sign in with Google to try it.",
     "landing.signInGoogle": "Sign in with Google",
     "landing.heroHeading": "Manage brand deals, invoices, and payments in one place",
     "landing.heroSubtitle":
       "Dibayar is being built for Indonesian creators tired of negotiating and chasing payments through messy WhatsApp chats.",
     "landing.workflowHeading": "Your brand-deal workflow",
-    "landing.seeHowItWorks": "See how it works",
     "landing.howItWorksHeading": "How it works",
     "landing.step1Title": "Log a deal in seconds",
     "landing.step1Detail": "Save the brand, fee, and deadline straight from a WhatsApp chat or DM — no long forms.",
@@ -498,7 +489,6 @@ const translations: Record<Language, Record<string, TranslationValue>> = {
     "landing.step2Detail": "Watch each deal move from Inbox to Paid, without scrolling through old chats.",
     "landing.step3Title": "Send reminders before payments are late",
     "landing.step3Detail": "Flag due invoices and send a polite WhatsApp follow-up.",
-    "landing.footer": "Dibayar — not yet available to the public. Built for Indonesian creators.",
   },
 };
 
