@@ -95,4 +95,12 @@ describe("DateField", () => {
 
     await waitFor(() => expect(screen.getByLabelText("Tanggal jatuh tempo")).toHaveProperty("disabled", true));
   });
+
+  it("stacks the date display and Kosongkan button full-width below 360px (T-26)", () => {
+    render(<DateField {...baseProps} value="2026-07-24" onCommit={async () => ({ ok: true })} />);
+
+    const row = screen.getByRole("button", { name: "Kosongkan" }).closest("div")!;
+    expect(row.className).toMatch(/flex-col/);
+    expect(row.className).toMatch(/min-\[360px\]:flex-row/);
+  });
 });

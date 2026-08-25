@@ -115,19 +115,19 @@ export default function DealDetailClient({
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink" htmlFor="contactName">
             {t("deal.detailContactName")}
           </label>
-          <div className="mt-1.5 flex items-center gap-2">
+          <div className="mt-1.5 flex flex-col gap-2 min-[360px]:flex-row min-[360px]:items-center">
             <input
               id="contactName"
               value={contactName}
               onChange={(event) => setContactName(event.target.value)}
               placeholder={t("deal.detailContactNameEmpty")}
-              className={fieldClassName}
+              className={`${fieldClassName} w-full min-[360px]:min-w-0 min-[360px]:flex-1`}
             />
             <button
               type="button"
               disabled={isSaving}
               onClick={handleSaveContactName}
-              className="inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-primary px-4 text-[13px] font-semibold text-surface hover:bg-primary-d disabled:cursor-wait disabled:opacity-60"
+              className="inline-flex h-11 w-full shrink-0 items-center justify-center rounded-full bg-primary px-4 text-[13px] font-semibold text-surface hover:bg-primary-d disabled:cursor-wait disabled:opacity-60 min-[360px]:w-auto"
             >
               {isSaving ? t("dashboard.saving") : t("deal.detailContactNameSave")}
             </button>
@@ -161,19 +161,19 @@ export default function DealDetailClient({
               <label className="mt-2 flex flex-col gap-1.5 text-[13px] font-semibold text-ink" htmlFor="contactWa">
                 {t("deal.detailWhatsAppRepairLabel")}
               </label>
-              <div className="mt-1.5 flex items-center gap-2">
+              <div className="mt-1.5 flex flex-col gap-2 min-[360px]:flex-row min-[360px]:items-center">
                 <input
                   id="contactWa"
                   inputMode="tel"
                   value={contactWaDraft}
                   onChange={(event) => setContactWaDraft(event.target.value)}
-                  className={fieldClassName}
+                  className={`${fieldClassName} w-full min-[360px]:min-w-0 min-[360px]:flex-1`}
                 />
                 <button
                   type="button"
                   disabled={isSavingContactWa}
                   onClick={handleSaveContactWa}
-                  className="inline-flex h-11 shrink-0 items-center justify-center rounded-full bg-primary px-4 text-[13px] font-semibold text-surface hover:bg-primary-d disabled:cursor-wait disabled:opacity-60"
+                  className="inline-flex h-11 w-full shrink-0 items-center justify-center rounded-full bg-primary px-4 text-[13px] font-semibold text-surface hover:bg-primary-d disabled:cursor-wait disabled:opacity-60 min-[360px]:w-auto"
                 >
                   {isSavingContactWa ? t("dashboard.saving") : t("deal.detailWhatsAppRepairSave")}
                 </button>

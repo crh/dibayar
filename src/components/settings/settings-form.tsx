@@ -378,17 +378,17 @@ export function SettingsForm({
         ) : (
           <div className="mt-3 rounded-xl bg-bg p-3">
             <p className="text-[13px] font-semibold text-ink">{t("settings.signOut.confirmTitle")}</p>
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 flex flex-col gap-2 min-[360px]:flex-row">
               <button
                 type="button"
                 onClick={() => setSignOutConfirming(false)}
-                className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
+                className="inline-flex h-11 w-full items-center justify-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink min-[360px]:w-auto"
               >
                 {t("invoice.cancel")}
               </button>
               <Link
                 href="/api/auth/signout?callbackUrl=/"
-                className="inline-flex h-11 items-center rounded-full bg-overdue px-4 text-[14px] font-semibold text-surface"
+                className="inline-flex h-11 w-full items-center justify-center rounded-full bg-overdue px-4 text-[14px] font-semibold text-surface min-[360px]:w-auto"
               >
                 {t("settings.signOut.confirmAction")}
               </Link>

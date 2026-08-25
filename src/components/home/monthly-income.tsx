@@ -47,7 +47,7 @@ export function MonthlyIncomeSummary({ invoices, now, loading = false, error = f
           const summary = summarizeMonthlyIncome(invoices ?? [], now);
           const paidCount = paidThisMonthCount(invoices ?? [], now);
           return (
-            <div className="flex min-h-24 flex-col gap-1 rounded-2xl border border-primary/30 bg-primary/5 p-5">
+            <div className="flex min-h-24 flex-col gap-1 rounded-2xl border border-primary/30 bg-primary/5 p-4 min-[360px]:p-5">
               <MoneyDisplay value={summary.netIdr} language={language} tone="primary" size="hero" />
               <p className="text-[13px] text-muted">
                 {summary.label} · {t("home.paidCount", { count: String(paidCount) })}

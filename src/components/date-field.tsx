@@ -68,8 +68,8 @@ export function DateField({
       <label htmlFor={id} className="text-[13px] font-semibold text-ink">
         {label}
       </label>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative inline-flex h-11 min-w-[160px] items-center">
+      <div className="flex flex-col gap-2 min-[360px]:flex-row min-[360px]:items-center">
+        <div className="relative inline-flex h-11 w-full min-w-[160px] items-center min-[360px]:w-auto">
           {/* The real control: kept in the DOM and focusable so tap (390)
               and click (1440) both open the native picker and keyboard/AT
               users get normal input semantics, but visually invisible so
@@ -97,7 +97,7 @@ export function DateField({
             type="button"
             disabled={disabled || isBusy}
             onClick={() => commit(null)}
-            className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60"
+            className="inline-flex h-11 w-full items-center justify-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60 min-[360px]:w-auto"
           >
             {clearLabel}
           </button>

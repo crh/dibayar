@@ -73,6 +73,16 @@ describe("MonthlyIncomeSummary — populated", () => {
   });
 });
 
+describe("MonthlyIncomeSummary XS band (T-26)", () => {
+  it("uses 16px card padding below 360px on the net-income figure card", () => {
+    renderSummary({ invoices: [makeInvoice()] });
+
+    const card = screen.getByText(/invoice lunas|invoices paid/i).closest("div")!;
+    expect(card.className).toMatch(/\bp-4\b/);
+    expect(card.className).toMatch(/min-\[360px\]:p-5/);
+  });
+});
+
 describe("MonthlyIncomeSummary — isolated loading and error states", () => {
   it("renders a skeleton and no figure while loading", () => {
     renderSummary({ invoices: null, loading: true });

@@ -291,7 +291,7 @@ function ShareSection({
   }
 
   return (
-    <section aria-labelledby="bagikan-invoice" className="rounded-2xl border border-line bg-surface p-5">
+    <section aria-labelledby="bagikan-invoice" className="rounded-2xl border border-line bg-surface p-4 min-[360px]:p-5">
       <h2 id="bagikan-invoice" className="text-[18px] font-bold text-ink">{t("invoice.share")}</h2>
       <p className="mt-1 text-[13px] text-muted">{t("invoice.shareHint")}</p>
 
@@ -335,12 +335,12 @@ function ShareSection({
             </div>
           ) : null}
 
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-col gap-2 min-[360px]:flex-row min-[360px]:flex-wrap">
             <button
               type="button"
               disabled={isBusy}
               onClick={() => setConfirm("regenerate")}
-              className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60"
+              className="inline-flex h-11 w-full items-center justify-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60 min-[360px]:w-auto"
             >
               {t("invoice.regenerate")}
             </button>
@@ -348,7 +348,7 @@ function ShareSection({
               type="button"
               disabled={isBusy}
               onClick={() => setConfirm("revoke")}
-              className="inline-flex h-11 items-center rounded-full border border-overdue px-4 text-[14px] font-semibold text-overdue disabled:cursor-wait disabled:opacity-60"
+              className="inline-flex h-11 w-full items-center justify-center rounded-full border border-overdue px-4 text-[14px] font-semibold text-overdue disabled:cursor-wait disabled:opacity-60 min-[360px]:w-auto"
             >
               {t("invoice.revoke")}
             </button>
@@ -359,11 +359,11 @@ function ShareSection({
               <p className="text-[13px] font-semibold text-overdue">
                 {t("invoice.regenerateWarning")}
               </p>
-              <div className="mt-3 flex gap-2">
+              <div className="mt-3 flex flex-col gap-2 min-[360px]:flex-row">
                 <button
                   type="button"
                   onClick={() => setConfirm(null)}
-                  className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
+                  className="inline-flex h-11 w-full items-center justify-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink min-[360px]:w-auto"
                 >
                   {t("invoice.cancel")}
                 </button>
@@ -371,7 +371,7 @@ function ShareSection({
                   type="button"
                   disabled={isBusy}
                   onClick={handleCreateOrRegenerate}
-                  className="inline-flex h-11 items-center rounded-full bg-primary px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
+                  className="inline-flex h-11 w-full items-center justify-center rounded-full bg-primary px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60 min-[360px]:w-auto"
                 >
                   {pendingAction === "create" ? t("invoice.creating") : t("invoice.confirmRegenerate")}
                 </button>
@@ -384,11 +384,11 @@ function ShareSection({
               <p className="text-[13px] font-semibold text-overdue">
                 {t("invoice.revokeWarning")}
               </p>
-              <div className="mt-3 flex gap-2">
+              <div className="mt-3 flex flex-col gap-2 min-[360px]:flex-row">
                 <button
                   type="button"
                   onClick={() => setConfirm(null)}
-                  className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink"
+                  className="inline-flex h-11 w-full items-center justify-center rounded-full border border-line px-4 text-[14px] font-semibold text-ink min-[360px]:w-auto"
                 >
                   {t("invoice.cancel")}
                 </button>
@@ -396,7 +396,7 @@ function ShareSection({
                   type="button"
                   disabled={isBusy}
                   onClick={handleRevoke}
-                  className="inline-flex h-11 items-center rounded-full bg-overdue px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
+                  className="inline-flex h-11 w-full items-center justify-center rounded-full bg-overdue px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60 min-[360px]:w-auto"
                 >
                   {pendingAction === "revoke" ? t("invoice.revoking") : t("invoice.confirmRevoke")}
                 </button>
@@ -598,7 +598,7 @@ export default function InvoiceDetailClient({
           1024 LG breakpoint) -- DOM order always stays 1/2/3/4/5, which is
           also the order interactive elements receive focus in. */}
       <div className="ds-grid gap-6">
-        <header className="lg:col-start-1 lg:col-end-9 lg:row-start-1 rounded-md border border-line border-t-[3px] border-t-primary bg-surface p-6 shadow-md">
+        <header className="lg:col-start-1 lg:col-end-9 lg:row-start-1 rounded-md border border-line border-t-[3px] border-t-primary bg-surface p-4 shadow-md min-[360px]:p-6">
           <p className="text-[13px] font-semibold text-muted">{invoice.number}</p>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h1><MoneyDisplay value={invoice.subtotalIdr} language={language} size="hero" /></h1>
@@ -621,7 +621,7 @@ export default function InvoiceDetailClient({
 
         <section
           aria-labelledby="status-invoice"
-          className="lg:col-start-1 lg:col-end-9 lg:row-start-2 rounded-2xl border border-line bg-surface p-5"
+          className="lg:col-start-1 lg:col-end-9 lg:row-start-2 rounded-2xl border border-line bg-surface p-4 min-[360px]:p-5"
         >
           <h2 id="status-invoice" className="text-[18px] font-bold text-ink">{t("invoice.paymentStatus")}</h2>
           <p className="mt-1 text-[13px] text-muted">{t("invoice.paymentStatusHint")}</p>
@@ -673,14 +673,14 @@ export default function InvoiceDetailClient({
               <label className="mt-2 flex flex-col gap-1.5 text-[13px] font-semibold text-ink" htmlFor="invoice-contact-wa">
                 {t("invoice.contactRepairLabel")}
               </label>
-              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <div className="mt-1.5 flex flex-col gap-2 min-[360px]:flex-row min-[360px]:items-center">
                 <input
                   id="invoice-contact-wa"
                   name="invoice-contact-wa"
                   type="tel"
                   value={contactWaDraft}
                   onChange={(event) => setContactWaDraft(event.target.value)}
-                  className={fieldClassName}
+                  className={`${fieldClassName} w-full min-[360px]:min-w-0 min-[360px]:flex-1`}
                 />
                 <Button
                   type="button"
@@ -688,6 +688,7 @@ export default function InvoiceDetailClient({
                   loading={isSavingContactWa}
                   loadingLabel={t("invoice.saving")}
                   onClick={handleSaveContactWa}
+                  className="w-full min-[360px]:w-auto"
                 >
                   {t("invoice.contactRepairSave")}
                 </Button>
@@ -724,7 +725,7 @@ export default function InvoiceDetailClient({
 
         <section
           aria-labelledby="rincian-invoice"
-          className="lg:col-start-1 lg:col-end-9 lg:row-start-3 rounded-2xl border border-line bg-surface p-5"
+          className="lg:col-start-1 lg:col-end-9 lg:row-start-3 rounded-2xl border border-line bg-surface p-4 min-[360px]:p-5"
         >
           <h2 id="rincian-invoice" className="text-[18px] font-bold text-ink">{t("invoice.details")}</h2>
           <dl className="mt-4 grid gap-3 text-[15px]">

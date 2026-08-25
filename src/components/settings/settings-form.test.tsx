@@ -292,4 +292,16 @@ describe("SettingsForm — sign out", () => {
     await user.click(screen.getByRole("button", { name: "Batal" }));
     expect(screen.queryByRole("link", { name: "Ya, keluar" })).toBeNull();
   });
+
+  it("stacks the sign-out Cancel/confirm pair full-width below 360px (T-26)", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetchMock());
+    renderForm();
+
+    await user.click(screen.getByRole("button", { name: "Keluar" }));
+
+    const row = screen.getByRole("link", { name: "Ya, keluar" }).closest("div")!;
+    expect(row.className).toMatch(/flex-col/);
+    expect(row.className).toMatch(/min-\[360px\]:flex-row/);
+  });
 });

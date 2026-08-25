@@ -149,3 +149,21 @@ describe("DealDetailClient WhatsApp action (T-18)", () => {
     openSpy.mockRestore();
   });
 });
+
+describe("DealDetailClient XS band (T-26)", () => {
+  it("stacks the contact-name input and Save button full-width below 360px, side by side at and above it", () => {
+    render(<DealDetailClient initialDeal={dealFixture} history={[]} />);
+
+    const nameRow = screen.getByLabelText("Nama kontak").closest("div")!;
+    expect(nameRow.className).toMatch(/flex-col/);
+    expect(nameRow.className).toMatch(/min-\[360px\]:flex-row/);
+  });
+
+  it("stacks the WhatsApp-repair input and Save button full-width below 360px, side by side at and above it", async () => {
+    render(<DealDetailClient initialDeal={{ ...dealFixture, contactWa: "not-a-phone" }} history={[]} />);
+
+    const row = screen.getByLabelText("Perbaiki nomor WhatsApp").closest("div")!;
+    expect(row.className).toMatch(/flex-col/);
+    expect(row.className).toMatch(/min-\[360px\]:flex-row/);
+  });
+});

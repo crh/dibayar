@@ -888,4 +888,50 @@ describe("InvoiceDetailClient", () => {
       ).toBeNull();
     });
   });
+
+  describe("XS band (T-26)", () => {
+    it("stacks the WhatsApp contact-repair input and Save button full-width below 360px", async () => {
+      vi.stubGlobal("fetch", makeFetchMock({ contactGet: { status: 200, body: { contactWa: "not-a-phone", brand: "Kopi Nusantara" } } }));
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+      const row = (await screen.findByLabelText("Perbaiki nomor WhatsApp")).closest("div")!;
+      expect(row.className).toMatch(/flex-col/);
+      expect(row.className).toMatch(/min-\[360px\]:flex-row/);
+    });
+
+    it("stacks the share regenerate/revoke button pair full-width below 360px", async () => {
+      vi.stubGlobal("fetch", makeFetchMock({ shareGet: { status: 200, body: { active: true } } }));
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+      const regenerate = await screen.findByRole("button", { name: /buat ulang tautan/i });
+      const row = regenerate.closest("div")!;
+      expect(row.className).toMatch(/flex-col/);
+      expect(row.className).toMatch(/min-\[360px\]:flex-row/);
+    });
+
+    it("stacks the revoke-confirm Cancel/Confirm button pair full-width below 360px", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal("fetch", makeFetchMock({ shareGet: { status: 200, body: { active: true } } }));
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+      await user.click(await screen.findByRole("button", { name: /cabut tautan/i }));
+      const confirmButton = screen.getByRole("button", { name: "Ya, cabut tautan" });
+      const row = confirmButton.closest("div")!;
+      expect(row.className).toMatch(/flex-col/);
+      expect(row.className).toMatch(/min-\[360px\]:flex-row/);
+    });
+
+    it("uses 16px card padding below 360px on the header, payment-status, share, and details cards", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+      const paymentStatusSection = screen.getByRole("heading", { name: "Status pembayaran" }).closest("section")!;
+      const detailsSection = screen.getByRole("heading", { name: "Rincian invoice" }).closest("section")!;
+      expect(paymentStatusSection.className).toMatch(/\bp-4\b/);
+      expect(paymentStatusSection.className).toMatch(/min-\[360px\]:p-5/);
+      expect(detailsSection.className).toMatch(/\bp-4\b/);
+      expect(detailsSection.className).toMatch(/min-\[360px\]:p-5/);
+    });
+  });
 });
