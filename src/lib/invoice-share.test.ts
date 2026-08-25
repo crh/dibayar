@@ -3,13 +3,14 @@ import { createHash } from "node:crypto";
 import {
   createOrRegenerateShare,
   generateShareToken,
-  getPublicInvoiceByToken,
+  getPublicInvoiceDocumentByToken,
   getPublicInvoicePdfDataByToken,
   getShareState,
   hashShareToken,
   revokeShare,
   type InvoiceShareDb,
   type InvoiceShareRecord,
+  type PublicInvoiceDocumentLookupDb,
   type PublicInvoiceLookupDb,
 } from "./invoice-share";
 import type { InvoiceRecord } from "./invoices";
@@ -216,31 +217,55 @@ describe("revokeShare", () => {
   });
 });
 
-describe("getPublicInvoiceByToken", () => {
+describe("getPublicInvoiceDocumentByToken", () => {
   function makeLookupDb(row: unknown) {
-    const findUnique = vi.fn<PublicInvoiceLookupDb["invoiceShare"]["findUnique"]>(
-      async () => row as Awaited<ReturnType<PublicInvoiceLookupDb["invoiceShare"]["findUnique"]>>,
+    const findUnique = vi.fn<PublicInvoiceDocumentLookupDb["invoiceShare"]["findUnique"]>(
+      async () => row as Awaited<ReturnType<PublicInvoiceDocumentLookupDb["invoiceShare"]["findUnique"]>>,
     );
-    const db = { invoiceShare: { findUnique } } as unknown as PublicInvoiceLookupDb;
+    const db = { invoiceShare: { findUnique } } as unknown as PublicInvoiceDocumentLookupDb;
     return { db, findUnique };
   }
 
-  it("returns null for an unknown token without distinguishing it from a revoked one", async () => {
+  const fullRow = {
+    expiresAt: new Date("2026-10-17T00:00:00.000Z"),
+    invoice: {
+      id: "invoice-1",
+      number: "INV/2026/07/001",
+      subtotalIdr: 1_500_000,
+      withholdingTaxType: "PPH23" as const,
+      dueDate: new Date("2026-07-31T00:00:00.000Z"),
+      createdAt: new Date("2026-07-15T00:00:00.000Z"),
+      deal: { brand: "Brand Kopi", contactName: "Budi", scope: "1 reel + 2 story", paymentTerms: "Lunas di muka" },
+      user: {
+        settings: {
+          issuerName: "Kenji",
+          issuerAddress: "Jl. Melati",
+          issuerWhatsapp: "0812",
+          issuerEmail: "k@example.com",
+          bankName: "BCA",
+          bankAccountNumber: "123",
+          bankAccountHolder: "Kenji",
+        },
+      },
+    },
+  };
+
+  it("reports invalid for an unknown token without distinguishing it from a revoked one", async () => {
     const { db } = makeLookupDb(null);
 
-    expect(await getPublicInvoiceByToken(db, "unknown-token")).toBeNull();
+    expect(await getPublicInvoiceDocumentByToken(db, "unknown-token")).toEqual({ kind: "invalid" });
   });
 
-  it("returns null for a malformed token by hashing it like any other input (no special-cased branch)", async () => {
+  it("reports invalid for a malformed token by hashing it like any other input (no special-cased branch)", async () => {
     const { db } = makeLookupDb(null);
 
-    expect(await getPublicInvoiceByToken(db, "not base64url !! %%")).toBeNull();
+    expect(await getPublicInvoiceDocumentByToken(db, "not base64url !! %%")).toEqual({ kind: "invalid" });
   });
 
   it("looks up by the SHA-256 hash of the presented token, never the plaintext", async () => {
     const { db, findUnique } = makeLookupDb(null);
 
-    await getPublicInvoiceByToken(db, "some-plaintext-token");
+    await getPublicInvoiceDocumentByToken(db, "some-plaintext-token");
 
     expect(findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { tokenHash: hashShareToken("some-plaintext-token") } }),
@@ -250,7 +275,7 @@ describe("getPublicInvoiceByToken", () => {
   it("queries with an exact select projection, never a full-relation include", async () => {
     const { db, findUnique } = makeLookupDb(null);
 
-    await getPublicInvoiceByToken(db, "some-plaintext-token");
+    await getPublicInvoiceDocumentByToken(db, "some-plaintext-token");
 
     const call = findUnique.mock.calls[0][0] as unknown as Record<string, unknown>;
     expect(call).not.toHaveProperty("include");
@@ -258,92 +283,101 @@ describe("getPublicInvoiceByToken", () => {
       expiresAt: true,
       invoice: {
         select: {
+          id: true,
           number: true,
           subtotalIdr: true,
           withholdingTaxType: true,
-          status: true,
           dueDate: true,
-          deal: { select: { brand: true, scope: true } },
-          user: { select: { name: true } },
+          createdAt: true,
+          deal: { select: { brand: true, contactName: true, scope: true, paymentTerms: true } },
+          user: {
+            select: {
+              settings: {
+                select: {
+                  issuerName: true,
+                  issuerAddress: true,
+                  issuerWhatsapp: true,
+                  issuerEmail: true,
+                  bankName: true,
+                  bankAccountNumber: true,
+                  bankAccountHolder: true,
+                },
+              },
+            },
+          },
         },
       },
     });
   });
 
-  it("projects only the minimum safe invoice fields", async () => {
-    const { db } = makeLookupDb({
-      expiresAt: new Date("2026-10-17T00:00:00.000Z"),
-      invoice: {
-        number: "INV/2026/07/001",
-        subtotalIdr: 1_500_000,
-        withholdingTaxType: "PPH23",
-        status: "SENT",
-        dueDate: new Date("2026-07-31T00:00:00.000Z"),
-        deal: { brand: "Brand Kopi", scope: "1 reel + 2 story" },
-        user: { name: "Kenji" },
+  it("projects a ready-to-render InvoiceDocumentInput for a live token", async () => {
+    const { db } = makeLookupDb(fullRow);
+
+    const result = await getPublicInvoiceDocumentByToken(db, "token");
+
+    expect(result).toEqual({
+      kind: "ok",
+      input: {
+        invoice: {
+          id: "invoice-1",
+          number: "INV/2026/07/001",
+          subtotalIdr: 1_500_000,
+          withholdingTaxType: "PPH23",
+          dueDate: new Date("2026-07-31T00:00:00.000Z"),
+          createdAt: new Date("2026-07-15T00:00:00.000Z"),
+        },
+        deal: { brand: "Brand Kopi", contactName: "Budi", scope: "1 reel + 2 story", paymentTerms: "Lunas di muka" },
+        settings: {
+          issuerName: "Kenji",
+          issuerAddress: "Jl. Melati",
+          issuerWhatsapp: "0812",
+          issuerEmail: "k@example.com",
+          bankName: "BCA",
+          bankAccountNumber: "123",
+          bankAccountHolder: "Kenji",
+        },
       },
     });
-
-    const view = await getPublicInvoiceByToken(db, "token");
-
-    expect(view).toEqual({
-      number: "INV/2026/07/001",
-      subtotalIdr: 1_500_000,
-      withholdingTaxLabel: "PPh 23",
-      status: "SENT",
-      dueDate: new Date("2026-07-31T00:00:00.000Z"),
-      brand: "Brand Kopi",
-      scope: "1 reel + 2 story",
-      issuerName: "Kenji",
-    });
-    expect(view).not.toHaveProperty("id");
-    expect(view).not.toHaveProperty("userId");
-    expect(view).not.toHaveProperty("dealId");
-    expect(view).not.toHaveProperty("tokenHash");
   });
 
-  it("labels NONE withholding tax as no withholding, in Bahasa", async () => {
+  it("normalizes a null settings row (issuer never saved Settings) to empty strings, not a crash", async () => {
     const { db } = makeLookupDb({
-      expiresAt: null,
-      invoice: {
-        number: "INV/2026/07/002",
-        subtotalIdr: 500_000,
-        withholdingTaxType: "NONE",
-        status: "DRAFT",
-        dueDate: null,
-        deal: { brand: "Brand Lain", scope: "1 post" },
-        user: { name: null },
-      },
+      ...fullRow,
+      invoice: { ...fullRow.invoice, user: { settings: null } },
     });
 
-    const view = await getPublicInvoiceByToken(db, "token");
+    const result = await getPublicInvoiceDocumentByToken(db, "token");
 
-    expect(view?.withholdingTaxLabel).toBe("Tidak ada");
-    expect(view?.issuerName).toBeNull();
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error("expected ok");
+    expect(result.input.settings).toEqual({
+      issuerName: "",
+      issuerAddress: "",
+      issuerWhatsapp: "",
+      issuerEmail: "",
+      bankName: "",
+      bankAccountNumber: "",
+      bankAccountHolder: "",
+    });
   });
 
-  it("returns null for an expired token through the same result as unknown or revoked", async () => {
+  it("reports expired, distinctly from invalid, for a token that existed but is past its expiry", async () => {
     const { db } = makeLookupDb({
+      ...fullRow,
       expiresAt: new Date("2026-07-18T23:59:59.999Z"),
-      invoice: {
-        number: "INV/2026/07/001", subtotalIdr: 1_500_000, withholdingTaxType: "PPH23",
-        status: "SENT", dueDate: null, deal: { brand: "Brand", scope: "Scope" }, user: { name: "Kenji" },
-      },
     });
 
-    expect(await getPublicInvoiceByToken(db, "expired-token", new Date("2026-07-19T00:00:00.000Z"))).toBeNull();
+    const result = await getPublicInvoiceDocumentByToken(db, "expired-token", new Date("2026-07-19T00:00:00.000Z"));
+
+    expect(result).toEqual({ kind: "expired" });
   });
 
-  it("keeps a null-expiry legacy row valid", async () => {
-    const { db } = makeLookupDb({
-      expiresAt: null,
-      invoice: {
-        number: "INV/2026/07/001", subtotalIdr: 1_500_000, withholdingTaxType: "PPH23",
-        status: "SENT", dueDate: null, deal: { brand: "Brand", scope: "Scope" }, user: { name: "Kenji" },
-      },
-    });
+  it("keeps a null-expiry legacy row valid indefinitely", async () => {
+    const { db } = makeLookupDb({ ...fullRow, expiresAt: null });
 
-    expect(await getPublicInvoiceByToken(db, "legacy-token", new Date("2030-01-01T00:00:00.000Z"))).not.toBeNull();
+    const result = await getPublicInvoiceDocumentByToken(db, "legacy-token", new Date("2030-01-01T00:00:00.000Z"));
+
+    expect(result.kind).toBe("ok");
   });
 });
 
