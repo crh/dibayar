@@ -99,6 +99,24 @@ async function seed() {
   ];
   await prisma.deal.createMany({ data: dealRows });
 
+  // Production's createDeal() always writes an initial DealStageTransition
+  // (fromStatus null, toStatus the deal's starting status) inside the same
+  // transaction as the Deal row -- see recordDealStageTransition in
+  // src/lib/deals.ts. prisma.deal.createMany() above bypasses that path
+  // entirely, so every seeded deal needs its initial transition inserted
+  // here to match what real deal creation would have produced. Cleanup needs
+  // no extra step: DealStageTransition cascades from Deal, which cascades
+  // from User (see cleanupRows).
+  await prisma.dealStageTransition.createMany({
+    data: dealRows.map((deal) => ({
+      id: `${deal.id}-initial-transition`,
+      dealId: deal.id,
+      fromStatus: null,
+      toStatus: deal.status,
+      createdAt: now,
+    })),
+  });
+
   const invoiceRows = [
     { id: `${prefix}-invoice-draft`, userId: ids.owner, dealId: `${prefix}-deal-masuk`, number: 'UX/DRAFT/001', subtotalIdr: 1_250_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.DRAFT, dueDate: null },
     { id: `${prefix}-invoice-sent`, userId: ids.owner, dealId: `${prefix}-deal-deal`, number: 'UX/SENT/002', subtotalIdr: 3_750_000, withholdingTaxType: WithholdingTaxType.PPH21, status: InvoiceStatus.SENT, dueDate: future },
@@ -110,8 +128,29 @@ async function seed() {
   await prisma.invoice.createMany({ data: invoiceRows });
   await prisma.invoiceShare.createMany({ data: [
     { id: `${prefix}-share-active`, invoiceId: `${prefix}-invoice-overdue`, tokenHash: sha256(publicTokens.active), expiresAt: future },
-    { id: `${prefix}-share-expired`, invoiceId: `${prefix}-invoice-sent`, tokenHash: sha256(publicTokens.expired), expiresAt: past },
+    { id: `${prefix}-share-expired`, invoiceId: `${prefix}-invoice-paid`, tokenHash: sha256(publicTokens.expired), expiresAt: past },
   ] });
+
+  // Owner gets a fully populated UserSettings row: F7/F8 public-document
+  // evidence needs a real issuer identity and bank account to render (not
+  // the "Detail rekening belum lengkap." fallback), and the main /pengaturan
+  // "populated" capture is supposed to show a *complete* settings page. The
+  // "zero" user deliberately gets no UserSettings row at all, so the
+  // "incomplete-issuer-bank" capture state has a guaranteed, guarded reason
+  // to show the "Lengkapi identitas dan rekening..." notice rather than
+  // relying on it being incomplete by accident.
+  await prisma.userSettings.create({
+    data: {
+      userId: ids.owner,
+      issuerName: 'UX Fixture Owner',
+      issuerAddress: 'Jl. Fixture Raya No. 1, Jakarta',
+      issuerWhatsapp: '628199999999',
+      issuerEmail: `${prefix}-owner@example.invalid`,
+      bankName: 'Bank Fixture',
+      bankAccountNumber: '1234567890',
+      bankAccountHolder: 'UX Fixture Owner',
+    },
+  });
 
   const manifest = {
     schemaVersion: 1,
@@ -139,9 +178,6 @@ async function seed() {
       other: `${prefix}-invoice-other`,
     },
     publicTokens,
-    unsupportedFixtures: {
-      populatedIssuerSettings: 'Deferred until the additive T-11 settings model exists',
-    },
   };
   await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
@@ -155,8 +191,22 @@ async function verify() {
     where: { id: { in: Object.values(ids) } },
     select: {
       id: true,
-      deals: { select: { status: true, contactWa: true } },
+      deals: {
+        select: {
+          status: true,
+          contactWa: true,
+          stageTransitions: { select: { fromStatus: true, toStatus: true, createdAt: true } },
+        },
+      },
       invoices: { select: { status: true, dueDate: true, withholdingTaxType: true, deal: { select: { id: true } } } },
+      settings: {
+        select: {
+          issuerName: true,
+          bankName: true,
+          bankAccountNumber: true,
+          bankAccountHolder: true,
+        },
+      },
     },
   });
   const owner = users.find((user) => user.id === ids.owner);
@@ -164,6 +214,7 @@ async function verify() {
   const zero = users.find((user) => user.id === ids.zero);
   const ownerStages = new Set(owner?.deals.map((deal) => deal.status));
   const ownerStatuses = new Set(owner?.invoices.map((invoice) => invoice.status));
+  const ownerSettingsRequiredFields = ['issuerName', 'bankName', 'bankAccountNumber', 'bankAccountHolder'] as const;
   const checks = {
     threeUsers: users.length === 3,
     ownerAllStages: Object.values(DealStatus).every((status) => ownerStages.has(status)),
@@ -175,6 +226,29 @@ async function verify() {
     taxAndNoTax: owner?.invoices.some((invoice) => invoice.withholdingTaxType === WithholdingTaxType.NONE) === true
       && owner?.invoices.some((invoice) => invoice.withholdingTaxType !== WithholdingTaxType.NONE) === true,
     allParentsPresent: owner?.invoices.every((invoice) => Boolean(invoice.deal?.id)) === true,
+    // Guards the F11 stage-history evidence: production createDeal() always
+    // writes an initial DealStageTransition (fromStatus null, toStatus the
+    // deal's starting status), but the seed above uses deal.createMany(),
+    // which bypasses that path -- so this proves the fixture's own
+    // dealStageTransition.createMany() call actually landed one initial row
+    // per owner deal, not merely that deals exist.
+    ownerDealsHaveInitialTransition: (owner?.deals.length ?? 0) > 0
+      && owner!.deals.every((deal) =>
+        deal.stageTransitions.some((transition) =>
+          transition.fromStatus === null
+          && transition.toStatus === deal.status
+          && transition.createdAt instanceof Date
+          && !Number.isNaN(transition.createdAt.getTime())
+        )
+      ),
+    // Guards the F7/F8/"populated settings" evidence: the owner fixture must
+    // actually have every field the settings form treats as required, and
+    // the "zero" fixture must have no settings row at all, so the
+    // incomplete-issuer-bank capture state is guaranteed rather than
+    // incidental.
+    ownerSettingsComplete: owner?.settings != null
+      && ownerSettingsRequiredFields.every((field) => (owner.settings?.[field] ?? '').trim() !== ''),
+    zeroSettingsMissing: zero?.settings == null,
   };
   if (Object.values(checks).some((value) => !value)) throw new Error(`Fixture verification failed: ${JSON.stringify(checks)}`);
   console.log(JSON.stringify({ action: 'verify', host: normalizedHost, prefix, checks }));

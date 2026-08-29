@@ -8,7 +8,7 @@ const dealFixture: DealRecord = {
   id: "deal-1",
   userId: "user-1",
   brand: "Kopi Nusantara",
-  contactWa: "+6281234567890",
+  contactWa: "+62 812-3456-7890",
   contactName: null,
   scope: "1 Reel + 2 Story",
   feeIdr: 2_500_000,
@@ -103,7 +103,7 @@ describe("DealDetailClient WhatsApp action (T-18)", () => {
     openSpy.mockRestore();
   });
 
-  it("opens wa.me with the deal's brand in the message only when the button is clicked", async () => {
+  it("opens a bare wa.me chat only when the button is clicked", async () => {
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
     const user = userEvent.setup();
     render(<DealDetailClient initialDeal={dealFixture} history={[]} />);
@@ -112,35 +112,44 @@ describe("DealDetailClient WhatsApp action (T-18)", () => {
 
     expect(openSpy).toHaveBeenCalledTimes(1);
     const [href, target, features] = openSpy.mock.calls[0];
-    expect(href).toMatch(/^https:\/\/wa\.me\/6281234567890\?text=/);
-    expect(decodeURIComponent(String(href))).toContain("Kopi Nusantara");
+    expect(href).toBe("https://wa.me/6281234567890");
     expect(target).toBe("_blank");
     expect(features).toBe("noopener,noreferrer");
     openSpy.mockRestore();
   });
 
-  it("shows a repair form instead of the WhatsApp button when the contact number is invalid", () => {
+  it("keeps the normal WhatsApp CTA enabled and reveals a focused repair form only after activation", async () => {
+    const user = userEvent.setup();
     render(<DealDetailClient initialDeal={{ ...dealFixture, contactWa: "not-a-phone" }} history={[]} />);
 
-    expect(screen.getByRole("alert").textContent).toBe("Nomor WhatsApp ini sepertinya tidak valid. Perbaiki dulu di bawah.");
-    expect(screen.getByLabelText("Perbaiki nomor WhatsApp")).toBeDefined();
-    expect(screen.queryByRole("button", { name: "Buka WhatsApp" })).toBeNull();
+    const whatsappButton = screen.getByRole("button", { name: "Buka WhatsApp" });
+    expect(whatsappButton.hasAttribute("disabled")).toBe(false);
+    expect(screen.queryByLabelText("Perbaiki nomor WhatsApp")).toBeNull();
+
+    await user.click(whatsappButton);
+    expect(screen.getByRole("alert").textContent).toBe("Nomor WhatsApp belum valid — perbaiki di deal ini.");
+    expect(document.activeElement).toBe(screen.getByLabelText("Perbaiki nomor WhatsApp"));
   });
 
   it("repairing the number only unblocks the WhatsApp button -- saving never opens WhatsApp by itself", async () => {
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
     vi.stubGlobal(
       "fetch",
-      vi.fn(() =>
-        Promise.resolve(jsonResponse(200, { deal: { ...dealFixture, contactWa: "+6281234567890" } })),
+      vi.fn((url: string, init?: RequestInit) =>
+        Promise.resolve(
+          init?.method === "PATCH"
+            ? jsonResponse(200, { deal: { ...dealFixture, contactWa: "6281234567890" } })
+            : jsonResponse(200, { deal: { ...dealFixture, contactWa: "6281234567890" } }),
+        ),
       ),
     );
     const user = userEvent.setup();
     render(<DealDetailClient initialDeal={{ ...dealFixture, contactWa: "not-a-phone" }} history={[]} />);
 
+    await user.click(screen.getByRole("button", { name: "Buka WhatsApp" }));
     const input = screen.getByLabelText("Perbaiki nomor WhatsApp");
     await user.clear(input);
-    await user.type(input, "+6281234567890");
+    await user.type(input, "+62 812-3456-7890");
     await user.click(screen.getByRole("button", { name: "Simpan nomor" }));
 
     expect(await screen.findByRole("status")).toHaveProperty("textContent", "Nomor WhatsApp disimpan");
@@ -188,8 +197,9 @@ describe("DealDetailClient XS band (T-26)", () => {
   });
 
   it("stacks the WhatsApp-repair input and Save button full-width below 360px, side by side at and above it", async () => {
+    const user = userEvent.setup();
     render(<DealDetailClient initialDeal={{ ...dealFixture, contactWa: "not-a-phone" }} history={[]} />);
-
+    await user.click(screen.getByRole("button", { name: "Buka WhatsApp" }));
     const row = screen.getByLabelText("Perbaiki nomor WhatsApp").closest("div")!;
     expect(row.className).toMatch(/flex-col/);
     expect(row.className).toMatch(/min-\[360px\]:flex-row/);

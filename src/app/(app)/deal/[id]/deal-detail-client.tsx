@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { fieldClassName } from "@/components/design-system";
 import { useLanguage } from "@/components/language-switcher";
@@ -9,6 +9,7 @@ import { formatDate } from "@/lib/format/date";
 import type { DealRecord, DealStageTransitionRecord } from "@/lib/deals";
 import { PIPELINE_STAGE_KEYS } from "@/components/deals/deal-stages";
 import { buildDealWhatsApp } from "@/lib/whatsapp";
+import { formatPhone } from "@/lib/format/phone";
 
 export default function DealDetailClient({
   initialDeal,
@@ -26,7 +27,14 @@ export default function DealDetailClient({
   const [contactWaDraft, setContactWaDraft] = useState(deal.contactWa);
   const [isSavingContactWa, setIsSavingContactWa] = useState(false);
   const [contactWaMessage, setContactWaMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
-  const whatsapp = buildDealWhatsApp({ contactWa: deal.contactWa, brand: deal.brand, contactName: deal.contactName });
+  const [showContactRepair, setShowContactRepair] = useState(false);
+  const contactWaInputRef = useRef<HTMLInputElement>(null);
+  const whatsapp = buildDealWhatsApp({ contactWa: deal.contactWa });
+  const displayContactWa = formatPhone(deal.contactWa) || deal.contactWa;
+
+  useEffect(() => {
+    if (showContactRepair && whatsapp.kind === "invalid-number") contactWaInputRef.current?.focus();
+  }, [showContactRepair, whatsapp.kind]);
 
   async function handleSaveContactName() {
     setIsSaving(true);
@@ -63,9 +71,16 @@ export default function DealDetailClient({
         body: JSON.stringify({ contactWa: contactWaDraft }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error("deal.detailWhatsAppNumberError");
-      setDeal(payload.deal);
-      setContactWaDraft(payload.deal.contactWa);
+      if (!response.ok || typeof payload.deal?.contactWa !== "string") throw new Error("deal.detailWhatsAppNumberError");
+      const readBackResponse = await fetch(`/api/deals/${deal.id}`, { cache: "no-store" });
+      const readBackPayload = await readBackResponse.json();
+      if (
+        !readBackResponse.ok ||
+        readBackPayload.deal?.id !== deal.id ||
+        readBackPayload.deal?.contactWa !== payload.deal.contactWa
+      ) throw new Error("deal.detailWhatsAppNumberError");
+      setDeal(readBackPayload.deal);
+      setContactWaDraft(readBackPayload.deal.contactWa);
       setContactWaMessage({ kind: "success", text: t("deal.detailWhatsAppNumberSaved") });
     } catch {
       setContactWaMessage({ kind: "error", text: t("deal.detailWhatsAppNumberError") });
@@ -99,7 +114,7 @@ export default function DealDetailClient({
           </div>
           <div>
             <dt className="text-[12px] font-semibold text-muted">{t("deal.detailContactWa")}</dt>
-            <dd className="text-[14px] text-ink">{deal.contactWa}</dd>
+            <dd className="text-[14px] text-ink">{displayContactWa}</dd>
           </div>
           <div>
             <dt className="text-[12px] font-semibold text-muted">{t("deal.detailPaymentTerms")}</dt>
@@ -155,29 +170,41 @@ export default function DealDetailClient({
             </button>
           ) : (
             <>
-              <p role="alert" className="mt-1 text-[13px] text-overdue">
-                {t("deal.detailWhatsAppInvalid")}
-              </p>
-              <label className="mt-2 flex flex-col gap-1.5 text-[13px] font-semibold text-ink" htmlFor="contactWa">
-                {t("deal.detailWhatsAppRepairLabel")}
-              </label>
-              <div className="mt-1.5 flex flex-col gap-2 min-[360px]:flex-row min-[360px]:items-center">
-                <input
-                  id="contactWa"
-                  inputMode="tel"
-                  value={contactWaDraft}
-                  onChange={(event) => setContactWaDraft(event.target.value)}
-                  className={`${fieldClassName} w-full min-[360px]:min-w-0 min-[360px]:flex-1`}
-                />
-                <button
-                  type="button"
-                  disabled={isSavingContactWa}
-                  onClick={handleSaveContactWa}
-                  className="inline-flex h-11 w-full shrink-0 items-center justify-center rounded-full bg-primary px-4 text-[13px] font-semibold text-surface hover:bg-primary-d disabled:cursor-wait disabled:opacity-60 min-[360px]:w-auto"
-                >
-                  {isSavingContactWa ? t("dashboard.saving") : t("deal.detailWhatsAppRepairSave")}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowContactRepair(true)}
+                className="mt-2 inline-flex h-11 items-center rounded-full bg-primary px-4 text-[13px] font-semibold text-surface hover:bg-primary-d"
+              >
+                {t("deal.detailWhatsAppOpen")}
+              </button>
+              {showContactRepair ? (
+                <div className="mt-3 rounded-xl bg-bg p-3">
+                  <p role="alert" className="text-[13px] text-overdue">
+                    {t("whatsapp.invalidNumber")}
+                  </p>
+                  <label className="mt-2 flex flex-col gap-1.5 text-[13px] font-semibold text-ink" htmlFor="contactWa">
+                    {t("deal.detailWhatsAppRepairLabel")}
+                  </label>
+                  <div data-ux-action-row="deal-contact-repair" className="mt-1.5 flex flex-col gap-2 min-[360px]:flex-row min-[360px]:items-center">
+                    <input
+                      ref={contactWaInputRef}
+                      id="contactWa"
+                      inputMode="tel"
+                      value={contactWaDraft}
+                      onChange={(event) => setContactWaDraft(event.target.value)}
+                      className={`${fieldClassName} w-full min-[360px]:min-w-0 min-[360px]:flex-1`}
+                    />
+                    <button
+                      type="button"
+                      disabled={isSavingContactWa}
+                      onClick={handleSaveContactWa}
+                      className="inline-flex h-11 w-full shrink-0 items-center justify-center rounded-full bg-primary px-4 text-[13px] font-semibold text-surface hover:bg-primary-d disabled:cursor-wait disabled:opacity-60 min-[360px]:w-auto"
+                    >
+                      {isSavingContactWa ? t("dashboard.saving") : t("deal.detailWhatsAppRepairSave")}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
             </>
           )}
           {/* Rendered regardless of which branch is currently active: a

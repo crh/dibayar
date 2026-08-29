@@ -438,21 +438,30 @@ describe("InvoiceDetailClient", () => {
       expect(message).not.toMatch(/reminder|overdue|thank you|due date/i);
     });
 
-    it("disables the primary WhatsApp button and shows a repair block naming the deal, when the deal contact is unusable", async () => {
+    it("keeps the primary WhatsApp button enabled for an unusable contact, revealing the repair block naming the deal only once activated (F15)", async () => {
+      const user = userEvent.setup();
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
       vi.stubGlobal("fetch", makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "not-a-phone", brand: "Kopi Nusantara" } },
       }));
 
       render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
       const whatsappButton = await screen.findByRole("button", { name: "Kirim lewat WhatsApp" });
+      await waitFor(() => expect(whatsappButton).toHaveProperty("disabled", false));
+      expect(screen.queryByText("Nomor WhatsApp belum valid — perbaiki di deal ini.")).toBeNull();
 
-      await waitFor(() => expect(whatsappButton).toHaveProperty("disabled", true));
-      expect(screen.getByText(/nomor whatsapp untuk kopi nusantara sepertinya tidak valid/i)).toBeDefined();
+      await user.click(whatsappButton);
+
+      expect(open).not.toHaveBeenCalled();
+      expect(screen.getByText("Nomor WhatsApp belum valid — perbaiki di deal ini.")).toBeDefined();
+      expect(screen.getByText("Nomor ini tersimpan di deal Kopi Nusantara.")).toBeDefined();
       expect(screen.getByLabelText("Perbaiki nomor WhatsApp")).toHaveProperty("value", "not-a-phone");
+      expect(screen.getByRole("button", { name: "Simpan & kirim" })).toBeDefined();
     });
 
-    it("writes a fixed contact number back to the deal, unblocking the primary button afterward", async () => {
+    it("writes a fixed contact number back to the deal, then sends WhatsApp directly with the repaired number (F15)", async () => {
       const user = userEvent.setup();
+      const open = vi.spyOn(window, "open").mockImplementation(() => ({}) as Window);
       const calls: Array<{ url: string; init?: RequestInit }> = [];
       vi.stubGlobal(
         "fetch",
@@ -461,7 +470,13 @@ describe("InvoiceDetailClient", () => {
           const method = init?.method ?? "GET";
           if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: { contactWa: "not-a-phone", brand: "Kopi Nusantara" } });
           if (url.endsWith("/share") && method === "GET") return jsonResponse({ status: 200, body: { active: false } });
+          if (url.endsWith("/share") && method === "POST") {
+            return jsonResponse({ status: 200, body: { active: true, path: "/i/deterministic-token" } });
+          }
           if (url.includes("/api/deals/") && method === "PATCH") {
+            return jsonResponse({ status: 200, body: { deal: { id: "deal-1", contactWa: "6281234567890" } } });
+          }
+          if (url.includes("/api/deals/") && method === "GET") {
             return jsonResponse({ status: 200, body: { deal: { id: "deal-1", contactWa: "6281234567890" } } });
           }
           return jsonResponse({ status: 200, body: {} });
@@ -469,15 +484,53 @@ describe("InvoiceDetailClient", () => {
       );
 
       render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Kirim lewat WhatsApp" }));
       const repairInput = await screen.findByLabelText("Perbaiki nomor WhatsApp");
       fireEvent.change(repairInput, { target: { value: "0812-3456-7890" } });
-      await user.click(screen.getByRole("button", { name: "Simpan nomor" }));
+      await user.click(screen.getByRole("button", { name: "Simpan & kirim" }));
 
       expect(await screen.findByText("Nomor WhatsApp disimpan")).toBeDefined();
       const patchCall = calls.find((call) => call.url.includes("/api/deals/") && call.init?.method === "PATCH");
       expect(patchCall?.url).toBe("/api/deals/deal-1");
       expect(JSON.parse(patchCall!.init!.body as string)).toEqual({ contactWa: "0812-3456-7890" });
+
+      await waitFor(() => expect(open).toHaveBeenCalled());
+      const href = open.mock.calls[0]?.[0] as string;
+      expect(href).toContain("6281234567890");
+      expect(screen.queryByLabelText("Perbaiki nomor WhatsApp")).toBeNull();
       await waitFor(() => expect(screen.getByRole("button", { name: "Kirim lewat WhatsApp" })).toHaveProperty("disabled", false));
+    });
+
+    it("shows a direct Buka WhatsApp link when the repaired number's send is popup-blocked (F15)", async () => {
+      const user = userEvent.setup();
+      vi.spyOn(window, "open").mockImplementation(() => null);
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          const method = init?.method ?? "GET";
+          if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: { contactWa: "not-a-phone", brand: "Kopi Nusantara" } });
+          if (url.endsWith("/share") && method === "GET") return jsonResponse({ status: 200, body: { active: false } });
+          if (url.endsWith("/share") && method === "POST") {
+            return jsonResponse({ status: 200, body: { active: true, path: "/i/deterministic-token" } });
+          }
+          if (url.includes("/api/deals/") && method === "PATCH") {
+            return jsonResponse({ status: 200, body: { deal: { id: "deal-1", contactWa: "6281234567890" } } });
+          }
+          if (url.includes("/api/deals/") && method === "GET") {
+            return jsonResponse({ status: 200, body: { deal: { id: "deal-1", contactWa: "6281234567890" } } });
+          }
+          return jsonResponse({ status: 200, body: {} });
+        }),
+      );
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Kirim lewat WhatsApp" }));
+      const repairInput = await screen.findByLabelText("Perbaiki nomor WhatsApp");
+      fireEvent.change(repairInput, { target: { value: "0812-3456-7890" } });
+      await user.click(screen.getByRole("button", { name: "Simpan & kirim" }));
+
+      const fallback = await screen.findByRole("link", { name: "Buka WhatsApp" });
+      expect(fallback.getAttribute("href")).toContain("6281234567890");
     });
 
     it("keeps the primary WhatsApp button available when the invoice has no due date, since a plain share never fabricates one", async () => {
@@ -891,9 +944,11 @@ describe("InvoiceDetailClient", () => {
 
   describe("XS band (T-26)", () => {
     it("stacks the WhatsApp contact-repair input and Save button full-width below 360px", async () => {
+      const user = userEvent.setup();
       vi.stubGlobal("fetch", makeFetchMock({ contactGet: { status: 200, body: { contactWa: "not-a-phone", brand: "Kopi Nusantara" } } }));
       render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
 
+      await user.click(await screen.findByRole("button", { name: "Kirim lewat WhatsApp" }));
       const row = (await screen.findByLabelText("Perbaiki nomor WhatsApp")).closest("div")!;
       expect(row.className).toMatch(/flex-col/);
       expect(row.className).toMatch(/min-\[360px\]:flex-row/);

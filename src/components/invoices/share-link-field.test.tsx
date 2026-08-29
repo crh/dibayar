@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
+  SAFE_MAX_CHARS,
   ShareLinkField,
   truncateShareLinkFallback,
   truncateShareLinkToWidth,
@@ -27,21 +28,32 @@ class FakeResizeObserver {
   }
 }
 
-function stubWidths(containerWidth: number, fullTextWidth: number) {
+// Simulates a monospace font: every character (including any ellipsis
+// already baked into the mirror's current textContent) advances by
+// `charWidth`, plus `ellipsisExtraWidth` for each ellipsis glyph -- modeling
+// browsers where "…" renders wider than a single monospace cell. The mirror
+// width is derived from its live textContent (not a fixed constant) since
+// measureDisplay re-measures it after each shrink attempt.
+function stubWidths(containerWidth: number, charWidth: number, ellipsisExtraWidth = 0) {
   const track = screen.getByTestId("share-link-track");
   const mirror = screen.getByTestId("share-link-mirror");
   vi.spyOn(track, "getBoundingClientRect").mockReturnValue({ width: containerWidth } as DOMRect);
-  vi.spyOn(mirror, "getBoundingClientRect").mockReturnValue({ width: fullTextWidth } as DOMRect);
+  vi.spyOn(mirror, "getBoundingClientRect").mockImplementation(() => {
+    const text = mirror.textContent ?? "";
+    const ellipsisCount = (text.match(/…/g) ?? []).length;
+    return { width: text.length * charWidth + ellipsisCount * ellipsisExtraWidth } as DOMRect;
+  });
 }
 
 describe("truncateShareLinkFallback", () => {
   it("keeps short URLs untouched", () => {
-    expect(truncateShareLinkFallback("https://short.link")).toBe("https://short.link");
+    expect(truncateShareLinkFallback("https://a.io")).toBe("https://a.io");
   });
 
-  it("keeps the first 22 characters and the final 8, joined by an ellipsis, for long URLs", () => {
+  it("keeps the first 6 characters and the final 8, joined by an ellipsis, for long URLs -- exactly SAFE_MAX_CHARS long", () => {
     const result = truncateShareLinkFallback(LONG_URL);
-    expect(result).toBe(`${LONG_URL.slice(0, 22)}…${LONG_URL.slice(-8)}`);
+    expect(result).toHaveLength(SAFE_MAX_CHARS);
+    expect(result).toBe(`${LONG_URL.slice(0, 6)}…${LONG_URL.slice(-8)}`);
   });
 });
 
@@ -89,14 +101,13 @@ describe("ShareLinkField", () => {
     vi.stubGlobal("ResizeObserver", FakeResizeObserver as unknown as typeof ResizeObserver);
 
     render(<ShareLinkField url={LONG_URL} language="id" />);
-    stubWidths(200, 400);
+    stubWidths(200, 10);
 
     await act(async () => {
       FakeResizeObserver.instances[0]?.trigger();
     });
 
-    const perChar = 400 / LONG_URL.length;
-    const expectedMaxChars = Math.floor(200 / perChar);
+    const expectedMaxChars = Math.min(Math.floor(200 / 10), SAFE_MAX_CHARS);
     const expected = truncateShareLinkToWidth(LONG_URL, expectedMaxChars);
 
     const displayed = screen.getByTitle(LONG_URL);
@@ -106,17 +117,50 @@ describe("ShareLinkField", () => {
     expect(displayed.className).toMatch(/min-w-0/);
   });
 
+  it("shrinks further than the naive per-character estimate when the truncated candidate's ellipsis renders wider than an average character, so the displayed text never overflows its track", async () => {
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver as unknown as typeof ResizeObserver);
+
+    render(<ShareLinkField url={LONG_URL} language="id" />);
+    const charWidth = 8;
+    // Kept below SAFE_MAX_CHARS's own pixel budget (charWidth * SAFE_MAX_CHARS)
+    // so this exercises the ellipsis-overflow shrink loop itself, not the
+    // separate SAFE_MAX_CHARS clamp covered by the dedicated test below.
+    const containerWidth = 100;
+    const ellipsisExtraWidth = 5;
+    stubWidths(containerWidth, charWidth, ellipsisExtraWidth);
+
+    await act(async () => {
+      FakeResizeObserver.instances[0]?.trigger();
+    });
+
+    const naiveMaxChars = Math.floor(containerWidth / charWidth);
+    const naiveCandidate = truncateShareLinkToWidth(LONG_URL, naiveMaxChars);
+    const naiveWidth = naiveCandidate.length * charWidth + ellipsisExtraWidth;
+    // Confirms this scenario actually exercises the correction loop: the
+    // naive per-character estimate alone would overflow once its ellipsis's
+    // extra width is counted.
+    expect(naiveWidth).toBeGreaterThan(containerWidth);
+
+    const displayed = screen.getByTitle(LONG_URL);
+    const displayedText = displayed.textContent ?? "";
+    expect(displayedText).not.toBe(naiveCandidate);
+    expect(displayedText.length).toBeLessThan(naiveCandidate.length);
+
+    const finalWidth = displayedText.length * charWidth + ellipsisExtraWidth;
+    expect(finalWidth).toBeLessThanOrEqual(containerWidth);
+  });
+
   it("recomputes the truncated text when ResizeObserver reports a new width", async () => {
     vi.stubGlobal("ResizeObserver", FakeResizeObserver as unknown as typeof ResizeObserver);
 
     render(<ShareLinkField url={LONG_URL} language="id" />);
-    stubWidths(200, 400);
+    stubWidths(200, 10);
     await act(async () => {
       FakeResizeObserver.instances[0]?.trigger();
     });
     const wide = screen.getByTitle(LONG_URL).textContent;
 
-    stubWidths(80, 400);
+    stubWidths(80, 10);
     await act(async () => {
       FakeResizeObserver.instances[0]?.trigger();
     });
@@ -124,6 +168,32 @@ describe("ShareLinkField", () => {
 
     expect(narrow).not.toBe(wide);
     expect((narrow ?? "").length).toBeLessThan((wide ?? "").length);
+  });
+
+  it("computes a display at a wide (e.g. xl1440) width that can never exceed SAFE_MAX_CHARS, so it remains safe if the track narrows to the lg1024 minimum before ResizeObserver's async callback fires", async () => {
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver as unknown as typeof ResizeObserver);
+
+    render(<ShareLinkField url={LONG_URL} language="id" />);
+    // A generously wide track -- the naive per-character estimate here
+    // (1000 / 8 = 125 chars) would badly overflow the real lg1024 track if
+    // it weren't clamped.
+    const charWidth = 8;
+    stubWidths(1000, charWidth);
+
+    await act(async () => {
+      FakeResizeObserver.instances[0]?.trigger();
+    });
+
+    const wideDisplay = screen.getByTitle(LONG_URL).textContent ?? "";
+    expect(wideDisplay.length).toBeLessThanOrEqual(SAFE_MAX_CHARS);
+
+    // The real, verified narrowest required track: lg1024's client width
+    // (122px) at this field's font-mono text-[13px]. Because `display` is
+    // already capped to SAFE_MAX_CHARS regardless of how wide the track was
+    // when it was computed, it fits here too -- without needing the
+    // ResizeObserver to have fired again for this width yet.
+    const LG1024_TRACK_WIDTH_PX = 122;
+    expect(wideDisplay.length * charWidth).toBeLessThanOrEqual(LG1024_TRACK_WIDTH_PX);
   });
 
   it("always keeps the full URL in the title attribute regardless of the truncated display text", () => {

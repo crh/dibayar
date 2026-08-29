@@ -103,14 +103,18 @@ input:focus-visible, textarea:focus-visible, select:focus-visible {
    an invisible, centered overlay, without growing the element's own visual
    footprint. The element needs `position: relative` (this class provides
    it); the overlay is a generated pseudo-box, so clicks on it still land on
-   the element itself. */
+   the element itself. Plain `display: inline` elements (default anchors)
+   also need `inline-block`, or the overlay's box still computes to 44x44
+   but hit-testing stays clipped to the inline line box; :where() keeps this
+   at zero specificity so an explicit flex/inline-flex utility still wins. */
 .ds-tap-target { position: relative; }
+:where(.ds-tap-target) { display: inline-block; }
 .ds-tap-target::before {
   content: "";
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: max(100%, 44px);
-  height: max(100%, 44px);
+  width: max(100%, 44.5px);
+  height: max(100%, 44.5px);
 }

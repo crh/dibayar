@@ -3,19 +3,24 @@ import { formatDate } from "./format/date";
 
 export type WhatsAppReminderKind = "due-soon" | "overdue";
 
+// §5.2 normalisation rules, applied in order: strip everything but digits
+// (a leading + carries no digit of its own, so stripping non-digits already
+// drops it); 62.../+62... is kept as-is; a leading 0 is replaced with 62; a
+// leading 8 is prefixed with 62; any other leading sequence is treated as an
+// already-international number and kept as-is. Valid only at 9-15 digits.
 export function normalizeWhatsAppNumber(raw: string): string | null {
   const digits = raw.trim().replace(/\D/g, "");
   if (!digits) return null;
 
-  const normalized = digits.startsWith("0")
-    ? `62${digits.slice(1)}`
-    : digits.startsWith("62")
-      ? digits
+  const normalized = digits.startsWith("62")
+    ? digits
+    : digits.startsWith("0")
+      ? `62${digits.slice(1)}`
       : digits.startsWith("8")
         ? `62${digits}`
-        : null;
+        : digits;
 
-  return normalized && /^628\d{7,11}$/.test(normalized) ? normalized : null;
+  return normalized.length >= 9 && normalized.length <= 15 ? normalized : null;
 }
 
 export function formatWhatsAppDate(value: Date | string): string {
@@ -107,14 +112,12 @@ export type DealWhatsAppResult = { kind: "ok"; href: string } | { kind: "invalid
 
 // The caller is responsible for offering a way to correct contactWa when
 // this returns "invalid-number" -- see the repair form in deal-detail-client.
-export function buildDealWhatsApp(input: {
-  contactWa: string;
-  brand: string;
-  contactName: string | null;
-}): DealWhatsAppResult {
+// T-18: the deal-stage chat link carries no prefilled body -- unlike the
+// invoice reminder/share messages, there is no invoice yet to describe, so
+// this opens a bare wa.me/<number> chat rather than composing text.
+export function buildDealWhatsApp(input: { contactWa: string }): DealWhatsAppResult {
   const normalizedNumber = normalizeWhatsAppNumber(input.contactWa);
   if (!normalizedNumber) return { kind: "invalid-number" };
 
-  const message = buildDealWhatsAppMessage({ brand: input.brand, contactName: input.contactName });
-  return { kind: "ok", href: buildWhatsAppShareUrl(normalizedNumber, message) };
+  return { kind: "ok", href: `https://wa.me/${normalizedNumber}` };
 }

@@ -18,6 +18,7 @@ export function StageFilter({
     <div
       role="group"
       aria-label={t("board.filterLabel")}
+      data-ux-scroll="stage-filter"
       className="flex gap-2 overflow-x-auto pb-1"
     >
       <button

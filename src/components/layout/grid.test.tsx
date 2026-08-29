@@ -60,7 +60,12 @@ describe("Grid", () => {
     expect(css).toMatch(/\.ds-tap-target\s*\{[^}]*position:\s*relative/);
     const overlayMatch = css.match(/\.ds-tap-target::before\s*\{[^}]*\}/);
     expect(overlayMatch).not.toBeNull();
-    expect(overlayMatch![0]).toMatch(/width:\s*max\(100%,\s*44px\)/);
-    expect(overlayMatch![0]).toMatch(/height:\s*max\(100%,\s*44px\)/);
+    const widthMatch = overlayMatch![0].match(/width:\s*max\(100%,\s*(\d+(?:\.\d+)?)px\)/);
+    expect(widthMatch).not.toBeNull();
+    expect(Number(widthMatch![1])).toBeGreaterThanOrEqual(44);
+
+    const heightMatch = overlayMatch![0].match(/height:\s*max\(100%,\s*(\d+(?:\.\d+)?)px\)/);
+    expect(heightMatch).not.toBeNull();
+    expect(Number(heightMatch![1])).toBeGreaterThanOrEqual(44);
   });
 });

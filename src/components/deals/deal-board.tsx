@@ -121,7 +121,7 @@ export function DealBoard({
   const visibleStages = stageFilter ? PIPELINE_STAGES.filter((stage) => stage.value === stageFilter) : PIPELINE_STAGES;
 
   return (
-    <div data-testid="deal-board-rail" className="flex flex-col gap-3 lg:flex-row lg:flex-nowrap lg:items-start lg:overflow-x-auto lg:pb-2">
+    <div data-testid="deal-board-rail" className="flex flex-row snap-x snap-mandatory gap-3 overflow-x-auto pb-2 max-[639px]:[scrollbar-width:none] min-[640px]:flex-col min-[640px]:overflow-visible min-[640px]:snap-none lg:flex-row lg:flex-nowrap lg:items-start lg:overflow-x-auto lg:pb-2">
       {visibleStages.map((stage) => {
         const stageDeals = deals.filter((deal) => deal.status === stage.value);
         // Empty stages collapse to a compact header-only block (a narrow
@@ -145,8 +145,8 @@ export function DealBoard({
             collapsed={collapsed}
             className={
               stageFilter
-                ? "w-full"
-                : `w-full ${collapsed ? "lg:w-[72px] lg:shrink-0" : "lg:w-[220px] lg:shrink-0"}`
+                ? "w-full min-w-full snap-start min-[640px]:min-w-0"
+                : `w-full min-w-full snap-start min-[640px]:min-w-0 ${collapsed ? "lg:w-[72px] lg:shrink-0" : "lg:w-[220px] lg:shrink-0"}`
             }
           />
         );

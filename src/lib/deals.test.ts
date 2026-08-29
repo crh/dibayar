@@ -7,6 +7,7 @@ import {
   listDeals,
   listDealStageTransitions,
   updateDeal,
+  type DealClient,
   type DealDb,
   type DealRecord,
   type DealStageTransitionRecord,
@@ -26,7 +27,27 @@ function makeDb(records: DealRecord[] = []): DealDb {
   // without this, one test's update would leak into every later test.
   const data = records.map((record) => ({ ...record }));
   const transitions: DealStageTransitionRecord[] = [];
-  return {
+  const db: DealDb = {
+    $transaction: vi.fn(async (fn: (tx: DealClient) => Promise<unknown>) => {
+      // Mimics a real transaction's rollback: snapshot both tables and
+      // restore them if the callback throws, so tests can assert that a
+      // failed transition write leaves no partial mutation behind.
+      const dealsBefore = data.map((record) => ({ ...record }));
+      const transitionsBefore = transitions.map((record) => ({ ...record }));
+      // Prisma's interactive transaction client only exposes model
+      // delegates, not $transaction itself, so the callback gets that
+      // narrower shape rather than the full db mock.
+      const tx: DealClient = { deal: db.deal, dealStageTransition: db.dealStageTransition };
+      try {
+        return await fn(tx);
+      } catch (error) {
+        data.length = 0;
+        data.push(...dealsBefore);
+        transitions.length = 0;
+        transitions.push(...transitionsBefore);
+        throw error;
+      }
+    }) as unknown as DealDb["$transaction"],
     deal: {
       findMany: vi.fn(async ({ where }: { where: { userId: string } }) =>
         data.filter((deal) => deal.userId === where.userId),
@@ -73,6 +94,7 @@ function makeDb(records: DealRecord[] = []): DealDb {
       ),
     },
   };
+  return db;
 }
 
 const existing: DealRecord = {
@@ -113,6 +135,17 @@ describe("deal repository", () => {
     expect(deal.brand).toBe("Kopi Nusantara");
     expect(db.deal.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ userId: "user-1", brand: "Kopi Nusantara" }),
+    });
+  });
+
+  it("stores a valid contact number in normalized international digits", async () => {
+    const db = makeDb();
+
+    const deal = await createDeal(db, "user-1", { ...input, contactWa: "+62 812-1234-5678" });
+
+    expect(deal.contactWa).toBe("6281212345678");
+    expect(db.deal.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ contactWa: "6281212345678" }),
     });
   });
 
@@ -230,5 +263,66 @@ describe("deal stage history (T-17)", () => {
     const history = await listDealStageTransitions(db, "deal-1");
 
     expect(history.map((entry) => entry.toStatus)).toEqual(["DEAL", "NEGO"]);
+  });
+
+  it("creates the deal and its initial transition inside a single transaction", async () => {
+    const db = makeDb();
+
+    await createDeal(db, "user-1", input);
+
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report a created deal when the initial transition write fails", async () => {
+    const db = makeDb();
+    db.dealStageTransition.create = vi.fn(async () => {
+      throw new Error("transition insert failed");
+    });
+
+    await expect(createDeal(db, "user-1", input)).rejects.toThrow("transition insert failed");
+
+    const deals = await listDeals(db, "user-1");
+    expect(deals).toHaveLength(0);
+  });
+
+  it("updates the deal status and records the transition inside a single transaction", async () => {
+    const db = makeDb([existing]);
+
+    await updateDeal(db, "deal-1", "user-1", { status: "NEGO" });
+
+    expect(db.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not report a status change when the transition write fails", async () => {
+    const db = makeDb([existing]);
+    db.dealStageTransition.create = vi.fn(async () => {
+      throw new Error("transition insert failed");
+    });
+
+    await expect(updateDeal(db, "deal-1", "user-1", { status: "NEGO" })).rejects.toThrow(
+      "transition insert failed",
+    );
+
+    const deal = await getOwnedDeal(db, "deal-1", "user-1");
+    expect(deal?.status).toBe("MASUK");
+  });
+
+  it("derives fromStatus from a read inside the transaction, not a stale pre-transaction read", async () => {
+    const db = makeDb([existing]);
+    const runTransaction = db.$transaction;
+    db.$transaction = vi.fn((fn: Parameters<DealDb["$transaction"]>[0]) => {
+      // Simulate a concurrent transaction committing a status change after
+      // updateDeal's outer call started but before its own transaction reads
+      // the row -- the recorded fromStatus must reflect this, not whatever
+      // status existed when updateDeal was first invoked.
+      return db.deal
+        .update({ where: { id: "deal-1" }, data: { status: "NEGO" } })
+        .then(() => runTransaction(fn));
+    }) as unknown as DealDb["$transaction"];
+
+    await updateDeal(db, "deal-1", "user-1", { status: "DEAL" });
+    const history = await listDealStageTransitions(db, "deal-1");
+
+    expect(history[0]).toMatchObject({ fromStatus: "NEGO", toStatus: "DEAL" });
   });
 });

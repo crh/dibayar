@@ -19,11 +19,16 @@ describe("normalizeWhatsAppNumber", () => {
     ["+62 812-3456-7890", "6281234567890"],
     ["6281234567890", "6281234567890"],
     ["81234567890", "6281234567890"],
+    // §5.2 rule 5: a leading digit sequence that is not 0/8/62 is an
+    // already-international number and is kept as-is, not forced into 62.
+    ["0215551234", "62215551234"],
+    ["+1 415 555 2671", "14155552671"],
+    ["6591234567", "6591234567"],
   ])("normalizes %s", (input, expected) => {
     expect(normalizeWhatsAppNumber(input)).toBe(expected);
   });
 
-  it.each(["", "12345", "0215551234", "+1 415 555 2671", "6281234", "abc"]) (
+  it.each(["", "12345", "6281234", "abc"]) (
     "rejects unusable number %s",
     (input) => expect(normalizeWhatsAppNumber(input)).toBeNull(),
   );
@@ -163,19 +168,18 @@ describe("buildDealWhatsAppMessage (T-18)", () => {
 
 describe("buildDealWhatsApp (T-18)", () => {
   it("builds a ready wa.me href for a valid contact number", () => {
-    const result = buildDealWhatsApp({ contactWa: "+62 812-3456-7890", brand: "Kopi Nusantara", contactName: null });
+    const result = buildDealWhatsApp({ contactWa: "+62 812-3456-7890" });
 
     expect(result.kind).toBe("ok");
     if (result.kind !== "ok") throw new Error("expected ok");
-    expect(result.href.startsWith("https://wa.me/6281234567890?text=")).toBe(true);
-    expect(decodeURIComponent(result.href)).toContain("Kopi Nusantara");
+    expect(result.href).toBe("https://wa.me/6281234567890");
   });
 
   it("reports invalid-number for an unusable phone number, never throwing or auto-sending anything", () => {
-    expect(buildDealWhatsApp({ contactWa: "not-a-phone", brand: "Kopi Nusantara", contactName: null })).toEqual({
+    expect(buildDealWhatsApp({ contactWa: "not-a-phone" })).toEqual({
       kind: "invalid-number",
     });
-    expect(buildDealWhatsApp({ contactWa: "", brand: "Kopi Nusantara", contactName: null })).toEqual({
+    expect(buildDealWhatsApp({ contactWa: "" })).toEqual({
       kind: "invalid-number",
     });
   });

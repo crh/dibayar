@@ -430,6 +430,8 @@ export default function InvoiceDetailClient({
   const [contactWaDraft, setContactWaDraft] = useState("");
   const [isSavingContactWa, setIsSavingContactWa] = useState(false);
   const [contactWaMessage, setContactWaMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const [showContactRepair, setShowContactRepair] = useState(false);
+  const [whatsAppBlockedHref, setWhatsAppBlockedHref] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [paidMoment, setPaidMoment] = useState(false);
@@ -481,10 +483,12 @@ export default function InvoiceDetailClient({
     fetchContact();
   }, [fetchContact]);
 
-  // T-21: writes back to the deal, mirroring deal-detail-client's own
-  // repair flow -- the invoice's contact IS the deal's contact, there is no
-  // separate copy. Never opens WhatsApp itself; it only unblocks the
-  // primary action above, which the owner still has to click.
+  // F15: the invoice's contact IS the deal's contact, there is no separate
+  // copy, so repairing it here writes back to the deal (mirroring
+  // deal-detail-client's own repair flow). A valid save goes straight into
+  // sendWhatsApp so the fix and the send happen in one step, rather than
+  // making the owner close the repair panel and press the primary button
+  // again.
   async function handleSaveContactWa() {
     setIsSavingContactWa(true);
     setContactWaMessage(null);
@@ -495,10 +499,24 @@ export default function InvoiceDetailClient({
         body: JSON.stringify({ contactWa: contactWaDraft }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error("invoice.contactRepairError");
-      setContactWa(payload.deal.contactWa);
-      setContactWaDraft(payload.deal.contactWa);
-      setContactWaMessage({ kind: "success", text: t("invoice.contactRepairSaved") });
+      if (!response.ok || typeof payload.deal?.contactWa !== "string") throw new Error("invoice.contactRepairError");
+      const readBackResponse = await fetchWithTimeout(`/api/deals/${invoice.dealId}`);
+      const readBackPayload = await readBackResponse.json();
+      if (
+        !readBackResponse.ok ||
+        readBackPayload.deal?.id !== invoice.dealId ||
+        readBackPayload.deal?.contactWa !== payload.deal.contactWa
+      ) throw new Error("invoice.contactRepairError");
+      const savedNumber: string = readBackPayload.deal.contactWa;
+      setContactWa(savedNumber);
+      setContactWaDraft(savedNumber);
+      if (normalizeWhatsAppNumber(savedNumber)) {
+        setShowContactRepair(false);
+        setContactWaMessage({ kind: "success", text: t("invoice.contactRepairSaved") });
+        await sendWhatsApp(savedNumber);
+      } else {
+        setContactWaMessage({ kind: "error", text: t("invoice.contactRepairError") });
+      }
     } catch {
       setContactWaMessage({ kind: "error", text: t("invoice.contactRepairError") });
     } finally {
@@ -546,14 +564,16 @@ export default function InvoiceDetailClient({
     }
   }
 
-  // The header's single primary action (§4.5 item 2): the owner's own
-  // Settings template (templateSend normally, templateChase once the
-  // invoice is overdue -- T-21), resolved with the real invoice/deal
-  // tokens. Ensures a share link exists first (creating one on demand), so
-  // this is always usable as the entry point to the invoice's public link
-  // -- it never duplicates the share management state in ShareSection
-  // below, it just drives the same hook.
-  async function handlePrimaryWhatsApp() {
+  // The owner's own Settings template (templateSend normally, templateChase
+  // once the invoice is overdue -- T-21), resolved with the real
+  // invoice/deal tokens. Ensures a share link exists first (creating one on
+  // demand), so this is always usable as the entry point to the invoice's
+  // public link -- it never duplicates the share management state in
+  // ShareSection below, it just drives the same hook. window.open's return
+  // value is the only reliable signal a popup blocker fired (F15): when
+  // blocked, a direct link takes its place instead of failing silently.
+  async function sendWhatsApp(number: string) {
+    setWhatsAppBlockedHref(null);
     setIsSharingToWhatsApp(true);
     try {
       const link = shareState.share.kind === "active" && shareState.share.link
@@ -562,7 +582,7 @@ export default function InvoiceDetailClient({
       if (!link) return;
 
       const result = buildInvoiceWhatsApp({
-        contactWa,
+        contactWa: number,
         shareUrl: link,
         template: isOverdue ? templateChase : templateSend,
         brand: brand ?? "",
@@ -570,16 +590,36 @@ export default function InvoiceDetailClient({
         totalIdr: invoice.subtotalIdr,
         dueDate: invoice.dueDate,
       });
-      if (result.kind === "ok") window.open(result.href, "_blank", "noopener,noreferrer");
+      if (result.kind === "ok") {
+        const win = window.open(result.href, "_blank", "noopener,noreferrer");
+        if (!win) setWhatsAppBlockedHref(result.href);
+      }
     } finally {
       setIsSharingToWhatsApp(false);
     }
   }
 
+  // The header's single primary action (§4.5 item 2). F15: the button is
+  // never disabled for an invalid contact -- activating it reveals the
+  // repair panel instead of silently doing nothing, rather than gating the
+  // button itself behind contact validity.
+  async function handlePrimaryWhatsApp() {
+    if (!normalizeWhatsAppNumber(contactWa ?? "")) {
+      setContactWaMessage(null);
+      setWhatsAppBlockedHref(null);
+      setShowContactRepair(true);
+      return;
+    }
+    setShowContactRepair(false);
+    await sendWhatsApp(contactWa ?? "");
+  }
+
+  const isContactUnusable = contactStatus === "loaded" && !normalizeWhatsAppNumber(contactWa ?? "");
+  const isShareLinkStale = shareState.share.kind === "active" && !shareState.share.link;
   const canShareViaWhatsApp =
+    contactStatus === "loaded" &&
     shareState.share.kind !== "loading" &&
-    !(shareState.share.kind === "active" && !shareState.share.link) &&
-    Boolean(normalizeWhatsAppNumber(contactWa ?? ""));
+    !isShareLinkStale;
 
   const dueDateValue = invoice.dueDate ? getDueDateCalendarDate(normalizeDueDate(invoice.dueDate)!) : "";
 
@@ -638,14 +678,14 @@ export default function InvoiceDetailClient({
               </button>
             </div>
           ) : null}
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+          <div data-ux-action-row="invoice-primary-actions" className="mt-4 flex flex-col gap-3 lg:flex-row lg:flex-nowrap lg:gap-2">
             <Button
               type="button"
               disabled={!canShareViaWhatsApp || isSharingToWhatsApp || shareState.isBusy}
               loading={isSharingToWhatsApp}
               loadingLabel={t("invoice.creating")}
               onClick={handlePrimaryWhatsApp}
-              className="w-full sm:w-auto"
+              className="w-full lg:w-auto lg:px-3"
             >
               {isOverdue ? t("invoice.sendReminder") : t("invoice.shareViaWhatsApp")}
             </Button>
@@ -658,18 +698,23 @@ export default function InvoiceDetailClient({
                 loading={isSaving}
                 loadingLabel={t("invoice.saving")}
                 onClick={() => updateStatus(action.status)}
-                className="w-full sm:w-auto"
+                className="w-full lg:w-auto lg:px-3"
               >
                 {t(action.labelKey)}
               </Button>
             ))}
           </div>
-          {!canShareViaWhatsApp && contactStatus === "loaded" && shareState.share.kind === "active" && !shareState.share.link ? (
+          {contactStatus === "loaded" && isShareLinkStale ? (
             <p className="mt-2 text-[12px] text-muted">{t("invoice.shareLinkUnavailable")}</p>
           ) : null}
-          {!canShareViaWhatsApp && contactStatus === "loaded" && !(shareState.share.kind === "active" && !shareState.share.link) ? (
+          {/* F15: the button above is never disabled for an invalid contact
+              -- this panel only appears once the owner activates it (or a
+              save attempt leaves the number still invalid), it does not
+              render itself just because the number is unusable. */}
+          {showContactRepair && isContactUnusable ? (
             <div className="mt-3 rounded-xl bg-bg p-3">
-              <p className="text-[13px] text-ink">{t("invoice.contactInvalidNote", { brand: brand ?? "" })}</p>
+              <p role="alert" className="text-[13px] text-overdue">{t("whatsapp.invalidNumber")}</p>
+              <p className="mt-1 text-[13px] text-ink">{t("invoice.contactSavedOnDeal", { brand: brand ?? "" })}</p>
               <label className="mt-2 flex flex-col gap-1.5 text-[13px] font-semibold text-ink" htmlFor="invoice-contact-wa">
                 {t("invoice.contactRepairLabel")}
               </label>
@@ -678,6 +723,7 @@ export default function InvoiceDetailClient({
                   id="invoice-contact-wa"
                   name="invoice-contact-wa"
                   type="tel"
+                  autoFocus
                   value={contactWaDraft}
                   onChange={(event) => setContactWaDraft(event.target.value)}
                   className={`${fieldClassName} w-full min-[360px]:min-w-0 min-[360px]:flex-1`}
@@ -690,13 +736,30 @@ export default function InvoiceDetailClient({
                   onClick={handleSaveContactWa}
                   className="w-full min-[360px]:w-auto"
                 >
-                  {t("invoice.contactRepairSave")}
+                  {t("whatsapp.saveAndSend")}
                 </Button>
               </div>
             </div>
           ) : null}
+          {/* F15 fallback: rendered whenever the most recent send attempt's
+              window.open() came back blocked, whether that attempt came
+              from the primary button directly or from a repair save --
+              independent of showContactRepair so it still surfaces after
+              the repair panel above closes on a successful save. */}
+          {whatsAppBlockedHref ? (
+            <p className="mt-2 text-[13px]">
+              <a
+                href={whatsAppBlockedHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-primary underline"
+              >
+                {t("whatsapp.openFallback")}
+              </a>
+            </p>
+          ) : null}
           {/* Rendered regardless of the repair block above: a successful
-              repair flips canShareViaWhatsApp to true on the same render
+              repair flips isContactUnusable to false on the same render
               that sets this message, and the repair block (which this used
               to live inside) would otherwise unmount right as the message
               appears, hiding it before anyone could read it. */}

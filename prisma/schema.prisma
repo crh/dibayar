@@ -126,9 +126,10 @@ model Deal {
 }
 
 // Durable audit trail of pipeline moves (T-15's menu/drag-drop moves and the
-// deal's initial stage both land here). Best-effort, written alongside the
-// Deal row rather than in the same transaction -- see recordDealStageTransition.
-// fromStatus is null only for the entry recorded at deal creation.
+// deal's initial stage both land here). The Deal mutation and its stage-history
+// append are written atomically inside the same transaction -- see
+// recordDealStageTransition. fromStatus is null only for the entry recorded at
+// deal creation.
 model DealStageTransition {
   id         String      @id @default(cuid())
   dealId     String

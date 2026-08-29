@@ -1,5 +1,6 @@
 import { Prisma } from "@/generated/prisma/client";
 import { dealInputSchema, dealPatchSchema, type DealInput, type DealPatch } from "./deal-validation";
+import { normalizeWhatsAppNumber } from "./whatsapp";
 
 export type DealStatus = DealInput["status"];
 
@@ -31,10 +32,9 @@ type DealModel = {
   delete(args: { where: { id: string } }): Promise<DealRecord>;
 };
 
-// T-17: a durable, best-effort audit trail of pipeline moves, written
-// alongside (not inside the same transaction as) the Deal row -- see
-// recordDealStageTransition. fromStatus is null only for the entry
-// recorded at deal creation.
+// T-17: a durable audit trail of pipeline moves, written inside the same
+// transaction as the Deal row it describes -- see recordDealStageTransition.
+// fromStatus is null only for the entry recorded at deal creation.
 export type DealStageTransitionRecord = {
   id: string;
   dealId: string;
@@ -53,13 +53,23 @@ type DealStageTransitionModel = {
   }): Promise<DealStageTransitionRecord[]>;
 };
 
-export type DealDb = { deal: DealModel; dealStageTransition: DealStageTransitionModel };
+// The model delegates alone -- this is what Prisma's interactive transaction
+// client actually exposes. It does not include $transaction: Prisma does not
+// support starting a transaction from within one.
+export type DealClient = {
+  deal: DealModel;
+  dealStageTransition: DealStageTransitionModel;
+};
+
+export type DealDb = DealClient & {
+  $transaction<T>(fn: (tx: DealClient) => Promise<T>): Promise<T>;
+};
 
 function toCreateData(userId: string, input: DealInput): DealCreateData {
   return {
     userId,
     brand: input.brand,
-    contactWa: input.contactWa,
+    contactWa: normalizeWhatsAppNumber(input.contactWa) ?? input.contactWa,
     contactName: input.contactName ?? null,
     scope: input.scope,
     feeIdr: input.feeIdr,
@@ -70,7 +80,7 @@ function toCreateData(userId: string, input: DealInput): DealCreateData {
 }
 
 async function recordDealStageTransition(
-  db: DealDb,
+  db: DealClient,
   dealId: string,
   fromStatus: DealStatus | null,
   toStatus: DealStatus,
@@ -87,6 +97,7 @@ export async function listDealStageTransitions(db: DealDb, dealId: string) {
 
 function toPatchData(input: DealPatch): Partial<DealCreateData> {
   const data: Partial<DealCreateData> = { ...input };
+  if (input.contactWa !== undefined) data.contactWa = normalizeWhatsAppNumber(input.contactWa) ?? input.contactWa;
   if (input.deadline !== undefined) data.deadline = input.deadline;
   return data;
 }
@@ -100,12 +111,14 @@ export async function listDeals(db: DealDb, userId: string) {
 
 export async function createDeal(db: DealDb, userId: string, input: unknown) {
   const validated = dealInputSchema.parse(input);
-  const deal = await db.deal.create({ data: toCreateData(userId, validated) });
-  await recordDealStageTransition(db, deal.id, null, deal.status);
-  return deal;
+  return db.$transaction(async (tx) => {
+    const deal = await tx.deal.create({ data: toCreateData(userId, validated) });
+    await recordDealStageTransition(tx, deal.id, null, deal.status);
+    return deal;
+  });
 }
 
-export async function getOwnedDeal(db: DealDb, id: string, userId: string) {
+export async function getOwnedDeal(db: DealClient, id: string, userId: string) {
   return db.deal.findFirst({ where: { id, userId } });
 }
 
@@ -115,18 +128,23 @@ export async function updateDeal(
   userId: string,
   input: unknown,
 ) {
-  const existing = await getOwnedDeal(db, id, userId);
-  if (!existing) return null;
-  // Snapshot as a primitive: db.deal.update below may mutate `existing` in
-  // place depending on the underlying implementation, and a string can't be
-  // affected by that the way a shared object reference could be.
-  const previousStatus = existing.status;
   const validated = dealPatchSchema.parse(input);
-  const deal = await db.deal.update({ where: { id }, data: toPatchData(validated) });
-  if (validated.status !== undefined && validated.status !== previousStatus) {
-    await recordDealStageTransition(db, id, previousStatus, validated.status);
-  }
-  return deal;
+  return db.$transaction(async (tx) => {
+    // The owner-scoped read happens inside this transaction, not before it,
+    // so fromStatus below reflects the row as of this transaction's own
+    // snapshot rather than a stale read taken before it started.
+    const existing = await getOwnedDeal(tx, id, userId);
+    if (!existing) return null;
+    // Snapshot as a primitive: tx.deal.update below may mutate `existing` in
+    // place depending on the underlying implementation, and a string can't be
+    // affected by that the way a shared object reference could be.
+    const previousStatus = existing.status;
+    const deal = await tx.deal.update({ where: { id }, data: toPatchData(validated) });
+    if (validated.status !== undefined && validated.status !== previousStatus) {
+      await recordDealStageTransition(tx, id, previousStatus, validated.status);
+    }
+    return deal;
+  });
 }
 
 export type DeleteDealResult =

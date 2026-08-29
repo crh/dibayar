@@ -53,7 +53,7 @@ export function ScopeBlock({ scope }: { scope: InvoiceDocumentModel["scope"] }) 
       </div>
       <div className="text-right">
         <p className="text-[12px] font-semibold text-muted">Jumlah</p>
-        <p className="mt-0.5 font-serif text-[15px] tabular-nums text-ink">{scope.amountLabel}</p>
+        <p data-ux-money="list" className="mt-0.5 font-serif text-[17px] tabular-nums text-ink">{scope.amountLabel}</p>
       </div>
     </div>
   );
@@ -63,7 +63,7 @@ export function TotalBlock({ total }: { total: InvoiceDocumentModel["total"] }) 
   return (
     <div className="flex items-baseline justify-between">
       <p className="text-[15px] font-bold text-ink">Total</p>
-      <p className="font-serif text-[24px] font-semibold tabular-nums text-ink">{total.amountLabel}</p>
+      <p data-ux-money="display" className="font-serif text-[28px] font-semibold tabular-nums text-ink">{total.amountLabel}</p>
     </div>
   );
 }

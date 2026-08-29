@@ -8,12 +8,64 @@ import { translate, type Language } from "@/lib/i18n";
 
 const DESKTOP_MENU_GAP = 8;
 const VIEWPORT_MARGIN = 8;
+const DEFAULT_DESKTOP_MENU_WIDTH = 260;
+const MAX_COLLISION_PASSES = 3;
+
+// Landmark-ish content containers a floating menu shouldn't visually cover.
+// Deliberately excludes <main>/<body>/<html>, which are large enough to wrap
+// the whole page and would make every candidate position "collide".
+const CONTENT_LANDMARK_SELECTOR = "section, article, header, footer, aside, [role='region'], [role='article']";
 
 const FOCUSABLE_SELECTOR =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function getFocusableMenuElements(menuElement: HTMLElement) {
   return menuElement.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+}
+
+type Rect = { left: number; right: number; top: number; bottom: number };
+
+// Finds how far down the candidate menu rect is obstructed by real page
+// content, using elementsFromPoint (unavailable in jsdom, so this is a no-op
+// in unit tests) rather than any selector naming a specific page's content.
+function findObstructionBottom(candidate: Rect, exclude: HTMLElement): number | null {
+  if (typeof document.elementsFromPoint !== "function") return null;
+
+  const samplePoints: Array<[number, number]> = [
+    [candidate.left + 1, candidate.top + 1],
+    [candidate.right - 1, candidate.top + 1],
+    [candidate.left + 1, candidate.bottom - 1],
+    [candidate.right - 1, candidate.bottom - 1],
+    [(candidate.left + candidate.right) / 2, (candidate.top + candidate.bottom) / 2],
+  ];
+
+  let obstructionBottom: number | null = null;
+
+  for (const [x, y] of samplePoints) {
+    if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) continue;
+
+    for (const hit of document.elementsFromPoint(x, y)) {
+      if (hit === document.documentElement || hit === document.body) continue;
+      if (exclude.contains(hit)) continue;
+
+      const target = hit.closest(CONTENT_LANDMARK_SELECTOR) ?? hit;
+      const rect = target.getBoundingClientRect();
+      const intersects =
+        rect.width > 0 &&
+        rect.height > 0 &&
+        rect.left < candidate.right &&
+        rect.right > candidate.left &&
+        rect.top < candidate.bottom &&
+        rect.bottom > candidate.top;
+
+      if (intersects) {
+        obstructionBottom = obstructionBottom === null ? rect.bottom : Math.max(obstructionBottom, rect.bottom);
+      }
+      break;
+    }
+  }
+
+  return obstructionBottom;
 }
 
 type DesktopPosition = { top: number; right: number };
@@ -56,15 +108,39 @@ export function AccountMenu({ language, email }: { language: Language; email?: s
 
   // Anchored trigger-rect popover: recomputed from the trigger's live
   // bounding rect (not a CSS-relative offset) so it stays correct if the
-  // sticky top bar or page scroll shifts the trigger's position.
+  // sticky top bar or page scroll shifts the trigger's position. Also
+  // nudged downward, up to MAX_COLLISION_PASSES times, past any content
+  // landmark it would otherwise visually cover (e.g. a KPI card sitting
+  // just below the header), then clamped back within the viewport margin.
   const updateDesktopPosition = useCallback(() => {
     const trigger = triggerRef.current;
-    if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    setDesktopPosition({
-      top: rect.bottom + DESKTOP_MENU_GAP,
-      right: Math.max(VIEWPORT_MARGIN, window.innerWidth - rect.right),
-    });
+    const container = containerRef.current;
+    if (!trigger || !container) return;
+
+    const triggerRect = trigger.getBoundingClientRect();
+    const menuRect = menuRef.current?.getBoundingClientRect();
+    const menuWidth = menuRect && menuRect.width > 0 ? menuRect.width : DEFAULT_DESKTOP_MENU_WIDTH;
+    const menuHeight = menuRect?.height ?? 0;
+
+    const right = Math.max(VIEWPORT_MARGIN, window.innerWidth - triggerRect.right);
+    const left = window.innerWidth - right - menuWidth;
+    let top = triggerRect.bottom + DESKTOP_MENU_GAP;
+
+    if (menuHeight > 0) {
+      for (let pass = 0; pass < MAX_COLLISION_PASSES; pass += 1) {
+        const obstructionBottom = findObstructionBottom(
+          { left, right: left + menuWidth, top, bottom: top + menuHeight },
+          container,
+        );
+        if (obstructionBottom === null || obstructionBottom + DESKTOP_MENU_GAP <= top) break;
+        top = obstructionBottom + DESKTOP_MENU_GAP;
+      }
+
+      const maxTop = Math.max(VIEWPORT_MARGIN, window.innerHeight - VIEWPORT_MARGIN - menuHeight);
+      top = Math.min(top, maxTop);
+    }
+
+    setDesktopPosition({ top, right });
   }, []);
 
   useLayoutEffect(() => {

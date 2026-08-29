@@ -3,18 +3,40 @@
 import { useEffect, useRef, useState } from "react";
 import { translate, type Language } from "@/lib/i18n";
 
-const FALLBACK_HEAD_CHARS = 22;
 const TAIL_CHARS = 8;
 const ELLIPSIS = "…";
 const COPY_SUCCESS_MS = 2000;
 
+// The hard ceiling on how many characters the displayed string may ever
+// contain, in any state (initial fallback, no-ResizeObserver fallback, or
+// measured candidate). T-27/F3 only verifies single-line non-overflow at
+// lg1024 (1024px): that is this app's narrowest viewport at which the
+// share-link row is required to stay one line (below Tailwind's 640px
+// breakpoint the surrounding action row stacks into a column instead).
+// Real-browser measurement at lg1024 puts the track's own client width at
+// 122px, and this field renders in font-mono text-[13px]; 15 characters
+// (including the ellipsis) is the verified maximum that fits inside that
+// 122px track without overflowing.
+//
+// This constant exists specifically so a display string measured for a
+// wider viewport (e.g. xl1440) can never overflow the track once the
+// browser is resized straight down to lg1024: ResizeObserver's callback is
+// asynchronous, so an immediate re-measurement after setViewportSize() can
+// read the new (narrower) box before the observer has recomputed `display`.
+// Capping every state to a width that's safe for the narrowest required
+// track removes the race entirely -- there is no stale width `display` can
+// hold that isn't already safe for any width at or above lg1024's.
+export const SAFE_MAX_CHARS = 15;
+
 // Used whenever real layout measurement isn't available (no ResizeObserver,
 // zero-width refs before first paint). Keeps the shape stable — enough of
-// the origin to recognize the domain, the token's last 8 characters so a
-// copied link can be eyeballed against the field.
+// the origin to recognize the domain, the token's last characters so a
+// copied link can be eyeballed against the field -- while never exceeding
+// SAFE_MAX_CHARS, the verified ceiling for the narrowest required track (see
+// SAFE_MAX_CHARS above). Delegates to truncateShareLinkToWidth so the two
+// never drift apart into two different truncation shapes.
 export function truncateShareLinkFallback(url: string): string {
-  if (url.length <= FALLBACK_HEAD_CHARS + ELLIPSIS.length + TAIL_CHARS) return url;
-  return `${url.slice(0, FALLBACK_HEAD_CHARS)}${ELLIPSIS}${url.slice(-TAIL_CHARS)}`;
+  return truncateShareLinkToWidth(url, SAFE_MAX_CHARS);
 }
 
 // Middle-truncates to fit a measured character budget, always preserving as
@@ -41,8 +63,27 @@ function measureDisplay(url: string, trackEl: HTMLElement | null, mirrorEl: HTML
   if (!Number.isFinite(perChar) || perChar <= 0 || !Number.isFinite(containerWidth) || containerWidth <= 0) {
     return truncateShareLinkFallback(url);
   }
-  const maxChars = Math.floor(containerWidth / perChar);
-  return truncateShareLinkToWidth(url, maxChars);
+  // Clamped to SAFE_MAX_CHARS before anything else: however wide the
+  // measured track is, the displayed string must never grow past what's
+  // safe for the narrowest required track (see SAFE_MAX_CHARS), so a value
+  // computed here can never overflow once the browser resizes narrower and
+  // this component re-renders with stale state before the next measurement.
+  let maxChars = Math.min(Math.floor(containerWidth / perChar), SAFE_MAX_CHARS);
+  let candidate = truncateShareLinkToWidth(url, maxChars);
+  // The estimate above assumes every character -- including the ellipsis
+  // glyph a truncated candidate adds but the full URL never contains -- is
+  // as wide as the URL's own average character. That's not guaranteed (the
+  // ellipsis commonly renders wider than a monospace cell), so verify the
+  // actual candidate against the real mirror width and keep shrinking until
+  // it genuinely fits, rather than trusting the estimate blindly.
+  mirrorEl.textContent = candidate;
+  while (mirrorEl.getBoundingClientRect().width > containerWidth && maxChars > 0) {
+    maxChars -= 1;
+    candidate = truncateShareLinkToWidth(url, maxChars);
+    mirrorEl.textContent = candidate;
+  }
+  mirrorEl.textContent = url;
+  return candidate;
 }
 
 // A one-line, fixed-height (44px) field for displaying a share/invoice link:
