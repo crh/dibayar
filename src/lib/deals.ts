@@ -28,8 +28,8 @@ type DealModel = {
   }): Promise<DealRecord[]>;
   findFirst(args: { where: { id: string; userId: string } }): Promise<DealRecord | null>;
   create(args: { data: DealCreateData }): Promise<DealRecord>;
-  update(args: { where: { id: string }; data: Partial<DealCreateData> }): Promise<DealRecord>;
-  delete(args: { where: { id: string } }): Promise<DealRecord>;
+  update(args: { where: { id: string; userId: string }; data: Partial<DealCreateData> }): Promise<DealRecord>;
+  delete(args: { where: { id: string; userId: string } }): Promise<DealRecord>;
 };
 
 // T-17: a durable audit trail of pipeline moves, written inside the same
@@ -139,7 +139,7 @@ export async function updateDeal(
     // place depending on the underlying implementation, and a string can't be
     // affected by that the way a shared object reference could be.
     const previousStatus = existing.status;
-    const deal = await tx.deal.update({ where: { id }, data: toPatchData(validated) });
+    const deal = await tx.deal.update({ where: { id, userId }, data: toPatchData(validated) });
     if (validated.status !== undefined && validated.status !== previousStatus) {
       await recordDealStageTransition(tx, id, previousStatus, validated.status);
     }
@@ -161,7 +161,7 @@ export async function deleteDeal(db: DealDb, id: string, userId: string): Promis
   if (!(await getOwnedDeal(db, id, userId))) return { kind: "not-found" };
 
   try {
-    await db.deal.delete({ where: { id } });
+    await db.deal.delete({ where: { id, userId } });
     return { kind: "deleted" };
   } catch (error) {
     if (isInvoiceForeignKeyRestriction(error)) return { kind: "has-invoices" };

@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "node scripts/lint.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:ux-audit": "npm run build && playwright test",
@@ -14,6 +14,7 @@
     "test:ux-baseline": "npm run build && playwright test baseline.landing.spec.ts",
     "ux:fixtures": "tsx scripts/ux-fixtures.ts",
     "test:cron-guard": "node --test scripts/cron-guard.test.mjs",
+    "test:lint-wrapper": "node --test scripts/lint.test.mjs",
     "postinstall": "prisma generate"
   },
   "dependencies": {

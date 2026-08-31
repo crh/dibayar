@@ -65,14 +65,19 @@ function makeDb(records: DealRecord[] = []): DealDb {
         data.push(record);
         return record;
       }),
-      update: vi.fn(async ({ where, data: values }: { where: { id: string }; data: Partial<DealRecord> }) => {
-        const record = data.find((deal) => deal.id === where.id);
-        if (!record) throw new Error("missing record");
-        Object.assign(record, values);
-        return record;
-      }),
-      delete: vi.fn(async ({ where }: { where: { id: string } }) => {
-        const index = data.findIndex((deal) => deal.id === where.id);
+      // Mirrors Prisma's real compound-where behavior for update/delete: a
+      // `where` that names a row's id but the wrong userId matches nothing,
+      // the same as it would against the actual database.
+      update: vi.fn(
+        async ({ where, data: values }: { where: { id: string; userId: string }; data: Partial<DealRecord> }) => {
+          const record = data.find((deal) => deal.id === where.id && deal.userId === where.userId);
+          if (!record) throw new Error("missing record");
+          Object.assign(record, values);
+          return record;
+        },
+      ),
+      delete: vi.fn(async ({ where }: { where: { id: string; userId: string } }) => {
+        const index = data.findIndex((deal) => deal.id === where.id && deal.userId === where.userId);
         if (index === -1) throw new Error("missing record");
         return data.splice(index, 1)[0];
       }),
@@ -191,7 +196,22 @@ describe("deal repository", () => {
 
     expect(await deleteDeal(db, "deal-1", "user-2")).toEqual({ kind: "not-found" });
     expect(await deleteDeal(db, "deal-1", "user-1")).toEqual({ kind: "deleted" });
-    expect(db.deal.delete).toHaveBeenCalledWith({ where: { id: "deal-1" } });
+    expect(db.deal.delete).toHaveBeenCalledWith({ where: { id: "deal-1", userId: "user-1" } });
+  });
+
+  // Defense-in-depth: even if the ownership pre-check above were ever
+  // dropped or refactored away, the delete/update call itself must still be
+  // scoped by userId so the database's own row match -- not just app-level
+  // control flow -- is what stands between one owner and another's row.
+  it("scopes the update mutation itself by owner, not only the pre-check", async () => {
+    const db = makeDb([existing]);
+
+    await updateDeal(db, "deal-1", "user-1", { status: "NEGO" });
+
+    expect(db.deal.update).toHaveBeenCalledWith({
+      where: { id: "deal-1", userId: "user-1" },
+      data: expect.objectContaining({ status: "NEGO" }),
+    });
   });
 
   it("reports has-invoices when the database restricts deletion of a deal with invoices", async () => {
@@ -316,7 +336,7 @@ describe("deal stage history (T-17)", () => {
       // the row -- the recorded fromStatus must reflect this, not whatever
       // status existed when updateDeal was first invoked.
       return db.deal
-        .update({ where: { id: "deal-1" }, data: { status: "NEGO" } })
+        .update({ where: { id: "deal-1", userId: "user-1" }, data: { status: "NEGO" } })
         .then(() => runTransaction(fn));
     }) as unknown as DealDb["$transaction"];
 
