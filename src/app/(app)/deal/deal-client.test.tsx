@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { DealRecord } from "@/lib/deals";
 import { DEAL_DRAG_MIME } from "@/components/deals/deal-card";
@@ -36,28 +36,50 @@ beforeEach(() => {
 });
 
 describe("DealClient stage filter (T-14)", () => {
-  it("pushes (not replaces) the URL when a stage filter chip is clicked, so back/forward can step through it", async () => {
+  afterEach(() => {
+    window.history.replaceState(null, "", "/deal");
+  });
+
+  it("updates the URL via history.pushState (not a router navigation) when a stage filter chip is clicked, so back/forward can step through it without a server round trip", async () => {
+    const pushStateSpy = vi.spyOn(window.history, "pushState");
     const user = userEvent.setup();
     render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
 
     await user.click(screen.getByRole("button", { name: "Nego" }));
 
-    expect(mockPush).toHaveBeenCalledWith("/deal?tahap=NEGO");
+    expect(pushStateSpy).toHaveBeenCalledWith(null, "", "/deal?tahap=NEGO");
+    expect(mockPush).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Nego" }).getAttribute("aria-pressed")).toBe("true");
   });
 
-  it("pushes back to the plain /deal URL when Semua is selected", async () => {
+  it("updates the URL back to the plain /deal path when Semua is selected", async () => {
     mockedUseSearchParams.mockReturnValue(new URLSearchParams("tahap=NEGO"));
+    const pushStateSpy = vi.spyOn(window.history, "pushState");
     const user = userEvent.setup();
     render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
 
     await user.click(screen.getByRole("button", { name: "Semua" }));
 
-    expect(mockPush).toHaveBeenCalledWith("/deal");
+    expect(pushStateSpy).toHaveBeenCalledWith(null, "", "/deal");
+    expect(mockPush).not.toHaveBeenCalled();
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
-  it("reflects the current URL's tahap value as the pressed filter, not stale local state", () => {
+  it("does not fetch or navigate when switching filters — the already-loaded deals are filtered client-side", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Nego" }));
+    await user.click(screen.getByRole("button", { name: "Semua" }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("reflects the current URL's tahap value as the pressed filter on initial render", () => {
     mockedUseSearchParams.mockReturnValue(new URLSearchParams("tahap=DEAL"));
     render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
 
@@ -71,6 +93,27 @@ describe("DealClient stage filter (T-14)", () => {
 
     expect(screen.getByRole("button", { name: "Semua" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getAllByRole("region")).toHaveLength(6);
+  });
+
+  it("restores the filter shown before the click when the user navigates back (popstate), without a server round trip", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Nego" }));
+    expect(screen.getByRole("button", { name: "Nego" }).getAttribute("aria-pressed")).toBe("true");
+
+    // Simulate the browser restoring the prior URL and firing popstate, as it
+    // does for a same-document history entry created by pushState.
+    window.history.replaceState(null, "", "/deal");
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    expect(screen.getByRole("button", { name: "Semua" }).getAttribute("aria-pressed")).toBe("true");
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 });
 

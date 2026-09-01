@@ -27,11 +27,18 @@ export default function DealClient({
   const { language, t } = useLanguage();
   const [deals, setDeals] = useState(initialDeals);
   const [invoices, setInvoices] = useState(initialInvoices);
-  // Derived directly from the URL (not local state seeded once) so reload,
-  // back/forward, and any other navigation always reflect the real filter —
-  // no separate state to fall out of sync with it.
-  const tahapParam = searchParams.get("tahap");
-  const stageFilter = isStageValue(tahapParam) ? tahapParam : null;
+  // Seeded once from the URL (correct for a hard load, reload, or deep link,
+  // since the server component reads the same searchParams). After mount,
+  // handleStageFilterChange keeps this in sync directly instead of re-reading
+  // the URL on every render: deals/invoices don't depend on `tahap` at all
+  // (DealBoard filters the already-loaded list client-side), so routing a
+  // real Next.js navigation through this param would force a wasted full
+  // server round trip — re-running auth() and both list queries — on every
+  // filter chip click.
+  const [stageFilter, setStageFilter] = useState<DealRecord["status"] | null>(() => {
+    const initial = searchParams.get("tahap");
+    return isStageValue(initial) ? initial : null;
+  });
   const [isDialogOpen, setIsDialogOpen] = useState(initialDialogOpen);
   const [form, setForm] = useState<DealFormState>(EMPTY_DEAL_FORM);
   const [error, setError] = useState<string | null>(null);
@@ -56,10 +63,26 @@ export default function DealClient({
     setForm(EMPTY_DEAL_FORM);
   }, []);
 
+  // Browser back/forward through the history entries pushState creates below
+  // fires popstate (no network navigation), so this keeps the filter in sync
+  // with it rather than the Next.js router, which never sees these entries.
+  useEffect(() => {
+    function handlePopState() {
+      const tahap = new URLSearchParams(window.location.search).get("tahap");
+      setStageFilter(isStageValue(tahap) ? tahap : null);
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   function handleStageFilterChange(next: DealRecord["status"] | null) {
-    // push (not replace): each filter choice is a real navigation step so
-    // browser back/forward can step through the stages the user visited.
-    router.push(next ? `/deal?tahap=${next}` : "/deal");
+    // History API only (not router.push): a real Next.js navigation here
+    // would re-run the server component's auth() and data queries for a
+    // param that never changes what they return. pushState (not replace)
+    // still gives each filter choice its own history entry so back/forward
+    // can step through it.
+    window.history.pushState(null, "", next ? `/deal?tahap=${next}` : "/deal");
+    setStageFilter(next);
   }
 
   async function handleStageChange(dealId: string, status: DealRecord["status"]) {
