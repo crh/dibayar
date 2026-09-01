@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { getOwnedInvoice, type InvoiceReadDb, type WithholdingTaxType } from "./invoices";
+import { decryptShareToken, encryptShareToken } from "./share-token-crypto";
 import type { InvoiceDocumentInput } from "@/components/documents/invoice-document/model";
 
 const TOKEN_BYTES = 32;
@@ -17,6 +18,7 @@ export type InvoiceShareRecord = {
   id: string;
   invoiceId: string;
   tokenHash: string;
+  tokenCiphertext: string | null;
   expiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -27,8 +29,8 @@ export type InvoiceShareDb = InvoiceReadDb & {
     findUnique(args: { where: { invoiceId: string } }): Promise<InvoiceShareRecord | null>;
     upsert(args: {
       where: { invoiceId: string };
-      create: { invoiceId: string; tokenHash: string; expiresAt: Date };
-      update: { tokenHash: string; expiresAt: Date };
+      create: { invoiceId: string; tokenHash: string; tokenCiphertext: string; expiresAt: Date };
+      update: { tokenHash: string; tokenCiphertext: string; expiresAt: Date };
     }): Promise<InvoiceShareRecord>;
     deleteMany(args: { where: { invoiceId: string } }): Promise<{ count: number }>;
   };
@@ -37,10 +39,15 @@ export type InvoiceShareDb = InvoiceReadDb & {
 export type ShareStateResult =
   | { kind: "not-found" }
   | { kind: "state"; active: false }
-  | { kind: "state"; active: true; expiresAt: Date | null };
+  | { kind: "state"; active: true; path: string | null; expiresAt: Date | null };
 
 // Active means a share row exists; revoking deletes the row rather than flagging it,
 // so a revoked token's hash is simply absent — indistinguishable from unknown/invalid.
+// path is the owner's own already-active link, recovered by decrypting
+// tokenCiphertext (see share-token-crypto.ts) -- null only for a share that
+// predates that column (created before this recovery existed) or whose
+// ciphertext fails to decrypt, in which case the owner falls back to
+// regenerating, exactly like before this existed.
 export async function getShareState(
   db: InvoiceShareDb,
   invoiceId: string,
@@ -50,9 +57,10 @@ export async function getShareState(
   if (!invoice) return { kind: "not-found" };
 
   const share = await db.invoiceShare.findUnique({ where: { invoiceId } });
-  return share
-    ? { kind: "state", active: true, expiresAt: share.expiresAt }
-    : { kind: "state", active: false };
+  if (!share) return { kind: "state", active: false };
+
+  const token = share.tokenCiphertext ? decryptShareToken(share.tokenCiphertext) : null;
+  return { kind: "state", active: true, path: token ? `/i/${token}` : null, expiresAt: share.expiresAt };
 }
 
 export type CreateShareResult =
@@ -71,12 +79,13 @@ export async function createOrRegenerateShare(
 
   const token = tokenFactory();
   const tokenHash = hashShareToken(token);
+  const tokenCiphertext = encryptShareToken(token);
   const expiresAt = new Date(nowFactory().getTime());
   expiresAt.setUTCDate(expiresAt.getUTCDate() + DEFAULT_SHARE_LIFETIME_DAYS);
   await db.invoiceShare.upsert({
     where: { invoiceId },
-    create: { invoiceId, tokenHash, expiresAt },
-    update: { tokenHash, expiresAt },
+    create: { invoiceId, tokenHash, tokenCiphertext, expiresAt },
+    update: { tokenHash, tokenCiphertext, expiresAt },
   });
 
   return { kind: "created", path: `/i/${token}`, expiresAt };

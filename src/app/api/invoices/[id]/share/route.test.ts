@@ -57,11 +57,12 @@ describe("GET /api/invoices/[id]/share", () => {
     expect((await response.json()).error).toBe("Invoice tidak ditemukan.");
   });
 
-  it("returns the active state without a token or hash", async () => {
+  it("returns the active state including the owner's recovered path, without a hash", async () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
     mockedGetShareState.mockResolvedValue({
       kind: "state",
       active: true,
+      path: "/i/recovered-token",
       expiresAt: new Date("2026-10-17T00:00:00.000Z"),
     });
 
@@ -69,9 +70,28 @@ describe("GET /api/invoices/[id]/share", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ active: true, expiresAt: "2026-10-17T00:00:00.000Z" });
+    expect(body).toEqual({ active: true, path: "/i/recovered-token", expiresAt: "2026-10-17T00:00:00.000Z" });
     expect(mockedGetShareState).toHaveBeenCalledWith(expect.anything(), "invoice-1", "user-1");
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+  });
+
+  it("returns a null path (not an error) for a share whose token can't be recovered", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedGetShareState.mockResolvedValue({
+      kind: "state",
+      active: true,
+      path: null,
+      expiresAt: new Date("2026-10-17T00:00:00.000Z"),
+    });
+
+    const response = await GET(req("GET", "invoice-1"), makeContext("invoice-1"));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      active: true,
+      path: null,
+      expiresAt: "2026-10-17T00:00:00.000Z",
+    });
   });
 
   it("returns a controlled 500 without leaking database details", async () => {

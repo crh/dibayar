@@ -544,10 +544,35 @@ describe("InvoiceDetailClient", () => {
       await waitFor(() => expect(whatsappButton).toHaveProperty("disabled", false));
     });
 
-    it("shows a stale-link disabled reason after a reload, without reconstructing the plaintext link", async () => {
+    it("re-enables WhatsApp after a reload/new session by recovering the existing active link from the server (no regenerate needed)", async () => {
+      const user = userEvent.setup();
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const fetchMock = makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+        shareGet: {
+          status: 200,
+          body: { active: true, path: "/i/recovered-token", expiresAt: "2026-10-17T00:00:00.000Z" },
+        },
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      const whatsappButton = await screen.findByRole("button", { name: "Kirim lewat WhatsApp" });
+      await waitFor(() => expect(whatsappButton).toHaveProperty("disabled", false));
+
+      await user.click(whatsappButton);
+
+      // Reuses the recovered link directly -- no POST /share (no new token minted).
+      await waitFor(() => expect(open).toHaveBeenCalled());
+      expect(fetchMock.mock.calls.some((call) => call[1]?.method === "POST")).toBe(false);
+      const openedUrl = open.mock.calls[0]?.[0] as string;
+      expect(openedUrl).toContain(encodeURIComponent(`${window.location.origin}/i/recovered-token`));
+    });
+
+    it("still shows the stale-link disabled reason for a share that predates link recovery (no path returned)", async () => {
       vi.stubGlobal("fetch", makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
-        shareGet: { status: 200, body: { active: true, expiresAt: "2026-10-17T00:00:00.000Z" } },
+        shareGet: { status: 200, body: { active: true, path: null, expiresAt: "2026-10-17T00:00:00.000Z" } },
       }));
 
       render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
@@ -755,6 +780,31 @@ describe("InvoiceDetailClient", () => {
       await user.click(screen.getByRole("button", { name: "Ya, buat tautan baru" }));
 
       expect(await screen.findByText("Tautan aktif sampai 1 Nov 2026.")).toBeDefined();
+    });
+
+    it("sends WhatsApp with the freshly regenerated link, not a stale recovered one", async () => {
+      const user = userEvent.setup();
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+        shareGet: { status: 200, body: { active: true, path: "/i/old-token", expiresAt: "2026-10-17T00:00:00.000Z" } },
+        sharePost: {
+          status: 200,
+          body: { active: true, path: "/i/new-token", expiresAt: "2026-11-01T00:00:00.000Z" },
+        },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: /buat ulang tautan/i }));
+      await user.click(screen.getByRole("button", { name: "Ya, buat tautan baru" }));
+      await screen.findByText("Tautan aktif sampai 1 Nov 2026.");
+
+      await user.click(screen.getByRole("button", { name: "Kirim lewat WhatsApp" }));
+
+      await waitFor(() => expect(open).toHaveBeenCalled());
+      const openedUrl = open.mock.calls[0]?.[0] as string;
+      expect(openedUrl).toContain(encodeURIComponent(`${window.location.origin}/i/new-token`));
+      expect(openedUrl).not.toContain(encodeURIComponent(`${window.location.origin}/i/old-token`));
     });
 
     it("requires explicit confirmation with destructive wording before revoking, then returns to inactive", async () => {

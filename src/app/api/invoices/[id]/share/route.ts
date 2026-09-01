@@ -44,7 +44,7 @@ export async function GET(_request: Request, context: RouteContext) {
       return json({ error: "Invoice tidak ditemukan." }, 404);
     }
 
-    return json(result.active ? { active: true, expiresAt: result.expiresAt } : { active: false });
+    return json(result.active ? { active: true, path: result.path, expiresAt: result.expiresAt } : { active: false });
   } catch {
     return json({ error: "Status berbagi belum bisa dimuat. Coba lagi." }, 500);
   }

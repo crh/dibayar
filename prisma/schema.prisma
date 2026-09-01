@@ -171,17 +171,25 @@ model Invoice {
 }
 
 // Recipient share link: tokenHash is a SHA-256 hex digest of a 32-random-byte,
-// base64url token. The plaintext token is never persisted — only its hash, so
-// a lookup requires re-deriving the hash from a presented token. One row per
-// invoice; presence of a row means the link is active (revoke deletes the row).
+// base64url token, used for the public /i/[token] lookup (unchanged, one-way,
+// never reversed). tokenCiphertext is a separate AES-256-GCM encryption of the
+// same plaintext token (see src/lib/share-token-crypto.ts), decryptable only
+// by the server holding AUTH_SECRET -- it exists solely so an authenticated
+// owner can recover their own already-active link across reloads/sessions
+// without the server ever storing the token in plaintext. Nullable because a
+// share created before this field existed has none and simply can't be
+// recovered (falls back to "regenerate"), not because it's optional going
+// forward. One row per invoice; presence of a row means the link is active
+// (revoke deletes the row).
 model InvoiceShare {
-  id        String    @id @default(cuid())
-  invoiceId String    @unique
-  tokenHash String    @unique
-  expiresAt DateTime?
-  invoice   Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  invoiceId        String    @unique
+  tokenHash        String    @unique
+  tokenCiphertext  String?   @db.Text
+  expiresAt        DateTime?
+  invoice          Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 // One row per (user, year, month); lastSequence is incremented atomically

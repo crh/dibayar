@@ -64,12 +64,15 @@ const SHARE_REVOKE_ERROR = "invoice.shareRevokeError";
 
 const SHARE_PATH_PATTERN = /^\/i\/[A-Za-z0-9_-]+$/;
 
-// The server only ever stores a hash of the share token, so the plaintext
-// path is never recoverable from the API after a reload. We keep a
-// best-effort copy in sessionStorage (scoped to this tab, keyed by invoice
-// id) purely so the owner doesn't lose Copy/WhatsApp access to a link they
-// just created in this session. It's read-and-validate-only: never used to
-// fabricate a link for a share this browser didn't create.
+// The server can recover an active share's plaintext path itself now (see
+// share-token-crypto.ts / getShareState) by decrypting a stored ciphertext --
+// it's still only ever verified via tokenHash on the public /i/[token] path,
+// the ciphertext exists solely for this authenticated recovery. This
+// sessionStorage copy (scoped to this tab, keyed by invoice id) remains as a
+// fast local fallback for a share created before that column existed, or if
+// decryption ever fails; both cases degrade to exactly the pre-encryption
+// behavior. It's read-and-validate-only: never used to fabricate a link for a
+// share this browser didn't create.
 function shareCacheKey(invoiceId: string) {
   return `dibayar-share-path:${invoiceId}`;
 }
@@ -109,10 +112,13 @@ function isValidExpiry(value: unknown): value is string | null | undefined {
   return value === undefined || value === null || (typeof value === "string" && !Number.isNaN(Date.parse(value)));
 }
 
-function isValidGetPayload(payload: unknown): payload is { active: boolean; expiresAt?: string | null } {
+function isValidGetPayload(
+  payload: unknown,
+): payload is { active: boolean; path?: string | null; expiresAt?: string | null } {
   if (typeof payload !== "object" || payload === null) return false;
-  const { active, expiresAt } = payload as { active?: unknown; expiresAt?: unknown };
-  return typeof active === "boolean" && isValidExpiry(expiresAt);
+  const { active, path, expiresAt } = payload as { active?: unknown; path?: unknown; expiresAt?: unknown };
+  const validPath = path === undefined || path === null || (typeof path === "string" && SHARE_PATH_PATTERN.test(path));
+  return typeof active === "boolean" && validPath && isValidExpiry(expiresAt);
 }
 
 function isValidCreatePayload(payload: unknown): payload is { active: true; path: string; expiresAt?: string | null } {
@@ -177,10 +183,16 @@ function useShareState(invoiceId: string) {
         setShare({ kind: "inactive", error: null });
         return;
       }
-      const cachedPath = readCachedSharePath(invoiceId);
+      // Prefer the server's own decrypted path -- it's authoritative and
+      // survives a reload/new tab/session on its own. The sessionStorage
+      // cache is only consulted as a fallback for a share created before
+      // tokenCiphertext existed (or one whose ciphertext failed to decrypt),
+      // and is refreshed here so it stays consistent with the server either way.
+      const resolvedPath = payload.path ?? readCachedSharePath(invoiceId);
+      if (payload.path) writeCachedSharePath(invoiceId, payload.path);
       setShare({
         kind: "active",
-        link: cachedPath ? `${window.location.origin}${cachedPath}` : null,
+        link: resolvedPath ? `${window.location.origin}${resolvedPath}` : null,
         expiresAt: payload.expiresAt ?? null,
         error: null,
       });
