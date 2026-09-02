@@ -28,17 +28,30 @@ export default function DealClient({
   const [deals, setDeals] = useState(initialDeals);
   const [invoices, setInvoices] = useState(initialInvoices);
   // Seeded once from the URL (correct for a hard load, reload, or deep link,
-  // since the server component reads the same searchParams). After mount,
-  // handleStageFilterChange keeps this in sync directly instead of re-reading
-  // the URL on every render: deals/invoices don't depend on `tahap` at all
-  // (DealBoard filters the already-loaded list client-side), so routing a
-  // real Next.js navigation through this param would force a wasted full
-  // server round trip — re-running auth() and both list queries — on every
-  // filter chip click.
+  // since the server component reads the same searchParams). deals/invoices
+  // don't depend on `tahap` at all (DealBoard filters the already-loaded list
+  // client-side), so routing a real Next.js navigation through this param on
+  // every filter chip click would force a wasted full server round trip —
+  // re-running auth() and both list queries. handleStageFilterChange below
+  // and the searchParams re-sync just after this keep this state aligned
+  // with the URL after mount.
   const [stageFilter, setStageFilter] = useState<DealRecord["status"] | null>(() => {
     const initial = searchParams.get("tahap");
     return isStageValue(initial) ? initial : null;
   });
+  // Tracks the last `tahap` value seen from `searchParams` so a same-route
+  // Next.js navigation (e.g. TopBar's "New Invoice"/"New Deal" links, which
+  // keep this component mounted) can be told apart from a chip click, which
+  // only ever changes the URL via history.pushState below and never touches
+  // `searchParams` itself. Adjusted during render — React's documented
+  // pattern for syncing state to a changed prop — rather than in an effect,
+  // so the browser never paints the stale value in between.
+  const [lastSyncedTahap, setLastSyncedTahap] = useState(() => searchParams.get("tahap"));
+  const currentTahap = searchParams.get("tahap");
+  if (currentTahap !== lastSyncedTahap) {
+    setLastSyncedTahap(currentTahap);
+    setStageFilter(isStageValue(currentTahap) ? currentTahap : null);
+  }
   const [isDialogOpen, setIsDialogOpen] = useState(initialDialogOpen);
   const [form, setForm] = useState<DealFormState>(EMPTY_DEAL_FORM);
   const [error, setError] = useState<string | null>(null);

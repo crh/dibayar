@@ -115,6 +115,38 @@ describe("DealClient stage filter (T-14)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
+
+  it("picks up a tahap filter added by a same-route Next.js navigation (e.g. TopBar's New Invoice link) on the already-mounted instance", () => {
+    const { rerender } = render(
+      <DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />
+    );
+    expect(screen.getByRole("button", { name: "Semua" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Invoice" }).getAttribute("aria-pressed")).toBe("false");
+
+    // Same mounted DealClient instance: only the reactive searchParams value
+    // changes, as it would after a <Link href="/deal?tahap=INVOICE"> click.
+    mockedUseSearchParams.mockReturnValue(new URLSearchParams("tahap=INVOICE"));
+    rerender(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    expect(screen.getByRole("button", { name: "Invoice" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Semua" }).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("clears the filter when a same-route Next.js navigation removes tahap from the URL (e.g. TopBar's New Deal link) on the already-mounted instance", () => {
+    mockedUseSearchParams.mockReturnValue(new URLSearchParams("tahap=INVOICE"));
+    const { rerender } = render(
+      <DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />
+    );
+    expect(screen.getByRole("button", { name: "Invoice" }).getAttribute("aria-pressed")).toBe("true");
+
+    // Same mounted DealClient instance: only the reactive searchParams value
+    // changes, as it would after a <Link href="/deal"> click.
+    mockedUseSearchParams.mockReturnValue(new URLSearchParams());
+    rerender(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    expect(screen.getByRole("button", { name: "Semua" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Invoice" }).getAttribute("aria-pressed")).toBe("false");
+  });
 });
 
 describe("DealClient stage movement (T-15)", () => {
