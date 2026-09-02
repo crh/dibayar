@@ -66,6 +66,7 @@ describe("/deal route", () => {
     mockedListDeals.mockResolvedValue([dealFixture]);
     mockedListInvoices.mockResolvedValue([]);
     mockedUseSearchParams.mockReturnValue(new URLSearchParams());
+    window.history.replaceState(null, "", "/deal");
 
     const page = await DealPage({ searchParams: Promise.resolve({}) });
     render(page);
@@ -82,6 +83,7 @@ describe("/deal route", () => {
     mockedListDeals.mockResolvedValue([dealFixture]);
     mockedListInvoices.mockResolvedValue([]);
     mockedUseSearchParams.mockReturnValue(new URLSearchParams("tahap=BUKAN_TAHAP"));
+    window.history.replaceState(null, "", "/deal?tahap=BUKAN_TAHAP");
 
     const page = await DealPage({ searchParams: Promise.resolve({ tahap: "BUKAN_TAHAP" }) });
     render(page);
@@ -98,6 +100,7 @@ describe("/deal route", () => {
     mockedListDeals.mockResolvedValue([dealFixture]);
     mockedListInvoices.mockResolvedValue([]);
     mockedUseSearchParams.mockReturnValue(new URLSearchParams("tahap=NEGO"));
+    window.history.replaceState(null, "", "/deal?tahap=NEGO");
 
     const page = await DealPage({ searchParams: Promise.resolve({ tahap: "NEGO" }) });
     render(page);
