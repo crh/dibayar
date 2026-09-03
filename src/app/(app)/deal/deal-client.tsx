@@ -74,14 +74,33 @@ export default function DealClient({
   // clicks and popstate can invalidate directly (no comparison, nothing to
   // alias). useSearchParams() above is still called: it subscribes this
   // component to the Next.js router, so a same-route Link/router navigation
-  // still causes a re-render here, by which point Next has already updated
-  // `window.location` for real. getServerSnapshot falls back to it because
-  // `window` doesn't exist during SSR.
+  // still causes a re-render here -- but Next updates its router context
+  // (and re-renders this component) one tick *before* it commits the actual
+  // `window.history` change, so the render triggered by a fresh
+  // `searchParams` value can still read stale `window.location.search`
+  // (verified: the mixed chip+Link sequences below reproduce this race
+  // every time without the effect below). `window.location` has always
+  // settled by the next effect flush, so re-dispatch the same invalidation
+  // event used for pushState once `searchParams` itself changes -- this
+  // asks useSyncExternalStore to re-read the now-correct URL instead of
+  // trusting the racy render. getServerSnapshot falls back to `searchParams`
+  // because `window` doesn't exist during SSR.
   const stageFilter = useSyncExternalStore(
     subscribeToStageFilterLocation,
     readStageFilterFromWindow,
     () => readStageFromTahap(searchParams.get("tahap")),
   );
+  // Skip the mount run: hydration already has a correct, settled URL, so
+  // there's nothing to resync yet -- only a *later* searchParams change
+  // (a real router navigation landing after mount) can hit the race above.
+  const isMountedSearchParamsEffect = useRef(false);
+  useEffect(() => {
+    if (!isMountedSearchParamsEffect.current) {
+      isMountedSearchParamsEffect.current = true;
+      return;
+    }
+    window.dispatchEvent(new Event(STAGE_FILTER_LOCATION_EVENT));
+  }, [searchParams]);
   const [isDialogOpen, setIsDialogOpen] = useState(initialDialogOpen);
   const [form, setForm] = useState<DealFormState>(EMPTY_DEAL_FORM);
   const [error, setError] = useState<string | null>(null);
