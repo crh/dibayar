@@ -13,6 +13,16 @@
     "test:ux-detectors": "UX_SKIP_WEBSERVER=1 playwright test detectors.selftest.spec.ts",
     "test:ux-baseline": "npm run build && playwright test baseline.landing.spec.ts",
     "ux:fixtures": "tsx scripts/ux-fixtures.ts",
+    "e2e:fixtures": "E2E_FIXTURE_CONFIRM=non-production tsx --env-file-if-exists=.env.local scripts/e2e-fixtures.ts",
+    "e2e:build": "next build",
+    "test:e2e": "npm run e2e:build && playwright test -c playwright.e2e.config.ts --project=chromium --project=chromium-mobile",
+    "test:e2e:critical": "npm run e2e:build && playwright test -c playwright.e2e.config.ts --project=chromium --project=chromium-mobile --grep @critical",
+    "test:e2e:visual": "npm run e2e:build && playwright test -c playwright.e2e.config.ts --project=chromium --grep @visual",
+    "test:e2e:a11y": "npm run e2e:build && playwright test -c playwright.e2e.config.ts --project=chromium --grep @a11y",
+    "test:e2e:update-snapshots": "npm run e2e:build && playwright test -c playwright.e2e.config.ts --project=chromium --grep @visual --update-snapshots",
+    "test:e2e:all-browsers": "npm run e2e:build && playwright test -c playwright.e2e.config.ts",
+    "test:e2e:headed": "playwright test -c playwright.e2e.config.ts --project=chromium --headed",
+    "test:e2e:ui": "playwright test -c playwright.e2e.config.ts --ui",
     "test:cron-guard": "node --test scripts/cron-guard.test.mjs",
     "test:lint-wrapper": "node --test scripts/lint.test.mjs",
     "postinstall": "prisma generate"
@@ -30,6 +40,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/react": "^16.3.2",
