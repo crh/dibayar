@@ -66,6 +66,8 @@ Do not claim any command works until it has been run against the current reposit
 
 The M0/T-00 test foundation uses Vitest with jsdom and Testing Library. Tests live beside source files under `src/**/*.test.ts` and `src/**/*.test.tsx`. Behavioral changes require added or updated tests.
 
+Real-browser journey/E2E coverage lives under `e2e/` (Playwright, `playwright.e2e.config.ts`) -- see `docs/testing/E2E.md`. This is separate from `tests/ux-audit/` (the visual/detector audit harness) and from the Vitest suite above; it exists specifically to catch bugs in the interaction between App Router navigation, `window.history`, `useSearchParams`, and client component state, which unit/component tests cannot see. Any change affecting navigation, URL/search params, multi-step workflows, authentication, or other cross-component user behavior must add or update the corresponding Playwright journey test. A regression discovered during independent review should normally become a permanent automated regression test (in `e2e/`, or `tests/ux-audit/` if it's a visual/layout regression) before the replacement candidate is promoted.
+
 ## Coding conventions
 
 - Use TypeScript and existing repository patterns once established.
