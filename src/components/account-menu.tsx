@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { BREAKPOINTS } from "@/lib/breakpoints";
 import { translate, type Language } from "@/lib/i18n";
 
@@ -169,7 +170,12 @@ export function AccountMenu({ language, email }: { language: Language; email?: s
     if (!isOpen) return;
 
     function handlePointerDown(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      // The menu itself is portaled to <body> (see the render below), so it's
+      // no longer a DOM descendant of containerRef -- check it separately or
+      // every click inside the menu would read as "outside" and self-close
+      // before the item's own onClick (e.g. a Link navigation) can run.
+      if (!containerRef.current?.contains(target) && !menuRef.current?.contains(target)) {
         closeMenu();
       }
     }
@@ -270,63 +276,79 @@ export function AccountMenu({ language, email }: { language: Language; email?: s
         <span className="sr-only">{menuLabel}</span>
       </button>
 
-      {isOpen ? (
-        <>
-          <div
-            className={isMobile ? "fixed inset-0 z-40 bg-black/30" : "hidden"}
-            onClick={() => closeMenu()}
-            aria-hidden="true"
-          />
+      {isOpen
+        ? createPortal(
+            <>
+              {/* Portaled to <body>: TopBar is `sticky` with its own z-index,
+                  which makes it a stacking context, so any z-index set on a
+                  DOM descendant (this menu) only ranks *inside* that context
+                  -- it can never out-rank a later sibling of TopBar, such as
+                  BottomNav, at the same z-index (30). BottomNav then wins the
+                  tie by DOM order and visually + interactively sits on top of
+                  this menu's bottom sheet, swallowing taps meant for it
+                  (verified: elementFromPoint at "Keluar"'s screen position
+                  resolved to a BottomNav link, not the menu item). Rendering
+                  at <body> puts the menu back in the root stacking context,
+                  where its z-40/z-50 already correctly outrank both TopBar
+                  and BottomNav's z-30 -- the same tier FloatingActionButton
+                  (also a root-level sibling) already relies on. */}
+              <div
+                className={isMobile ? "fixed inset-0 z-40 bg-black/30" : "hidden"}
+                onClick={() => closeMenu()}
+                aria-hidden="true"
+              />
 
-          <div
-            ref={menuRef}
-            id={menuId}
-            role="menu"
-            aria-label={menuLabel}
-            className={getMenuClasses()}
-            style={getMenuStyle()}
-            onClick={(event) => event.stopPropagation()}
-          >
-            {isMobile && (
-              <div className="mb-2 flex items-center justify-between border-b border-line px-4 py-2">
-                <span className="text-[15px] font-semibold">{menuLabel}</span>
-                <button
-                  type="button"
-                  onClick={() => closeMenu()}
-                  className="flex h-11 w-11 items-center justify-center text-ink hover:text-primary"
-                  aria-label={translate(language, "dashboard.close")}
+              <div
+                ref={menuRef}
+                id={menuId}
+                role="menu"
+                aria-label={menuLabel}
+                className={getMenuClasses()}
+                style={getMenuStyle()}
+                onClick={(event) => event.stopPropagation()}
+              >
+                {isMobile && (
+                  <div className="mb-2 flex items-center justify-between border-b border-line px-4 py-2">
+                    <span className="text-[15px] font-semibold">{menuLabel}</span>
+                    <button
+                      type="button"
+                      onClick={() => closeMenu()}
+                      className="flex h-11 w-11 items-center justify-center text-ink hover:text-primary"
+                      aria-label={translate(language, "dashboard.close")}
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+
+                {email ? (
+                  <div className="mb-1 border-b border-line px-3 pb-2">
+                    <p className="truncate text-[13px] font-semibold text-muted">{email}</p>
+                  </div>
+                ) : null}
+
+                <Link
+                  href="/pengaturan"
+                  role="menuitem"
+                  className="flex h-11 items-center rounded-md px-3 text-[15px] font-semibold text-ink outline-none hover:bg-bg focus-visible:ring-2 focus-visible:ring-primary"
+                  onClick={handleMenuItemClick}
                 >
-                  ×
-                </button>
+                  {translate(language, "nav.settings")}
+                </Link>
+
+                <Link
+                  href="/api/auth/signout?callbackUrl=/"
+                  role="menuitem"
+                  className="flex h-11 items-center rounded-md px-3 text-[15px] font-semibold text-overdue outline-none hover:bg-bg focus-visible:ring-2 focus-visible:ring-primary"
+                  onClick={handleMenuItemClick}
+                >
+                  {translate(language, "dashboard.signOut")}
+                </Link>
               </div>
-            )}
-
-            {email ? (
-              <div className="mb-1 border-b border-line px-3 pb-2">
-                <p className="truncate text-[13px] font-semibold text-muted">{email}</p>
-              </div>
-            ) : null}
-
-            <Link
-              href="/pengaturan"
-              role="menuitem"
-              className="flex h-11 items-center rounded-md px-3 text-[15px] font-semibold text-ink outline-none hover:bg-bg focus-visible:ring-2 focus-visible:ring-primary"
-              onClick={handleMenuItemClick}
-            >
-              {translate(language, "nav.settings")}
-            </Link>
-
-            <Link
-              href="/api/auth/signout?callbackUrl=/"
-              role="menuitem"
-              className="flex h-11 items-center rounded-md px-3 text-[15px] font-semibold text-overdue outline-none hover:bg-bg focus-visible:ring-2 focus-visible:ring-primary"
-              onClick={handleMenuItemClick}
-            >
-              {translate(language, "dashboard.signOut")}
-            </Link>
-          </div>
-        </>
-      ) : null}
+            </>,
+            document.body,
+          )
+        : null}
 
       <style jsx>{`
         @keyframes slideUp {
