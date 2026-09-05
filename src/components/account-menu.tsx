@@ -29,7 +29,10 @@ type Rect = { left: number; right: number; top: number; bottom: number };
 // Finds how far down the candidate menu rect is obstructed by real page
 // content, using elementsFromPoint (unavailable in jsdom, so this is a no-op
 // in unit tests) rather than any selector naming a specific page's content.
-function findObstructionBottom(candidate: Rect, exclude: HTMLElement): number | null {
+// `excluded` must cover every node the menu itself owns -- the trigger's
+// container *and* the portaled panel, since the panel renders at
+// document.body and is no longer a descendant of the container.
+function findObstructionBottom(candidate: Rect, ...excluded: Array<HTMLElement | null>): number | null {
   if (typeof document.elementsFromPoint !== "function") return null;
 
   const samplePoints: Array<[number, number]> = [
@@ -47,7 +50,7 @@ function findObstructionBottom(candidate: Rect, exclude: HTMLElement): number | 
 
     for (const hit of document.elementsFromPoint(x, y)) {
       if (hit === document.documentElement || hit === document.body) continue;
-      if (exclude.contains(hit)) continue;
+      if (excluded.some((element) => element?.contains(hit))) continue;
 
       const target = hit.closest(CONTENT_LANDMARK_SELECTOR) ?? hit;
       const rect = target.getBoundingClientRect();
@@ -132,6 +135,7 @@ export function AccountMenu({ language, email }: { language: Language; email?: s
         const obstructionBottom = findObstructionBottom(
           { left, right: left + menuWidth, top, bottom: top + menuHeight },
           container,
+          menuRef.current,
         );
         if (obstructionBottom === null || obstructionBottom + DESKTOP_MENU_GAP <= top) break;
         top = obstructionBottom + DESKTOP_MENU_GAP;

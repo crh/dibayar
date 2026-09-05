@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AccountMenu } from "./account-menu";
 
@@ -236,6 +236,93 @@ describe("AccountMenu", () => {
     // Naive placement (trigger.bottom + gap) would land at 61.5px, which
     // overlaps the 96..237.5 obstacle -- the menu must clear it instead.
     expect(menu.style.top).toBe("245.5px");
+
+    rectSpy.mockRestore();
+    // @ts-expect-error -- test-only cleanup of the jsdom polyfill above.
+    delete document.elementsFromPoint;
+    Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: originalWidth });
+    Object.defineProperty(window, "innerHeight", { writable: true, configurable: true, value: originalHeight });
+  });
+
+  it("does not treat its own portaled panel as a desktop collision obstruction (B-1 regression)", async () => {
+    const originalWidth = window.innerWidth;
+    const originalHeight = window.innerHeight;
+    Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: 1280 });
+    Object.defineProperty(window, "innerHeight", { writable: true, configurable: true, value: 900 });
+
+    // Trigger placed so the menu's natural (no-obstruction) position doesn't
+    // spatially overlap the panel's pre-measurement default style (top: 0,
+    // right: VIEWPORT_MARGIN) -- isolating what's under test to the *second*
+    // pass, where the panel is already sitting exactly where a fresh
+    // candidate would also place it.
+    const triggerRect = { x: 640, y: 9.5, width: 44, height: 44, top: 9.5, left: 640, right: 640, bottom: 53.5, toJSON() {} };
+    const menuWidth = 260;
+    const menuHeight = 146.5;
+
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.matches('button[aria-haspopup="menu"]')) return triggerRect as DOMRect;
+        if (this.matches('[role="menu"]')) {
+          // Mirrors real fixed-position layout: the panel's on-screen rect
+          // tracks whatever top/right the component last set on it, not a
+          // hand-picked constant -- so a second measurement pass sees the
+          // panel exactly where it was actually placed, the way a real
+          // browser's layout engine would.
+          const top = parseFloat(this.style.top || "0");
+          const right = parseFloat(this.style.right || "8");
+          const rectRight = window.innerWidth - right;
+          const rectLeft = rectRight - menuWidth;
+          return {
+            top,
+            bottom: top + menuHeight,
+            left: rectLeft,
+            right: rectRight,
+            width: menuWidth,
+            height: menuHeight,
+            x: rectLeft,
+            y: top,
+            toJSON() {},
+          } as DOMRect;
+        }
+        return { x: 0, y: 0, width: 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, toJSON() {} } as DOMRect;
+      });
+
+    // Realistic elementsFromPoint: the portaled panel is a genuine node in
+    // <body>, so a sample point landing on it returns the panel itself --
+    // exactly like any other page element would be returned. Nothing else
+    // is rendered, so this is the *only* possible hit: there is no real
+    // obstruction anywhere on the page.
+    document.elementsFromPoint = vi.fn((x: number, y: number) => {
+      const menu = document.querySelector('[role="menu"]');
+      if (!menu) return [];
+      const rect = menu.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        return [menu];
+      }
+      return [];
+    });
+
+    const user = userEvent.setup();
+    render(<AccountMenu language="id" />);
+    await user.click(screen.getByRole("button", { name: "Menu akun" }));
+
+    const initialTop = screen.getByRole("menu").style.top;
+    expect(initialTop).toBe("61.5px");
+
+    // No genuine obstruction exists anywhere on the page. Repeated resizes
+    // re-run the collision pass; the panel must not jump merely because the
+    // pass now samples points that land back on its own, already-correct
+    // position.
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(screen.getByRole("menu").style.top).toBe(initialTop);
+
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(screen.getByRole("menu").style.top).toBe(initialTop);
 
     rectSpy.mockRestore();
     // @ts-expect-error -- test-only cleanup of the jsdom polyfill above.
