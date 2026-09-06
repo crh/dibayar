@@ -175,18 +175,57 @@ can be silently changed or reset by anyone with Vercel project access, with
 no diff, no PR, and no record. This is the exact "undocumented manual
 override" class of risk this audit was asked to close.
 
-**Recommended fix (not yet implemented — see below):** move this build
-command into a checked-in `vercel.json`:
+**Fix implemented and verified 2026-09-06.** The build command now lives in a
+checked-in `vercel.json`, and the Vercel dashboard's Build Command override
+was turned off (by the user) so `vercel.json` is authoritative:
 
 ```json
 {
-  "buildCommand": "npx prisma migrate deploy && next build"
+  "buildCommand": "if [ -n \"$DATABASE_URL\" ]; then npx prisma migrate deploy; fi && next build"
 }
 ```
 
-and keep it there **permanently** for every environment (Preview and
-Production), rather than treating it as a one-time backfill to revert.
-Rationale:
+This is **not** the same string as the original dashboard override —a real
+regression was caught and fixed before this reached `main`, see below.
+
+**Regression found and fixed during Preview verification:** the first
+version of `vercel.json` used the original unconditional
+`npx prisma migrate deploy && next build`. Pushing it (branch
+`hermes/v6-1-production-hardening`) to trigger a Preview build — precisely
+the verification step this hardening effort establishes as standard practice
+— immediately failed:
+
+```
+Error: The datasource.url property is required in your Prisma config file when using prisma migrate deploy.
+Error: Command "npx prisma migrate deploy && next build" exited with 1
+```
+
+Root cause: this project provisions Preview databases **per named git
+branch**, not for Preview as a whole — `vercel env ls --project dibayar
+preview` shows `DATABASE_URL` scoped only to `hermes/ux-phase-2`,
+`hermes/m2-invoice`, and `hermes/day-001-m0-bootstrap`. A brand-new branch
+(this one) has no `DATABASE_URL` at build time; `prisma.config.ts` reads
+`process.env["DATABASE_URL"]` directly, which resolves to `undefined`, and
+`prisma migrate deploy` refuses to run without a datasource URL. Under the
+old dashboard-override-on-Production-only setup this never surfaced, because
+Preview always built with plain `next build` (no DB needed for the build
+itself); making the migration step unconditional and project-wide would have
+broken the build for **every future new feature branch** the moment this
+merged, which is the normal case in this repo's workflow, not an edge case.
+
+The guard clause (`if [ -n "$DATABASE_URL" ]; ...`) fixes this: skip the
+migration step entirely when no database is configured for this
+branch/environment (identical behavior to before `vercel.json` existed), and
+run it when one is. Re-verified live: a second Preview build from the fixed
+`vercel.json`
+(`https://dibayar-bnb9o467r-kenji-iwakura.vercel.app`) completed successfully
+in 21s with the migration step visibly skipped
+(`vercel inspect <url> --logs` shows the guarded command running, no
+`Applying migration` lines, `Build Completed`).
+
+Applied and kept **permanently** for every environment (Preview and
+Production) — the guard means this is now safe to do rather than a one-time
+backfill to revert. Rationale for keeping it permanent:
 
 - `prisma migrate deploy` is additive/idempotent: it only applies migrations
   not already recorded in `_prisma_migrations`. Running it on every build is
@@ -208,23 +247,21 @@ Rationale:
   already produces (see §2.6 of the post-merge handoff for exactly this kind
   of build-log verification).
 
-**Why this fix is not yet applied:** a `vercel.json` `buildCommand` value is
-only authoritative if the Vercel project's dashboard Build Command override
-is turned off (or matches it exactly) — the dashboard override otherwise
-takes precedence over `vercel.json`. Turning off that dashboard override, or
-otherwise touching Production build configuration, is a Production change
-this session did not make without explicit authorization (see the release
-gate below and the open items in
-`DIBAYAR-V6-1-PRODUCTION-HARDENING-HANDOFF.md`). Writing `vercel.json` itself
-was also blocked by this session's local tooling as a deployment-config
-change; it is documented here as the recommendation for whoever applies it
-next, not as a completed action.
+**Sequencing note:** creating `vercel.json` was initially blocked by this
+session's own local tooling as a deployment-config change; the user created
+it directly. Turning off the dashboard Build Command override was likewise
+left to the user as a genuine Production-configuration change (done
+2026-09-06). This session's role was limited to the file content, the
+Preview-build verification that caught the regression above, and this
+documentation — not touching Production settings directly.
 
-**If this recommendation is rejected:** at minimum, keep the dashboard
-Build Command override exactly as-is (do not silently revert it to plain
-`next build`) — reverting now would not undo the already-applied migrations,
-but would put the repository back into "Production migration state depends
-on an undocumented manual setting" with no record of what that setting is.
+**Not yet done:** this branch has not been merged into `main`, so
+Production is still running under whatever the dashboard override was set
+to before it was turned off — **verify Production's next real deploy** (the
+actual merge to `main`) with the same `vercel inspect <url> --logs` pattern
+before treating this as closed for Production specifically. Preview-build
+success is evidence the mechanism works, not evidence Production has been
+rebuilt with it yet.
 
 ## Deployment verification record (convention, established 2026-09-06)
 
