@@ -1,0 +1,79 @@
+{
+  "htmlFields": [
+    {
+      "key": "number",
+      "label": "Nomor invoice",
+      "value": "UX/OVERDUE/004"
+    },
+    {
+      "key": "billedTo",
+      "label": "Ditagihkan kepada",
+      "value": "Brand dengan nama sangat panjang untuk menguji pemotongan aman tanpa merusak dokumen"
+    },
+    {
+      "key": "dueDate",
+      "label": "Jatuh tempo",
+      "value": "5 Agustus 2026"
+    },
+    {
+      "key": "scope",
+      "label": "Cakupan kerja",
+      "value": "Long text fixture: deliver a campaign recap, links, captions, and final exported assets without clipping."
+    },
+    {
+      "key": "tax",
+      "label": "Pajak potong",
+      "value": "Tidak ada"
+    },
+    {
+      "key": "total",
+      "label": "Nilai invoice",
+      "value": "Rp12.345.678"
+    }
+  ],
+  "ownerParity": {
+    "equal": true,
+    "missingFromHtml": [],
+    "missingFromPdf": [],
+    "mismatches": []
+  },
+  "publicParity": {
+    "equal": true,
+    "missingFromHtml": [],
+    "missingFromPdf": [],
+    "mismatches": []
+  },
+  "ownerOrder": [
+    0,
+    64,
+    82,
+    194,
+    329,
+    352
+  ],
+  "publicOrder": [
+    0,
+    64,
+    82,
+    194,
+    329,
+    352
+  ],
+  "ownerSourceLabels": [
+    "DIBAYAR",
+    "Ditagihkan kepada",
+    "Jatuh tempo",
+    "Jasa kolaborasi",
+    "Pajak potong",
+    "Total invoice"
+  ],
+  "publicSourceLabels": [
+    "DIBAYAR",
+    "Ditagihkan kepada",
+    "Jatuh tempo",
+    "Jasa kolaborasi",
+    "Pajak potong",
+    "Total invoice"
+  ],
+  "ownerPublicTextEqual": true
+}

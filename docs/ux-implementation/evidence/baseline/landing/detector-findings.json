@@ -1,0 +1,252 @@
+[
+  {
+    "viewport": "xs320",
+    "language": "id",
+    "overflow": {
+      "viewportWidth": 320,
+      "documentClientWidth": 320,
+      "documentScrollWidth": 320,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": [
+      {
+        "selector": "select",
+        "tag": "select",
+        "text": "Indonesia English",
+        "rect": {
+          "x": 210,
+          "y": 57.5,
+          "width": 77,
+          "height": 17
+        },
+        "required": 44
+      }
+    ]
+  },
+  {
+    "viewport": "xs320",
+    "language": "en",
+    "overflow": {
+      "viewportWidth": 320,
+      "documentClientWidth": 320,
+      "documentScrollWidth": 320,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": [
+      {
+        "selector": "select",
+        "tag": "select",
+        "text": "Indonesian English",
+        "rect": {
+          "x": 203,
+          "y": 57.5,
+          "width": 84,
+          "height": 17
+        },
+        "required": 44
+      }
+    ]
+  },
+  {
+    "viewport": "sm390",
+    "language": "id",
+    "overflow": {
+      "viewportWidth": 390,
+      "documentClientWidth": 390,
+      "documentScrollWidth": 390,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": [
+      {
+        "selector": "select",
+        "tag": "select",
+        "text": "Indonesia English",
+        "rect": {
+          "x": 280,
+          "y": 57.5,
+          "width": 77,
+          "height": 17
+        },
+        "required": 44
+      }
+    ]
+  },
+  {
+    "viewport": "sm390",
+    "language": "en",
+    "overflow": {
+      "viewportWidth": 390,
+      "documentClientWidth": 390,
+      "documentScrollWidth": 390,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": [
+      {
+        "selector": "select",
+        "tag": "select",
+        "text": "Indonesian English",
+        "rect": {
+          "x": 273,
+          "y": 57.5,
+          "width": 84,
+          "height": 17
+        },
+        "required": 44
+      }
+    ]
+  },
+  {
+    "viewport": "md768",
+    "language": "id",
+    "overflow": {
+      "viewportWidth": 768,
+      "documentClientWidth": 768,
+      "documentScrollWidth": 768,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": [
+      {
+        "selector": "select",
+        "tag": "select",
+        "text": "Indonesia English",
+        "rect": {
+          "x": 646,
+          "y": 99.75,
+          "width": 77,
+          "height": 17
+        },
+        "required": 44
+      }
+    ]
+  },
+  {
+    "viewport": "md768",
+    "language": "en",
+    "overflow": {
+      "viewportWidth": 768,
+      "documentClientWidth": 768,
+      "documentScrollWidth": 768,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": [
+      {
+        "selector": "select",
+        "tag": "select",
+        "text": "Indonesian English",
+        "rect": {
+          "x": 639,
+          "y": 99.75,
+          "width": 84,
+          "height": 17
+        },
+        "required": 44
+      }
+    ]
+  },
+  {
+    "viewport": "lg1024",
+    "language": "id",
+    "overflow": {
+      "viewportWidth": 1024,
+      "documentClientWidth": 1024,
+      "documentScrollWidth": 1024,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": [
+      {
+        "selector": "select",
+        "tag": "select",
+        "text": "Indonesia English",
+        "rect": {
+          "x": 426,
+          "y": 114.375,
+          "width": 77,
+          "height": 17
+        },
+        "required": 44
+      }
+    ]
+  },
+  {
+    "viewport": "lg1024",
+    "language": "en",
+    "overflow": {
+      "viewportWidth": 1024,
+      "documentClientWidth": 1024,
+      "documentScrollWidth": 1024,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": [
+      {
+        "selector": "select",
+        "tag": "select",
+        "text": "Indonesian English",
+        "rect": {
+          "x": 419,
+          "y": 119.375,
+          "width": 84,
+          "height": 17
+        },
+        "required": 44
+      }
+    ]
+  },
+  {
+    "viewport": "xl1440",
+    "language": "id",
+    "overflow": {
+      "viewportWidth": 1440,
+      "documentClientWidth": 1440,
+      "documentScrollWidth": 1440,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": [
+      {
+        "selector": "select",
+        "tag": "select",
+        "text": "Indonesia English",
+        "rect": {
+          "x": 634,
+          "y": 114.375,
+          "width": 77,
+          "height": 17
+        },
+        "required": 44
+      }
+    ]
+  },
+  {
+    "viewport": "xl1440",
+    "language": "en",
+    "overflow": {
+      "viewportWidth": 1440,
+      "documentClientWidth": 1440,
+      "documentScrollWidth": 1440,
+      "pageOverflow": false,
+      "elements": []
+    },
+    "smallTouchTargets": [
+      {
+        "selector": "select",
+        "tag": "select",
+        "text": "Indonesian English",
+        "rect": {
+          "x": 627,
+          "y": 119.375,
+          "width": 84,
+          "height": 17
+        },
+        "required": 44
+      }
+    ]
+  }
+]

@@ -1,0 +1,71 @@
+{
+  "route": "/masuk",
+  "matrix": "5 viewports x 2 languages",
+  "files": [
+    {
+      "path": "capture-manifest.json",
+      "bytes": 2965,
+      "sha256": "06d089170eb46565d632721460d8146e211a55f438c61bf90b96cf7800b46e91"
+    },
+    {
+      "path": "detector-findings.json",
+      "bytes": 5108,
+      "sha256": "414e3d469c2c1251c0f3e25845fb9bda4ae184ae1a62555beeca64cb4f81d6db"
+    },
+    {
+      "path": "runtime-diagnostics.json",
+      "bytes": 73,
+      "sha256": "826b8737bead4709a036aba71188ca90ad035e9217dde0733fac4a240589881c"
+    },
+    {
+      "path": "captures/landing-current__anonymous__lg1024__en.png",
+      "bytes": 87922,
+      "sha256": "24312bc661aeeca2f4247c42f20d2e65ea23750f0fb7a16011b64410b8b19435"
+    },
+    {
+      "path": "captures/landing-current__anonymous__lg1024__id.png",
+      "bytes": 88309,
+      "sha256": "9fa7ee9f1f267abbbe7fc1dd4a8b55c88da1194f9f4289563fedeea04ac65e66"
+    },
+    {
+      "path": "captures/landing-current__anonymous__md768__en.png",
+      "bytes": 83315,
+      "sha256": "6aa314bbc77c0cd4aac4cd281a731ad0f7182f0daad43038a6134d7c72d4cdf4"
+    },
+    {
+      "path": "captures/landing-current__anonymous__md768__id.png",
+      "bytes": 82168,
+      "sha256": "feffaa2bff36060fb1d6ea5c9139b61c455086ff41f7926a93146c3f497da221"
+    },
+    {
+      "path": "captures/landing-current__anonymous__sm390__en.png",
+      "bytes": 82222,
+      "sha256": "260fcfb90c2b211bc6a0edb0b44def34a9f5884f8426dff003b081c906e0e53f"
+    },
+    {
+      "path": "captures/landing-current__anonymous__sm390__id.png",
+      "bytes": 81078,
+      "sha256": "50da3170275ce66ef09f248b35950f380972edd941dbb1b149f88a374229ac62"
+    },
+    {
+      "path": "captures/landing-current__anonymous__xl1440__en.png",
+      "bytes": 90144,
+      "sha256": "a6baa4236101410284facf43f9cd6b8d22fba9400f54475813f1b9dd13791202"
+    },
+    {
+      "path": "captures/landing-current__anonymous__xl1440__id.png",
+      "bytes": 90789,
+      "sha256": "ac478d277811eb1a9d3b209eaa9c7a0bb5c9cb4866820f3cb07ccb1216dc1c3e"
+    },
+    {
+      "path": "captures/landing-current__anonymous__xs320__en.png",
+      "bytes": 81823,
+      "sha256": "79f375d87c938b2b5f95c97c921b050f20e3fa7a6f60126ba828770458e3a8dd"
+    },
+    {
+      "path": "captures/landing-current__anonymous__xs320__id.png",
+      "bytes": 79946,
+      "sha256": "6da372d4eebd9fa4e5c27684db0813b85d311907ad3545a780f7582b48509cde"
+    }
+  ]
+}

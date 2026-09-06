@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "count": 15,
+  "artifacts": [
+    {
+      "routeKey": "dashboard-current",
+      "stateKey": "populated",
+      "viewport": "lg1024",
+      "language": "en",
+      "path": "captures/dashboard-current__populated__lg1024__en.png",
+      "route": "/dashboard",
+      "width": 1024,
+      "height": 900,
+      "fullPage": true
+    },
+    {
+      "routeKey": "dashboard-current",
+      "stateKey": "populated",
+      "viewport": "lg1024",
+      "language": "id",
+      "path": "captures/dashboard-current__populated__lg1024__id.png",
+      "route": "/dashboard",
+      "width": 1024,
+      "height": 900,
+      "fullPage": true
+    },
+    {
+      "routeKey": "dashboard-current",
+      "stateKey": "populated",
+      "viewport": "md768",
+      "language": "en",
+      "path": "captures/dashboard-current__populated__md768__en.png",
+      "route": "/dashboard",
+      "width": 768,
+      "height": 1024,
+      "fullPage": true
+    },
+    {
+      "routeKey": "dashboard-current",
+      "stateKey": "populated",
+      "viewport": "md768",
+      "language": "id",
+      "path": "captures/dashboard-current__populated__md768__id.png",
+      "route": "/dashboard",
+      "width": 768,
+      "height": 1024,
+      "fullPage": true
+    },
+    {
+      "routeKey": "dashboard-current",
+      "stateKey": "populated",
+      "viewport": "sm390",
+      "language": "en",
+      "path": "captures/dashboard-current__populated__sm390__en.png",
+      "route": "/dashboard",
+      "width": 390,
+      "height": 844,
+      "fullPage": true
+    },
+    {
+      "routeKey": "dashboard-current",
+      "stateKey": "populated",
+      "viewport": "sm390",
+      "language": "id",
+      "path": "captures/dashboard-current__populated__sm390__id.png",
+      "route": "/dashboard",
+      "width": 390,
+      "height": 844,
+      "fullPage": true
+    },
+    {
+      "routeKey": "dashboard-current",
+      "stateKey": "populated",
+      "viewport": "xl1440",
+      "language": "en",
+      "path": "captures/dashboard-current__populated__xl1440__en.png",
+      "route": "/dashboard",
+      "width": 1440,
+      "height": 900,
+      "fullPage": true
+    },
+    {
+      "routeKey": "dashboard-current",
+      "stateKey": "populated",
+      "viewport": "xl1440",
+      "language": "id",
+      "path": "captures/dashboard-current__populated__xl1440__id.png",
+      "route": "/dashboard",
+      "width": 1440,
+      "height": 900,
+      "fullPage": true
+    },
+    {
+      "routeKey": "dashboard-current",
+      "stateKey": "populated",
+      "viewport": "xs320",
+      "language": "en",
+      "path": "captures/dashboard-current__populated__xs320__en.png",
+      "route": "/dashboard",
+      "width": 320,
+      "height": 800,
+      "fullPage": true
+    },
+    {
+      "routeKey": "dashboard-current",
+      "stateKey": "populated",
+      "viewport": "xs320",
+      "language": "id",
+      "path": "captures/dashboard-current__populated__xs320__id.png",
+      "route": "/dashboard",
+      "width": 320,
+      "height": 800,
+      "fullPage": true
+    },
+    {
+      "routeKey": "dashboard-current",
+      "stateKey": "zero-state",
+      "viewport": "sm390",
+      "language": "id",
+      "path": "captures/dashboard-current__zero-state__sm390__id.png",
+      "route": "/dashboard",
+      "width": 390,
+      "height": 844,
+      "fullPage": true
+    },
+    {
+      "routeKey": "invoice-detail-current",
+      "stateKey": "draft-no-tax-empty-date-invalid-phone",
+      "viewport": "sm390",
+      "language": "id",
+      "path": "captures/invoice-detail-current__draft-no-tax-empty-date-invalid-phone__sm390__id.png",
+      "route": "/dashboard/invoices/[id]",
+      "width": 390,
+      "height": 844,
+      "fullPage": true
+    },
+    {
+      "routeKey": "invoice-detail-current",
+      "stateKey": "sent-tax",
+      "viewport": "sm390",
+      "language": "id",
+      "path": "captures/invoice-detail-current__sent-tax__sm390__id.png",
+      "route": "/dashboard/invoices/[id]",
+      "width": 390,
+      "height": 844,
+      "fullPage": true
+    },
+    {
+      "routeKey": "invoice-detail-current",
+      "stateKey": "sent-tax",
+      "viewport": "xl1440",
+      "language": "en",
+      "path": "captures/invoice-detail-current__sent-tax__xl1440__en.png",
+      "route": "/dashboard/invoices/[id]",
+      "width": 1440,
+      "height": 900,
+      "fullPage": true
+    },
+    {
+      "routeKey": "public-invoice-current",
+      "stateKey": "active-long-content",
+      "viewport": "sm390",
+      "language": "id",
+      "path": "captures/public-invoice-current__active-long-content__sm390__id.png",
+      "route": "/i/[token]",
+      "width": 390,
+      "height": 844,
+      "fullPage": true
+    }
+  ]
+}

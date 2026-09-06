@@ -13,43 +13,56 @@ product_name: Dibayar (working name — rename requires Chris approval)
 one_liner: Brand-deal CRM + invoice + payment tracker for Indonesian creators (WhatsApp-first)
 phase: 1-build            # 0-discovery | 1-build | 2-validate  (transition = Chris approval)
 phase_started: 2026-07-12
-day_count: 1
+day_count: 11
 repo_url: git@github.com:crh/dibayar.git
-prod_url: none
-last_deploy: none
-build_status: green
-latest_validation: 2026-07-13 local gates green; 6/6 tests; HTTP/security-header smoke; 390px accessibility snapshot; npm audit has 5 moderate findings
+prod_url: https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/
+last_deploy: 2026-08-25 — commit `331e986` (`T-26: harden the 320-359 pixel layout band`) pushed to `origin/hermes/ux-phase-2`; local/tracking/remote refs equal `331e986`. Vercel Preview for this commit is READY on the stable branch alias `https://dibayar-git-hermes-ux-phase-2-kenji-iwakura.vercel.app`; no new migration required (T-25–T-26 are UI-only). Production unchanged; no public/non-SSO access enabled.
+build_status: green (2026-08-25, post-T-26) — `npm test` 75 files/696 tests, `npm run lint`, `npm run typecheck`, `npm run build`, `git diff --check` all PASS.
+latest_validation: 2026-08-25 — T-25 (landing page simplified to the spec's single-column 5-block layout) and T-26 (320–359 responsive corrections: stacked action rows, 16px card padding, both via `min-[360px]:` variants) implemented, tested, committed, pushed, and live-verified against Preview. Confirmed live on `/masuk`: exact 5-block order, "Coming soon" fully gone, the new access sentence present, zero two-column classes anywhere in the tree. T-26 couldn't be observed visually below 360px (same `resize_window` tool limitation as prior phases — this browser consistently renders at 390px regardless), but was verified a different way: fetched every fixed element's live `className` from the deployed page and confirmed `getComputedStyle` actually reflects the `min-[360px]:` override at the current 390px width (e.g. header `padding-top: 24px` matching `p-6`, action rows `flex-direction: row` matching `flex-row`) — proving the media query is real and functioning, not just an unused class name. Full detail: `DAILY_LOG.md` "Phase 6" entry.
 stack: Next.js + TS + Tailwind + Postgres + Prisma + Auth.js (Google OAuth) + Vercel
 vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linked to github.com/crh/dibayar)
 
 ## now
-current_milestone: M0 — repo bootstrap (local implementation complete; deployment criteria incomplete)
-active_branch: hermes/day-001-m0-bootstrap
-latest_feature_commit: 4f531d9 feat(m0): bootstrap Dibayar foundation
+current_milestone: UX implementation Phase 6's Claude-owned scope (T-25 landing, T-26 XS pass) implemented, tested, and pushed directly to `hermes/ux-phase-2`, live-verified 2026-08-25 (see latest_validation). T-27 (verification capture rerun) is Hermes-owned — Claude's role there is limited to adding any missing feature test Hermes identifies, never authoring detectors/captures. Phase 5 (T-22–T-24) still awaits Chris's explicit acknowledgement before merge, not yet sought.
+active_branch: hermes/ux-phase-2 (current, HEAD `331e986` — `T-26: harden the 320-359 pixel layout band`; pushed, local/origin match)
+latest_feature_commit: `331e986` (T-26), `084b717` (T-25), then the Phase 5 chain `a1ae921`+`4ee47bb` (T-24), `366f6e8` (T-23), `18edb01` (T-22), the Phase 4 chain `3fb7546`/`fd15377`/`08079f0` (T-21/T-19+T-20/T-19), and the Phase 3 chain `6ab5c25`/`f696973`/`a881839`/`e7cd863`/`7de5c97`/`216e0d7`/`8a8265c`/`37c5bbc` (T-18–T-13) — all on `hermes/ux-phase-2`, all pushed.
+open_blockers: The T-13 R1 Klaus-delegation-ledger track (three expired proposals, plus an unresolved "Prompt 11.1" identity-remediation thread) documented in DAILY_LOG.md's 2026-08-24 archive entry was superseded in practice: T-13 through T-26 were implemented directly, Claude Code working with Chris across ordinary sessions, never through that ledger mechanism. This file has no visibility into whether "Prompt 11.1" was ever separately resolved — not claimed resolved here, and not reopened. Known product findings carried forward unchanged: deal-deletion-with-invoices UX remains deferred; the 7-day due-soon window is provisional; monthly income uses invoice `createdAt`; PPh values are estimates, not tax filing calculations. T-26's true <360px stacked state was not visually observed live this session (tool limitation — see latest_validation); confirmed instead via computed-style inspection proving the media query is genuinely active at the live viewport width.
 completed_milestones:
   - Phase 0 discovery closed
-  - M0 local scaffold and validation checkpoint complete
-today_tasks_max_3:
-  - Finish M0 scaffold and independent review (local implementation complete)
-  - Preserve validated work on the feature branch (commit 4f531d9 created)
-  - Resolve the M0 deployment approval/access decision
-open_blockers: Roadmap M0 still requires a deployed Bahasa page; project/repo linkage is Chris-confirmed, but deployment and access protection are unverified
+  - M0 bootstrap and protected production deployment complete
+  - M1 auth + deal pipeline accepted on protected Preview
+  - M2 invoice (generation, share-link, status tracking) accepted on protected Preview 2026-07-18 — Production/public-access separately gated, not yet decided
+  - UX implementation Phase 0 (T-00–T-03) and Phase 1 (T-04–T-07, shell/blocking findings) accepted and closed by Chris; see `docs/ux-implementation/evidence/phase-0/GATE.md` and `phase-1/GATE.md`
+  - UX implementation Phase 2 (T-08–T-12, IA split) implemented, committed, and independently verified 2026-08-09; external gate criteria (Preview/Production isolation, Chris acknowledgement) satisfied 2026-08-17; merge/Phase 3 separately not authorized at that point — see `docs/ux-implementation/evidence/phase-2/GATE.md`
+  - UX implementation Phase 3 (T-13–T-18: deal board/detail polish) implemented, tested, committed, pushed, and live-verified on Vercel Preview with real Google OAuth 2026-08-21–23; a genuine Preview P2022 infra bug (stale `DATABASE_URL` pointing at an abandoned Neon branch) was found and fixed via runtime instrumentation, not guesswork — see `DAILY_LOG.md` "Phase 3" entry
+  - UX implementation Phase 4 (T-19–T-21: invoice detail reorder, DateField, configurable WhatsApp templates) implemented, tested, committed, pushed, and live-verified on Preview 2026-08-24; a genuine broken-link bug (invoice list/home queue pointing at a dead `/invoice/:id` placeholder while the real page sat at the compatibility route) was found and fixed as part of T-19 — see `DAILY_LOG.md` "Phase 4" entry
+  - UX implementation Phase 5 (T-22–T-24: canonical `InvoiceDocument`, public route rewrite, PDF parity) implemented, tested, committed, pushed, and live-verified on Preview 2026-08-25 — real generated PDFs confirmed byte-identical in length between owner and recipient copies of the same invoice; merge requires Chris's explicit Phase 5 acknowledgement, not yet sought — see `DAILY_LOG.md` "Phase 5" entry
+  - UX implementation Phase 6, Claude-owned scope (T-25 landing simplification, T-26 XS-band pass) implemented, tested, committed, pushed, and live-verified on Preview 2026-08-25; T-27 (capture rerun) remains Hermes-owned and not started — see `DAILY_LOG.md` "Phase 6" entry
+
+today_work (Focus measures approved scope, not task volume, from 2026-07-19):
+  - T-25: landing page rebuilt to the spec's single-column 5-block layout; "Coming soon" deleted and replaced with the honest access sentence; on-page language switcher and its now-unused component/keys removed (language switching already lives in Settings) — done, committed, pushed, live-verified
+  - T-26: every always-side-by-side action row (2 buttons, or input+button) across the app now stacks full-width below 360px via `min-[360px]:` variants, reverting to today's layout at and above it; card padding on the invoice header/payment-status/share/details cards and the home net-income card drops to 16px below 360px the same way — done, committed, pushed, live-verified (via computed-style inspection, see latest_validation)
+
+open_blockers_continued: none beyond the ones listed above.
 
 ## recent_signal_findings
-- No external signal check recorded; this run was limited to the M0 bootstrap and validation scope.
+- No external signal check recorded.
 
 ## pivot_watch
 <!-- A pivot needs 3 dated evidence entries here + explicit Chris approval. Until then: continue. -->
 (empty)
 
 ## decisions_last_3_days
-- 2026-07-13: Continue Dibayar/M0; local scaffold is validated, but do not mark M0 complete without the Roadmap deployment evidence.
-- 2026-07-13: Keep the repository private and do not deploy publicly without Chris approval; no phase transition requested.
-- 2026-07-12: Use exact claude-sonnet-5 through the repository wrapper; do not downgrade or claim completion without independent gates.
+- 2026-08-25 (Phase 6): T-25/T-26 implemented, tested, committed (`084b717`, `331e986`), pushed, and live-verified on Preview. T-25 rebuilt `/masuk` to the spec's exact single-column 5-block order (headline, subhead, chips, sign-in, three steps), deleting "Coming soon"/"Segera hadir" for the honest access sentence and removing the on-page language switcher (redundant with Settings) along with its now-fully-unused `LanguageSwitcher` component and `language.*` i18n keys. T-26 audited every always-side-by-side action row across the six owner routes and converted the genuine wrap/overflow risks (two-button rows, input+button rows) to stack full-width below 360px via `min-[360px]:` variants, plus dropped card padding to 16px below 360px on four invoice-detail cards and the home income card. Since jsdom has no layout engine and this session's browser-resize tool doesn't produce a true <360px viewport, added structural class-presence tests as the implementation-side evidence and verified live via `getComputedStyle` (confirming the media query is genuinely active at 390px, not a dead class) rather than a visual capture — the real pixel-measurement capture is Hermes's T-27 job. 696/696 tests pass. Full detail: `DAILY_LOG.md` "Phase 6" entry.
+- 2026-08-25 (Phase 5): T-22/T-23/T-24 implemented, tested, committed (`18edb01`, `366f6e8`, `4ee47bb`+`a1ae921`), pushed, and live-verified on Preview. T-22 built the canonical `InvoiceDocument` model/blocks/HTML adapter from the §5.3 field table, reusing the existing `withholdingTaxLabel` (now exported) for guaranteed tax-parity. T-23 rewrote `/i/:token` to server-render that model directly (was: server gate + redundant client re-fetch), adding a typed "expired" state distinct from the deliberately-generic "invalid"/rate-limited 404. T-24 added the react-pdf adapter and rewired both PDF routes onto the same canonical model, including the owner route fetching issuer/bank Settings for the first time. A staging mistake split T-24 into two commits (`4ee47bb` alone doesn't build; `a1ae921` completes it), caught and fixed in the same push. Live verification captured real `%PDF-1.3` bytes from both PDF routes, byte-identical in length for the same invoice. Full detail: `DAILY_LOG.md` "Phase 5" entry.
+- 2026-08-24 (Phase 4): T-19 (corrected)/T-20/T-21 implemented, tested, committed (`08079f0`, `fd15377`, `3fb7546`), pushed, and live-verified on Preview. T-19's first pass (`08079f0`) reordered the payment-status section and added the PAID→SENT undo, but missed two spec requirements: moving the real page from the `/dashboard/invoices/:id` compatibility route to `/invoice/:id` (the list/home queue already linked there, so those links were live-broken), and putting the primary WhatsApp action first with due-date editing moved into Details. Surfaced to Chris before proceeding; Chris chose the full fix. `fd15377` fixed both, added a 302 redirect, built `DateField`, and added a desktop share rail. `3fb7546` replaced hardcoded WhatsApp message text with the owner's actual Settings templates. Full detail: `DAILY_LOG.md` "Phase 4" entry.
+- Older entries (2026-08-07 through 2026-08-23: Phase 0/1 checkpoints, Phase 2 T-08–T-12, the full T-13 R1 delegation-ledger saga, and Phase 3 T-13–T-18) moved to `DAILY_LOG.md` per the 3-day retention rule; nothing was dropped, only relocated.
 
 ## approvals
-pending_from_chris: deployment approval/access decision for M0; no production launch requested
-granted_by_chris: local staging/commit review approval
+pending_from_chris: explicit Phase 5 acknowledgement (T-22–T-24 canonical document/public route/PDF parity) before merge, per `IMPLEMENTATION_PLAN.md`'s Phase 5 heading — not yet sought; explicit merge decision for `hermes/ux-phase-2` overall; Production deployment decision beyond the env-config action Chris already performed; separate public (non-SSO) access decision for recipient share links; M4 validation/go-no-go; confirm or revise the provisional 7-day due-soon window and invoice-issue-date income basis.
+pending_external: none
+
+granted_by_chris: standing autonomous milestone execution, code-fix, and protected Preview redeployment approval; T-14 through T-26 executed directly per Chris's explicit "continue... just want to complete tasks as fast as possible" and subsequent "proceed"/"continue"/"yes" instructions across Phases 4–6, without a separate per-task delegation-ledger approval; explicit "remember to do live-preview after each phase" instruction, followed via real browser automation against the live Preview deployment for Phases 4, 5, and 6.
 
 ## metrics (phase 2+ only)
 users_shown: 0
@@ -57,12 +70,12 @@ feedback_logged: 0
 wtp_signals: 0
 
 ## latest_deployment_status
-project_linkage: confirmed by Chris; dashboard independently inaccessible in current browser session
-preview: none
-production: none
-smoke: local HTTP page and security headers passed
+project_linkage: confirmed by Chris; Vercel Preview auto-deploys via GitHub integration on push to `hermes/ux-phase-2`
+preview: Preview deployment for `331e986` is READY on the stable branch alias `https://dibayar-git-hermes-ux-phase-2-kenji-iwakura.vercel.app`; live-verified 2026-08-25 (see latest_validation); no new migration required for T-25–T-26 (UI-only)
+production: unchanged since Chris's 2026-08-17 Vercel Production `DATABASE_URL` configuration/redeploy (deployment `CnHyzTh8Z4Te5Yx7xcRTeUvykow6`, `main`@`e92d6e4`, `dibayar.vercel.app`); no Hermes/Klaus/Claude-Code-initiated Production deployment or migration since
+smoke: real browser automation against the live Preview deployment — see latest_validation for the exact Phase 6 checks; Phase 5 (2026-08-25), Phase 4 (2026-08-24), and Phase 3 (2026-08-23) UAT passed the same way
 
 ## next_3_tasks
-1. Decide whether Chris approves a confidential protected preview; verify the resulting deployment directly if approved.
-2. Push the validated private feature branch only after explicit push approval.
-3. After M0 deployment evidence, request Chris approval before Phase 2; otherwise continue M0 deployment preparation.
+1. T-27 — verification capture rerun: Hermes-owned (executes/extends instruments, captures, reviews, records evidence); Claude's role is narrowly limited to adding any missing feature test Hermes identifies before capture, never authoring detectors/captures itself. Depends on all tasks (T-13–T-26 now complete).
+2. Seek Chris's explicit Phase 5 acknowledgement (T-22–T-24 canonical document/public route/PDF parity) before any merge, per `IMPLEMENTATION_PLAN.md`'s Phase 5 heading — still not sought.
+3. Once T-27 and Phase 5 acknowledgement land: the explicit merge/Production/public-access decisions listed under `approvals` remain the actual next gate, not further implementation — the task list (T-13 through T-27) is otherwise complete.

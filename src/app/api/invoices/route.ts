@@ -1,0 +1,53 @@
+import { NextResponse } from "next/server";
+import { ZodError } from "zod";
+import { auth } from "@/auth";
+import { createInvoice, listInvoices, type InvoiceCreateDb, type InvoiceReadDb } from "@/lib/invoices";
+import { prisma } from "@/lib/prisma";
+import { isSameOriginRequest } from "@/lib/request-origin";
+
+const db = prisma as unknown as InvoiceCreateDb;
+const readDb = prisma as unknown as InvoiceReadDb;
+
+export async function GET() {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
+    }
+
+    const invoices = await listInvoices(readDb, session.user.id);
+    return NextResponse.json({ invoices });
+  } catch {
+    return NextResponse.json({ error: "Invoice belum bisa dimuat. Coba lagi." }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Kamu harus masuk terlebih dahulu." }, { status: 401 });
+    }
+    if (!isSameOriginRequest(request)) {
+      return NextResponse.json({ error: "Permintaan ditolak. Muat ulang halaman lalu coba lagi." }, { status: 403 });
+    }
+
+    const invoice = await createInvoice(db, session.user.id, await request.json());
+    if (!invoice) {
+      return NextResponse.json({ error: "Deal tidak ditemukan." }, { status: 404 });
+    }
+    return NextResponse.json({ invoice }, { status: 201 });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return NextResponse.json(
+        { error: "Periksa kembali data invoice kamu.", fields: error.flatten().fieldErrors },
+        { status: 400 },
+      );
+    }
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "Periksa kembali data invoice kamu." }, { status: 400 });
+    }
+
+    return NextResponse.json({ error: "Invoice belum bisa dibuat. Coba lagi." }, { status: 500 });
+  }
+}

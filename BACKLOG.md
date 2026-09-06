@@ -1,12 +1,14 @@
 # BACKLOG.md
 
-<!-- Pick 1–3 items per day into STATE.md today_tasks. Prefer finishing one vertical slice.
+<!-- Pick approved work into STATE.md today_tasks. Prefer finishing one vertical slice.
      Prune stale items every Monday retro. Keep items one line each. -->
 
 ## Product / UX
 - Deal capture flow wireframe: 60-second target, thumb-reachable, Bahasa microcopy
 - Empty-state onboarding: seed one contoh deal so pipeline isn't blank
 - Polite WhatsApp follow-up message templates (3 tones: ramah, netral, tegas)
+- Recipient-locale for public invoices / PDF / WhatsApp reminders (currently Indonesian-only
+  in v1) — future, separate feature. Not scheduled.
 
 ## Frontend
 - Pipeline board (mobile-first, horizontal scroll stages)

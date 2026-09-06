@@ -1,0 +1,352 @@
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
+import type { DealRecord } from "@/lib/deals";
+import { DEAL_DRAG_MIME } from "@/components/deals/deal-card";
+import DealClient from "./deal-client";
+
+const mockPush = vi.fn();
+const mockReplace = vi.fn();
+const mockedUseSearchParams = vi.fn(() => new URLSearchParams());
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  useSearchParams: () => mockedUseSearchParams(),
+}));
+
+const dealFixture: DealRecord = {
+  id: "deal-1",
+  userId: "user-1",
+  brand: "Acme",
+  contactWa: "6281234567890",
+  contactName: null,
+  scope: "Video promosi",
+  feeIdr: 1500000,
+  deadline: null,
+  paymentTerms: null,
+  status: "MASUK",
+  createdAt: new Date("2026-01-01T00:00:00.000Z"),
+  updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+};
+
+// Deep-link / hard-load setup: sets the actual browser URL (the real source
+// of truth DealClient reads) without adding a history entry.
+function setLocation(url: string) {
+  window.history.replaceState(null, "", url);
+}
+
+// Simulates a real Next.js <Link>/router navigation to a same-route URL
+// (e.g. TopBar's "New Deal"/"New Invoice" links): Next moves the actual
+// browser URL via the History API *and* updates its reactive searchParams,
+// which is what causes DealClient to re-render while staying mounted.
+// `rerender` stands in for that re-render -- called with a freshly built
+// element each time (not a cached one), since React bails out of an update
+// entirely when the exact same element reference is passed to rerender
+// twice in a row, which would mask the very re-render this simulates.
+function simulateLinkNavigation(
+  rerender: (ui: ReactElement) => void,
+  buildUi: () => ReactElement,
+  url: string,
+) {
+  window.history.pushState(null, "", url);
+  const query = url.includes("?") ? url.slice(url.indexOf("?") + 1) : "";
+  mockedUseSearchParams.mockReturnValue(new URLSearchParams(query));
+  rerender(buildUi());
+}
+
+beforeEach(() => {
+  mockPush.mockClear();
+  mockReplace.mockClear();
+  mockedUseSearchParams.mockReturnValue(new URLSearchParams());
+  setLocation("/deal");
+});
+
+describe("DealClient stage filter (T-14)", () => {
+  afterEach(() => {
+    window.history.replaceState(null, "", "/deal");
+  });
+
+  it("updates the URL via history.pushState (not a router navigation) when a stage filter chip is clicked, so back/forward can step through it without a server round trip", async () => {
+    const pushStateSpy = vi.spyOn(window.history, "pushState");
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Nego" }));
+
+    expect(pushStateSpy).toHaveBeenCalledWith(null, "", "/deal?tahap=NEGO");
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Nego" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("updates the URL back to the plain /deal path when Semua is selected", async () => {
+    mockedUseSearchParams.mockReturnValue(new URLSearchParams("tahap=NEGO"));
+    setLocation("/deal?tahap=NEGO");
+    const pushStateSpy = vi.spyOn(window.history, "pushState");
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Semua" }));
+
+    expect(pushStateSpy).toHaveBeenCalledWith(null, "", "/deal");
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it("does not fetch or navigate when switching filters — the already-loaded deals are filtered client-side", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Nego" }));
+    await user.click(screen.getByRole("button", { name: "Semua" }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("reflects the current URL's tahap value as the pressed filter on initial render", () => {
+    mockedUseSearchParams.mockReturnValue(new URLSearchParams("tahap=DEAL"));
+    setLocation("/deal?tahap=DEAL");
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    expect(screen.getByRole("button", { name: "Deal" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Semua" }).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("falls back to no filter when the URL's tahap value is invalid", () => {
+    mockedUseSearchParams.mockReturnValue(new URLSearchParams("tahap=NOT_A_STAGE"));
+    setLocation("/deal?tahap=NOT_A_STAGE");
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    expect(screen.getByRole("button", { name: "Semua" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getAllByRole("region")).toHaveLength(6);
+  });
+
+  it("restores the filter shown before the click when the user navigates back (popstate), without a server round trip", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Nego" }));
+    expect(screen.getByRole("button", { name: "Nego" }).getAttribute("aria-pressed")).toBe("true");
+
+    // Simulate the browser restoring the prior URL and firing popstate, as it
+    // does for a same-document history entry created by pushState.
+    window.history.replaceState(null, "", "/deal");
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    expect(screen.getByRole("button", { name: "Semua" }).getAttribute("aria-pressed")).toBe("true");
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("picks up a tahap filter added by a same-route Next.js navigation (e.g. TopBar's New Invoice link) on the already-mounted instance", () => {
+    const buildUi = () => <DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />;
+    const { rerender } = render(buildUi());
+    expect(screen.getByRole("button", { name: "Semua" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Invoice" }).getAttribute("aria-pressed")).toBe("false");
+
+    // Same mounted DealClient instance: a real <Link href="/deal?tahap=INVOICE">
+    // click, which moves the actual browser URL and updates searchParams.
+    simulateLinkNavigation(rerender, buildUi, "/deal?tahap=INVOICE");
+
+    expect(window.location.search).toBe("?tahap=INVOICE");
+    expect(screen.getByRole("button", { name: "Invoice" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Semua" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getAllByRole("region")).toHaveLength(1);
+  });
+
+  it("clears the filter when a same-route Next.js navigation removes tahap from the URL (e.g. TopBar's New Deal link) on the already-mounted instance", () => {
+    mockedUseSearchParams.mockReturnValue(new URLSearchParams("tahap=INVOICE"));
+    setLocation("/deal?tahap=INVOICE");
+    const buildUi = () => <DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />;
+    const { rerender } = render(buildUi());
+    expect(screen.getByRole("button", { name: "Invoice" }).getAttribute("aria-pressed")).toBe("true");
+
+    // Same mounted DealClient instance: a real <Link href="/deal"> click.
+    simulateLinkNavigation(rerender, buildUi, "/deal");
+
+    expect(window.location.search).toBe("");
+    expect(screen.getByRole("button", { name: "Semua" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Invoice" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getAllByRole("region")).toHaveLength(6);
+  });
+
+  it("preserves the active stage filter through the one-shot ?tambah=1 URL cleanup", () => {
+    mockedUseSearchParams.mockReturnValue(new URLSearchParams("tahap=INVOICE&tambah=1"));
+    setLocation("/deal?tahap=INVOICE&tambah=1");
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={true} />);
+
+    expect(screen.getByRole("button", { name: "Invoice" }).getAttribute("aria-pressed")).toBe("true");
+    expect(mockReplace).toHaveBeenCalledWith("/deal?tahap=INVOICE");
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+  });
+
+  describe("mixed navigation (chip click + TopBar Link, same mounted instance)", () => {
+    // Every sequence below re-asserts the full invariant this fix exists to
+    // guarantee: after any supported navigation completes, window.location,
+    // stageFilter (via aria-pressed on both the target and the
+    // previously-active chip), and DealBoard's rendered filter must all
+    // agree. V4 passed some of these by coincidence and silently failed
+    // others -- see DIBAYAR-INTERVIEW-CANDIDATE-V4-FRESH-REVIEW.md.
+
+    it("sequence 1: /deal -> chip Invoice -> TopBar New Deal ends unfiltered", async () => {
+      const user = userEvent.setup();
+      const buildUi = () => <DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />;
+      const { rerender } = render(buildUi());
+
+      await user.click(screen.getByRole("button", { name: "Invoice" }));
+      expect(window.location.search).toBe("?tahap=INVOICE");
+
+      simulateLinkNavigation(rerender, buildUi, "/deal");
+
+      expect(window.location.search).toBe("");
+      expect(screen.getByRole("button", { name: "Semua" }).getAttribute("aria-pressed")).toBe("true");
+      expect(screen.getByRole("button", { name: "Invoice" }).getAttribute("aria-pressed")).toBe("false");
+      expect(screen.getAllByRole("region")).toHaveLength(6);
+    });
+
+    it("sequence 2: /deal -> chip Dibayar -> TopBar New Invoice ends filtered to Invoice", async () => {
+      const user = userEvent.setup();
+      const buildUi = () => <DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />;
+      const { rerender } = render(buildUi());
+
+      await user.click(screen.getByRole("button", { name: "Dibayar" }));
+      expect(window.location.search).toBe("?tahap=DIBAYAR");
+
+      simulateLinkNavigation(rerender, buildUi, "/deal?tahap=INVOICE");
+
+      expect(window.location.search).toBe("?tahap=INVOICE");
+      expect(screen.getByRole("button", { name: "Invoice" }).getAttribute("aria-pressed")).toBe("true");
+      expect(screen.getByRole("button", { name: "Dibayar" }).getAttribute("aria-pressed")).toBe("false");
+      expect(screen.getByRole("region", { name: "Invoice" })).toBeTruthy();
+      expect(screen.getAllByRole("region")).toHaveLength(1);
+    });
+
+    it("sequence 3: /deal?tahap=INVOICE -> chip Dibayar -> TopBar New Invoice ends filtered to Invoice", async () => {
+      mockedUseSearchParams.mockReturnValue(new URLSearchParams("tahap=INVOICE"));
+      setLocation("/deal?tahap=INVOICE");
+      const user = userEvent.setup();
+      const buildUi = () => <DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />;
+      const { rerender } = render(buildUi());
+
+      await user.click(screen.getByRole("button", { name: "Dibayar" }));
+      expect(window.location.search).toBe("?tahap=DIBAYAR");
+
+      simulateLinkNavigation(rerender, buildUi, "/deal?tahap=INVOICE");
+
+      expect(window.location.search).toBe("?tahap=INVOICE");
+      expect(screen.getByRole("button", { name: "Invoice" }).getAttribute("aria-pressed")).toBe("true");
+      expect(screen.getByRole("button", { name: "Dibayar" }).getAttribute("aria-pressed")).toBe("false");
+      expect(screen.getAllByRole("region")).toHaveLength(1);
+    });
+
+    it("sequence 4: /deal?tahap=INVOICE -> chip Dibayar -> TopBar New Deal ends unfiltered", async () => {
+      mockedUseSearchParams.mockReturnValue(new URLSearchParams("tahap=INVOICE"));
+      setLocation("/deal?tahap=INVOICE");
+      const user = userEvent.setup();
+      const buildUi = () => <DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />;
+      const { rerender } = render(buildUi());
+
+      await user.click(screen.getByRole("button", { name: "Dibayar" }));
+      expect(window.location.search).toBe("?tahap=DIBAYAR");
+
+      simulateLinkNavigation(rerender, buildUi, "/deal");
+
+      expect(window.location.search).toBe("");
+      expect(screen.getByRole("button", { name: "Semua" }).getAttribute("aria-pressed")).toBe("true");
+      expect(screen.getByRole("button", { name: "Dibayar" }).getAttribute("aria-pressed")).toBe("false");
+      expect(screen.getAllByRole("region")).toHaveLength(6);
+    });
+
+    it("survives a longer mixed sequence including back/forward: chip -> chip -> back -> forward all agree with the URL at every step", async () => {
+      const user = userEvent.setup();
+      render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+      await user.click(screen.getByRole("button", { name: "Invoice" }));
+      expect(window.location.search).toBe("?tahap=INVOICE");
+      await user.click(screen.getByRole("button", { name: "Dibayar" }));
+      expect(window.location.search).toBe("?tahap=DIBAYAR");
+
+      // Back: browser restores /deal?tahap=INVOICE and fires popstate.
+      window.history.replaceState(null, "", "/deal?tahap=INVOICE");
+      act(() => {
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      });
+      expect(screen.getByRole("button", { name: "Invoice" }).getAttribute("aria-pressed")).toBe("true");
+      expect(screen.getByRole("button", { name: "Dibayar" }).getAttribute("aria-pressed")).toBe("false");
+
+      // Forward: browser restores /deal?tahap=DIBAYAR and fires popstate.
+      window.history.replaceState(null, "", "/deal?tahap=DIBAYAR");
+      act(() => {
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      });
+      expect(screen.getByRole("button", { name: "Dibayar" }).getAttribute("aria-pressed")).toBe("true");
+      expect(screen.getByRole("button", { name: "Invoice" }).getAttribute("aria-pressed")).toBe("false");
+      expect(screen.getAllByRole("region")).toHaveLength(1);
+    });
+  });
+});
+
+describe("DealClient stage movement (T-15)", () => {
+  function jsonResponse(status: number, body: unknown) {
+    return { ok: status >= 200 && status < 300, status, json: async () => body };
+  }
+
+  it("moves the card immediately (optimistic), before the request resolves", async () => {
+    let resolveFetch: (value: unknown) => void = () => {};
+    const fetchMock = vi.fn(() => new Promise((resolve) => { resolveFetch = resolve; }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Acme" }));
+    await user.click(screen.getByRole("menuitem", { name: "Lanjut ke Nego" }));
+
+    // Moved immediately client-side, before the in-flight PATCH resolves.
+    expect(screen.getAllByRole("region", { name: "Nego" })[0].textContent).toContain("Acme");
+
+    resolveFetch(jsonResponse(200, { deal: { ...dealFixture, status: "NEGO" } }));
+    vi.unstubAllGlobals();
+  });
+
+  it("rolls back to the prior stage and shows an error when the move request fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(500, {}))));
+
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Acme" }));
+    await user.click(screen.getByRole("menuitem", { name: "Lanjut ke Nego" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Deal belum bisa diperbarui. Coba lagi.");
+    expect(screen.getAllByRole("region", { name: "Masuk" })[0].textContent).toContain("Acme");
+    expect(screen.getAllByRole("region", { name: "Nego" })[0].textContent).not.toContain("Acme");
+
+    vi.unstubAllGlobals();
+  });
+
+  it("does not issue a request when a card is dropped back onto the column it is already in", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    // dealFixture is already at MASUK; dropping it on the MASUK column is a no-op.
+    const masukColumn = screen.getByRole("region", { name: "Masuk" });
+    fireEvent.drop(masukColumn, {
+      dataTransfer: { types: [DEAL_DRAG_MIME], getData: () => dealFixture.id, setData: vi.fn() },
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
+  });
+});

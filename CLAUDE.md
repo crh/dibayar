@@ -15,7 +15,7 @@ Verified from `STATE.md` and the repository planning documents:
 - Auth.js with Google OAuth
 - Vercel deployment target
 
-Current status: the M0 application scaffold is present and locally verified. It contains the static coming-soon page, Tailwind styling, Prisma PostgreSQL configuration, Vitest tests, and security-header configuration. Authentication, user data models, application routes, Vercel linkage, and deployment remain out of scope or unverified until their milestones.
+Current status: UX implementation Phase 0 foundations T-00 through T-03 are accepted on local branch `hermes/ux-phase-0`. T-00 fixture-backed evidence, T-01 locale/formatters and default-only migration, T-02 breakpoint/Grid primitives, and T-03 route scaffolding/redirects passed independent review and local gates. No Preview or Production deployment/public-access change occurred; T-04 is next.
 
 ## Repository structure
 
@@ -31,6 +31,17 @@ Verified top-level documents:
 - `REPORT_RUBRIC.md` — reporting expectations
 - `DEPLOYMENT.md` — local verification and deployment approval boundaries
 - `BACKLOG.md` and `DAILY_LOG.md` — project work tracking
+
+## Hermes multi-agent roles
+
+The Dibayar workflow uses three explicitly separated roles. Read `docs/ux-implementation/HERMES_CONTROLLER.md` before continuing autonomous work and `docs/ux-implementation/AGENT_ROLES.md` for the role contract.
+
+- **Luna** — Hermes default-profile orchestrator (`gpt-5.6-luna`); recovers state, delegates, independently verifies, manages evidence/Git, and controls approval boundaries.
+- **Klaus** — Claude Code implementation worker invoked by `/home/kenji/.local/bin/run-dibayar-claude`; default `CLAUDE_MAX_TURNS=100`; implements only the bounded packet and reports exact evidence; does not approve architecture or phase gates.
+- **Archie** — Hermes `archie` profile using the exact supported model `gpt-5.6-sol`; independent read-only-by-policy architect/reviewer; returns the structured ARCHIE REVIEW verdict and recommends corrections for Klaus rather than editing them.
+
+Luna remains the main orchestrator. Worker reports are evidence and do not override independent verification or approval gates.
+
 
 Application directories:
 
@@ -53,16 +64,18 @@ Do not claim any command works until it has been run against the current reposit
 
 ## Testing commands
 
-The M0 test foundation uses Vitest with jsdom and Testing Library. Tests live beside the App Router files under `src/app/*.test.tsx`. Behavioral changes require added or updated tests.
+The M0/T-00 test foundation uses Vitest with jsdom and Testing Library. Tests live beside source files under `src/**/*.test.ts` and `src/**/*.test.tsx`. Behavioral changes require added or updated tests.
+
+Real-browser journey/E2E coverage lives under `e2e/` (Playwright, `playwright.e2e.config.ts`) -- see `docs/testing/E2E.md`. This is separate from `tests/ux-audit/` (the visual/detector audit harness) and from the Vitest suite above; it exists specifically to catch bugs in the interaction between App Router navigation, `window.history`, `useSearchParams`, and client component state, which unit/component tests cannot see. Any change affecting navigation, URL/search params, multi-step workflows, authentication, or other cross-component user behavior must add or update the corresponding Playwright journey test. A regression discovered during independent review should normally become a permanent automated regression test (in `e2e/`, or `tests/ux-audit/` if it's a visual/layout regression) before the replacement candidate is promoted.
 
 ## Coding conventions
 
 - Use TypeScript and existing repository patterns once established.
 - Follow `DESIGN.md`: mobile-first, primary target width 390px, touch targets at least 44px, visible focus, reduced-motion support, and natural Bahasa Indonesia for user-facing copy.
-- Format money as IDR with dot thousands separators and no decimals, for example `Rp1.500.000`.
+- Format money as IDR with dot thousands separators, no decimals, and the specified non-breaking space after `Rp`, for example `Rp 1.500.000`.
 - Keep user-facing actions explicit; avoid generic labels such as `Submit`.
 - Prefer small, reviewable changes and avoid unrelated refactors.
-- Use the existing lint, formatting, typecheck, and test configuration once created; configuration details are currently `TBD`.
+- Use the checked-in ESLint, TypeScript, Vitest, Playwright, and Prisma configuration; run the relevant gates for each task.
 
 ## Authentication and authorization design
 
@@ -70,11 +83,11 @@ Planned design verified from `STATE.md`, `PRODUCT.md`, and `SECURITY.md`: Auth.j
 
 ## Database and migration process
 
-Planned database: PostgreSQL accessed through Prisma. Schema location, migration commands, seed strategy, backup/rollback procedure, and local database setup are currently `TBD`. Never modify production data or run production migrations unless the task explicitly requires it and the required approval is present. All tenant/user-owned records must be scoped to the authenticated user.
+Verified database process: use the approved disposable local PostgreSQL target only (`127.0.0.1:55432/dibayar_test`) with credentials from the protected test environment; never invoke Docker/Compose or expose credentials. Prisma schema/migration and fixture procedures are documented under `docs/ux-implementation/`. Never modify production data or run production migrations without explicit scope and approval. All tenant/user-owned records remain scoped to the authenticated user.
 
 ## Deployment workflow
 
-Deployment target is Vercel, verified from `STATE.md`. The repository is Vercel-compatible, but project linkage, environment variables, preview deployment, production release, rollback procedure, and CI/CD remain unverified. Follow `DEPLOYMENT.md`; secrets belong in the deployment environment, never in source control.
+Deployment target is Vercel and project linkage is confirmed in `STATE.md`. Phase 0 was verified locally only; Preview is currently non-isolated from Production, so no Preview migration/capture or Production/public release is authorized. Follow `DEPLOYMENT.md`; secrets belong in the deployment environment, never in source control.
 
 ## Security requirements
 

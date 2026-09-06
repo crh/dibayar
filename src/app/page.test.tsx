@@ -1,49 +1,55 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import Home from "./page";
 
-describe("Home (coming-soon page)", () => {
-  it("shows the Dibayar coming-soon message in Bahasa Indonesia", () => {
-    render(<Home />);
+const { cookies } = vi.hoisted(() => ({ cookies: vi.fn() }));
+vi.mock("next/headers", () => ({ cookies }));
 
-    expect(screen.getByText("Segera hadir")).toBeDefined();
-    expect(
-      screen.getByText(
-        "Kelola deal brand, invoice, dan pembayaran di satu tempat",
-      ),
-    ).toBeDefined();
-  });
+import Home from "./masuk/page";
 
-  it("does not leak the default English create-next-app copy", () => {
-    const { container } = render(<Home />);
+function cookieJar(value?: string) {
+  return {
+    get: (name: string) => (name === "dibayar-language" && value !== undefined ? { name, value } : undefined),
+  };
+}
+
+beforeEach(() => {
+  cookies.mockReset();
+  cookies.mockResolvedValue(cookieJar());
+  window.localStorage.clear();
+});
+
+// The landing page's own content/structure (order, deleted "coming soon"
+// copy, bilingual rendering, sign-in link, etc.) is covered by
+// landing-client.test.tsx. This file only owns the server page's own job:
+// reading the language cookie and passing the right language through.
+describe("Home (landing page)", () => {
+  it("does not leak the default English create-next-app copy", async () => {
+    const { container } = render(await Home());
     const text = container.textContent ?? "";
 
     expect(text).not.toMatch(/create next app/i);
     expect(text).not.toMatch(/get started by editing/i);
   });
 
-  it("renders the brand-deal pipeline stages in order", () => {
-    render(<Home />);
-    const pipeline = screen.getByRole("list", {
-      name: "Alur kerja deal brand kamu",
-    });
-    const text = pipeline.textContent ?? "";
+  it("defaults to Indonesian when no language cookie is set", async () => {
+    render(await Home());
 
-    const stages = ["Masuk", "Nego", "Deal", "Konten", "Invoice", "Dibayar"];
-    let lastIndex = -1;
-    for (const stage of stages) {
-      const index = text.indexOf(stage);
-      expect(index).toBeGreaterThan(lastIndex);
-      lastIndex = index;
-    }
+    expect(screen.getByRole("heading", { name: "Kelola deal brand, invoice, dan pembayaran di satu tempat" })).toBeDefined();
   });
 
-  it("uses an explicit Bahasa action label instead of a generic submit button", () => {
-    render(<Home />);
+  it("renders Indonesian content when the language cookie is id", async () => {
+    cookies.mockResolvedValue(cookieJar("id"));
 
-    expect(
-      screen.getByRole("link", { name: "Lihat cara kerja" }),
-    ).toBeDefined();
-    expect(screen.queryByText(/^submit$/i)).toBeNull();
+    render(await Home());
+
+    expect(screen.getByRole("heading", { name: "Kelola deal brand, invoice, dan pembayaran di satu tempat" })).toBeDefined();
+  });
+
+  it("renders English content when the language cookie is en", async () => {
+    cookies.mockResolvedValue(cookieJar("en"));
+
+    render(await Home());
+
+    expect(screen.getByRole("heading", { name: "Manage brand deals, invoices, and payments in one place" })).toBeDefined();
   });
 });

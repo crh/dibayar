@@ -22,12 +22,22 @@ and chase payments manually.
    (indonewstoday.com, komunitasmea.web.id).
 
 ## solution (MVP)
-Mobile-first web app, Bahasa Indonesia, where a creator:
+Mobile-first web app, English + Bahasa Indonesia (English by default; creator-facing UI
+only — see `language` below), where a creator:
 1. Logs a deal from a DM in <60 seconds (brand, scope, fee IDR, deadline, payment terms)
 2. Tracks pipeline: Masuk → Nego → Deal → Konten → Invoice → DIBAYAR
 3. Generates a professional IDR invoice (PDF/link) with PPh 21/23 field awareness
 4. Gets payment due-date reminders; one-tap WhatsApp follow-up message (pre-written, polite)
 5. Sees running income total per month (tax-season friendly export = v2)
+
+## language
+The creator-facing app (landing page + authenticated dashboard) is bilingual, English by
+default, switchable to Bahasa Indonesia, persisted per-device pre-login (cookie) and
+cross-device once signed in (`User.language` in the DB — see DESIGN.md for the UX rule).
+Everything the creator's recipient sees — the public invoice page, the generated PDF, and
+the WhatsApp reminder message — stays Bahasa Indonesia-only in v1, independent of the
+creator's own language choice, since recipients are assumed to be Indonesian brand
+contacts. A future recipient-locale feature is logged in BACKLOG.md and not scheduled.
 
 ## why_now
 Performance-based/hybrid deals now standard in Indonesia (contentgrip.com) → more deals,

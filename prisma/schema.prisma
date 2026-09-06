@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -10,4 +5,215 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+enum DealStatus {
+  MASUK
+  NEGO
+  DEAL
+  KONTEN
+  INVOICE
+  DIBAYAR
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  DUE
+  OVERDUE
+  PAID
+}
+
+enum WithholdingTaxType {
+  NONE
+  PPH21
+  PPH23
+}
+
+model User {
+  id               String            @id @default(cuid())
+  name             String?
+  email            String?           @unique
+  emailVerified    DateTime?
+  image            String?
+  language         String            @default("id")
+  accounts         Account[]
+  sessions         Session[]
+  deals            Deal[]
+  invoices         Invoice[]
+  invoiceSequences InvoiceSequence[]
+  authEvents       AuthEvent[]
+  settings         UserSettings?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+// Issuer identity, bank details, and WhatsApp templates the invoice document
+// needs (see T-11). No NPWP/tax fields and no automatic-apply behavior here.
+// A missing row means the user has not saved any settings yet; every field
+// stays nullable so partial saves never require the others to be present.
+model UserSettings {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  issuerName        String?
+  issuerAddress     String?  @db.Text
+  issuerWhatsapp    String?
+  issuerEmail       String?
+  bankName          String?
+  bankAccountNumber String?
+  bankAccountHolder String?
+  templateSend      String?  @db.Text
+  templateChase     String?  @db.Text
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Deal {
+  id               String                @id @default(cuid())
+  userId           String
+  brand            String
+  contactWa        String
+  contactName      String?
+  scope            String                @db.Text
+  feeIdr           Int
+  deadline         DateTime?
+  paymentTerms     String?               @db.Text
+  status           DealStatus            @default(MASUK)
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoices         Invoice[]
+  stageTransitions DealStageTransition[]
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([userId, status])
+  @@index([userId, deadline])
+}
+
+// Durable audit trail of pipeline moves (T-15's menu/drag-drop moves and the
+// deal's initial stage both land here). The Deal mutation and its stage-history
+// append are written atomically inside the same transaction -- see
+// recordDealStageTransition. fromStatus is null only for the entry recorded at
+// deal creation.
+model DealStageTransition {
+  id         String      @id @default(cuid())
+  dealId     String
+  fromStatus DealStatus?
+  toStatus   DealStatus
+  // @db.Timestamptz, unlike every other DateTime in this schema: this is the
+  // first column whose time-of-day (not just calendar date) is rendered to
+  // users (the stage-history list), and a plain `timestamp without time
+  // zone` round-tripped incorrectly here (~7h shift matching Asia/Jakarta,
+  // confirmed live). The other bookkeeping createdAt/updatedAt columns never
+  // exercise that path since they're not displayed with time-of-day
+  // precision, so they're left as-is -- migrating them is a separate,
+  // broader concern outside this task's scope.
+  createdAt  DateTime    @default(now()) @db.Timestamptz
+  deal       Deal        @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  @@index([dealId, createdAt])
+}
+
+// Numbered per user per calendar month as INV/YYYY/MM/NNN (Asia/Jakarta boundary).
+// See src/lib/invoice-number.ts for the numbering/atomicity contract.
+model Invoice {
+  id                 String             @id @default(cuid())
+  userId             String
+  dealId             String
+  number             String
+  subtotalIdr        Int
+  withholdingTaxType WithholdingTaxType @default(NONE)
+  status             InvoiceStatus      @default(DRAFT)
+  dueDate            DateTime?
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deal               Deal               @relation(fields: [dealId], references: [id], onDelete: Restrict)
+  share              InvoiceShare?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@unique([userId, number])
+  @@index([dealId])
+}
+
+// Recipient share link: tokenHash is a SHA-256 hex digest of a 32-random-byte,
+// base64url token, used for the public /i/[token] lookup (unchanged, one-way,
+// never reversed). tokenCiphertext is a separate AES-256-GCM encryption of the
+// same plaintext token (see src/lib/share-token-crypto.ts), decryptable only
+// by the server holding AUTH_SECRET -- it exists solely so an authenticated
+// owner can recover their own already-active link across reloads/sessions
+// without the server ever storing the token in plaintext. Nullable because a
+// share created before this field existed has none and simply can't be
+// recovered (falls back to "regenerate"), not because it's optional going
+// forward. One row per invoice; presence of a row means the link is active
+// (revoke deletes the row).
+model InvoiceShare {
+  id               String    @id @default(cuid())
+  invoiceId        String    @unique
+  tokenHash        String    @unique
+  tokenCiphertext  String?   @db.Text
+  expiresAt        DateTime?
+  invoice          Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+// One row per (user, year, month); lastSequence is incremented atomically
+// (INSERT ... ON CONFLICT ... DO UPDATE ... RETURNING) to hand out invoice
+// sequence numbers without a race. See src/lib/invoice-number.ts.
+model InvoiceSequence {
+  id           String   @id @default(cuid())
+  userId       String
+  year         Int
+  month        Int
+  lastSequence Int      @default(0)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, year, month])
+}
+
+model AuthEvent {
+  id        String   @id @default(cuid())
+  userId    String?
+  type      String
+  provider  String?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
 }

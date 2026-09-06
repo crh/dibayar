@@ -1,17 +1,31 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f7f4ec;
-  --surface: #ffffff;
-  --ink: #23201b;
-  --muted: #6e6559;
-  --primary: #c25e3e;
-  --primary-d: #a94d30;
-  --paid: #2f8f6b;
-  --due: #e0a83e;
-  --overdue: #c7443b;
-  --line: #e6decf;
+  /* Existing tokens — names preserved for compatibility. */
+  --bg: oklch(97.5% 0.013 75);
+  --surface: oklch(99% 0.004 75);
+  --ink: oklch(24% 0.02 50);
+  --muted: oklch(47% 0.022 55);
+  --primary: oklch(50% 0.135 35);
+  --primary-d: oklch(41% 0.13 35);
+  --paid: oklch(54% 0.11 155);
+  --due: oklch(67% 0.135 75);
+  --overdue: oklch(53% 0.16 25);
+  --line: oklch(89% 0.017 70);
   --font-system: -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  /* Phase 1 design-system additions. */
+  --primary-tint: oklch(93% 0.035 35);
+  --paid-tint: oklch(94% 0.045 155);
+  --due-tint: oklch(94% 0.05 82);
+  --overdue-tint: oklch(94% 0.045 25);
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 999px;
+  --shadow-sm: 0 1px 2px oklch(30% 0.02 50 / 0.07), 0 1px 1px oklch(30% 0.02 50 / 0.05);
+  --shadow-md: 0 12px 28px oklch(30% 0.02 50 / 0.14);
+  --font-sans: "Plus Jakarta Sans", var(--font-system);
+  --font-serif: "Source Serif 4", Georgia, serif;
 }
 
 @theme inline {
@@ -21,32 +35,86 @@
   --color-muted: var(--muted);
   --color-primary: var(--primary);
   --color-primary-d: var(--primary-d);
+  --color-primary-tint: var(--primary-tint);
   --color-paid: var(--paid);
+  --color-paid-tint: var(--paid-tint);
   --color-due: var(--due);
+  --color-due-tint: var(--due-tint);
   --color-overdue: var(--overdue);
+  --color-overdue-tint: var(--overdue-tint);
   --color-line: var(--line);
-  --font-sans: var(--font-system);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-pill: var(--radius-pill);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
 }
 
-html {
-  overflow-x: hidden;
-}
+html { overflow-x: hidden; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-sans); }
 
-body {
-  background: var(--bg);
-  color: var(--ink);
-  font-family: var(--font-system);
-}
-
-a:focus-visible,
-button:focus-visible {
+button, a, input, textarea, select { -webkit-tap-highlight-color: transparent; }
+a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-tint);
+  outline: none;
+}
+.public-invoice .font-serif { font-family: var(--font-source-serif), var(--font-serif); }
 
+/* T-23: printing the public invoice document. The app background/margins
+   exist for the browser chrome around the page, not the document itself --
+   printed output should be a plain white page with no surrounding color. */
+@media print {
+  .public-invoice { background: #fff; color: #000; }
+}
+.ds-money { font-variant-numeric: tabular-nums; }
+.ds-body { font-size: 15px; line-height: 22px; }
+.ds-small { font-size: 13px; line-height: 18px; font-weight: 500; }
+.ds-micro { font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.ds-h1 { font-size: clamp(22px, 4vw, 26px); line-height: 32px; font-weight: 800; }
+.ds-h2 { font-size: 19px; line-height: 25px; font-weight: 700; }
+.ds-h3 { font-size: 15px; line-height: 20px; font-weight: 700; }
+.ds-display { font-size: 34px; line-height: 40px; font-weight: 800; }
+.ds-button { min-height: 48px; border-radius: var(--radius-pill); font-size: 15px; font-weight: 700; transition: background-color 180ms ease, border-color 180ms ease, transform 120ms ease; }
+.ds-button:active { transform: scale(.98); }
+.ds-button:disabled { cursor: not-allowed; opacity: .45; }
+.ds-button-primary { background: var(--primary); color: var(--surface); }
+.ds-button-primary:hover { background: var(--primary-d); }
+.ds-button-secondary { border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.ds-button-secondary:hover { background: var(--primary-tint); }
+.ds-button-destructive { border: 1px solid var(--overdue); background: var(--surface); color: var(--overdue); }
+.ds-button-destructive:hover { background: var(--overdue-tint); }
 @media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+.ds-grid { display: grid; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1024px) {
+  .ds-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 24px; }
+}
+
+/* Expands a link/button's clickable area to the 44x44 CSS-pixel minimum via
+   an invisible, centered overlay, without growing the element's own visual
+   footprint. The element needs `position: relative` (this class provides
+   it); the overlay is a generated pseudo-box, so clicks on it still land on
+   the element itself. Plain `display: inline` elements (default anchors)
+   also need `inline-block`, or the overlay's box still computes to 44x44
+   but hit-testing stays clipped to the inline line box; :where() keeps this
+   at zero specificity so an explicit flex/inline-flex utility still wins. */
+.ds-tap-target { position: relative; }
+:where(.ds-tap-target) { display: inline-block; }
+.ds-tap-target::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: max(100%, 44.5px);
+  height: max(100%, 44.5px);
 }
