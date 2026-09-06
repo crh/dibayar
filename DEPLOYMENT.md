@@ -1,6 +1,49 @@
 # Dibayar deployment
 
-## Current status
+## Current verified state (2026-09-06, V6.1 production-hardening audit)
+
+This section is the current authoritative summary. It supersedes any
+conflicting Production/Preview claim elsewhere in this file's "Current
+status" history below — that history is preserved as-is for the record (what
+was believed/true at each point in time), not rewritten, but should not be
+read as current.
+
+```text
+ENVIRONMENT=production
+COMMIT_SHA=b6119d2ae97ca8cf52473b5adfcd7024fbaef240 (merge of PR #2, `main`)
+DEPLOYMENT_URL=https://dibayar.vercel.app
+DEPLOYED_AT=2026-09-06T04:36Z (auto-deploy on merge) + at least 3 subsequent
+            redeploys the same day (env-var fix, then migration fix) —
+            current live deployment created 2026-09-06T09:01Z
+AUTH_STATUS=OK — verified 2026-09-06 via unauthenticated `curl` (`/` -> 307 to
+            `/api/auth/signin`, `/api/auth/signin` -> 200) and, earlier the
+            same day, a real user completing a live Google OAuth sign-in
+            (see `DIBAYAR-V6-1-POST-MERGE-PRODUCTION-HANDOFF.md`)
+DATABASE_CONNECTIVITY=inferred OK (see MIGRATION_STATUS; no dedicated health
+            endpoint exists to check this independently — see
+            `scripts/smoke-deployment.mjs`)
+MIGRATION_STATUS=all 12 checked-in migrations applied; confirmed both by
+            build-log evidence from 2026-09-06 and again independently
+            reconfirmed live (see "Migration strategy" section below)
+SMOKE_TEST_STATUS=PASS — `node scripts/smoke-deployment.mjs --env production
+            --url https://dibayar.vercel.app` run 2026-09-06, all checks PASS
+VERIFIED_BY=Claude Code (V6.1 production-hardening session), 2026-09-06
+```
+
+**Important open finding, not yet a decided product state:** Production
+(`dibayar.vercel.app`) currently responds to a plain, credential-free `curl`
+with the application's own Auth.js redirect (HTTP 307 to
+`/api/auth/signin`), not a Vercel Authentication/SSO login wall. This means
+Production is **currently reachable at the Vercel edge without any Vercel
+SSO gate** — the opposite of what the "Production policy" and "Preview
+policy" sections below (and multiple `STATE.md`/`CLAUDE.md` entries) describe
+for earlier points in this project's history. Whether this is an
+intentional, approved configuration or an unreviewed side effect of this
+incident's remediation is **not established by this audit** — see the
+Production release gate section below; `PRODUCTION_READY` should not be
+marked until Chris confirms this is the intended state.
+
+## Current status (historical — see "Current verified state" above for what is actually true today)
 
 - Target: Vercel.
 - M0 local scaffold: verified.
@@ -107,6 +150,184 @@ The first production deployment, production-domain assignment, public launch, an
 ## Rollback
 
 Rollback procedure and Vercel project identifiers are not yet verified. Do not claim a deployment or rollback until the resulting Vercel status and URL have been checked directly.
+
+## Migration strategy (established 2026-09-06, post-V6.1 incident)
+
+**Current mechanism, verified live 2026-09-06:** Production's Vercel project
+**Build Command has a dashboard override** set to:
+
+```
+npx prisma migrate deploy && next build
+```
+
+This was applied manually through the Vercel dashboard on 2026-09-06 during
+incident remediation (see `DIBAYAR-V6-1-POST-MERGE-PRODUCTION-HANDOFF.md`
+§2.6) to backfill 12 never-applied migrations. It is **still active** as of
+this audit (confirmed via `vercel inspect <latest production url> --logs`,
+which shows the same command running and all 12 migrations re-applying
+idempotently on the most recent deploy). The checked-in `package.json`
+`"build"` script is still plain `next build` — the override exists **only**
+in the Vercel dashboard, not in this repository.
+
+**Why this is a problem:** a dashboard-only Build Command override is
+invisible to code review, `git log`, and anyone reading this repository. It
+can be silently changed or reset by anyone with Vercel project access, with
+no diff, no PR, and no record. This is the exact "undocumented manual
+override" class of risk this audit was asked to close.
+
+**Recommended fix (not yet implemented — see below):** move this build
+command into a checked-in `vercel.json`:
+
+```json
+{
+  "buildCommand": "npx prisma migrate deploy && next build"
+}
+```
+
+and keep it there **permanently** for every environment (Preview and
+Production), rather than treating it as a one-time backfill to revert.
+Rationale:
+
+- `prisma migrate deploy` is additive/idempotent: it only applies migrations
+  not already recorded in `_prisma_migrations`. Running it on every build is
+  a no-op once the schema is current — this was already re-confirmed live on
+  2026-09-06's most recent Production build.
+- Prisma's `migrate deploy` takes a database-level advisory lock while
+  applying migrations, so even Vercel's occasional concurrent-build scenario
+  serializes rather than races; it does not need external locking.
+- This directly prevents a repeat of this incident's root cause — Production
+  had zero applied migrations for its entire lifetime until 2026-09-06,
+  because migrating it was always a manual, undocumented, easy-to-forget
+  step. Folding it into the build makes every future deploy self-healing
+  instead of relying on someone remembering to run it.
+- The alternative (a separate CI job, e.g. a GitHub Actions step that runs
+  `prisma migrate deploy` against Production after merge) was considered and
+  rejected: it would require duplicating `DATABASE_URL` into a second secret
+  store (GitHub Actions secrets), which increases secret sprawl for no
+  corresponding audit-trail benefit over the build-log evidence Vercel
+  already produces (see §2.6 of the post-merge handoff for exactly this kind
+  of build-log verification).
+
+**Why this fix is not yet applied:** a `vercel.json` `buildCommand` value is
+only authoritative if the Vercel project's dashboard Build Command override
+is turned off (or matches it exactly) — the dashboard override otherwise
+takes precedence over `vercel.json`. Turning off that dashboard override, or
+otherwise touching Production build configuration, is a Production change
+this session did not make without explicit authorization (see the release
+gate below and the open items in
+`DIBAYAR-V6-1-PRODUCTION-HARDENING-HANDOFF.md`). Writing `vercel.json` itself
+was also blocked by this session's local tooling as a deployment-config
+change; it is documented here as the recommendation for whoever applies it
+next, not as a completed action.
+
+**If this recommendation is rejected:** at minimum, keep the dashboard
+Build Command override exactly as-is (do not silently revert it to plain
+`next build`) — reverting now would not undo the already-applied migrations,
+but would put the repository back into "Production migration state depends
+on an undocumented manual setting" with no record of what that setting is.
+
+## Deployment verification record (convention, established 2026-09-06)
+
+Every meaningful Preview or Production verification — a manual check, a
+`scripts/smoke-deployment.mjs` run, or a live authenticated smoke test —
+should be recorded using this schema, either inline in a chat/report or
+appended to this file, `STATE.md`, or a dated evidence file under
+`docs/ux-implementation/evidence/`:
+
+```text
+ENVIRONMENT=<preview|production>
+COMMIT_SHA=<the exact deployed git SHA, not a branch name>
+DEPLOYMENT_URL=<the exact URL checked>
+DEPLOYED_AT=<when this deployment was created>
+AUTH_STATUS=<OK|FAIL and how it was checked>
+DATABASE_CONNECTIVITY=<OK|FAIL|NOT_CHECKED and how>
+MIGRATION_STATUS=<applied/pending count, and how confirmed>
+SMOKE_TEST_STATUS=<PASS|FAIL>
+VERIFIED_BY=<person or agent, and date>
+```
+
+**Rule: a record for one environment is never evidence for the other.** A
+Preview record must never be cited as proof Production is healthy, and vice
+versa — this exact conflation (documented Preview successes read as implying
+Production was fine) is what let Production run for its entire history with
+zero applied migrations and no auth secrets without anyone noticing until a
+real user hit it. Every record above must state `ENVIRONMENT` explicitly and
+every claim elsewhere in project docs that summarizes deployment health
+should name which environment it covers.
+
+## Post-deploy smoke check
+
+`scripts/smoke-deployment.mjs` is a dependency-free Node script (same
+convention as `scripts/cron-guard.mjs`) that performs a **non-destructive**
+smoke check against an explicit target:
+
+```bash
+node scripts/smoke-deployment.mjs --env preview --url https://dibayar-xxxxx-kenji-iwakura.vercel.app
+node scripts/smoke-deployment.mjs --env production --url https://dibayar.vercel.app
+```
+
+Both `--env` and `--url` are required — there is no default target, so it
+can never silently run against Production. It checks, via plain
+credential-free GETs only:
+
+1. `/` responds (not a 5xx), and unauthenticated behavior is the expected
+   redirect to sign-in.
+2. `/api/auth/signin` renders (200) — catches the exact `MissingSecret`-class
+   failure this incident hit, which turned every route into a 500.
+3. `/api/auth/providers` and `/api/auth/csrf` respond (200) — cheap,
+   read-only Auth.js config checks.
+4. It performs no writes, creates no sessions, and never uses real
+   credentials.
+
+It prints a filled-in-where-possible Deployment Verification Record (see
+above) for the operator to complete and file. **Database-backed health is
+explicitly NOT checked** — the app has no dedicated unauthenticated health
+endpoint, and probing real data routes would need a real invoice token or
+real session, both out of scope for an automated check. Cross-check the
+target deployment's own build log (`vercel inspect <url> --logs`) for the
+migration-apply summary as the practical substitute until such an endpoint
+exists.
+
+Validated 2026-09-06 against the real Production target (read-only): all
+four checks passed against `https://dibayar.vercel.app`.
+
+## Production release gate
+
+A merge into `main` is **not** proof Production is healthy — Vercel's
+GitHub integration auto-deploys on merge as a side effect, independent of
+whether the deployed environment actually has the secrets and schema it
+needs. Track these as separate, explicit states; do not skip from `MERGED`
+straight to assuming `PRODUCTION_READY`:
+
+```text
+MERGED             — PR is merged into main.
+DEPLOYED           — Vercel shows a Ready deployment for that merge commit's
+                     SHA in the target environment (verify the SHA, not just
+                     "a deployment exists").
+SMOKE_VERIFIED     — scripts/smoke-deployment.mjs (or equivalent manual
+                     checks) run against that exact deployment URL and
+                     recorded via the Deployment Verification Record above.
+AUTH_VERIFIED      — sign-in actually completes end-to-end. Automated checks
+                     can only verify the signin/providers/csrf endpoints
+                     respond; a real authenticated round-trip still requires
+                     a real user with real credentials (never automate this
+                     with the user's own Google account).
+MIGRATION_VERIFIED — the target database's applied-migration count matches
+                     `prisma/migrations` exactly, confirmed from build logs
+                     or (never against Production directly from a local
+                     session) `prisma migrate status`.
+PRODUCTION_READY   — all of the above hold **for Production specifically**,
+                     AND Chris has explicitly confirmed real-user/public
+                     access is intended (see "Current verified state" above
+                     — this is currently NOT confirmed; Production is
+                     technically functional but its public reachability was
+                     never a deliberate launch decision).
+```
+
+Do not mark `PRODUCTION_READY` from Preview evidence, from "the merge
+succeeded," or from a single ad hoc curl — require the full chain above with
+a dated Deployment Verification Record for the Production environment
+specifically.
 
 ## Cron preflight guard (Task E)
 

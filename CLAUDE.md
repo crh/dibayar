@@ -17,6 +17,8 @@ Verified from `STATE.md` and the repository planning documents:
 
 Current status: UX implementation Phase 0 foundations T-00 through T-03 are accepted on local branch `hermes/ux-phase-0`. T-00 fixture-backed evidence, T-01 locale/formatters and default-only migration, T-02 breakpoint/Grid primitives, and T-03 route scaffolding/redirects passed independent review and local gates. No Preview or Production deployment/public-access change occurred; T-04 is next.
 
+**This paragraph describes a much earlier point in the project's history and is stale relative to `main` (UX phases through T-27, a Playwright E2E suite, and PR #2's v6.1 account-menu fix have since merged).** It was not rewritten as part of the 2026-09-06 production-hardening audit — that audit's scope was Preview/Production deployment-state accuracy, not the UX phase-tracking narrative, which is Hermes/`STATE.md`-owned. For current, independently-verified Preview/Production state, do not rely on this file — see `DEPLOYMENT.md`'s "Current verified state" section, which supersedes any Preview/Production claim here or in `STATE.md`.
+
 ## Repository structure
 
 Verified top-level documents:
@@ -88,6 +90,8 @@ Verified database process: use the approved disposable local PostgreSQL target o
 ## Deployment workflow
 
 Deployment target is Vercel and project linkage is confirmed in `STATE.md`. Phase 0 was verified locally only; Preview is currently non-isolated from Production, so no Preview migration/capture or Production/public release is authorized. Follow `DEPLOYMENT.md`; secrets belong in the deployment environment, never in source control.
+
+**This is stale as of 2026-09-06.** Production has since been migrated (all 12 checked-in migrations applied) and its auth secrets configured, following a real post-merge incident on 2026-09-06 documented in `DIBAYAR-V6-1-POST-MERGE-PRODUCTION-HANDOFF.md`; Production is also currently reachable at the Vercel edge without an SSO gate (verified by unauthenticated `curl`, not merely inferred), which was never a deliberate public-launch decision — see `DEPLOYMENT.md`'s "Current verified state" and "Production release gate" sections for what is actually true now and what remains an open Chris decision. Do not treat "no Production/public release is authorized" as still accurate without re-checking that section first.
 
 ## Security requirements
 
