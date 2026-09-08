@@ -16,6 +16,7 @@ import {
   WithholdingTaxType,
 } from "../src/generated/prisma/client";
 import { E2E_FIXTURE_PREFIX, E2E_OWNER_SESSION_TOKEN, E2E_OWNER_SIGNOUT_SESSION_TOKEN } from "../e2e/support/fixture-ids";
+import { FIXTURE_FUTURE_DATE, FIXTURE_PAST_DATE } from "../src/lib/e2e-fixture-dates";
 
 const action = process.argv[2];
 if (!["seed", "verify", "cleanup"].includes(action ?? "")) {
@@ -95,16 +96,19 @@ async function cleanupRows() {
 async function seed() {
   await cleanupRows();
   const now = new Date();
-  const future = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-  const past = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  // Session expiry only needs to stay ahead of whenever tests actually run
+  // -- unlike FIXTURE_FUTURE_DATE/FIXTURE_PAST_DATE below (imported, not
+  // computed here), it's never rendered into a checked-in screenshot, so
+  // there's no reason it can't stay relative to `now`.
+  const sessionExpiry = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
 
   await prisma.user.create({
     data: { id: ids.owner, name: "E2E Fixture Owner", email: `${prefix}-owner@example.invalid`, language: "id" },
   });
   await prisma.session.createMany({
     data: [
-      { sessionToken: sessionTokens.owner, userId: ids.owner, expires: future },
-      { sessionToken: sessionTokens.ownerSignout, userId: ids.owner, expires: future },
+      { sessionToken: sessionTokens.owner, userId: ids.owner, expires: sessionExpiry },
+      { sessionToken: sessionTokens.ownerSignout, userId: ids.owner, expires: sessionExpiry },
     ],
   });
 
@@ -135,13 +139,13 @@ async function seed() {
 
   await prisma.invoice.createMany({
     data: [
-      { id: invoiceIds.sent, userId: ids.owner, dealId: dealIds.invoiceSent, number: "E2E/SENT/001", subtotalIdr: 6_000_000, withholdingTaxType: WithholdingTaxType.PPH21, status: InvoiceStatus.SENT, dueDate: future },
-      { id: invoiceIds.paid, userId: ids.owner, dealId: dealIds.dibayar, number: "E2E/PAID/002", subtotalIdr: 7_000_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.PAID, dueDate: past },
+      { id: invoiceIds.sent, userId: ids.owner, dealId: dealIds.invoiceSent, number: "E2E/SENT/001", subtotalIdr: 6_000_000, withholdingTaxType: WithholdingTaxType.PPH21, status: InvoiceStatus.SENT, dueDate: FIXTURE_FUTURE_DATE },
+      { id: invoiceIds.paid, userId: ids.owner, dealId: dealIds.dibayar, number: "E2E/PAID/002", subtotalIdr: 7_000_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.PAID, dueDate: FIXTURE_PAST_DATE },
     ],
   });
 
   await prisma.invoiceShare.create({
-    data: { id: `${prefix}-share-sent`, invoiceId: invoiceIds.sent, tokenHash: sha256(`${prefix}-public-token-do-not-share`), expiresAt: future },
+    data: { id: `${prefix}-share-sent`, invoiceId: invoiceIds.sent, tokenHash: sha256(`${prefix}-public-token-do-not-share`), expiresAt: FIXTURE_FUTURE_DATE },
   });
 
   await prisma.userSettings.create({

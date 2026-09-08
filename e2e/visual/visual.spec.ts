@@ -6,9 +6,13 @@
 // semantic assertions wouldn't notice.
 //
 // Run with `npm run test:e2e:visual`; update intentional baselines with
-// `npm run test:e2e:update-snapshots`. All fixture data here is static
-// (deterministic seed, no relative-time-sensitive fields), so no masking is
-// needed to keep these stable across runs.
+// `npm run test:e2e:update-snapshots`. Fixture dates rendered into these
+// pages (invoice due dates, share-link expiry) are fixed calendar dates,
+// not computed relative to whenever the seed runs -- see
+// scripts/e2e-fixtures.ts -- specifically so the formatted text (and its
+// wrapped line height) doesn't drift with the day a test happens to run,
+// which would fail these for reasons having nothing to do with a real
+// regression. No masking is needed to keep these stable across runs.
 import { expect, test } from "@playwright/test";
 import { loadFixtureManifest } from "../support/manifest";
 
