@@ -133,10 +133,29 @@ describe("FollowUpQueue — selection and rendering", () => {
     expect(within(section).queryByText("INV/2026/07/014")).toBeNull();
   });
 
-  it("renders the Indonesian empty-state copy and no list when nothing needs chasing", () => {
+  it("excludes a manually-marked OVERDUE invoice that has no due date (nothing to chase it against)", () => {
+    const deal = makeDeal({ id: "deal-a", brand: "Tokopedia" });
+    const manuallyOverdue = makeInvoice({
+      id: "invoice-manual-overdue",
+      dealId: "deal-a",
+      status: "OVERDUE",
+      dueDate: null,
+    });
+
+    renderQueue([manuallyOverdue], [deal]);
+
+    expect(screen.getByText("Tidak ada yang perlu dikejar.")).toBeDefined();
+  });
+
+  it("renders the Indonesian empty-state copy (with its eligibility hint) and no list when nothing needs chasing", () => {
     renderQueue([], []);
 
     expect(screen.getByText("Tidak ada yang perlu dikejar.")).toBeDefined();
+    expect(
+      screen.getByText(
+        "Invoice yang sudah dikirim dan punya tenggat pembayaran akan muncul di sini saat mendekati atau melewati jatuh tempo.",
+      ),
+    ).toBeDefined();
     expect(screen.queryByRole("list")).toBeNull();
   });
 

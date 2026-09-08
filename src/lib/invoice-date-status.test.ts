@@ -111,6 +111,7 @@ describe("deriveInvoiceDisplayStatus", () => {
     const noDueDate = invoice({ status: "SENT", dueDate: null });
     expect(deriveInvoiceDisplayStatus(noDueDate, new Date("2026-07-19T00:00:00.000Z"))).toBe("SENT");
   });
+
 });
 
 describe("selectAttentionInvoices", () => {
@@ -148,6 +149,19 @@ describe("selectAttentionInvoices", () => {
     const result = selectAttentionInvoices(invoices, now, DUE_SOON_WINDOW_DAYS);
     expect(result.dueSoon).toHaveLength(0);
     expect(result.overdue).toHaveLength(0);
+  });
+
+  it("excludes a manually-marked OVERDUE invoice that has no due date (nothing to chase it against)", () => {
+    // deriveInvoiceDisplayStatus treats a dueDate-less stored OVERDUE as
+    // stale and re-derives it to SENT (see invoice-date-status.test.ts's
+    // "keeps the stored status..." case plus invoice-detail-client.test.tsx's
+    // "shows the derived SENT chip, not the stale raw OVERDUE" test) -- with
+    // no due date there's also no day count for dueSoon, so it's correctly
+    // invisible to both buckets, not a bug.
+    const invoices = [invoice({ id: "manual-overdue", status: "OVERDUE", dueDate: null })];
+    const result = selectAttentionInvoices(invoices, now);
+    expect(result.overdue).toHaveLength(0);
+    expect(result.dueSoon).toHaveLength(0);
   });
 
   it("orders overdue by soonest-overdue-first and due-soon by nearest-due-first", () => {

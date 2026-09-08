@@ -158,9 +158,10 @@ export function FollowUpQueue({ invoices, deals, now, loading = false, error = f
           </button>
         </div>
       ) : queue.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-line bg-surface p-4 text-[13px] text-muted">
-          {t("home.chaseEmpty")}
-        </p>
+        <div className="flex flex-col gap-1 rounded-2xl border border-dashed border-line bg-surface p-4">
+          <p className="text-[13px] text-muted">{t("home.chaseEmpty")}</p>
+          <p className="text-[12px] text-muted">{t("home.chaseEmptyHint")}</p>
+        </div>
       ) : (
         <ul className="flex flex-col gap-3">
           {queue.map((invoice) => {

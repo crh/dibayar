@@ -218,15 +218,21 @@ export default function DealClient({
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-[1100px] flex-col gap-5 px-5 py-6 min-[640px]:px-8 min-[640px]:py-8">
-      {successMessage ? (
-        <div role="status" aria-live="polite" className="rounded-md border border-paid/30 bg-paid-tint px-4 py-3 text-[14px] font-semibold text-paid">
-          {t(successMessage)}
-        </div>
-      ) : null}
-      {error && !isDialogOpen ? <p role="alert" className="ds-small text-overdue">{t(error)}</p> : null}
+    // Only the readable text/controls (message banners, filter chips) stay
+    // capped at 1100px -- the board itself drops that cap on desktop
+    // (lg:max-w-none) so its columns get the full sidenav-adjacent width to
+    // flex into instead of being squeezed into a reading-width column.
+    <main className="mx-auto flex w-full max-w-[1100px] flex-col gap-5 px-5 py-6 min-[640px]:px-8 min-[640px]:py-8 lg:max-w-none">
+      <div className="mx-auto flex w-full max-w-[1100px] flex-col gap-5">
+        {successMessage ? (
+          <div role="status" aria-live="polite" className="rounded-md border border-paid/30 bg-paid-tint px-4 py-3 text-[14px] font-semibold text-paid">
+            {t(successMessage)}
+          </div>
+        ) : null}
+        {error && !isDialogOpen ? <p role="alert" className="ds-small text-overdue">{t(error)}</p> : null}
 
-      <StageFilter stageFilter={stageFilter} t={t} onChange={handleStageFilterChange} />
+        <StageFilter stageFilter={stageFilter} t={t} onChange={handleStageFilterChange} />
+      </div>
 
       <DealBoard
         deals={deals}
