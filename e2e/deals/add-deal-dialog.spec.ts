@@ -4,11 +4,14 @@
 // router.replace() so reload/back don't reopen it on their own, while
 // preserving any ?tahap filter that was present alongside it.
 //
-// Known gap (see docs/testing/E2E.md "Known limitations" / handoff): as of
-// this baseline SHA there is no in-app link that actually navigates to
-// ?tambah=1 -- TopBar's "+ Deal" goes to plain /deal. These tests exercise
-// the URL contract directly via page.goto, which is what a future entry
-// point (or an external/bookmarked link) would trigger.
+// Most of these tests exercise the URL contract directly via page.goto
+// (deep link / bookmark / external entry point). The real in-app entry
+// points (TopBar's "+ Deal" and the mobile FloatingActionButton) previously
+// linked to plain /deal with no ?tambah=1 at all -- the button visually read
+// as "add a deal" but silently did nothing, since nothing in the app ever
+// navigated to the URL that actually opens the dialog. Fixed to link to
+// /deal?tambah=1; "TopBar + Deal actually opens the dialog" below guards the
+// real click path, not just the URL contract.
 import { expect, test } from "@playwright/test";
 import { assertDealFilterState } from "../support/deal-filter";
 import { loadFixtureManifest } from "../support/manifest";
@@ -31,6 +34,44 @@ test.describe("tambah=1 add-deal dialog journey", { tag: "@critical" }, () => {
     await dialog.getByRole("button", { name: "Tutup" }).click();
     await expect(dialog).toBeHidden();
     await expect(page).toHaveURL(/\/deal$/);
+  });
+
+  test("TopBar + Deal actually opens the dialog", async ({ page, isMobile }) => {
+    test.skip(isMobile === true, "TopBar create-deal link only renders at >=640px");
+    await page.goto("/deal");
+
+    await page.getByRole("link", { name: "+ Deal", exact: true }).click();
+
+    const dialog = page.getByRole("dialog", { name: "Tambah deal" });
+    await expect(dialog).toBeVisible();
+    await expect(page).toHaveURL(/\/deal$/);
+    await expect(page).not.toHaveURL(/tambah/);
+  });
+
+  test("TopBar + Deal reopens the dialog on a second click without a full reload", async ({ page, isMobile }) => {
+    // Regression test: DealClient's dialog-open effect used a "has this
+    // param ever been stripped" ref that, once set on the first click,
+    // never reset -- so a second same-route "+ Deal" click (the common case
+    // of a user closing the dialog and immediately reopening it without
+    // navigating away) silently no-opped even though the URL correctly
+    // flipped to ?tambah=1 and back. The ref must reset once
+    // initialDialogOpen goes back to false so the next navigation can
+    // retrigger it.
+    test.skip(isMobile === true, "TopBar create-deal link only renders at >=640px");
+    await page.goto("/deal");
+    const plusDeal = page.getByRole("link", { name: "+ Deal", exact: true });
+    const dialog = page.getByRole("dialog", { name: "Tambah deal" });
+
+    await plusDeal.click();
+    await expect(dialog).toBeVisible();
+    await expect(page).not.toHaveURL(/tambah/);
+
+    await dialog.getByRole("button", { name: "Tutup" }).click();
+    await expect(dialog).toBeHidden();
+
+    await plusDeal.click();
+    await expect(dialog).toBeVisible();
+    await expect(page).not.toHaveURL(/tambah/);
   });
 
   test("/deal?tahap=INVOICE&tambah=1 opens the dialog and preserves the Invoice filter after cleanup", async ({ page }) => {

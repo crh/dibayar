@@ -45,7 +45,7 @@ export function TopBar({ pathname, email }: { pathname: string; email?: string |
       <div className="flex items-center gap-3">
         <div className="hidden min-[640px]:flex items-center gap-2">
           <Link
-            href="/deal"
+            href="/deal?tambah=1"
             className="inline-flex h-11 items-center justify-center rounded-full border border-line bg-surface px-4 text-[13px] font-semibold text-ink outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             {t("action.newDeal")}

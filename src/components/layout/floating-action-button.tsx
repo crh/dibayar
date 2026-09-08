@@ -12,7 +12,7 @@ export function FloatingActionButton() {
 
   return (
     <Link
-      href="/deal"
+      href="/deal?tambah=1"
       className="fixed z-40 right-4 bottom-[calc(72px+env(safe-area-inset-bottom))] flex h-14 w-14 items-center justify-center rounded-full bg-primary text-surface shadow-lg outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 min-[640px]:hidden"
     >
       <span aria-hidden="true" className="text-[28px] font-bold leading-none">+</span>
