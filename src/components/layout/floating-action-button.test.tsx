@@ -4,11 +4,11 @@ import { render, screen } from "@testing-library/react";
 import { FloatingActionButton } from "./floating-action-button";
 
 describe("FloatingActionButton", () => {
-  it("links to /deal with an accessible + Deal name", () => {
+  it("links to /deal?tambah=1 with an accessible + Deal name", () => {
     render(<FloatingActionButton />);
 
     const link = screen.getByRole("link", { name: "+ Deal" });
-    expect(link.getAttribute("href")).toBe("/deal");
+    expect(link.getAttribute("href")).toBe("/deal?tambah=1");
   });
 
   it("is a fixed 56px circle pinned bottom-right above the bottom nav and safe area, hidden at SM and above", () => {

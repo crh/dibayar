@@ -112,12 +112,43 @@ export default function DealClient({
   // The dialog-open URL flag (?tambah=1) from the global "+ Deal" action is a
   // one-shot trigger, not durable state: strip it once so reload/back don't
   // reopen the dialog on their own.
+  //
+  // isDialogOpen must be explicitly set here, not just seeded via
+  // useState(initialDialogOpen) above: that initial value is only consulted
+  // on this component's very first mount. "+ Deal" is a same-route Link
+  // (only ?tambah=1 changes), so an already-mounted DealClient (the user is
+  // already on /deal and clicks it) re-renders with a new initialDialogOpen
+  // prop but keeps its existing isDialogOpen state -- without this call the
+  // dialog silently never opens, the URL flickers to ?tambah=1 and instantly
+  // back, and it looks like the button does nothing.
+  //
+  // The filter to preserve after stripping is read from `searchParams`
+  // (Next's own router-reactive value, settled in the same render as
+  // `initialDialogOpen`), not `stageFilter` (the window.location-derived
+  // external store above, which a same-render click can still read as stale
+  // -- see the long comment on stageFilter itself for why that lag exists).
+  // ?tambah=1 only ever arrives via a real Next.js navigation, never the raw
+  // pushState chip clicks use, so searchParams is always exactly this
+  // navigation's own params -- no staleness possible here.
+  //
+  // hasStrippedDialogParam must reset once initialDialogOpen goes back to
+  // false (i.e. once our own router.replace above has taken effect and
+  // page.tsx re-derives the prop with no ?tambah=1): otherwise, since this
+  // ref never unmounts between "+ Deal" clicks, a second click while already
+  // on /deal would flip initialDialogOpen true -> false -> true again but
+  // the guard would still read "already stripped" from the first click and
+  // silently no-op, leaving the dialog closed.
   useEffect(() => {
-    if (initialDialogOpen && !hasStrippedDialogParam.current) {
-      hasStrippedDialogParam.current = true;
-      router.replace(stageFilter ? `/deal?tahap=${stageFilter}` : "/deal");
+    if (!initialDialogOpen) {
+      hasStrippedDialogParam.current = false;
+      return;
     }
-  }, [initialDialogOpen, router, stageFilter]);
+    if (hasStrippedDialogParam.current) return;
+    hasStrippedDialogParam.current = true;
+    setIsDialogOpen(true);
+    const tahapToPreserve = readStageFromTahap(searchParams.get("tahap"));
+    router.replace(tahapToPreserve ? `/deal?tahap=${tahapToPreserve}` : "/deal");
+  }, [initialDialogOpen, router, searchParams]);
 
   const closeDialog = useCallback(() => {
     setIsDialogOpen(false);

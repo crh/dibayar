@@ -159,10 +159,6 @@ determinism. `firefox` and `webkit` projects exist in
   `--with-deps` (system libraries) failed for lack of `sudo`, so Firefox/WebKit
   may need those installed in whatever CI runner actually executes
   `test:e2e:all-browsers`.
-- There is currently no in-app entry point that navigates to `/deal?tambah=1`
-  (TopBar's "+ Deal" goes to plain `/deal`). The `tambah=1` journey tests
-  exercise the URL contract directly; see the header comment in
-  `e2e/deals/add-deal-dialog.spec.ts`.
 - The Escape-key dialog-close test uses a short empirical `waitForTimeout`
   rather than a semantic wait -- see the comment at
   `e2e/deals/add-deal-dialog.spec.ts` for what was tried and why.

@@ -75,11 +75,11 @@ describe("TopBar", () => {
     expect(bar.className).toContain("min-[640px]:h-16");
   });
 
-  it("shows an inline + Deal link to /deal, hidden below the SM band by class contract", () => {
+  it("shows an inline + Deal link to /deal?tambah=1, hidden below the SM band by class contract", () => {
     render(<TopBar pathname="/" />);
 
     const link = screen.getByRole("link", { name: "+ Deal" });
-    expect(link.getAttribute("href")).toBe("/deal");
+    expect(link.getAttribute("href")).toBe("/deal?tambah=1");
     expect(link.className).not.toContain("hidden");
     const wrapper = link.parentElement!;
     expect(wrapper.className).toContain("hidden");
