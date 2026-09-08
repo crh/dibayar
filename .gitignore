@@ -6,6 +6,10 @@ node_modules
 
 .hermes-runtime/
 
+# local developer/tool state
+.mcp.json
+.neon
+
 # next.js
 /out/
 /build
