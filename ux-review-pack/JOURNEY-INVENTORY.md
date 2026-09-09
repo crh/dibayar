@@ -86,6 +86,7 @@ External side effect: none
 Risk if broken: owner can't tell why sharing is blocked
 Priority: P1
 Capture required: yes — already covered by matrix.spec.ts (both states); referenced
+Disposition: COVERED_BY_EXISTING_CORPUS
 ```
 
 ```
@@ -146,6 +147,7 @@ External side effect: none
 Risk if broken: detail view is the only place history is visible
 Priority: P1
 Capture required: yes (representative P1)
+Disposition: CAPTURED (stabilization pass -- the original pass documented this as "yes" but never actually captured it; fixed as part of Workstream C3's audit against the real manifest)
 ```
 
 ```
@@ -336,6 +338,7 @@ Entry route: /invoice/[id]
 Expected result: amount hero, status chip, payment-status section with action buttons, share section, details (tax/amount/due-date), PDF link
 Priority: P1
 Capture required: yes (baseline for the status-transition sequence below)
+Disposition: CAPTURED (stabilization pass -- the original pass documented this as "yes" but never actually captured it under its own ID; captured against `invoices.due`, distinct from J27's `invoices.draft` baseline)
 ```
 
 ```
@@ -411,6 +414,7 @@ Preconditions: `zero`/incomplete-issuer persona's invoice (if one exists) — ot
 Expected result: due notice "Lengkapi identitas penerbit dan rekening di Pengaturan agar invoice lengkap." shown inline in the details section when issuer/bank incomplete
 Priority: P2
 Capture required: no this pass — no fixture invoice exists under the `zero` persona to exercise this combination; documented as a gap for a follow-up session (would need a new fixture: zero-persona deal at INVOICE stage with an invoice created)
+Disposition: CAPTURED (stabilization pass, Workstream C1) -- no new fixture needed after all: `hasIncompleteIssuer` depends only on the invoice owner's UserSettings completeness, not on invoice status, and the existing `quiet` persona already has real deal/invoice activity (unlike `zero`, which is deliberately data-free) but no UserSettings row -- so `quiet`'s own invoice already exercises this state. Captured as a two-step journey: the notice on `quiet`'s invoice, then its resolved state after completing `quiet`'s settings (Nama/nama usaha, Nama bank, Nomor rekening, Atas nama) and revisiting. `zero` is left as a pure "no data at all" fixture, matching its use elsewhere (J01/J31).
 ```
 
 ```
@@ -433,6 +437,7 @@ Expected result: link field shows truncated URL with title=full URL; copy button
 External side effect: POST /api/invoices/[id]/share; clipboard write
 Priority: P0 (blocks J20/J21 if broken — share link is a prerequisite for WhatsApp send)
 Capture required: yes
+Disposition: CAPTURED, genuine success state (stabilization pass, Workstream D) -- the original pass's "clipboard fails in headless Chromium" conclusion was itself wrong: the copy button's accessible name is a fixed aria-label ("Salin tautan invoice") that never changes even though its visible text flips Salin→Tersalin on success, so the original test's `getByRole("button", { name: "Tersalin" })` could never match regardless of outcome. Fixed to match on visible text; the real "Tersalin" success state is now captured every run. See DETERMINISM-REPORT.md and the stabilization receipt.
 ```
 
 ```
@@ -527,6 +532,7 @@ Primary action: rapid double-click the primary WhatsApp button
 Expected result: button disables/shows loading state during the request (`isSharingToWhatsApp`), preventing a second concurrent send
 Priority: P1
 Capture required: no this pass — behavioral assertion is easy to check functionally but awkward to "screenshot" meaningfully; documented, recommend a Vitest/component-level assertion instead of a screenshot journey
+Disposition: BETTER_AS_FUNCTIONAL_ASSERTION (stabilization pass, Workstream C3) -- confirmed on review: a disable-during-request race has no distinct visual state worth a screenshot (the button is disabled/relabelled the same way any other pending mutation is, already shown incidentally elsewhere, e.g. J08/J51). Recommended as a future Vitest/component test on the relevant button's `disabled`/`isSharingToWhatsApp` state; not added in this session to keep scope to evidence capture.
 ```
 
 ---
@@ -623,6 +629,7 @@ Entry route: /pengaturan and /invoice/[id]
 Expected result: `settings.dependencyNotice` on Pengaturan when incomplete; `invoice.settingsDependencyNotice` on an existing invoice when its owner's issuer is incomplete
 Priority: P1
 Capture required: yes — Pengaturan side already covered by matrix.spec.ts (incomplete-issuer-bank); invoice side is J33 (deferred, no fixture)
+Disposition: CAPTURED (stabilization pass) -- Pengaturan side: COVERED_BY_EXISTING_CORPUS (matrix.spec.ts); invoice side: CAPTURED via J33 (see above)
 ```
 
 ```
@@ -660,6 +667,7 @@ Name: API/network failure state
 Notes: every mutating action in this app has a real fetch-catch → inline `role="alert"` error message (deal save/status, invoice status/share, settings save, contact repair). Reproducing a live network failure deterministically inside Playwright (route interception) is straightforward but wasn't attempted this pass to keep scope bounded.
 Priority: P1
 Capture required: no this pass — flagged as a good, cheap addition for the follow-up session (Playwright `page.route()` abort/500 on one representative mutation, e.g. deal status PATCH)
+Disposition: CAPTURED (stabilization pass, Workstream C2) -- `page.route()` intercepts a deal-status PATCH with a mocked HTTP 500. Captures: the visible error ("Deal belum bisa diperbarui. Coba lagi."), the optimistic-move reverting so the card is never falsely shown as moved, and a reload afterward confirming no phantom persistence.
 ```
 
 ```
@@ -698,11 +706,42 @@ Capture required: no separately
 
 ---
 
+## P1 disposition audit (stabilization pass, Workstream C3)
+
+Every P1 journey gets exactly one disposition below, cross-checked against `manifest.json` (not just this document's prose) so a "yes, captured" claim that was never actually true (as J09 and J25 both were, before this pass — see their entries above) can't recur silently.
+
+| Journey | Disposition | Note |
+|---|---|---|
+| J05 | COVERED_BY_EXISTING_CORPUS | `tests/ux-audit/routes/matrix.spec.ts`, both states |
+| J07 | CAPTURED | |
+| J09 | CAPTURED | Fixed this pass — previously claimed captured but wasn't |
+| J13 | CAPTURED | |
+| J15 | CAPTURED | |
+| J19 | CAPTURED | |
+| J22 | CAPTURED | |
+| J25 | CAPTURED | Fixed this pass — previously claimed captured but wasn't |
+| J31 | CAPTURED | |
+| J33 | CAPTURED | Fixed this pass (Workstream C1) — see above |
+| J34 | CAPTURED | |
+| J36 | CAPTURED | |
+| J37 | CAPTURED | |
+| J46 | BETTER_AS_FUNCTIONAL_ASSERTION | See above |
+| J53 | CAPTURED | |
+| J55 | CAPTURED | |
+| J57 | CAPTURED | Pengaturan side COVERED_BY_EXISTING_CORPUS, invoice side CAPTURED via J33 |
+| J58 | CAPTURED | |
+| J61 | CAPTURED | Fixed this pass (Workstream C2) — see above |
+
+No P1 journey is `DEFERRED_WITH_REASON` or `NOT_FOUND_IN_PRODUCT` after this pass.
+
+---
+
 ## Summary counts
 
 - **Total distinct journey IDs discovered/enumerated**: 66 (J01–J66; several explicitly merged/not-found, leaving a smaller effective capture set)
 - **P0**: 17 (J01–J04 [referenced], J06, J08, J11/J12, J18, J20, J21, J23, J27/J28, J35, J38 [referenced], J42, J51/J52)
-- **P1**: 19 (J05 [referenced], J07, J09, J13, J15, J19, J22, J25, J31, J33 [deferred], J34, J36, J37, J46 [documented not captured], J53, J55, J57, J58, J61 [documented not captured])
+- **P1**: 19 — after the stabilization pass, all 19 have a settled disposition (see the P1 disposition audit table above): 17 CAPTURED (2 of those, J09/J25, were previously mis-claimed as captured and are now genuinely captured; 2 more, J33/J61, were newly closed this pass), 1 COVERED_BY_EXISTING_CORPUS (J05; J57 splits across COVERED_BY_EXISTING_CORPUS + CAPTURED), 1 BETTER_AS_FUNCTIONAL_ASSERTION (J46). None remain DEFERRED_WITH_REASON.
 - **P2**: remainder (J14, J16, J17, J29, J30, J32, J39, J48, J49, J56, J59, J62, J63, J65, J66) — mostly "not found" corrections or explicitly deferred, not silently dropped
 - **Corrected against the request spec's assumptions**: 9 (deal status UI, deal delete, invoice creation, invoice status UI, invoice list filtering, native share, copy-invoice-number, unsaved-changes warning, partial-payment state)
 - **Newly found, not anticipated by the request spec**: 8 (J18/J19 deal WhatsApp + repair, J36/J37 share regenerate/revoke confirms, J39 expired public token, J58 sign-out confirm, J59 language switch)
+- **Stabilization pass additions**: J09, J25 (previously mis-claimed captured, now genuinely captured), J33 (invoice settings-dependency notice, closed via the existing `quiet` persona), J61 (deterministic network-failure journey via `page.route()`)

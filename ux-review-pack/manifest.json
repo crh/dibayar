@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "count": 61,
+  "count": 67,
   "entries": [
     {
       "journeyId": "J06",
@@ -104,6 +104,21 @@
       "expectedOutcome": "\"Deal disimpan\" banner, new card in Masuk",
       "expectedPrimaryCta": null,
       "stateType": "success",
+      "externalActionIntent": null,
+      "passedFunctionalAssertions": true
+    },
+    {
+      "journeyId": "J09",
+      "stepId": "J09-S01",
+      "screenshot": "screenshots/J09-deal-detail/01-detail-view-mobile375.png",
+      "route": "/deal/ux-t00-deal-paid",
+      "viewport": "mobile375",
+      "fixturePersona": "owner",
+      "dataState": "dibayar-stage",
+      "userAction": "open a deal's detail page",
+      "expectedOutcome": "brand/fee/deadline/contact/scope fields + stage-transition history list render",
+      "expectedPrimaryCta": null,
+      "stateType": "baseline",
       "externalActionIntent": null,
       "passedFunctionalAssertions": true
     },
@@ -449,7 +464,7 @@
       "expectedOutcome": "share link auto-created, wa.me href includes invoice number/amount/link",
       "expectedPrimaryCta": null,
       "stateType": "success",
-      "externalActionIntent": "https://wa.me/628122222222?text=Halo%20Brand%20Deal%2C%20berikut%20invoice%20UX%2FSENT%2F002%20sebesar%20Rp%C2%A03.750.000.%0AJatuh%20tempo%2023%20Sep%202026.%0ADetail%20dan%20unduh%20PDF%3A%20http%3A%2F%2Flocalhost%3A3400%2Fi%2FQkvOe1qSR0rxxvcNeQph7HA69XD3n4kHmcs5qWAklP0%0ATerima%20kasih!",
+      "externalActionIntent": "https://wa.me/628122222222?text=Halo%20Brand%20Deal%2C%20berikut%20invoice%20UX%2FSENT%2F002%20sebesar%20Rp%C2%A03.750.000.%0AJatuh%20tempo%2023%20Sep%202026.%0ADetail%20dan%20unduh%20PDF%3A%20http%3A%2F%2Flocalhost%3A3400%2Fi%2F-YO2oKFmSo1uajwvzJGqjXqIR18yeUUXoF8Ej2oNMMA%0ATerima%20kasih!",
       "passedFunctionalAssertions": true
     },
     {
@@ -459,9 +474,9 @@
       "route": "/invoice/ux-t00-invoice-overdue",
       "viewport": "mobile375",
       "fixturePersona": "owner",
-      "dataState": "OVERDUE-valid-contact",
-      "userAction": "open an overdue invoice (after revoking its stale seeded share)",
-      "expectedOutcome": "primary action relabels to \"Kirim pengingat\"",
+      "dataState": "OVERDUE-valid-contact-active-share",
+      "userAction": "open an overdue invoice that already has an active share link",
+      "expectedOutcome": "primary action relabels to \"Kirim pengingat\"; share section shows the already-active link, not a stale/blocked state",
       "expectedPrimaryCta": "Kirim pengingat",
       "stateType": "baseline",
       "externalActionIntent": null,
@@ -479,7 +494,7 @@
       "expectedOutcome": "share link auto-created, wa.me href uses the chase template",
       "expectedPrimaryCta": null,
       "stateType": "success",
-      "externalActionIntent": "https://wa.me/628133333333?text=Halo%20Brand%20dengan%20nama%20sangat%20panjang%20untuk%20menguji%20pemotongan%20aman%20tanpa%20merusak%20dokumen%2C%20izin%20mengingatkan%20invoice%20UX%2FOVERDUE%2F004%20sebesar%20Rp%C2%A012.345.678%20yang%20jatuh%20tempo%208%20Sep%202026.%0AMohon%20dibantu%20prosesnya%20ya.%20Detail%3A%20http%3A%2F%2Flocalhost%3A3400%2Fi%2FMUoJv6HyzyqqzjwfDjLOWkMUNMr-0tZYNh7t4CDveT8%0ATerima%20kasih!",
+      "externalActionIntent": "https://wa.me/628133333333?text=Halo%20Brand%20dengan%20nama%20sangat%20panjang%20untuk%20menguji%20pemotongan%20aman%20tanpa%20merusak%20dokumen%2C%20izin%20mengingatkan%20invoice%20UX%2FOVERDUE%2F004%20sebesar%20Rp%C2%A012.345.678%20yang%20jatuh%20tempo%208%20Sep%202026.%0AMohon%20dibantu%20prosesnya%20ya.%20Detail%3A%20http%3A%2F%2Flocalhost%3A3400%2Fi%2Fux-t00-public-active-do-not-share%0ATerima%20kasih!",
       "passedFunctionalAssertions": true
     },
     {
@@ -509,7 +524,7 @@
       "expectedOutcome": "repair panel closes, WhatsApp auto-sends in the same step",
       "expectedPrimaryCta": null,
       "stateType": "success",
-      "externalActionIntent": "https://wa.me/628199999999?text=Halo%20Brand%20Masuk%2C%20berikut%20invoice%20UX%2FDRAFT%2F001%20sebesar%20Rp%C2%A01.250.000.%0ADetail%20dan%20unduh%20PDF%3A%20http%3A%2F%2Flocalhost%3A3400%2Fi%2FYASFd_ijUdUJOXNVrH5zkELe6xGfJmfZCaIIQGOvBKQ%0ATerima%20kasih!",
+      "externalActionIntent": "https://wa.me/628199999999?text=Halo%20Brand%20Masuk%2C%20berikut%20invoice%20UX%2FDRAFT%2F001%20sebesar%20Rp%C2%A01.250.000.%0ADetail%20dan%20unduh%20PDF%3A%20http%3A%2F%2Flocalhost%3A3400%2Fi%2FaSMVTYt7gcvduysp5zEGHELKsmPAiOVeFtUQzjYm6yo%0ATerima%20kasih!",
       "passedFunctionalAssertions": true
     },
     {
@@ -539,6 +554,21 @@
       "expectedOutcome": "\"Invoice dibuat\" status banner",
       "expectedPrimaryCta": null,
       "stateType": "success",
+      "externalActionIntent": null,
+      "passedFunctionalAssertions": true
+    },
+    {
+      "journeyId": "J25",
+      "stepId": "J25-S01",
+      "screenshot": "screenshots/J25-invoice-detail/01-detail-view-mobile375.png",
+      "route": "/invoice/ux-t00-invoice-due",
+      "viewport": "mobile375",
+      "fixturePersona": "owner",
+      "dataState": "DUE",
+      "userAction": "open invoice detail",
+      "expectedOutcome": "amount hero, status chip, payment-status actions, share section, details, PDF link all render",
+      "expectedPrimaryCta": null,
+      "stateType": "baseline",
       "externalActionIntent": null,
       "passedFunctionalAssertions": true
     },
@@ -663,6 +693,36 @@
       "passedFunctionalAssertions": true
     },
     {
+      "journeyId": "J33",
+      "stepId": "J33-S01",
+      "screenshot": "screenshots/J33-invoice-settings-dependency-notice/01-notice-shown-mobile375.png",
+      "route": "/invoice/ux-t00-invoice-quiet",
+      "viewport": "mobile375",
+      "fixturePersona": "quiet",
+      "dataState": "incomplete-issuer",
+      "userAction": "open an invoice belonging to an owner with incomplete issuer/bank settings",
+      "expectedOutcome": "inline dependency notice explains why invoice completeness is blocked",
+      "expectedPrimaryCta": null,
+      "stateType": "error",
+      "externalActionIntent": null,
+      "passedFunctionalAssertions": true
+    },
+    {
+      "journeyId": "J33",
+      "stepId": "J33-S02",
+      "screenshot": "screenshots/J33-invoice-settings-dependency-notice/02-resolved-mobile375.png",
+      "route": "/invoice/ux-t00-invoice-quiet",
+      "viewport": "mobile375",
+      "fixturePersona": "quiet",
+      "dataState": "complete-issuer",
+      "userAction": "complete issuer/bank settings, then revisit the invoice",
+      "expectedOutcome": "dependency notice no longer shown",
+      "expectedPrimaryCta": null,
+      "stateType": "success",
+      "externalActionIntent": null,
+      "passedFunctionalAssertions": true
+    },
+    {
       "journeyId": "J34",
       "stepId": "J34-S01",
       "screenshot": "screenshots/J34-invoice-pdf-download/01-detail-with-pdf-link-mobile375.png",
@@ -710,7 +770,7 @@
     {
       "journeyId": "J35",
       "stepId": "J35-S03",
-      "screenshot": "screenshots/J35-invoice-share-link/03-copy-failed-headless-mobile375.png",
+      "screenshot": "screenshots/J35-invoice-share-link/03-copied-mobile375.png",
       "route": "/invoice/ux-t00-invoice-paid",
       "viewport": "mobile375",
       "fixturePersona": "owner",
@@ -718,9 +778,9 @@
       "userAction": "click Salin",
       "expectedOutcome": "button flips to \"Tersalin\" for 2s",
       "expectedPrimaryCta": null,
-      "stateType": "error",
+      "stateType": "success",
       "externalActionIntent": null,
-      "passedFunctionalAssertions": false
+      "passedFunctionalAssertions": true
     },
     {
       "journeyId": "J36",
@@ -809,7 +869,7 @@
       "expectedOutcome": "same WhatsApp mechanism as the invoice-detail reminder, triggered from home",
       "expectedPrimaryCta": null,
       "stateType": "success",
-      "externalActionIntent": "https://wa.me/628133333333?text=Halo%2C%20ini%20pengingat%20invoice%20UX%2FOVERDUE%2F004%20sebesar%20Rp%C2%A012.345.678%20yang%20sudah%20melewati%20jatuh%20tempo%208%20Sep%202026.%0ADetail%20invoice%3A%20http%3A%2F%2Flocalhost%3A3400%2Fi%2FAxtN1OdYNPMLnGLL9X3_keMAxSAchZXF3sbURvEYamw%0ATerima%20kasih.",
+      "externalActionIntent": "https://wa.me/628133333333?text=Halo%2C%20ini%20pengingat%20invoice%20UX%2FOVERDUE%2F004%20sebesar%20Rp%C2%A012.345.678%20yang%20sudah%20melewati%20jatuh%20tempo%208%20Sep%202026.%0ADetail%20invoice%3A%20http%3A%2F%2Flocalhost%3A3400%2Fi%2FIliOHp1z19882Ipb20eKFWPLNBtZ_O0tujHczWfOhHw%0ATerima%20kasih.",
       "passedFunctionalAssertions": true
     },
     {
@@ -899,6 +959,36 @@
       "expectedOutcome": "returns to normal view, session untouched",
       "expectedPrimaryCta": "Keluar",
       "stateType": "transition",
+      "externalActionIntent": null,
+      "passedFunctionalAssertions": true
+    },
+    {
+      "journeyId": "J61",
+      "stepId": "J61-S01",
+      "screenshot": "screenshots/J61-deal-status-network-failure/01-error-shown-reverted-laptop1280.png",
+      "route": "/deal",
+      "viewport": "laptop1280",
+      "fixturePersona": "owner",
+      "dataState": "masuk-stage",
+      "userAction": "move a deal to the next stage while its PATCH request fails (HTTP 500)",
+      "expectedOutcome": "visible \"Deal belum bisa diperbarui. Coba lagi.\" error; the optimistic move reverts, card stays in Masuk (never falsely shown as moved)",
+      "expectedPrimaryCta": null,
+      "stateType": "error",
+      "externalActionIntent": null,
+      "passedFunctionalAssertions": true
+    },
+    {
+      "journeyId": "J61",
+      "stepId": "J61-S02",
+      "screenshot": "screenshots/J61-deal-status-network-failure/02-correct-after-reload-laptop1280.png",
+      "route": "/deal",
+      "viewport": "laptop1280",
+      "fixturePersona": "owner",
+      "dataState": "masuk-stage",
+      "userAction": "reload after the failed attempt",
+      "expectedOutcome": "deal is still in Masuk -- the failed PATCH never mutated server state",
+      "expectedPrimaryCta": null,
+      "stateType": "success",
       "externalActionIntent": null,
       "passedFunctionalAssertions": true
     },

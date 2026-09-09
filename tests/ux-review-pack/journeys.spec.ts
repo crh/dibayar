@@ -51,6 +51,18 @@ async function lastOpenedHref(page: Page): Promise<string | undefined> {
   return hrefs.at(-1);
 }
 
+// The invoice detail page's "Bagikan invoice" section resolves its share
+// state via its own async fetch (useShareState) after the page itself has
+// already painted -- a screenshot taken right after goto200()/reload() can
+// race that fetch and capture "Memuat status berbagi..." (a transient loading
+// line, not a real UX state) instead of the settled section. Journeys whose
+// own assertions already wait on a share-dependent button (e.g. "Kirim lewat
+// WhatsApp" toBeEnabled) don't need this; ones that don't (a plain baseline
+// open, or a reload) do.
+async function waitForShareSectionSettled(page: Page) {
+  await expect(page.getByText("Memuat status berbagi", { exact: false })).toHaveCount(0, { timeout: 10_000 });
+}
+
 test.describe("A/G. Navigation", () => {
   test("J06 mobile bottom nav", async ({ page, context, baseURL }) => {
     if (!baseURL) throw new Error("baseURL required");
@@ -136,6 +148,25 @@ test.describe("B. Deal lifecycle", () => {
       route: "/deal", viewport: PRIMARY, fixturePersona: "owner", dataState: "post-create",
       userAction: "submit form", expectedOutcome: "\"Deal disimpan\" banner, new card in Masuk",
       expectedPrimaryCta: null, stateType: "success", passedFunctionalAssertions: true,
+    });
+  });
+
+  test("J09 open deal detail", async ({ page, context, baseURL }) => {
+    if (!baseURL) throw new Error("baseURL required");
+    await loginAs(context, baseURL, fixtures, "owner");
+    // deals.dibayar (Brand Dibayar) isn't touched by any other journey in
+    // this suite, so its stage-history section is a stable, uncontended
+    // baseline -- unlike the masuk/nego/deal/konten/invoice fixture deals,
+    // which J11a-e move mid-suite.
+    const route = `/deal/${fixtures.deals.dibayar}`;
+    await goto200(page, route);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Riwayat tahap" })).toBeVisible();
+    await captureStep(page, {
+      journeyId: "J09", journeySlug: "deal-detail", step: 1, description: "detail-view",
+      route, viewport: PRIMARY, fixturePersona: "owner", dataState: "dibayar-stage",
+      userAction: "open a deal's detail page", expectedOutcome: "brand/fee/deadline/contact/scope fields + stage-transition history list render",
+      expectedPrimaryCta: null, stateType: "baseline", passedFunctionalAssertions: true,
     });
   });
 
@@ -310,12 +341,33 @@ test.describe("B. Deal lifecycle", () => {
 });
 
 test.describe("C/D. Invoice lifecycle + WhatsApp", () => {
+  test("J25 open invoice detail", async ({ page, context, baseURL }) => {
+    if (!baseURL) throw new Error("baseURL required");
+    await loginAs(context, baseURL, fixtures, "owner");
+    // invoices.due isn't touched by any other journey in this suite, so it's
+    // a stable, uncontended baseline for the generic invoice-detail layout
+    // (amount hero, status chip, payment-status actions, share section,
+    // details, PDF link) -- distinct from J27, which starts from
+    // invoices.draft specifically to walk the full status chain.
+    const route = `/invoice/${fixtures.invoices.due}`;
+    await goto200(page, route);
+    await waitForShareSectionSettled(page);
+    await expect(page.getByRole("heading", { name: "Bagikan invoice" })).toBeVisible();
+    await captureStep(page, {
+      journeyId: "J25", journeySlug: "invoice-detail", step: 1, description: "detail-view",
+      route, viewport: PRIMARY, fixturePersona: "owner", dataState: "DUE",
+      userAction: "open invoice detail", expectedOutcome: "amount hero, status chip, payment-status actions, share section, details, PDF link all render",
+      expectedPrimaryCta: null, stateType: "baseline", passedFunctionalAssertions: true,
+    });
+  });
+
   test("J27/J28 invoice status full chain, then undo", async ({ page, context, baseURL }) => {
     if (!baseURL) throw new Error("baseURL required");
     await loginAs(context, baseURL, fixtures, "owner");
     await page.setViewportSize({ width: 1280, height: 800 });
     const route = `/invoice/${fixtures.invoices.draft}`;
     await goto200(page, route);
+    await waitForShareSectionSettled(page);
     await captureStep(page, {
       journeyId: "J27", journeySlug: "invoice-status-chain", step: 1, description: "draft-before",
       route, viewport: DESKTOP, fixturePersona: "owner", dataState: "DRAFT",
@@ -346,6 +398,7 @@ test.describe("C/D. Invoice lifecycle + WhatsApp", () => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.reload();
     await expect(page.getByRole("button", { name: "Batalkan status lunas" })).toBeVisible();
+    await waitForShareSectionSettled(page);
     await captureStep(page, {
       journeyId: "J27", journeySlug: "invoice-status-chain", step: stepNum, description: "paid-persisted-after-reload",
       route, viewport: DESKTOP, fixturePersona: "owner", dataState: "PAID",
@@ -403,23 +456,22 @@ test.describe("C/D. Invoice lifecycle + WhatsApp", () => {
     // deriveInvoiceDisplayStatus (src/lib/invoice-date-status.ts) correctly
     // does NOT treat as overdue (daysUntilDue is 0, not negative) -- marking
     // it OVERDUE there gets re-derived back to a SENT display, by design.
-    // invoices.overdue genuinely has a past dueDate, but its InvoiceShare row
-    // is seeded directly (createMany, no tokenCiphertext), which the server
-    // can't decrypt to a plaintext path -- its share reads back "active"
-    // with a null link, and canShareViaWhatsApp/isShareLinkStale keeps the
-    // primary button disabled for that stale share. Revoking it first (a
-    // real, in-app recovery path) clears the stale state; the reminder click
-    // then exercises the real auto-create-on-send flow.
+    // invoices.overdue's InvoiceShare is now seeded via the app's own
+    // createOrRegenerateShare() (scripts/ux-fixtures.ts), so it carries a
+    // real, decryptable tokenCiphertext and reads back as a genuinely
+    // active, usable share -- no revoke-and-recreate workaround needed
+    // (see DIBAYAR-UX-REVIEW-PACK-V2-STABILIZATION-RECEIPT.md, Workstream B).
+    // This baseline capture is therefore also the "overdue invoice with an
+    // already-active share link" evidence.
     const route = `/invoice/${fixtures.invoices.overdue}`;
     await goto200(page, route);
-    await page.getByRole("button", { name: "Cabut tautan" }).click();
-    await page.getByRole("button", { name: "Ya, cabut tautan" }).click();
     const reminderButton = page.getByRole("button", { name: "Kirim pengingat" });
     await expect(reminderButton).toBeEnabled({ timeout: 10_000 });
+    await expect(page.getByTestId("share-link-track")).toBeVisible({ timeout: 10_000 });
     await captureStep(page, {
       journeyId: "J21", journeySlug: "invoice-whatsapp-reminder", step: 1, description: "overdue-before",
-      route, viewport: PRIMARY, fixturePersona: "owner", dataState: "OVERDUE-valid-contact",
-      userAction: "open an overdue invoice (after revoking its stale seeded share)", expectedOutcome: "primary action relabels to \"Kirim pengingat\"",
+      route, viewport: PRIMARY, fixturePersona: "owner", dataState: "OVERDUE-valid-contact-active-share",
+      userAction: "open an overdue invoice that already has an active share link", expectedOutcome: "primary action relabels to \"Kirim pengingat\"; share section shows the already-active link, not a stale/blocked state",
       expectedPrimaryCta: "Kirim pengingat", stateType: "baseline", passedFunctionalAssertions: true,
     });
 
@@ -498,19 +550,25 @@ test.describe("C/D. Invoice lifecycle + WhatsApp", () => {
       expectedPrimaryCta: "Salin", stateType: "success", passedFunctionalAssertions: true,
     });
 
-    // navigator.clipboard.writeText can silently reject in a headless
-    // Chromium context even with clipboard-write granted (a document-focus
-    // quirk, not a product defect) -- verify whichever real outcome the app
-    // produced (success flips the button to "Tersalin"; failure surfaces
-    // ShareLinkField's own role="alert" copy-error text) rather than
-    // hard-asserting the success path only.
-    await page.getByRole("button", { name: "Salin" }).click();
-    const copiedButton = page.getByRole("button", { name: "Tersalin" });
-    const copyError = page.getByRole("alert");
-    await expect(copiedButton.or(copyError)).toBeVisible({ timeout: 5000 });
-    const copySucceeded = await copiedButton.isVisible();
+    // Workstream D investigation (see the stabilization receipt): clipboard
+    // copy was never actually failing in headless Chromium -- the prior
+    // pass's own detection was broken. ShareLinkField's copy button carries
+    // a fixed aria-label ("Salin tautan invoice") that never changes, so its
+    // *accessible name* stays constant even though its *visible text* flips
+    // Salin -> Tersalin on success; getByRole("button", { name: "Tersalin" })
+    // matches by accessible name, so it could never match this button
+    // regardless of outcome, silently misreporting every successful copy as
+    // a failure. Matching on visible text instead reflects what actually
+    // happens.
+    const copyButton = page.getByRole("button", { name: "Salin tautan invoice" });
+    await copyButton.click();
+    await expect(copyButton).toHaveText("Tersalin", { timeout: 5000 }).catch(() => {});
+    const copySucceeded = (await copyButton.textContent())?.trim() === "Tersalin";
+    if (!copySucceeded) {
+      await expect(page.getByText("Gagal menyalin. Tekan lama untuk salin manual.")).toBeVisible();
+    }
     await captureStep(page, {
-      journeyId: "J35", journeySlug: "invoice-share-link", step: 3, description: copySucceeded ? "copied" : "copy-failed-headless",
+      journeyId: "J35", journeySlug: "invoice-share-link", step: 3, description: copySucceeded ? "copied" : "copy-failed",
       route, viewport: PRIMARY, fixturePersona: "owner", dataState: "active-share",
       userAction: "click Salin", expectedOutcome: "button flips to \"Tersalin\" for 2s",
       expectedPrimaryCta: null, stateType: copySucceeded ? "success" : "error", passedFunctionalAssertions: copySucceeded,
@@ -562,6 +620,45 @@ test.describe("C/D. Invoice lifecycle + WhatsApp", () => {
     });
   });
 
+  test("J33 invoice settings-dependency notice, then resolve", async ({ page, context, baseURL }) => {
+    if (!baseURL) throw new Error("baseURL required");
+    // `quiet` has real deal/invoice activity (unlike `zero`, which has none
+    // at all -- see the global correction in JOURNEY-INVENTORY.md) but, like
+    // `zero`, no UserSettings row, so its own invoice already exercises the
+    // settings-dependency notice without needing a new fixture: any owner
+    // with an incomplete issuer identity shows it on every one of their
+    // invoices, regardless of that invoice's payment status.
+    await loginAs(context, baseURL, fixtures, "quiet");
+    const route = `/invoice/${fixtures.quiet.invoice}`;
+    await goto200(page, route);
+    await waitForShareSectionSettled(page);
+    await expect(page.getByText("Lengkapi identitas penerbit dan rekening di Pengaturan agar invoice lengkap.")).toBeVisible();
+    await captureStep(page, {
+      journeyId: "J33", journeySlug: "invoice-settings-dependency-notice", step: 1, description: "notice-shown",
+      route, viewport: PRIMARY, fixturePersona: "quiet", dataState: "incomplete-issuer",
+      userAction: "open an invoice belonging to an owner with incomplete issuer/bank settings", expectedOutcome: "inline dependency notice explains why invoice completeness is blocked",
+      expectedPrimaryCta: null, stateType: "error", passedFunctionalAssertions: true,
+    });
+
+    await goto200(page, "/pengaturan");
+    await page.getByLabel("Nama / nama usaha").fill("UX Fixture Quiet");
+    await page.getByLabel("Nama bank").fill("Bank Fixture Quiet");
+    await page.getByLabel("Nomor rekening").fill("9876543210");
+    await page.getByLabel("Atas nama").fill("UX Fixture Quiet");
+    await page.getByRole("button", { name: "Simpan pengaturan" }).click();
+    await expect(page.getByText("Tersimpan")).toBeVisible({ timeout: 5000 });
+
+    await goto200(page, route);
+    await waitForShareSectionSettled(page);
+    await expect(page.getByText("Lengkapi identitas penerbit dan rekening di Pengaturan agar invoice lengkap.")).toHaveCount(0);
+    await captureStep(page, {
+      journeyId: "J33", journeySlug: "invoice-settings-dependency-notice", step: 2, description: "resolved",
+      route, viewport: PRIMARY, fixturePersona: "quiet", dataState: "complete-issuer",
+      userAction: "complete issuer/bank settings, then revisit the invoice", expectedOutcome: "dependency notice no longer shown",
+      expectedPrimaryCta: null, stateType: "success", passedFunctionalAssertions: true,
+    });
+  });
+
   test("J34 download invoice PDF", async ({ page, context, baseURL }) => {
     if (!baseURL) throw new Error("baseURL required");
     await loginAs(context, baseURL, fixtures, "owner");
@@ -569,6 +666,7 @@ test.describe("C/D. Invoice lifecycle + WhatsApp", () => {
     await goto200(page, route);
     const pdfLink = page.getByRole("link", { name: "Unduh PDF" });
     await expect(pdfLink).toBeVisible();
+    await waitForShareSectionSettled(page);
     const href = await pdfLink.getAttribute("href");
     await captureStep(page, {
       journeyId: "J34", journeySlug: "invoice-pdf-download", step: 1, description: "detail-with-pdf-link",
@@ -685,6 +783,54 @@ test.describe("G. Settings", () => {
 });
 
 test.describe("H. Error / resilience", () => {
+  test("J61 deal status update fails over the network", async ({ page, context, baseURL }) => {
+    if (!baseURL) throw new Error("baseURL required");
+    await loginAs(context, baseURL, fixtures, "owner");
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await goto200(page, "/deal");
+    // "Toko Sepatu Lokal" (deals.many[2]) isn't touched by any other journey
+    // in this suite -- deterministic route interception (page.route()) on
+    // its own PATCH, not a shared/global one, so no other test's mutations
+    // are affected.
+    const brand = "Toko Sepatu Lokal";
+    const dealId = fixtures.deals.many[2];
+    const card = page.locator("article", { hasText: brand });
+    const masukColumn = page.locator("section", { has: page.getByRole("heading", { name: "Masuk", exact: true }) });
+    await expect(masukColumn.locator("article", { hasText: brand })).toBeVisible();
+
+    await page.route(`**/api/deals/${dealId}`, async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Simulated failure for UX evidence capture" }),
+      });
+    });
+
+    await card.getByRole("button", { name: `Aksi lain untuk deal ${brand}`, exact: true }).click();
+    await page.getByRole("menuitem", { name: "Lanjut ke Nego" }).click();
+    // Optimistic move happens first, then reverts once the PATCH rejects --
+    // the error alert and the card's return to Masuk are the same commit.
+    await expect(page.getByRole("alert").filter({ hasText: "Deal belum bisa diperbarui" })).toBeVisible();
+    await expect(masukColumn.locator("article", { hasText: brand })).toBeVisible();
+    await captureStep(page, {
+      journeyId: "J61", journeySlug: "deal-status-network-failure", step: 1, description: "error-shown-reverted",
+      route: "/deal", viewport: DESKTOP, fixturePersona: "owner", dataState: "masuk-stage",
+      userAction: "move a deal to the next stage while its PATCH request fails (HTTP 500)",
+      expectedOutcome: "visible \"Deal belum bisa diperbarui. Coba lagi.\" error; the optimistic move reverts, card stays in Masuk (never falsely shown as moved)",
+      expectedPrimaryCta: null, stateType: "error", passedFunctionalAssertions: true,
+    });
+
+    await page.unroute(`**/api/deals/${dealId}`);
+    await page.reload();
+    await expect(masukColumn.locator("article", { hasText: brand })).toBeVisible();
+    await captureStep(page, {
+      journeyId: "J61", journeySlug: "deal-status-network-failure", step: 2, description: "correct-after-reload",
+      route: "/deal", viewport: DESKTOP, fixturePersona: "owner", dataState: "masuk-stage",
+      userAction: "reload after the failed attempt", expectedOutcome: "deal is still in Masuk -- the failed PATCH never mutated server state",
+      expectedPrimaryCta: null, stateType: "success", passedFunctionalAssertions: true,
+    });
+  });
+
   test("J63 deal detail 404", async ({ page, context, baseURL }) => {
     if (!baseURL) throw new Error("baseURL required");
     await loginAs(context, baseURL, fixtures, "owner");
