@@ -51,7 +51,11 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   timeout: 30_000,
   expect: { timeout: 5_000 },
-  reporter: [["list"], ["html", { outputFolder: "playwright-report/e2e", open: "never" }]],
+  // The json reporter feeds scripts/ux-report.ts's "Visual Regression
+  // status" section (see docs/testing/UX_AUDIT.md) when this config is run
+  // with --grep @visual; it's additive and doesn't change any existing
+  // list/html reporting.
+  reporter: [["list"], ["html", { outputFolder: "playwright-report/e2e", open: "never" }], ["json", { outputFile: "test-results/e2e/results.json" }]],
   use: {
     baseURL,
     locale: "id-ID",

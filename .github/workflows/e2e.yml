@@ -65,3 +65,50 @@ jobs:
           name: playwright-report
           path: playwright-report/e2e
           retention-days: 7
+
+  ux-audit:
+    runs-on: ubuntu-latest
+    needs: lint-typecheck-test
+    # Deterministic UX QA gate (docs/testing/UX_AUDIT.md): functional,
+    # responsive-layout, state/data, and visual-regression checks for
+    # tests/ux-audit/. Runs in parallel with e2e-critical, not nested in it,
+    # so a UX-audit failure never blocks or slows down the critical-path
+    # gate. Same disposable Postgres target as e2e-critical.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dibayar_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/dibayar_test?schema=public
+      # Same placeholder rationale as e2e-critical above -- OAuth itself is
+      # never exercised (real Auth.js database sessions are seeded directly).
+      AUTH_SECRET: ci-only-placeholder-not-a-real-secret
+      AUTH_GOOGLE_ID: ci-only-placeholder
+      AUTH_GOOGLE_SECRET: ci-only-placeholder
+      E2E_FIXTURE_CONFIRM: non-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx prisma migrate deploy
+      - run: npm run ux:audit
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ux-audit-report
+          path: artifacts/ux-audit
+          retention-days: 7

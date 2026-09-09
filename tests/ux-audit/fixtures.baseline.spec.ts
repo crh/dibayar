@@ -4,8 +4,7 @@ import path from "node:path";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { capturePage, writeCaptureManifest, type CaptureArtifact } from "./support/capture";
 import { detectHorizontalOverflow, detectSmallTouchTargets } from "./support/detectors";
-import { compareDocumentFields, type DocumentField } from "./support/parity";
-import { UX_LANGUAGES, UX_VIEWPORTS, type UxLanguage, type UxViewportKey } from "./support/viewports";
+import { UX_VIEWPORTS, type UxLanguage, type UxViewportKey } from "./support/viewports";
 
 type FixtureManifest = {
   sessions: { owner: string; other: string; zero: string };
@@ -66,55 +65,15 @@ function normalizeDocumentText(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function extractPdfFields(pdfPath: string) {
-  const rawText = execFileSync("pdftotext", ["-layout", pdfPath, "-"], { encoding: "utf8" });
-  const lines = rawText.split(/\r?\n/).map((line) => line.replace(/\s+$/, ""));
-  const text = normalizeDocumentText(rawText);
-  const lineContaining = (label: string) => {
-    const index = lines.findIndex((line) => line.includes(label));
-    if (index < 0) throw new Error(`Missing PDF label: ${label}`);
-    return index;
-  };
-  const nextContentLine = (index: number) => {
-    const next = lines.slice(index + 1).find((line) => line.trim().length > 0);
-    if (!next) throw new Error(`Missing PDF value after line ${index + 1}`);
-    return next;
-  };
-
-  lineContaining("DIBAYAR");
-  const invoiceNumber = lines.find((line) => /^\s*[A-Z0-9]+(?:\/[A-Z0-9]+)+\s*$/.test(line));
-  if (!invoiceNumber) throw new Error("Missing PDF invoice number");
-  const billedLabelIndex = lineContaining("Ditagihkan kepada");
-  const billedLabelLine = lines[billedLabelIndex];
-  const dueColumn = billedLabelLine.indexOf("Jatuh tempo");
-  if (dueColumn < 0) throw new Error("Missing PDF label: Jatuh tempo");
-  const billedValueLine = nextContentLine(billedLabelIndex);
-  const lineItemLabelIndex = lineContaining("Jasa kolaborasi");
-  const taxLabelIndex = lineContaining("Pajak potong");
-  const taxLabelLine = lines[taxLabelIndex];
-  const totalLabelIndex = lineContaining("Total invoice");
-  const totalLabelLine = lines[totalLabelIndex];
-
-  const fields: DocumentField[] = [
-    { key: "number", label: "Nomor invoice", value: invoiceNumber.trim() },
-    { key: "billedTo", label: "Ditagihkan kepada", value: billedValueLine.slice(0, dueColumn).trim() },
-    { key: "dueDate", label: "Jatuh tempo", value: billedValueLine.slice(dueColumn).trim() },
-    { key: "scope", label: "Cakupan kerja", value: normalizeDocumentText(nextContentLine(lineItemLabelIndex)) },
-    { key: "tax", label: "Pajak potong", value: taxLabelLine.slice(taxLabelLine.indexOf("Pajak potong") + "Pajak potong".length).trim() },
-    { key: "total", label: "Nilai invoice", value: totalLabelLine.slice(totalLabelLine.indexOf("Total invoice") + "Total invoice".length).trim() },
-  ];
-  const sourceLabels = ["DIBAYAR", "Ditagihkan kepada", "Jatuh tempo", "Jasa kolaborasi", "Pajak potong", "Total invoice"];
-  let cursor = 0;
-  const positions: Record<string, number> = {};
-  fields.forEach((field, index) => {
-    const position = text.indexOf(sourceLabels[index], cursor);
-    positions[field.key] = position;
-    if (position >= 0) cursor = position + sourceLabels[index].length;
-  });
-  return { text, fields, positions, sourceLabels };
-}
-
-test.describe.serial("T-00 fixture-backed baseline", () => {
+// No real cross-test ordering dependency exists below (each test logs in
+// with its own session and only reads/navigates; the one place a test
+// mutates shared per-user state -- setLanguage's PATCH -- always resets it
+// back to "id" before the test ends), so this suite runs as a plain,
+// non-serial describe: one test failing must never silently skip its
+// siblings. It used to be test.describe.serial(...), which is exactly how
+// the now-retired composite-dashboard test below (see comment) suppressed
+// five unrelated regression checks on every run once it went stale.
+test.describe("T-00 fixture-backed baseline", () => {
   test.beforeAll(async () => {
     fixtures = JSON.parse(await readFile(fixturePath, "utf8")) as FixtureManifest;
   });
@@ -125,67 +84,127 @@ test.describe.serial("T-00 fixture-backed baseline", () => {
     await writeFile(path.join(outputRoot, "geometry-findings.json"), `${JSON.stringify(geometryFindings, null, 2)}\n`, "utf8");
   });
 
-  test("captures populated owner dashboard at five widths in ID and EN", async ({ page, context, baseURL }) => {
-    test.setTimeout(120_000);
-    if (!baseURL) throw new Error("baseURL required");
-    await login(context, baseURL, fixtures.sessions.owner);
-    expect((await page.goto("/dashboard", { waitUntil: "networkidle" }))?.status()).toBe(200);
-
-    for (const language of UX_LANGUAGES) {
-      await setLanguage(page, language);
-      const response = await page.reload({ waitUntil: "networkidle" });
-      expect(response?.status()).toBe(200);
-      await expect(page.getByText("Brand Masuk", { exact: true })).toBeVisible();
-      await expect(page.getByText("UX/OVERDUE/004", { exact: true }).first()).toBeVisible();
-      for (const [viewport, size] of Object.entries(UX_VIEWPORTS) as Array<[UxViewportKey, { width: number; height: number }]>) {
-        await page.setViewportSize(size);
-        await captureAndMeasure(page, "/dashboard", "dashboard-current", "populated", viewport, language);
-      }
-    }
-    await setLanguage(page, "id");
-    expect(artifacts.filter((item) => item.routeKey === "dashboard-current")).toHaveLength(10);
-  });
+  // RETIRED (independent review, see DIBAYAR-UX-QA-HARNESS-INDEPENDENT-REVIEW.md
+  // section 11): this test used to capture a single composite "/dashboard"
+  // page -- showing a deal card ("Brand Masuk") and an invoice number
+  // ("UX/OVERDUE/004") together -- at 5 widths x 2 languages. That composite
+  // page no longer exists: T-08/T-12 (docs/ux-implementation/
+  // SPEC_RECONCILIATION.md) split it into "/", "/deal", and "/invoice", and
+  // "/dashboard" is now a documented 302 compatibility redirect to "/" (see
+  // src/app/dashboard/route.ts). Retargeting this test to "/" would just
+  // re-assert the same overdue-invoice-visibility invariant states/
+  // needs-chasing.spec.ts's "actionable" case already covers on the current
+  // canonical route -- blind duplication, not real signal. The other
+  // invariants this test carried are also already covered on canonical
+  // routes: populated Beranda/invoice-detail visual regression
+  // (e2e/visual/visual.spec.ts), long-content/overdue invoice-detail
+  // geometry (routes/matrix.spec.ts), and PDF/HTML parity
+  // (t27.verification.spec.ts). Nothing unique to this test survives
+  // retargeting, so it is retired rather than kept as a permanently-skipped
+  // or rewritten-to-be-redundant test.
 
   test("captures zero-state owner and proves no cross-owner cards", async ({ page, context, baseURL }) => {
+    // Retargeted from "/dashboard" (now a 302 to "/") to the canonical
+    // "/deal" and "/invoice" list routes. "/" itself is not a meaningful
+    // target for this check: a zero-deal user's "/" renders Beranda's
+    // onboarding empty state instead of any list content at all (see
+    // states/needs-chasing.spec.ts's "fresh-user" case), so a cross-owner
+    // text/link assertion made against "/" would pass trivially regardless
+    // of whether the underlying queries are actually scoped to the
+    // authenticated user -- the same kind of staleness this remediation
+    // exists to fix. "/deal" and "/invoice" still render their real list
+    // UI (empty columns / an EmptyState block) for a zero-count user, so a
+    // leaked cross-owner deal or invoice would still be visible here.
     if (!baseURL) throw new Error("baseURL required");
     await login(context, baseURL, fixtures.sessions.zero);
     await page.setViewportSize(UX_VIEWPORTS.sm390);
-    const response = await page.goto("/dashboard", { waitUntil: "networkidle" });
-    expect(response?.status()).toBe(200);
+
+    const dealsResponse = await page.goto("/deal", { waitUntil: "networkidle" });
+    expect(dealsResponse?.status()).toBe(200);
     await expect(page.getByText("Brand Masuk", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Other Owner Secret Brand", { exact: true })).toHaveCount(0);
-    await expect(page.locator('a[href^="/dashboard/invoices/"]')).toHaveCount(0);
-    await captureAndMeasure(page, "/dashboard", "dashboard-current", "zero-state", "sm390", "id");
+    await captureAndMeasure(page, "/deal", "deal-list-current", "zero-state", "sm390", "id");
+
+    const invoicesResponse = await page.goto("/invoice", { waitUntil: "networkidle" });
+    expect(invoicesResponse?.status()).toBe(200);
+    await expect(page.getByText("UX/OTHER/001", { exact: true })).toHaveCount(0);
+    await expect(page.locator('a[href^="/invoice/"]')).toHaveCount(0);
+    await captureAndMeasure(page, "/invoice", "invoice-list-current", "zero-state", "sm390", "id");
   });
 
   test("enforces second-owner invoice isolation in both directions", async ({ page, context, baseURL }) => {
+    // Retargeted from "/dashboard/invoices/[id]" (now a 302 to
+    // "/invoice/[id]") to the canonical route directly. The authorization
+    // check itself lives in the canonical page (src/app/(app)/invoice/[id]/
+    // page.tsx's notFound()), not in the two-line redirect handler, so
+    // this now exercises the real boundary end-to-end through an actual
+    // browser navigation rather than through a deprecated compatibility
+    // hop -- a strictly more direct proof of the same invariant, and one
+    // this task's own independent review found had no other E2E-level
+    // coverage (only a Vitest unit test of the same page).
+    //
+    // Asserted on rendered content, not response.status(): every route
+    // under the (app) route group is wrapped in src/app/(app)/loading.tsx,
+    // which -- per node_modules/next/dist/docs/.../not-found.md and
+    // loading.md#status-codes -- makes Next.js start streaming the response
+    // (and therefore commit to a 200) before notFound()'s render can flip
+    // the status. This is documented, version-specific behavior, not a
+    // security defect: verified directly (curl with each session's cookie)
+    // that the response body is genuinely Next's not-found page (a
+    // <meta name="robots" content="noindex"> tag and "This page could not
+    // be found." are present) with none of the other owner's invoice data
+    // in it, for both directions.
     if (!baseURL) throw new Error("baseURL required");
     await login(context, baseURL, fixtures.sessions.other);
-    expect((await page.goto(`/dashboard/invoices/${fixtures.invoices.draft}`))?.status()).toBe(404);
+    await page.goto(`/invoice/${fixtures.invoices.draft}`, { waitUntil: "networkidle" });
+    await expect(page.getByText("This page could not be found.")).toBeVisible();
+    await expect(page.getByText("UX/DRAFT/001")).toHaveCount(0);
+
     await login(context, baseURL, fixtures.sessions.owner);
-    expect((await page.goto(`/dashboard/invoices/${fixtures.invoices.other}`))?.status()).toBe(404);
+    await page.goto(`/invoice/${fixtures.invoices.other}`, { waitUntil: "networkidle" });
+    await expect(page.getByText("This page could not be found.")).toBeVisible();
+    await expect(page.getByText("UX/OTHER/001")).toHaveCount(0);
   });
 
   test("captures no-tax/empty-date/invalid-phone and tax-bearing invoice detail", async ({ page, context, baseURL }) => {
+    // Retargeted from "/dashboard/invoices/[id]" to the canonical
+    // "/invoice/[id]" route. This covers invoice-detail states (a
+    // no-tax/invalid-phone draft, and a PPh-21-bearing sent invoice, in
+    // both languages) that routes/matrix.spec.ts's own invoice-detail
+    // capture doesn't -- that one is fixed to the "overdue + long-content"
+    // state -- so this remains real, non-duplicated signal.
     if (!baseURL) throw new Error("baseURL required");
     await login(context, baseURL, fixtures.sessions.owner);
     await page.setViewportSize(UX_VIEWPORTS.sm390);
 
-    let response = await page.goto(`/dashboard/invoices/${fixtures.invoices.draft}`, { waitUntil: "networkidle" });
+    let response = await page.goto(`/invoice/${fixtures.invoices.draft}`, { waitUntil: "networkidle" });
     expect(response?.status()).toBe(200);
     await expect(page.getByText("UX/DRAFT/001", { exact: true }).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "Bagikan via WhatsApp" })).toBeDisabled();
-    await captureAndMeasure(page, "/dashboard/invoices/[id]", "invoice-detail-current", "draft-no-tax-empty-date-invalid-phone", "sm390", "id");
+    // Retargeted: "Bagikan via WhatsApp" hasn't existed since the T-19/§4.5
+    // reorder -- the per-share WhatsApp button it named was folded into the
+    // header's single primary action (invoice-detail-client.tsx's
+    // handlePrimaryWhatsApp), labeled "Kirim lewat WhatsApp" for a
+    // not-yet-overdue invoice. F15 also deliberately made that button never
+    // disabled for an invalid contact (a disabled control gave no way to
+    // discover why); activating it now reveals a repair panel instead. This
+    // asserts the current, intentional behavior for the same
+    // invalid-phone fixture: the button stays enabled, and using it surfaces
+    // the repair prompt rather than silently doing nothing.
+    const primaryWhatsAppButton = page.getByRole("button", { name: "Kirim lewat WhatsApp" });
+    await expect(primaryWhatsAppButton).toBeEnabled();
+    await primaryWhatsAppButton.click();
+    await expect(page.getByText("Nomor WhatsApp belum valid — perbaiki di deal ini.")).toBeVisible();
+    await captureAndMeasure(page, "/invoice/[id]", "invoice-detail-current", "draft-no-tax-empty-date-invalid-phone", "sm390", "id");
 
-    response = await page.goto(`/dashboard/invoices/${fixtures.invoices.sent}`, { waitUntil: "networkidle" });
+    response = await page.goto(`/invoice/${fixtures.invoices.sent}`, { waitUntil: "networkidle" });
     expect(response?.status()).toBe(200);
     await expect(page.getByText("PPh 21 (5%)", { exact: true })).toBeVisible();
-    await captureAndMeasure(page, "/dashboard/invoices/[id]", "invoice-detail-current", "sent-tax", "sm390", "id");
+    await captureAndMeasure(page, "/invoice/[id]", "invoice-detail-current", "sent-tax", "sm390", "id");
 
     await setLanguage(page, "en");
     await page.setViewportSize(UX_VIEWPORTS.xl1440);
-    await page.goto(`/dashboard/invoices/${fixtures.invoices.sent}`, { waitUntil: "networkidle" });
-    await captureAndMeasure(page, "/dashboard/invoices/[id]", "invoice-detail-current", "sent-tax", "xl1440", "en");
+    await page.goto(`/invoice/${fixtures.invoices.sent}`, { waitUntil: "networkidle" });
+    await captureAndMeasure(page, "/invoice/[id]", "invoice-detail-current", "sent-tax", "xl1440", "en");
     await setLanguage(page, "id");
   });
 
@@ -194,74 +213,73 @@ test.describe.serial("T-00 fixture-backed baseline", () => {
     await page.setViewportSize(UX_VIEWPORTS.sm390);
     const active = await page.goto(`/i/${fixtures.publicTokens.active}`, { waitUntil: "networkidle" });
     expect(active?.status()).toBe(200);
-    await expect(page.getByText("UX/OVERDUE/004", { exact: true }).first()).toBeVisible();
+    // Not exact: T-22/T-23's document markup renders the number inline in
+    // the same paragraph as its "Nomor invoice: " label
+    // (src/components/documents/invoice-document/blocks.tsx's HeaderBlock),
+    // not as an isolated text node the way the pre-T-22 markup did, so an
+    // exact-text locator can never match it.
+    await expect(page.getByText("UX/OVERDUE/004").first()).toBeVisible();
     await captureAndMeasure(page, "/i/[token]", "public-invoice-current", "active-long-content", "sm390", "id");
 
-    expect((await page.goto(`/i/${fixtures.publicTokens.expired}`))?.status()).toBe(404);
+    // Retargeted: an expired share link no longer 404s. T-23
+    // (src/app/i/[token]/page.tsx) deliberately gives it its own honest,
+    // typed 200 state instead of the same notFound() as an unknown/invalid
+    // token -- "the one case that can only ever be observed by someone who
+    // already holds a real, previously valid link" -- so asserting 404 here
+    // was asserting pre-T-23 behavior.
+    const expired = await page.goto(`/i/${fixtures.publicTokens.expired}`, { waitUntil: "networkidle" });
+    expect(expired?.status()).toBe(200);
+    await expect(page.getByText("Tautan ini sudah tidak berlaku.")).toBeVisible();
+
+    // "invalid" (malformed/unknown) still goes through the real notFound()
+    // -- and this route has no route-group loading.tsx, so nothing forces
+    // it to stream, and the 404 status is genuine (unlike the (app)-group
+    // case above).
     expect((await page.goto(`/i/${fixtures.publicTokens.invalid}`))?.status()).toBe(404);
   });
 
-  test("downloads owner/public PDFs and verifies canonical HTML/PDF parity", async ({ page, context, request, baseURL }) => {
+  // Narrowed from "downloads owner/public PDFs and verifies canonical
+  // HTML/PDF parity": the HTML-side field extraction below
+  // (main.querySelectorAll("header p" / "dl > div")) assumed a DOM shape
+  // that no longer exists -- T-22/T-23 rewrote the public invoice document
+  // as plain <p>/<h2> blocks (src/components/documents/invoice-document/
+  // blocks.tsx), with no <header> or <dl> at all, so every field always
+  // extracted as "". The full HTML<->PDF field-by-field parity check this
+  // test used to do is already covered, more thoroughly and against the
+  // current markup, by t27.verification.spec.ts's own PDF parity check
+  // (same publicTokens.active token; it extracts issuer/client/description/
+  // amount/total/tax/terms/dueDate/bank/footer, not just the 6 fields here)
+  // -- rebuilding that extraction against the new DOM here would just be a
+  // second, drifting copy of the same logic. What's kept is the coverage
+  // that check does *not* have: that the owner-authenticated PDF endpoint
+  // itself works, that the request context used to reach the public PDF
+  // endpoint is genuinely unauthenticated, and that both endpoints produce
+  // the same document for the same invoice.
+  test("downloads owner and public PDFs for the same invoice and confirms they match", async ({ request, context, baseURL }) => {
     if (!baseURL) throw new Error("baseURL required");
     await login(context, baseURL, fixtures.sessions.owner);
-    const htmlResponse = await page.goto(`/i/${fixtures.publicTokens.active}`, { waitUntil: "networkidle" });
-    expect(htmlResponse?.status()).toBe(200);
-    const htmlFields = await page.locator("main.public-invoice").evaluate((main): DocumentField[] => {
-      const text = (element: Element | null) => element?.textContent?.replace(/\s+/g, " ").trim() ?? "";
-      const headerLines = Array.from(main.querySelectorAll("header p")).map((element) => text(element));
-      const details = new Map(Array.from(main.querySelectorAll("dl > div")).map((row) => [
-        text(row.querySelector("dt")),
-        text(row.querySelector("dd")),
-      ]));
-      return [
-        { key: "number", label: "Nomor invoice", value: details.get("Nomor invoice") ?? "" },
-        { key: "billedTo", label: "Ditagihkan kepada", value: (headerLines.find((line) => line.startsWith("Ditagihkan kepada ")) ?? "").replace("Ditagihkan kepada ", "") },
-        { key: "dueDate", label: "Jatuh tempo", value: (headerLines.find((line) => line.startsWith("Jatuh tempo: ")) ?? "").replace("Jatuh tempo: ", "") },
-        { key: "scope", label: "Cakupan kerja", value: details.get("Cakupan kerja") ?? "" },
-        { key: "tax", label: "Pajak potong", value: details.get("Pajak potong") ?? "" },
-        { key: "total", label: "Nilai invoice", value: details.get("Nilai invoice") ?? "" },
-      ];
-    });
-    expect(htmlFields.every((field) => field.value.length > 0)).toBe(true);
-
     const ownerPdf = await context.request.get(`${baseURL}/api/invoices/${fixtures.invoices.overdue}/pdf`);
     expect(ownerPdf.status()).toBe(200);
     expect(ownerPdf.headers()["content-type"]).toContain("application/pdf");
+
+    // `request` (not `context.request`) is a bare, cookie-free fetch
+    // context -- this proves the public PDF endpoint is reachable by
+    // someone who was never authenticated, not merely that it *also* works
+    // for a logged-in owner.
     expect((await request.storageState()).cookies).toHaveLength(0);
     const publicPdf = await request.get(`${baseURL}/api/public/invoices/${fixtures.publicTokens.active}/pdf`);
     expect(publicPdf.status()).toBe(200);
     expect(publicPdf.headers()["content-type"]).toContain("application/pdf");
+
     await mkdir(path.join(outputRoot, "pdf"), { recursive: true });
     const ownerPdfPath = path.join(outputRoot, "pdf", "owner-overdue.pdf");
     const publicPdfPath = path.join(outputRoot, "pdf", "public-overdue.pdf");
     await writeFile(ownerPdfPath, await ownerPdf.body());
     await writeFile(publicPdfPath, await publicPdf.body());
 
-    const ownerFields = extractPdfFields(ownerPdfPath);
-    const publicFields = extractPdfFields(publicPdfPath);
-    const ownerParity = compareDocumentFields(htmlFields, ownerFields.fields);
-    const publicParity = compareDocumentFields(htmlFields, publicFields.fields);
-    const expectedOrder = htmlFields.map((field) => field.key);
-    const ownerOrder = expectedOrder.map((key) => ownerFields.positions[key]);
-    const publicOrder = expectedOrder.map((key) => publicFields.positions[key]);
-    const strictlyIncreasing = (values: number[]) => values.every((value, index) => value >= 0 && (index === 0 || value > values[index - 1]));
-    const ownerPublicTextEqual = ownerFields.text === publicFields.text;
-
-    expect(ownerParity.equal).toBe(true);
-    expect(publicParity.equal).toBe(true);
-    expect(strictlyIncreasing(ownerOrder)).toBe(true);
-    expect(strictlyIncreasing(publicOrder)).toBe(true);
-    expect(ownerPublicTextEqual).toBe(true);
-
-    await writeFile(path.join(outputRoot, "pdf", "parity-report.json"), `${JSON.stringify({
-      htmlFields,
-      ownerParity,
-      publicParity,
-      ownerOrder,
-      publicOrder,
-      ownerSourceLabels: ownerFields.sourceLabels,
-      publicSourceLabels: publicFields.sourceLabels,
-      ownerPublicTextEqual,
-    }, null, 2)}\n`, "utf8");
+    const ownerText = normalizeDocumentText(execFileSync("pdftotext", ["-layout", ownerPdfPath, "-"], { encoding: "utf8" }));
+    const publicText = normalizeDocumentText(execFileSync("pdftotext", ["-layout", publicPdfPath, "-"], { encoding: "utf8" }));
+    expect(ownerText.length).toBeGreaterThan(0);
+    expect(ownerText).toBe(publicText);
   });
 });

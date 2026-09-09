@@ -49,12 +49,19 @@ const ids = {
   owner: `${prefix}-owner`,
   other: `${prefix}-other`,
   zero: `${prefix}-zero`,
+  // "nothing-needs-chasing": has real deal/invoice activity (distinct from
+  // `zero`'s "no data at all" -- see docs/testing/UX_AUDIT.md), but none of
+  // it currently qualifies as overdue or due-soon, so the FollowUpQueue
+  // empty state below must be reached through real business logic, not
+  // merely by having nothing to look at.
+  quiet: `${prefix}-quiet`,
 };
 
 const sessionTokens = {
   owner: `${prefix}-session-owner-do-not-share`,
   other: `${prefix}-session-other-do-not-share`,
   zero: `${prefix}-session-zero-do-not-share`,
+  quiet: `${prefix}-session-quiet-do-not-share`,
 };
 
 const publicTokens = {
@@ -80,12 +87,14 @@ async function seed() {
       { id: ids.owner, name: 'UX Fixture Owner', email: `${prefix}-owner@example.invalid`, language: 'id' },
       { id: ids.other, name: 'UX Fixture Other', email: `${prefix}-other@example.invalid`, language: 'en' },
       { id: ids.zero, name: 'UX Fixture Zero', email: `${prefix}-zero@example.invalid`, language: 'id' },
+      { id: ids.quiet, name: 'UX Fixture Quiet', email: `${prefix}-quiet@example.invalid`, language: 'id' },
     ],
   });
   await prisma.session.createMany({ data: [
     { sessionToken: sessionTokens.owner, userId: ids.owner, expires: future },
     { sessionToken: sessionTokens.other, userId: ids.other, expires: future },
     { sessionToken: sessionTokens.zero, userId: ids.zero, expires: future },
+    { sessionToken: sessionTokens.quiet, userId: ids.quiet, expires: future },
   ] });
 
   const dealRows = [
@@ -96,6 +105,30 @@ async function seed() {
     { id: `${prefix}-deal-invoice`, userId: ids.owner, brand: 'Brand dengan nama sangat panjang untuk menguji pemotongan aman tanpa merusak dokumen', contactWa: '628133333333', scope: 'Long text fixture: deliver a campaign recap, links, captions, and final exported assets without clipping.', feeIdr: 12_345_678, status: DealStatus.INVOICE, paymentTerms: 'Pembayaran 30 hari setelah invoice diterima. Referensi: https://example.invalid/a/very/long/path/for/layout/testing' },
     { id: `${prefix}-deal-paid`, userId: ids.owner, brand: 'Brand Dibayar', contactWa: '628144444444', scope: 'Paid fixture', feeIdr: 5_000_000, status: DealStatus.DIBAYAR },
     { id: `${prefix}-deal-other`, userId: ids.other, brand: 'Other Owner Secret Brand', contactWa: '628155555555', scope: 'Ownership isolation fixture', feeIdr: 9_999_999, status: DealStatus.INVOICE },
+    // UX-audit "many-deals" density fixture: several additional cards spread
+    // across the earlier pipeline stages (not INVOICE/DIBAYAR, which already
+    // have their own single-card fixtures above) so the deals__desktop
+    // capture and the Deals-desktop-scroll regression exercise a board with
+    // more than one card per column, including a mix of short and long
+    // Indonesian brand names -- not just the single long-name card above.
+    { id: `${prefix}-deal-many-masuk-1`, userId: ids.owner, brand: 'Kopi Senja Nusantara', contactWa: '628160000001', scope: 'Ulasan produk kopi kemasan', feeIdr: 800_000, status: DealStatus.MASUK },
+    { id: `${prefix}-deal-many-masuk-2`, userId: ids.owner, brand: 'Klinik Kecantikan Radiant Glow Indonesia', contactWa: '628160000002', scope: 'Konten sebelum dan sesudah perawatan wajah', feeIdr: 1_500_000, status: DealStatus.MASUK },
+    { id: `${prefix}-deal-many-masuk-3`, userId: ids.owner, brand: 'Toko Sepatu Lokal', contactWa: '628160000003', scope: 'Video unboxing sepatu edisi terbatas', feeIdr: 950_000, status: DealStatus.MASUK },
+    { id: `${prefix}-deal-many-nego-1`, userId: ids.owner, brand: 'Aplikasi Keuangan Digital Sejahtera', contactWa: '628160000004', scope: 'Tutorial penggunaan fitur baru aplikasi', feeIdr: 2_200_000, status: DealStatus.NEGO },
+    { id: `${prefix}-deal-many-nego-2`, userId: ids.owner, brand: 'Warung Makan Ibu Sari', contactWa: '628160000005', scope: 'Review menu andalan warung', feeIdr: 600_000, status: DealStatus.NEGO },
+    { id: `${prefix}-deal-many-deal-1`, userId: ids.owner, brand: 'Merek Skincare Herbal Alami Indonesia', contactWa: '628160000006', scope: 'Rangkaian konten pemakaian rutin 30 hari', feeIdr: 3_100_000, status: DealStatus.DEAL },
+    { id: `${prefix}-deal-many-deal-2`, userId: ids.owner, brand: 'Brand Fashion Lokal', contactWa: '628160000007', scope: 'Lookbook koleksi musim ini', feeIdr: 1_800_000, status: DealStatus.DEAL },
+    // UX-audit "overdue-deliverable" fixture: deadline already in the past,
+    // but pre-INVOICE (no invoice exists yet) -- distinct from the
+    // "overdue-invoice" fixture above, which is a payment-due-date overdue.
+    { id: `${prefix}-deal-overdue-deliverable`, userId: ids.owner, brand: 'Brand Konten Terlambat', contactWa: '628160000008', scope: 'Konten deadline sudah lewat, belum dikirim', feeIdr: 1_100_000, status: DealStatus.KONTEN, deadline: past },
+    // UX-audit "nothing-needs-chasing" fixture: real, completed activity for
+    // a separate user (`quiet`) whose only invoice is PAID (terminal --
+    // never re-derived as OVERDUE/due-soon regardless of its due date, see
+    // deriveInvoiceDisplayStatus), so its FollowUpQueue empty state is
+    // reached through real business logic rather than having no data at all
+    // (that's the `zero` user's "fresh-user" fixture instead).
+    { id: `${prefix}-deal-quiet`, userId: ids.quiet, brand: 'Brand Tenang', contactWa: '628170000000', scope: 'Proyek selesai, sudah dibayar lunas', feeIdr: 2_000_000, status: DealStatus.DIBAYAR },
   ];
   await prisma.deal.createMany({ data: dealRows });
 
@@ -124,6 +157,7 @@ async function seed() {
     { id: `${prefix}-invoice-overdue`, userId: ids.owner, dealId: `${prefix}-deal-invoice`, number: 'UX/OVERDUE/004', subtotalIdr: 12_345_678, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.OVERDUE, dueDate: past },
     { id: `${prefix}-invoice-paid`, userId: ids.owner, dealId: `${prefix}-deal-paid`, number: 'UX/PAID/005', subtotalIdr: 5_000_000, withholdingTaxType: WithholdingTaxType.PPH23, status: InvoiceStatus.PAID, dueDate: past },
     { id: `${prefix}-invoice-other`, userId: ids.other, dealId: `${prefix}-deal-other`, number: 'UX/OTHER/001', subtotalIdr: 9_999_999, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.SENT, dueDate: future },
+    { id: `${prefix}-invoice-quiet`, userId: ids.quiet, dealId: `${prefix}-deal-quiet`, number: 'UX/QUIET/001', subtotalIdr: 2_000_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.PAID, dueDate: past },
   ];
   await prisma.invoice.createMany({ data: invoiceRows });
   await prisma.invoiceShare.createMany({ data: [
@@ -160,6 +194,7 @@ async function seed() {
     database: actualDatabase,
     users: ids,
     sessions: sessionTokens,
+    quiet: { deal: `${prefix}-deal-quiet`, invoice: `${prefix}-invoice-quiet` },
     deals: {
       masuk: `${prefix}-deal-masuk`,
       nego: `${prefix}-deal-nego`,
@@ -168,6 +203,16 @@ async function seed() {
       invoice: `${prefix}-deal-invoice`,
       dibayar: `${prefix}-deal-paid`,
       other: `${prefix}-deal-other`,
+      many: [
+        `${prefix}-deal-many-masuk-1`,
+        `${prefix}-deal-many-masuk-2`,
+        `${prefix}-deal-many-masuk-3`,
+        `${prefix}-deal-many-nego-1`,
+        `${prefix}-deal-many-nego-2`,
+        `${prefix}-deal-many-deal-1`,
+        `${prefix}-deal-many-deal-2`,
+      ],
+      overdueDeliverable: `${prefix}-deal-overdue-deliverable`,
     },
     invoices: {
       draft: `${prefix}-invoice-draft`,
@@ -183,7 +228,7 @@ async function seed() {
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
   await chmod(manifestPath, 0o600);
   await verify();
-  console.log(JSON.stringify({ action: 'seed', host: normalizedHost, prefix, users: 3, deals: dealRows.length, invoices: invoiceRows.length, manifestMode: '0600' }));
+  console.log(JSON.stringify({ action: 'seed', host: normalizedHost, prefix, users: Object.keys(ids).length, deals: dealRows.length, invoices: invoiceRows.length, manifestMode: '0600' }));
 }
 
 async function verify() {
@@ -193,6 +238,7 @@ async function verify() {
       id: true,
       deals: {
         select: {
+          id: true,
           status: true,
           contactWa: true,
           stageTransitions: { select: { fromStatus: true, toStatus: true, createdAt: true } },
@@ -212,11 +258,12 @@ async function verify() {
   const owner = users.find((user) => user.id === ids.owner);
   const other = users.find((user) => user.id === ids.other);
   const zero = users.find((user) => user.id === ids.zero);
+  const quiet = users.find((user) => user.id === ids.quiet);
   const ownerStages = new Set(owner?.deals.map((deal) => deal.status));
   const ownerStatuses = new Set(owner?.invoices.map((invoice) => invoice.status));
   const ownerSettingsRequiredFields = ['issuerName', 'bankName', 'bankAccountNumber', 'bankAccountHolder'] as const;
   const checks = {
-    threeUsers: users.length === 3,
+    fourUsers: users.length === 4,
     ownerAllStages: Object.values(DealStatus).every((status) => ownerStages.has(status)),
     ownerAllInvoiceStatuses: Object.values(InvoiceStatus).every((status) => ownerStatuses.has(status)),
     secondOwnerIsolated: other?.deals.length === 1 && other.invoices.length === 1,
@@ -249,6 +296,24 @@ async function verify() {
     ownerSettingsComplete: owner?.settings != null
       && ownerSettingsRequiredFields.every((field) => (owner.settings?.[field] ?? '').trim() !== ''),
     zeroSettingsMissing: zero?.settings == null,
+    // UX-audit "many-deals" fixture: at least 4 cards in MASUK (1 original +
+    // 3 many-fixture) so the desktop board actually renders a dense column,
+    // not just one card per stage.
+    manyDealsInMasuk: (owner?.deals.filter((deal) => deal.status === DealStatus.MASUK).length ?? 0) >= 4,
+    // UX-audit "overdue-deliverable" fixture: a pre-INVOICE deal whose
+    // deadline is already in the past (distinct from the invoice-overdue
+    // fixture, which is a payment due-date overdue on an existing invoice).
+    overdueDeliverablePresent: owner?.deals.some((deal) =>
+      deal.id === `${prefix}-deal-overdue-deliverable`
+      && deal.status !== DealStatus.INVOICE
+      && deal.status !== DealStatus.DIBAYAR
+    ) === true,
+    // UX-audit "nothing-needs-chasing": `quiet` has real activity (unlike
+    // `zero`) but its only invoice is PAID -- a terminal status that must
+    // never surface in the FollowUpQueue regardless of due date.
+    quietHasActivityButOnlyPaidInvoices: (quiet?.deals.length ?? 0) > 0
+      && (quiet?.invoices.length ?? 0) > 0
+      && quiet!.invoices.every((invoice) => invoice.status === InvoiceStatus.PAID),
   };
   if (Object.values(checks).some((value) => !value)) throw new Error(`Fixture verification failed: ${JSON.stringify(checks)}`);
   console.log(JSON.stringify({ action: 'verify', host: normalizedHost, prefix, checks }));
