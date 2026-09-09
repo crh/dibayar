@@ -19,6 +19,8 @@
 //
 // Usage: npm run ux:audit [-- --route=/deal]
 // See docs/testing/UX_AUDIT.md "Running a route-focused audit".
+import { existsSync, rmSync } from "node:fs";
+import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const routeArg = process.argv.slice(2).find((arg) => arg.startsWith("--route="))?.slice("--route=".length);
@@ -41,6 +43,31 @@ function runOrAbort(step: string, command: string, args: string[], extraEnv: Rec
   }
 }
 
+// scripts/ux-report.ts can only turn a Playwright run's own crash into a
+// reportable CRITICAL finding if that run got far enough to write *some*
+// JSON reporter output (Playwright does this even when e.g. its webServer
+// fails to start, recording the fatal error in the JSON's top-level
+// `errors` array). If the process is killed/crashes before the reporter
+// itself is ever initialized (a segfault, an OOM kill, `npx` failing to
+// resolve at all), no results file exists, ux-report.ts has nothing to
+// read for that run, and its "no findings for this run" default has no
+// way to distinguish that from "genuinely nothing failed" -- so it would
+// report NOT_RUN/PASS and this whole gate would silently exit 0 having
+// tested nothing. Abort here instead of handing that case to the report.
+function runPlaywrightOrAbort(step: string, args: string[], resultsJsonPath: string) {
+  // A stale results.json from a previous run would otherwise let this
+  // run's own crash go unnoticed by the existsSync check below.
+  rmSync(resultsJsonPath, { force: true });
+  const status = run("npx", args);
+  if (!existsSync(resultsJsonPath)) {
+    console.error(
+      `\nux:audit: aborting -- "${step}" exited ${status} and produced no ${path.relative(process.cwd(), resultsJsonPath)}; ` +
+        "the report has no run to read for this suite, so it cannot be trusted to reflect what actually happened.",
+    );
+    process.exit(status !== 0 ? status : 1);
+  }
+}
+
 async function main() {
   console.log(`ux:audit starting${routeArg ? ` (focused: --route=${routeArg})` : ""}`);
 
@@ -50,16 +77,22 @@ async function main() {
 
   runOrAbort("build", "npm", ["run", "build"]);
 
-  // Playwright's own exit code is informational here -- see header comment.
-  // The route filter matches against test titles (see routes/matrix.spec.ts
-  // and routes/deals.desktop-scroll.spec.ts titles), so `--route=/deal`
-  // matches "deals / ..." and "... Deals board ..." titles.
+  // Playwright's own exit code is otherwise informational here -- see header
+  // comment -- but the run must at least have produced a results.json for
+  // the report to read; see runPlaywrightOrAbort. The route filter matches
+  // against test titles (see routes/matrix.spec.ts and
+  // routes/deals.desktop-scroll.spec.ts titles), so `--route=/deal` matches
+  // "deals / ..." and "... Deals board ..." titles.
   const uxAuditArgs = ["playwright", "test", "-c", "playwright.config.ts"];
   if (routeArg) uxAuditArgs.push("--grep", routeArg.replace(/^\//, ""));
-  run("npx", uxAuditArgs);
+  runPlaywrightOrAbort("tests/ux-audit run", uxAuditArgs, path.resolve("test-results/ux-audit/results.json"));
 
   if (!routeArg) {
-    run("npx", ["playwright", "test", "-c", "playwright.e2e.config.ts", "--project=chromium", "--grep", "@visual"]);
+    runPlaywrightOrAbort(
+      "e2e @visual run",
+      ["playwright", "test", "-c", "playwright.e2e.config.ts", "--project=chromium", "--grep", "@visual"],
+      path.resolve("test-results/e2e/results.json"),
+    );
   }
 
   const reportStatus = run("npx", ["tsx", "scripts/ux-report.ts"]);

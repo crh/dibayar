@@ -26,6 +26,13 @@ type PwSuite = { title: string; file: string; specs?: PwSpec[]; suites?: PwSuite
 type PwResults = {
   suites: PwSuite[];
   stats: { expected: number; unexpected: number; skipped: number; flaky: number };
+  // Playwright's own top-level fatal-error slot (global setup throwing,
+  // webServer failing to start, etc.). Populated with an empty `suites`
+  // array in exactly this case, which -- unless checked for explicitly --
+  // reads to every category below as "NOT_RUN" (nothing to report) rather
+  // than the CRITICAL infrastructure failure it actually is. See
+  // "Infrastructure failure" handling in main().
+  errors?: Array<{ message?: string }>;
 };
 
 type Finding = {
@@ -156,24 +163,66 @@ async function main() {
   const uxAuditSpecs = uxAuditResults ? flattenSpecs(uxAuditResults.suites) : [];
   const e2eSpecs = e2eResults ? flattenSpecs(e2eResults.suites) : [];
 
-  const functionalStatus = uxAuditResults
-    ? (["detector-self-check", "functional-regression"] as const).every(
-        (category) => statusFor(uxAuditSpecs, category) !== "FAIL",
-      )
-      ? "PASS"
-      : "FAIL"
-    : "NOT_RUN";
-  const responsiveLayoutStatus = statusFor(uxAuditSpecs, "responsive-layout");
-  const stateDataStatus = statusFor(uxAuditSpecs, "state-data");
-  const visualRegressionStatus: CategoryStatus = e2eResults
-    ? e2eSpecs.length > 0 && e2eSpecs.every((spec) => spec.ok)
-      ? "PASS"
-      : e2eSpecs.length === 0
-        ? "NOT_RUN"
-        : "FAIL"
-    : "NOT_RUN";
+  // A Playwright run that fails before it can collect/execute any test
+  // (webServer failed to start, global setup threw, etc.) still writes a
+  // valid results.json -- with an empty `suites` array and the fatal error
+  // recorded in the top-level `errors` array instead of any spec. Every
+  // category status below is file-derived from `suites`, so this shape
+  // reads as "nothing in this category ran" (NOT_RUN) rather than the
+  // CRITICAL infrastructure failure it is -- and NOT_RUN does not fail the
+  // gate. Surface it as an explicit, unmissable finding instead of letting
+  // a run that tested nothing report a clean pass.
+  const infrastructureFailures: Finding[] = [];
+  for (const [label, results] of [
+    ["tests/ux-audit", uxAuditResults] as const,
+    ["e2e @visual", e2eResults] as const,
+  ]) {
+    const fatalErrors = results?.errors ?? [];
+    if (fatalErrors.length > 0) {
+      infrastructureFailures.push({
+        id: `UX-INFRA-${label.replace(/[^a-z0-9]+/gi, "-")}`,
+        severity: "CRITICAL",
+        category: "infrastructure-failure",
+        route: "n/a",
+        viewport: "n/a",
+        state: "n/a",
+        description: `${label} run reported a fatal error before any test could be collected/executed: ${stripAnsi(fatalErrors[0]?.message ?? "unknown error")}`,
+        expected: "The Playwright run starts its webServer/global setup successfully and collects at least one test.",
+        evidence: label === "tests/ux-audit" ? uxAuditResultsPath : e2eResultsPath,
+        assertion: stripAnsi(fatalErrors[0]?.message ?? "unknown error"),
+      });
+    }
+  }
 
-  const findings = [...buildFindings(uxAuditSpecs), ...buildFindings(e2eSpecs).map((finding) => ({ ...finding, category: "visual-regression" as const }))];
+  const uxAuditInfraFailed = (uxAuditResults?.errors?.length ?? 0) > 0;
+  const e2eInfraFailed = (e2eResults?.errors?.length ?? 0) > 0;
+
+  const functionalStatus: CategoryStatus = uxAuditInfraFailed
+    ? "FAIL"
+    : uxAuditResults
+      ? (["detector-self-check", "functional-regression"] as const).every(
+          (category) => statusFor(uxAuditSpecs, category) !== "FAIL",
+        )
+        ? "PASS"
+        : "FAIL"
+      : "NOT_RUN";
+  const responsiveLayoutStatus: CategoryStatus = uxAuditInfraFailed ? "FAIL" : statusFor(uxAuditSpecs, "responsive-layout");
+  const stateDataStatus: CategoryStatus = uxAuditInfraFailed ? "FAIL" : statusFor(uxAuditSpecs, "state-data");
+  const visualRegressionStatus: CategoryStatus = e2eInfraFailed
+    ? "FAIL"
+    : e2eResults
+      ? e2eSpecs.length > 0 && e2eSpecs.every((spec) => spec.ok)
+        ? "PASS"
+        : e2eSpecs.length === 0
+          ? "NOT_RUN"
+          : "FAIL"
+      : "NOT_RUN";
+
+  const findings = [
+    ...infrastructureFailures,
+    ...buildFindings(uxAuditSpecs),
+    ...buildFindings(e2eSpecs).map((finding) => ({ ...finding, category: "visual-regression" as const })),
+  ];
   const bySeverityOrder: Severity[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
   findings.sort((a, b) => bySeverityOrder.indexOf(a.severity) - bySeverityOrder.indexOf(b.severity));
 
