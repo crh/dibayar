@@ -1,12 +1,17 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Page } from "@playwright/test";
-import type { UxLanguage, UxViewportKey } from "./viewports";
+import type { UxLanguage } from "./viewports";
 
 export type CaptureDescriptor = {
   routeKey: string;
   stateKey: string;
-  viewport: UxViewportKey;
+  // A viewport-set key (see ./viewports.ts's UxViewportKey and
+  // ./viewport-matrix.ts's UxMatrixViewportKey). Kept as a plain string
+  // here so capture.ts doesn't couple every caller to one specific viewport
+  // set; deterministicCaptureName's own kebab-case validation is what keeps
+  // this safe, not the type.
+  viewport: string;
   language: UxLanguage;
 };
 

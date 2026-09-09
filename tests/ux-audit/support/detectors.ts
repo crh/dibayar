@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { ALLOWED_SCROLL_CONTAINERS, type ScrollExceptionRule } from "./scroll-policy";
 
 export type ElementFinding = {
   selector: string;
@@ -31,8 +32,11 @@ export type WrappedActionRowFinding = ElementFinding & {
   childLines: number[];
 };
 
-export async function detectHorizontalOverflow(page: Page): Promise<OverflowReport> {
-  return page.evaluate(() => {
+export async function detectHorizontalOverflow(
+  page: Page,
+  allowedScrollContainers: readonly ScrollExceptionRule[] = ALLOWED_SCROLL_CONTAINERS,
+): Promise<OverflowReport> {
+  return page.evaluate((rules) => {
     function describe(element: Element, rect: DOMRect) {
       const html = element as HTMLElement;
       const id = html.id ? `#${CSS.escape(html.id)}` : "";
@@ -46,17 +50,17 @@ export async function detectHorizontalOverflow(page: Page): Promise<OverflowRepo
       };
     }
 
-    // Known intentional horizontal-scroll containers: the deal-board stage
-    // rail (`data-testid="deal-board-rail"`) and the stage/status filter
-    // chip row (`data-ux-scroll="stage-filter"`, see `stage-filter.tsx`).
-    // Both scroll their own content via `overflow-x: auto|scroll` without
-    // expanding the page. Exemption is by these two exact selectors only —
-    // not by role/aria-label pattern-matching — so an unrelated horizontal
-    // scroller isn't accidentally waved through.
+    // Known intentional horizontal-scroll containers, from the reviewable
+    // registry in ./scroll-policy.ts (passed in as `rules` since this runs
+    // inside the browser and can't import it directly). Exemption is by
+    // exact selector match only — not by role/aria-label pattern-matching —
+    // so an unrelated horizontal scroller isn't accidentally waved through.
     function isKnownIntentionalScrollAncestor(candidate: HTMLElement) {
-      if (candidate.dataset?.testid === "deal-board-rail") return true;
-      if (candidate.dataset?.uxScroll === "stage-filter") return true;
-      return false;
+      return rules.some(
+        (rule) =>
+          (rule.testid !== undefined && candidate.dataset?.testid === rule.testid) ||
+          (rule.uxScroll !== undefined && candidate.dataset?.uxScroll === rule.uxScroll),
+      );
     }
 
     function findIntentionalScrollAncestor(element: Element): HTMLElement | null {
@@ -139,7 +143,7 @@ export async function detectHorizontalOverflow(page: Page): Promise<OverflowRepo
       pageOverflow,
       elements,
     };
-  });
+  }, allowedScrollContainers);
 }
 
 export async function detectSmallTouchTargets(
@@ -418,4 +422,111 @@ export async function rectanglesOverlap(page: Page, first: string, second: strin
     if (!a || !b) throw new Error(`Missing overlap target: ${first} or ${second}`);
     return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
   }, { first, second });
+}
+
+export type ScrollContainerMeasurement = {
+  found: boolean;
+  scrollWidth: number;
+  clientWidth: number;
+  /** scrollWidth exceeds clientWidth by more than a 1px rounding tolerance. */
+  requiresHorizontalScroll: boolean;
+};
+
+// Measures whether a specific, already-known intentional-scroll container
+// (e.g. the Deals board rail, `[data-testid="deal-board-rail"]`) actually
+// needs to scroll right now -- distinct from detectHorizontalOverflow, which
+// only asks whether such a container exists and exempts its descendants from
+// the page-level check. A container can legitimately be `overflow-x: auto`
+// at every viewport (so it CAN scroll) while still being required not to
+// NEED to at specific viewports (see routes/deals.desktop-scroll.spec.ts).
+export async function measureScrollContainer(page: Page, selector: string): Promise<ScrollContainerMeasurement> {
+  return page.evaluate((selector) => {
+    const element = document.querySelector(selector) as HTMLElement | null;
+    if (!element) return { found: false, scrollWidth: 0, clientWidth: 0, requiresHorizontalScroll: false };
+    const { scrollWidth, clientWidth } = element;
+    return { found: true, scrollWidth, clientWidth, requiresHorizontalScroll: scrollWidth > clientWidth + 1 };
+  }, selector);
+}
+
+export type HiddenRequiredControlFinding = ElementFinding & {
+  reason: "display-none" | "visibility-hidden" | "zero-opacity" | "zero-dimensions" | "detached";
+};
+
+// Controls can't be scanned for "is this wrongly hidden" without knowing
+// intent -- a collapsed mobile menu button being display:none on desktop is
+// correct, not a defect. This only inspects elements explicitly marked
+// `data-ux-required` (or a caller-supplied selector) -- i.e. "this control
+// must always be usable on this route/state", declared at the call site,
+// never inferred. See routes/matrix.spec.ts and
+// synthetic/detectors.negative-control.spec.ts.
+export async function detectHiddenRequiredControls(
+  page: Page,
+  selector = "[data-ux-required]",
+): Promise<HiddenRequiredControlFinding[]> {
+  return page.evaluate((selector) => {
+    function describe(element: Element, rect: DOMRect | { x: number; y: number; width: number; height: number }) {
+      const html = element as HTMLElement;
+      const id = html.id ? `#${CSS.escape(html.id)}` : "";
+      const testId = html.dataset?.testid ? `[data-testid="${CSS.escape(html.dataset.testid)}"]` : "";
+      const uxId = html.dataset?.uxId ? `[data-ux-id="${CSS.escape(html.dataset.uxId)}"]` : "";
+      return {
+        selector: uxId || testId || id || html.tagName.toLowerCase(),
+        tag: html.tagName.toLowerCase(),
+        text: (html.innerText || html.getAttribute("aria-label") || "").trim().replace(/\s+/g, " ").slice(0, 120),
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      };
+    }
+
+    const findings: HiddenRequiredControlFinding[] = [];
+    for (const element of Array.from(document.querySelectorAll(selector))) {
+      const html = element as HTMLElement;
+      if (!html.isConnected) {
+        findings.push({ ...describe(html, { x: 0, y: 0, width: 0, height: 0 }), reason: "detached" });
+        continue;
+      }
+      const style = getComputedStyle(html);
+      const rect = html.getBoundingClientRect();
+      if (style.display === "none") {
+        findings.push({ ...describe(html, rect), reason: "display-none" });
+      } else if (style.visibility === "hidden") {
+        findings.push({ ...describe(html, rect), reason: "visibility-hidden" });
+      } else if (Number.parseFloat(style.opacity) === 0) {
+        findings.push({ ...describe(html, rect), reason: "zero-opacity" });
+      } else if (rect.width === 0 || rect.height === 0) {
+        findings.push({ ...describe(html, rect), reason: "zero-dimensions" });
+      }
+    }
+    return findings;
+  }, selector);
+}
+
+export type EmptyStateConsistency = {
+  consistent: boolean;
+  declaredItemCount: number;
+  renderedItemCount: number;
+  showsEmptyCopy: boolean;
+};
+
+// A declarative cross-check for "the empty state claims there's nothing,
+// but there actually is" (or the reverse): compares a container's own
+// declared item count (`data-ux-item-count`, written by the component
+// itself from its real data) against what actually rendered
+// (`data-ux-item` children) and whether empty-state copy
+// (`data-ux-empty-state`) is shown. All three signals must agree; see
+// synthetic/detectors.negative-control.spec.ts for a worked bad-data example
+// (this is a generic, declarative contract -- it is not wired into any
+// production component, which would require adding these data-attributes
+// there first).
+export async function detectEmptyStateInconsistency(page: Page, containerSelector: string): Promise<EmptyStateConsistency> {
+  return page.evaluate((containerSelector) => {
+    const container = document.querySelector(containerSelector);
+    if (!container) throw new Error(`Missing empty-state container: ${containerSelector}`);
+    const declaredItemCount = Number.parseInt(container.getAttribute("data-ux-item-count") ?? "0", 10);
+    const renderedItemCount = container.querySelectorAll("[data-ux-item]").length;
+    const showsEmptyCopy = container.querySelector("[data-ux-empty-state]") !== null;
+    const consistent =
+      declaredItemCount === renderedItemCount &&
+      (declaredItemCount > 0 ? !showsEmptyCopy : showsEmptyCopy);
+    return { consistent, declaredItemCount, renderedItemCount, showsEmptyCopy };
+  }, containerSelector);
 }
