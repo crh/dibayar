@@ -8,6 +8,7 @@ import {
   PrismaClient,
   WithholdingTaxType,
 } from "../src/generated/prisma/client";
+import { createOrRegenerateShare, getShareState, type InvoiceShareDb } from "../src/lib/invoice-share";
 
 const action = process.argv[2];
 if (!['seed', 'verify', 'cleanup'].includes(action ?? '')) {
@@ -161,9 +162,26 @@ async function seed() {
   ];
   await prisma.invoice.createMany({ data: invoiceRows });
   await prisma.invoiceShare.createMany({ data: [
-    { id: `${prefix}-share-active`, invoiceId: `${prefix}-invoice-overdue`, tokenHash: sha256(publicTokens.active), expiresAt: future },
     { id: `${prefix}-share-expired`, invoiceId: `${prefix}-invoice-paid`, tokenHash: sha256(publicTokens.expired), expiresAt: past },
   ] });
+  // invoices.overdue gets its share created through the application's own
+  // createOrRegenerateShare() (not a raw createMany row) so it carries a real
+  // tokenCiphertext, matching what production always produces. A row seeded
+  // directly with only a tokenHash (the prior approach) can be looked up
+  // publicly but can never be recovered by the owner's own UI -- getShareState
+  // treats a present-but-undecryptable share as "active but stale" and
+  // disables the primary WhatsApp button, which made J21 have to revoke and
+  // recreate the share before it could exercise the real send-reminder flow.
+  // Passing a fixed tokenFactory keeps publicTokens.active's value stable for
+  // the other suites (tests/ux-audit) that depend on it resolving to this
+  // invoice.
+  await createOrRegenerateShare(
+    prisma as unknown as InvoiceShareDb,
+    `${prefix}-invoice-overdue`,
+    ids.owner,
+    () => publicTokens.active,
+    () => now,
+  );
 
   // Owner gets a fully populated UserSettings row: F7/F8 public-document
   // evidence needs a real issuer identity and bank account to render (not
@@ -262,6 +280,10 @@ async function verify() {
   const ownerStages = new Set(owner?.deals.map((deal) => deal.status));
   const ownerStatuses = new Set(owner?.invoices.map((invoice) => invoice.status));
   const ownerSettingsRequiredFields = ['issuerName', 'bankName', 'bankAccountNumber', 'bankAccountHolder'] as const;
+  // Guards the invoices.overdue share fix: the share must be recoverable by
+  // the owner's own UI (a real tokenCiphertext that decrypts), not merely
+  // present as a row -- see the createOrRegenerateShare() call in seed().
+  const overdueShareState = await getShareState(prisma as unknown as InvoiceShareDb, `${prefix}-invoice-overdue`, ids.owner);
   const checks = {
     fourUsers: users.length === 4,
     ownerAllStages: Object.values(DealStatus).every((status) => ownerStages.has(status)),
@@ -296,6 +318,7 @@ async function verify() {
     ownerSettingsComplete: owner?.settings != null
       && ownerSettingsRequiredFields.every((field) => (owner.settings?.[field] ?? '').trim() !== ''),
     zeroSettingsMissing: zero?.settings == null,
+    overdueShareRecoverable: overdueShareState.kind === 'state' && overdueShareState.active && overdueShareState.path !== null,
     // UX-audit "many-deals" fixture: at least 4 cards in MASUK (1 original +
     // 3 many-fixture) so the desktop board actually renders a dense column,
     // not just one card per stage.
