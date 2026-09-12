@@ -26,6 +26,15 @@
   --shadow-md: 0 12px 28px oklch(30% 0.02 50 / 0.14);
   --font-sans: "Plus Jakarta Sans", var(--font-system);
   --font-serif: "Source Serif 4", Georgia, serif;
+  /* Mobile fixed chrome: BottomNav is 56px (bottom-nav.tsx's h-14) and
+     FloatingActionButton is a 56px circle floating 16px above it
+     (floating-action-button.tsx's bottom-[calc(72px+...)]), so its top
+     edge sits 128px above the viewport bottom. AppShell reserves this
+     much space below page content (see app-shell.tsx) so the FAB never
+     rests on top of the last in-flow control -- reserving only the nav's
+     own 56px left the FAB uncovered. Update this if either component's
+     height/gap changes. */
+  --mobile-fixed-chrome-clearance: 128px;
 }
 
 @theme inline {

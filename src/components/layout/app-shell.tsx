@@ -15,7 +15,7 @@ export function AppShell({ children, email }: { children: ReactNode; email?: str
       <TopBar pathname={pathname} email={email} />
       <div className="flex flex-1">
         <SideNav pathname={pathname} />
-        <div className="min-w-0 flex-1 pb-[calc(56px+env(safe-area-inset-bottom))] min-[640px]:pb-0">{children}</div>
+        <div className="min-w-0 flex-1 pb-[calc(var(--mobile-fixed-chrome-clearance)+env(safe-area-inset-bottom))] min-[640px]:pb-0">{children}</div>
       </div>
       <BottomNav pathname={pathname} />
       <FloatingActionButton />
