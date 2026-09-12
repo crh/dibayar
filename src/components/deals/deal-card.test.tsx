@@ -117,6 +117,21 @@ describe("DealCard", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
+  it("renders a dismissable, aria-hidden backdrop behind the open overflow menu, absent when closed", async () => {
+    const user = userEvent.setup();
+    renderCard({ deal: makeDeal({ status: "INVOICE" }), hasInvoice: false });
+
+    expect(screen.queryByTestId("deal-card-menu-backdrop")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Kopi Nusantara" }));
+    const backdrop = screen.getByTestId("deal-card-menu-backdrop");
+    expect(backdrop.getAttribute("aria-hidden")).toBe("true");
+
+    await user.click(backdrop);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.queryByTestId("deal-card-menu-backdrop")).toBeNull();
+  });
+
   it("closes the overflow menu on Escape", async () => {
     const user = userEvent.setup();
     renderCard({ deal: makeDeal({ status: "INVOICE" }), hasInvoice: false });
