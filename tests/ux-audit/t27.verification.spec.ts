@@ -1830,7 +1830,11 @@ test.describe.serial("T-27 verification capture rerun", () => {
     try {
       const response = await page.goto("/i/not-a-real-token-000000000000", { waitUntil: "networkidle" });
       expect(response?.status(), "F7 malformed public token must still 404").toBe(404);
-      await expect(page.getByText("This page could not be found.", { exact: true })).toBeVisible();
+      // Phase 3 remediation (see OBSERVATIONS.md): this segment now has its
+      // own branded not-found.tsx instead of falling through to Next's
+      // generic default 404 -- same indistinguishable-from-any-other-404
+      // contract, different (on-brand) copy.
+      await expect(page.locator('main [role="alert"]')).toHaveText("Tautan ini tidak ditemukan.");
     } finally {
       expectingMalformedToken404 = false;
     }

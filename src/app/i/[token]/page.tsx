@@ -8,6 +8,7 @@ import { bestEffortClientIp } from "@/lib/request-ip";
 import { prisma } from "@/lib/prisma";
 import { buildInvoiceDocumentModel } from "@/components/documents/invoice-document/model";
 import { InvoiceDocumentHtml } from "@/components/documents/invoice-document/html";
+import { PublicErrorCard } from "./public-error-card";
 
 const sourceSerif = Source_Serif_4({ subsets: ["latin"], display: "swap", weight: ["500", "600"], variable: "--font-source-serif" });
 
@@ -48,10 +49,10 @@ export default async function PublicInvoicePage({ params }: PublicInvoicePagePro
 
   if (lookup.kind === "expired") {
     return (
-      <main className="mx-auto flex min-h-dvh w-full max-w-xl flex-col items-center justify-center gap-2 px-5 py-8 text-center">
+      <PublicErrorCard>
         <p role="alert" className="text-[17px] font-semibold text-ink">Tautan ini sudah tidak berlaku.</p>
         <p className="text-[14px] text-muted">Hubungi pengirim untuk mendapatkan tautan baru.</p>
-      </main>
+      </PublicErrorCard>
     );
   }
 
