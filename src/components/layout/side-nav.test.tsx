@@ -20,8 +20,15 @@ describe("SideNav", () => {
     const nav = screen.getByTestId("side-nav");
     expect(nav.className).toContain("min-[1024px]:sticky");
     expect(nav.className).toContain("min-[1024px]:top-16");
-    expect(nav.className).toContain("min-[1024px]:h-[calc(100vh-4rem)]");
+    expect(nav.className).toContain("min-[1024px]:min-h-[calc(100vh-4rem)]");
     expect(nav.className).toContain("min-[1024px]:overflow-y-auto");
+  });
+
+  it("uses min-height (not a fixed height) so its background stretches to match a taller main column instead of leaving a seam", () => {
+    render(<SideNav pathname="/" />);
+
+    const nav = screen.getByTestId("side-nav");
+    expect(nav.className).not.toMatch(/min-\[1024px\]:h-\[calc\(100vh-4rem\)\]/);
   });
 
   it("renders the four nav items in order, each a 44px touch target", () => {
