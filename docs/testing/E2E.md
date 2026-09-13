@@ -164,6 +164,13 @@ is stale-baseline/browser-rendering drift, not a real UI regression -- before
 regenerating. After regenerating, re-run `npm run test:e2e:visual` once more
 and confirm it passes clean with no further snapshot writes.
 
+A bare dev machine's Chromium can still render a handful of pixels
+differently than the `ubuntu-latest` CI runner (OS font/fontconfig/freetype
+stack, not pinned by the Playwright version) -- run the update inside the
+official Playwright Docker image pinned to the exact version in
+`package.json` instead of on the host; see `docs/testing/UX_AUDIT.md`
+"Browser strategy" for the exact `docker run` invocation.
+
 ## Security safeguards (recap)
 
 - `scripts/e2e-fixtures.ts` will not run without `E2E_FIXTURE_CONFIRM=non-production`

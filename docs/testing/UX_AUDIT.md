@@ -71,6 +71,19 @@ npx playwright install chromium
 
 **Never regenerate a baseline against an arbitrary system Chrome install.** Only regenerate against the pinned `npx playwright install chromium` binary, after confirming (screenshot diff, not just "tests pass") that the actual rendered UI -- not just pixels -- is correct. See "To update a visual baseline" below.
 
+**The same Chromium binary still isn't enough on its own.** Even with `channel: "chrome"` removed, a baseline generated on an arbitrary dev machine can still mismatch the `ubuntu-latest` CI runner by a handful of pixels -- font/fontconfig/freetype and other OS-level rendering-stack differences aren't pinned by the Playwright version. Generate/regenerate `@visual` baselines inside the official Playwright Docker image, pinned to the exact version in `package.json` (`v1.62.1` at this writing -- match whatever `@playwright/test` currently resolves to), not on a bare host:
+
+```bash
+docker run --rm --network host \
+  -v "$(pwd)":/work -v dibayar-container-node-modules:/work/node_modules \
+  -w /work --env-file <a local env file with DATABASE_URL, E2E_FIXTURE_CONFIRM=non-production> \
+  -e HOME=/tmp \
+  mcr.microsoft.com/playwright:v1.62.1-noble \
+  bash -lc 'npm ci && npx prisma migrate deploy && npm run test:e2e:update-snapshots'
+```
+
+(`--network host` so the container reaches the same `127.0.0.1:55432` Postgres as the rest of the repo; the named volume keeps the container's `node_modules` install separate from the host's.) This container is closer to the actual `ubuntu-latest` CI runner than a bare dev machine, but still isn't a byte-for-byte guarantee -- if a baseline regenerated this way still mismatches in CI, that's a real CI-environment difference to investigate, not a reason to weaken the diff threshold.
+
 ## PDF tooling
 
 `tests/ux-audit/fixtures.baseline.spec.ts` and `t27.verification.spec.ts` shell out directly to the `pdftotext`/`pdfinfo` binaries (`poppler-utils` on Debian/Ubuntu) to assert on real generated-PDF text/metadata, not just "a PDF-shaped file exists". Install locally:
