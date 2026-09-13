@@ -88,61 +88,76 @@ export function DealCard({
             </span>
           </button>
           {menuOpen ? (
-            <div
-              role="menu"
-              className="absolute right-0 top-full z-10 mt-1 min-w-[10rem] rounded-lg border border-line bg-surface p-1 shadow-md"
-            >
-              {previousStage ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={isSaving}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onStageChange(deal.id, previousStage.value);
-                  }}
-                  className="flex h-11 w-full items-center rounded-md px-3 text-left text-[13px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60"
-                >
-                  {t("dashboard.moveToPreviousStage", { stage: t(PIPELINE_STAGE_KEYS[previousStage.value]) })}
-                </button>
-              ) : null}
-              {nextStage ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={isSaving}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onStageChange(deal.id, nextStage.value);
-                  }}
-                  className="flex h-11 w-full items-center rounded-md px-3 text-left text-[13px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60"
-                >
-                  {t("dashboard.moveToNextStage", { stage: t(PIPELINE_STAGE_KEYS[nextStage.value]) })}
-                </button>
-              ) : null}
-              {canCreateInvoice ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={isSaving}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onCreateInvoice(deal.id);
-                  }}
-                  className="flex h-11 w-full items-center rounded-md px-3 text-left text-[13px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60"
-                >
-                  {isSaving ? t("dashboard.saving") : t("dashboard.createInvoice")}
-                </button>
-              ) : null}
-              <Link
-                href={`/deal/${deal.id}`}
-                role="menuitem"
+            <>
+              {/* Dims the board so it's unambiguous which card an open menu
+                  belongs to, even when columns stack cards tightly enough
+                  for the menu to visually reach the card below (see
+                  OBSERVATIONS.md). Mirrors add-deal-dialog.tsx's backdrop
+                  contract (fixed, aria-hidden, dismiss-on-click) so it's
+                  also recognized as an active-overlay backdrop by the UX
+                  audit detectors. */}
+              <div
+                data-testid="deal-card-menu-backdrop"
+                className="fixed inset-0 z-40 bg-black/20"
                 onClick={() => setMenuOpen(false)}
-                className="flex h-11 w-full items-center rounded-md px-3 text-left text-[13px] font-semibold text-ink"
+                aria-hidden="true"
+              />
+              <div
+                role="menu"
+                className="absolute right-0 top-full z-50 mt-1 min-w-[10rem] rounded-lg border border-line bg-surface p-1 shadow-md"
               >
-                {t("dashboard.viewDetail")}
-              </Link>
-            </div>
+                {previousStage ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={isSaving}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onStageChange(deal.id, previousStage.value);
+                    }}
+                    className="flex h-11 w-full items-center rounded-md px-3 text-left text-[13px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {t("dashboard.moveToPreviousStage", { stage: t(PIPELINE_STAGE_KEYS[previousStage.value]) })}
+                  </button>
+                ) : null}
+                {nextStage ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={isSaving}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onStageChange(deal.id, nextStage.value);
+                    }}
+                    className="flex h-11 w-full items-center rounded-md px-3 text-left text-[13px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {t("dashboard.moveToNextStage", { stage: t(PIPELINE_STAGE_KEYS[nextStage.value]) })}
+                  </button>
+                ) : null}
+                {canCreateInvoice ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={isSaving}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onCreateInvoice(deal.id);
+                    }}
+                    className="flex h-11 w-full items-center rounded-md px-3 text-left text-[13px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {isSaving ? t("dashboard.saving") : t("dashboard.createInvoice")}
+                  </button>
+                ) : null}
+                <Link
+                  href={`/deal/${deal.id}`}
+                  role="menuitem"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex h-11 w-full items-center rounded-md px-3 text-left text-[13px] font-semibold text-ink"
+                >
+                  {t("dashboard.viewDetail")}
+                </Link>
+              </div>
+            </>
           ) : null}
         </div>
       </div>

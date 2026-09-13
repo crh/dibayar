@@ -100,8 +100,8 @@ async function seed() {
 
   const dealRows = [
     { id: `${prefix}-deal-masuk`, userId: ids.owner, brand: 'Brand Masuk', contactWa: 'not-a-phone', scope: 'Invalid phone repair fixture', feeIdr: 1_250_000, status: DealStatus.MASUK, deadline: future },
-    { id: `${prefix}-deal-nego`, userId: ids.owner, brand: 'Brand Negosiasi', contactWa: '628111111111', scope: 'One short-form video', feeIdr: 2_500_000, status: DealStatus.NEGO, paymentTerms: '14 hari setelah konten tayang' },
-    { id: `${prefix}-deal-deal`, userId: ids.owner, brand: 'Brand Deal', contactWa: '628122222222', scope: 'Two videos and three story frames', feeIdr: 3_750_000, status: DealStatus.DEAL },
+    { id: `${prefix}-deal-nego`, userId: ids.owner, brand: 'Brand Negosiasi', contactWa: '628111111111', scope: 'Satu video pendek', feeIdr: 2_500_000, status: DealStatus.NEGO, paymentTerms: '14 hari setelah konten tayang' },
+    { id: `${prefix}-deal-deal`, userId: ids.owner, brand: 'Brand Deal', contactWa: '628122222222', scope: 'Dua video dan tiga story', feeIdr: 3_750_000, status: DealStatus.DEAL },
     { id: `${prefix}-deal-konten`, userId: ids.owner, brand: 'Brand Konten', contactWa: '6591234567', scope: 'International phone fixture', feeIdr: 4_000_000, status: DealStatus.KONTEN },
     { id: `${prefix}-deal-invoice`, userId: ids.owner, brand: 'Brand dengan nama sangat panjang untuk menguji pemotongan aman tanpa merusak dokumen', contactWa: '628133333333', scope: 'Long text fixture: deliver a campaign recap, links, captions, and final exported assets without clipping.', feeIdr: 12_345_678, status: DealStatus.INVOICE, paymentTerms: 'Pembayaran 30 hari setelah invoice diterima. Referensi: https://example.invalid/a/very/long/path/for/layout/testing' },
     { id: `${prefix}-deal-paid`, userId: ids.owner, brand: 'Brand Dibayar', contactWa: '628144444444', scope: 'Paid fixture', feeIdr: 5_000_000, status: DealStatus.DIBAYAR },

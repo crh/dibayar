@@ -11,7 +11,7 @@ export function SideNav({ pathname }: { pathname: string }) {
     <nav
       data-testid="side-nav"
       aria-label={t("nav.label")}
-      className="hidden min-[1024px]:flex min-[1024px]:sticky min-[1024px]:top-16 min-[1024px]:h-[calc(100vh-4rem)] min-[1024px]:overflow-y-auto min-[1024px]:w-[240px] min-[1440px]:w-[264px] flex-shrink-0 flex-col gap-1 border-r border-line bg-surface p-3"
+      className="hidden min-[1024px]:flex min-[1024px]:sticky min-[1024px]:top-16 min-[1024px]:min-h-[calc(100vh-4rem)] min-[1024px]:overflow-y-auto min-[1024px]:w-[240px] min-[1440px]:w-[264px] flex-shrink-0 flex-col gap-1 border-r border-line bg-surface p-3"
     >
       {NAV_ITEMS.map((item) => {
         const active = isNavItemActive(pathname, item.href);
