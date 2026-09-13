@@ -71,18 +71,11 @@ npx playwright install chromium
 
 **Never regenerate a baseline against an arbitrary system Chrome install.** Only regenerate against the pinned `npx playwright install chromium` binary, after confirming (screenshot diff, not just "tests pass") that the actual rendered UI -- not just pixels -- is correct. See "To update a visual baseline" below.
 
-**The same Chromium binary still isn't enough on its own.** Even with `channel: "chrome"` removed, a baseline generated on an arbitrary dev machine can still mismatch the `ubuntu-latest` CI runner by a handful of pixels -- font/fontconfig/freetype and other OS-level rendering-stack differences aren't pinned by the Playwright version. Generate/regenerate `@visual` baselines inside the official Playwright Docker image, pinned to the exact version in `package.json` (`v1.62.1` at this writing -- match whatever `@playwright/test` currently resolves to), not on a bare host:
+**The same Chromium binary still isn't enough on its own -- generate baselines on the actual CI runner, not a dev machine.** Even with `channel: "chrome"` removed, a baseline generated on an arbitrary dev machine can mismatch the `ubuntu-latest` CI runner by a handful of pixels (OS font/fontconfig/freetype differences, not pinned by the Playwright version). This isn't hypothetical: baselines regenerated locally via `npx playwright install chromium`, and separately inside the official Playwright Docker image pinned to the exact installed version (`mcr.microsoft.com/playwright:v1.62.1-noble`), both still failed in CI with small anti-aliasing-level diffs (a handful of pixels out of hundreds of thousands). Only generating them on an actual `ubuntu-latest` GitHub Actions runner matched CI.
 
-```bash
-docker run --rm --network host \
-  -v "$(pwd)":/work -v dibayar-container-node-modules:/work/node_modules \
-  -w /work --env-file <a local env file with DATABASE_URL, E2E_FIXTURE_CONFIRM=non-production> \
-  -e HOME=/tmp \
-  mcr.microsoft.com/playwright:v1.62.1-noble \
-  bash -lc 'npm ci && npx prisma migrate deploy && npm run test:e2e:update-snapshots'
-```
+**Use the `Update visual baselines` workflow** (`.github/workflows/update-visual-baselines.yml`, `workflow_dispatch`-only): Actions tab -> "Update visual baselines" -> "Run workflow" against your branch, then download the `updated-visual-baselines` artifact from the completed run and replace the files under `e2e/visual/visual.spec.ts-snapshots/` with its contents. Equivalently: `gh workflow run update-visual-baselines.yml --ref <your-branch>`, then `gh run download <run-id> -n updated-visual-baselines -D <dir>`.
 
-(`--network host` so the container reaches the same `127.0.0.1:55432` Postgres as the rest of the repo; the named volume keeps the container's `node_modules` install separate from the host's.) This container is closer to the actual `ubuntu-latest` CI runner than a bare dev machine, but still isn't a byte-for-byte guarantee -- if a baseline regenerated this way still mismatches in CI, that's a real CI-environment difference to investigate, not a reason to weaken the diff threshold.
+This still doesn't replace the inspection step -- a genuine UI regression regenerates "clean" on CI too. Always inspect the diff (or, for a fresh regeneration, the new image itself) before trusting it; see "To update a visual baseline" below.
 
 ## PDF tooling
 

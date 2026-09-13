@@ -164,12 +164,13 @@ is stale-baseline/browser-rendering drift, not a real UI regression -- before
 regenerating. After regenerating, re-run `npm run test:e2e:visual` once more
 and confirm it passes clean with no further snapshot writes.
 
-A bare dev machine's Chromium can still render a handful of pixels
-differently than the `ubuntu-latest` CI runner (OS font/fontconfig/freetype
-stack, not pinned by the Playwright version) -- run the update inside the
-official Playwright Docker image pinned to the exact version in
-`package.json` instead of on the host; see `docs/testing/UX_AUDIT.md`
-"Browser strategy" for the exact `docker run` invocation.
+A bare dev machine's Chromium (and even the official Playwright Docker image,
+pinned to the exact installed version) can still render a handful of pixels
+differently than the actual `ubuntu-latest` CI runner -- confirmed in
+practice, not just a theoretical risk. Use the `Update visual baselines`
+GitHub Actions workflow instead (`workflow_dispatch`-only); see
+`docs/testing/UX_AUDIT.md` "Browser strategy" for how to run it and where to
+get the regenerated PNGs from.
 
 ## Security safeguards (recap)
 

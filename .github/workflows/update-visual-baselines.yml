@@ -19,13 +19,6 @@ name: Update visual baselines
 # on the "real" runner; a genuine UI regression would regenerate "clean" too.
 on:
   workflow_dispatch:
-  # TEMPORARY, removed before merge: workflow_dispatch can only be invoked via
-  # API/CLI once this file is on the default branch, but this branch isn't
-  # merged yet and this workflow needs to actually run once to produce
-  # environment-accurate baselines. Restricted to this exact branch name so
-  # it can't fire for anyone else's branch/PR.
-  push:
-    branches: [test/stabilize-playwright-visual-baselines]
 
 jobs:
   update-visual-baselines:
