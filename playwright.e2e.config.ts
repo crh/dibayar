@@ -68,8 +68,14 @@ export default defineConfig({
   projects: [
     // --- Critical PR-gate tier: Chromium only, desktop + mobile viewport ---
     {
+      // Playwright-managed Chromium (devices["Desktop Chrome"]'s own
+      // defaultBrowserType), not the "chrome" channel -- that resolved to
+      // whatever system Google Chrome happened to be on the runner/host,
+      // which drifts as Chrome auto-updates and isn't reproducible for
+      // visual-regression baselines. See docs/testing/E2E.md "Browser
+      // strategy".
       name: "chromium",
-      use: { ...devices["Desktop Chrome"], channel: "chrome" },
+      use: { ...devices["Desktop Chrome"] },
     },
     {
       name: "chromium-mobile",
