@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { auth } from "@/auth";
 import { getOwnedDeal, listDealStageTransitions, type DealRecord } from "@/lib/deals";
+import { findInvoiceByDealId, type InvoiceRecord } from "@/lib/invoices";
 import DealDetailPage from "./page";
 
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
@@ -9,6 +10,11 @@ vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/deals", async () => {
   const actual = await vi.importActual<typeof import("@/lib/deals")>("@/lib/deals");
   return { ...actual, getOwnedDeal: vi.fn(), listDealStageTransitions: vi.fn() };
+});
+
+vi.mock("@/lib/invoices", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/invoices")>("@/lib/invoices");
+  return { ...actual, findInvoiceByDealId: vi.fn() };
 });
 
 const { notFound, redirect } = vi.hoisted(() => ({
@@ -22,9 +28,17 @@ const { notFound, redirect } = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ notFound, redirect }));
 
 vi.mock("./deal-detail-client", () => ({
-  default: ({ initialDeal, history }: { initialDeal: DealRecord; history: unknown[] }) => (
+  default: ({
+    initialDeal,
+    history,
+    initialInvoice,
+  }: {
+    initialDeal: DealRecord;
+    history: unknown[];
+    initialInvoice: InvoiceRecord | null;
+  }) => (
     <div data-testid="deal-detail-client">
-      {initialDeal.brand} · {history.length}
+      {initialDeal.brand} · {history.length} · {initialInvoice?.number ?? "no-invoice"}
     </div>
   ),
 }));
@@ -32,6 +46,7 @@ vi.mock("./deal-detail-client", () => ({
 const mockedAuth = vi.mocked(auth);
 const mockedGetOwnedDeal = vi.mocked(getOwnedDeal);
 const mockedListDealStageTransitions = vi.mocked(listDealStageTransitions);
+const mockedFindInvoiceByDealId = vi.mocked(findInvoiceByDealId);
 
 const dealFixture: DealRecord = {
   id: "deal-1",
@@ -79,10 +94,12 @@ describe("/deal/:id", () => {
     mockedListDealStageTransitions.mockResolvedValue([
       { id: "t-1", dealId: "deal-1", fromStatus: null, toStatus: "MASUK", createdAt: new Date() },
     ]);
+    mockedFindInvoiceByDealId.mockResolvedValue(null);
 
     const page = await DealDetailPage({ params: Promise.resolve({ id: "deal-1" }) });
     render(page);
 
-    expect(screen.getByTestId("deal-detail-client").textContent).toBe("Kopi Nusantara · 1");
+    expect(screen.getByTestId("deal-detail-client").textContent).toBe("Kopi Nusantara · 1 · no-invoice");
+    expect(mockedFindInvoiceByDealId).toHaveBeenCalledWith(expect.anything(), "deal-1", "user-1");
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { DealRecord, DealStageTransitionRecord } from "@/lib/deals";
+import type { InvoiceRecord } from "@/lib/invoices";
 import DealDetailClient from "./deal-detail-client";
 
 const dealFixture: DealRecord = {
@@ -34,7 +35,10 @@ beforeEach(() => {
 
 describe("DealDetailClient", () => {
   it("shows the deal's brand, current stage, fee, deadline, and scope", () => {
-    render(<DealDetailClient initialDeal={dealFixture} history={[]} />);
+    // Pinned before dealFixture's own deadline so this deadline-text
+    // assertion stays valid regardless of which real day the suite runs on
+    // -- see the dedicated overdue-styling tests below for that path.
+    render(<DealDetailClient initialDeal={dealFixture} history={[]} now={new Date("2026-08-15T00:00:00.000Z")} />);
 
     expect(screen.getByRole("heading", { name: "Kopi Nusantara" })).toBeDefined();
     expect(screen.getByText(/Nego/)).toBeDefined();
@@ -203,5 +207,108 @@ describe("DealDetailClient XS band (T-26)", () => {
     const row = screen.getByLabelText("Perbaiki nomor WhatsApp").closest("div")!;
     expect(row.className).toMatch(/flex-col/);
     expect(row.className).toMatch(/min-\[360px\]:flex-row/);
+  });
+});
+
+describe("DealDetailClient — next action (deal↔invoice continuity)", () => {
+  it("shows stage-transition buttons that PATCH the deal and update the shown stage", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(jsonResponse(200, { deal: { ...dealFixture, status: "DEAL" } }))),
+    );
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={dealFixture} history={[]} />);
+
+    expect(screen.getByRole("button", { name: "Kembali ke Masuk" })).toBeDefined();
+    await user.click(screen.getByRole("button", { name: "Lanjut ke Deal" }));
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/deals/deal-1",
+      expect.objectContaining({ method: "PATCH", body: JSON.stringify({ status: "DEAL" }) }),
+    );
+    expect(await screen.findByText(/Deal/)).toBeDefined();
+  });
+
+  it("offers Buat invoice for a deal at the Invoice stage with no invoice yet, and shows a link to the created invoice on success", async () => {
+    const createdInvoice: InvoiceRecord = {
+      id: "inv-1",
+      userId: "user-1",
+      dealId: "deal-1",
+      number: "INV/2026/09/001",
+      subtotalIdr: 2_500_000,
+      withholdingTaxType: "NONE",
+      status: "DRAFT",
+      dueDate: null,
+      createdAt: new Date("2026-09-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-09-01T00:00:00.000Z"),
+    };
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(201, { invoice: createdInvoice }))));
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={{ ...dealFixture, status: "INVOICE" }} history={[]} />);
+
+    const createButton = screen.getByRole("button", { name: "Buat invoice" });
+    await user.click(createButton);
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/api/invoices",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ dealId: "deal-1", withholdingTaxType: "NONE" }),
+      }),
+    );
+    expect(await screen.findByRole("link", { name: "Lihat invoice INV/2026/09/001 →" })).toHaveProperty(
+      "href",
+      expect.stringContaining("/invoice/inv-1"),
+    );
+    expect(screen.queryByRole("button", { name: "Buat invoice" })).toBeNull();
+  });
+
+  it("shows a link straight to the invoice when one already exists for this deal, instead of Buat invoice", () => {
+    const existingInvoice: InvoiceRecord = {
+      id: "inv-2",
+      userId: "user-1",
+      dealId: "deal-1",
+      number: "INV/2026/09/002",
+      subtotalIdr: 2_500_000,
+      withholdingTaxType: "NONE",
+      status: "SENT",
+      dueDate: null,
+      createdAt: new Date("2026-09-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-09-01T00:00:00.000Z"),
+    };
+    render(
+      <DealDetailClient
+        initialDeal={{ ...dealFixture, status: "INVOICE" }}
+        history={[]}
+        initialInvoice={existingInvoice}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Lihat invoice INV/2026/09/002 →" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Buat invoice" })).toBeNull();
+  });
+
+  it("shows a 'Telat N hari' label for a deal whose deadline has already passed", () => {
+    render(
+      <DealDetailClient
+        initialDeal={{ ...dealFixture, status: "KONTEN", deadline: new Date("2026-08-28T00:00:00.000Z") }}
+        history={[]}
+        now={new Date("2026-09-01T00:00:00.000Z")}
+      />,
+    );
+
+    expect(screen.getByText(/Telat 4 hari/)).toBeDefined();
+  });
+
+  it("never shows an overdue label for a Dibayar (paid/terminal) deal, even with a past deadline", () => {
+    render(
+      <DealDetailClient
+        initialDeal={{ ...dealFixture, status: "DIBAYAR", deadline: new Date("2026-08-28T00:00:00.000Z") }}
+        history={[]}
+        now={new Date("2026-09-01T00:00:00.000Z")}
+      />,
+    );
+
+    expect(screen.queryByText(/Telat/)).toBeNull();
   });
 });

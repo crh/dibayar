@@ -89,6 +89,19 @@ export async function getOwnedInvoice(db: InvoiceReadDb, id: string, userId: str
   return db.invoice.findFirst({ where: { id, userId } });
 }
 
+export type InvoiceByDealDb = {
+  invoice: {
+    findFirst(args: { where: { dealId: string; userId: string } }): Promise<InvoiceRecord | null>;
+  };
+};
+
+// The deal detail page's own "is this deal already invoiced" check -- lets
+// it show a direct link to the existing invoice, or the create-invoice
+// action when there isn't one yet, instead of neither ever appearing there.
+export async function findInvoiceByDealId(db: InvoiceByDealDb, dealId: string, userId: string) {
+  return db.invoice.findFirst({ where: { dealId, userId } });
+}
+
 export type InvoiceContactDb = {
   invoice: {
     findFirst(args: {
