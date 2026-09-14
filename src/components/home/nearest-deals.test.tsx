@@ -22,10 +22,14 @@ function makeDeal(overrides: Partial<DealRecord> = {}): DealRecord {
   };
 }
 
+// Before every fixture deadline below, so none of these tests exercise the
+// overdue-styling path by accident -- that has its own dedicated tests.
+const NOW = new Date("2026-07-01T00:00:00.000Z");
+
 function renderNearest(deals: DealRecord[] | null) {
   return render(
     <LanguageProvider initialLanguage="id">
-      <NearestDeals deals={deals} />
+      <NearestDeals deals={deals} now={NOW} />
     </LanguageProvider>,
   );
 }
@@ -63,5 +67,23 @@ describe("NearestDeals — selection", () => {
     renderNearest([]);
 
     expect(screen.getByRole("link", { name: "Lihat semua →" }).className).toMatch(/ds-tap-target/);
+  });
+
+  it("shows a 'Telat N hari' label instead of the plain date for a deal whose deadline has already passed", () => {
+    const overdueDeal = makeDeal({ id: "deal-overdue", brand: "Overdue Brand", status: "KONTEN", deadline: new Date("2026-06-28T00:00:00.000Z") });
+    render(
+      <LanguageProvider initialLanguage="id">
+        <NearestDeals deals={[overdueDeal]} now={new Date("2026-07-01T00:00:00.000Z")} />
+      </LanguageProvider>,
+    );
+
+    expect(screen.getByText("Telat 3 hari")).toBeDefined();
+  });
+
+  it("shows the plain date, not an overdue label, for a deal whose deadline has not passed", () => {
+    const upcomingDeal = makeDeal({ id: "deal-upcoming", brand: "Upcoming Brand", status: "KONTEN", deadline: new Date("2026-07-05T00:00:00.000Z") });
+    renderNearest([upcomingDeal]);
+
+    expect(screen.queryByText(/Telat/)).toBeNull();
   });
 });

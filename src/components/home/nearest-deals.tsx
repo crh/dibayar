@@ -6,6 +6,7 @@ import type { DealRecord } from "@/lib/deals";
 import { StatusChip } from "@/components/design-system";
 import { formatMoney } from "@/lib/format/money";
 import { formatDate } from "@/lib/format/date";
+import { isOverdueByDueDate, daysUntilDue } from "@/lib/invoice-date-status";
 
 const FINAL_STAGE: DealRecord["status"] = "DIBAYAR";
 
@@ -24,12 +25,13 @@ function selectNearestDeals(deals: DealRecord[]): DealRecord[] {
 
 type NearestDealsProps = {
   deals: DealRecord[] | null;
+  now: Date;
   loading?: boolean;
   error?: boolean;
   onRetry?: () => void;
 };
 
-export function NearestDeals({ deals, loading = false, error = false, onRetry }: NearestDealsProps) {
+export function NearestDeals({ deals, now, loading = false, error = false, onRetry }: NearestDealsProps) {
   const { language, t } = useLanguage();
   const nearest = deals ? selectNearestDeals(deals) : [];
 
@@ -67,25 +69,32 @@ export function NearestDeals({ deals, loading = false, error = false, onRetry }:
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {nearest.map((deal) => (
-            <li key={deal.id}>
-              <Link
-                href={`/deal/${deal.id}`}
-                className="flex min-h-16 items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3 outline-none transition-colors hover:border-primary focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-[15px] font-semibold text-ink">{deal.brand}</p>
-                  <p className="mt-0.5 text-[13px] text-muted">
-                    {deal.deadline ? formatDate(deal.deadline) : t("invoice.notSet")}
-                  </p>
-                </div>
-                <div className="flex flex-shrink-0 flex-col items-end gap-1">
-                  <p className="text-[15px] font-bold tabular-nums text-ink">{formatMoney(deal.feeIdr)}</p>
-                  <StatusChip status={deal.status} language={language} />
-                </div>
-              </Link>
-            </li>
-          ))}
+          {nearest.map((deal) => {
+            const overdue = isOverdueByDueDate(deal.deadline, now);
+            return (
+              <li key={deal.id}>
+                <Link
+                  href={`/deal/${deal.id}`}
+                  className="flex min-h-16 items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3 outline-none transition-colors hover:border-primary focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-[15px] font-semibold text-ink">{deal.brand}</p>
+                    <p className={`mt-0.5 text-[13px] ${overdue ? "font-semibold text-overdue" : "text-muted"}`}>
+                      {deal.deadline
+                        ? overdue
+                          ? t("home.overdueBy", { days: String(Math.abs(daysUntilDue(deal.deadline, now))) })
+                          : formatDate(deal.deadline)
+                        : t("invoice.notSet")}
+                    </p>
+                  </div>
+                  <div className="flex flex-shrink-0 flex-col items-end gap-1">
+                    <p className="text-[15px] font-bold tabular-nums text-ink">{formatMoney(deal.feeIdr)}</p>
+                    <StatusChip status={deal.status} language={language} />
+                  </div>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>

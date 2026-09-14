@@ -56,7 +56,7 @@ export default function BerandaClient({ deals, dealsError, invoices, invoicesErr
         </div>
 
         <div className="flex flex-col gap-6 min-[1024px]:col-start-1 min-[1024px]:col-span-8 min-[1024px]:row-start-2">
-          <NearestDeals deals={deals} loading={false} error={dealsError} onRetry={retry} />
+          <NearestDeals deals={deals} now={referenceNow} loading={false} error={dealsError} onRetry={retry} />
         </div>
       </Grid>
     </main>

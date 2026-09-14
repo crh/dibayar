@@ -20,7 +20,7 @@ export default function BerandaLoading() {
         </div>
 
         <div className="flex flex-col gap-6 min-[1024px]:col-start-1 min-[1024px]:col-span-8 min-[1024px]:row-start-2">
-          <NearestDeals deals={null} loading />
+          <NearestDeals deals={null} now={now} loading />
         </div>
       </Grid>
     </main>
