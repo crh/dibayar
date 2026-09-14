@@ -16,7 +16,9 @@ export default defineConfig({
   use: {
     baseURL,
     browserName: "chromium",
-    channel: "chrome",
+    // Playwright-managed Chromium, not a channel that resolves to whatever
+    // system Google Chrome the runner/host happens to have installed --
+    // see docs/testing/UX_AUDIT.md "Browser strategy" for why.
     headless: true,
     locale: "id-ID",
     timezoneId: "Asia/Jakarta",

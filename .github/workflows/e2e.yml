@@ -104,6 +104,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      # tests/ux-audit/fixtures.baseline.spec.ts and t27.verification.spec.ts
+      # shell out to pdftotext/pdfinfo (poppler-utils) to assert on real PDF
+      # content -- not preinstalled on the ubuntu-latest runner image.
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+          pdftotext -v
+          pdfinfo -v
       - run: npx prisma migrate deploy
       - run: npm run ux:audit
       - if: always()

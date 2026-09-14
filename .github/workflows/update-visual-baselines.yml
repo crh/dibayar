@@ -1,0 +1,61 @@
+name: Update visual baselines
+
+# Manual-only tool for intentionally regenerating e2e/visual/visual.spec.ts's
+# @visual snapshots. Never runs on pull_request/push -- see
+# docs/testing/E2E.md "To intentionally update a @visual baseline".
+#
+# Why this exists instead of regenerating locally or in a local Docker
+# container: even Playwright's official Docker image, pinned to the exact
+# @playwright/test version, still rendered a handful of pixels differently
+# than the actual ubuntu-latest runner in practice (OS font/fontconfig/
+# freetype stack isn't fully pinned by the Playwright version or the browser
+# binary alone). Running this on the same runner image CI itself uses is the
+# only way to guarantee the baseline matches what CI will compare against.
+#
+# Usage: Actions tab -> "Update visual baselines" -> Run workflow. Download
+# the "updated-visual-baselines" artifact from the run, replace the files
+# under e2e/visual/visual.spec.ts-snapshots/ with its contents, inspect the
+# diff, and commit -- do not skip the inspection step just because this ran
+# on the "real" runner; a genuine UI regression would regenerate "clean" too.
+on:
+  workflow_dispatch:
+
+jobs:
+  update-visual-baselines:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dibayar_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/dibayar_test?schema=public
+      AUTH_SECRET: ci-only-placeholder-not-a-real-secret
+      AUTH_GOOGLE_ID: ci-only-placeholder
+      AUTH_GOOGLE_SECRET: ci-only-placeholder
+      E2E_FIXTURE_CONFIRM: non-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx prisma migrate deploy
+      - run: npm run test:e2e:update-snapshots
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: updated-visual-baselines
+          path: e2e/visual/visual.spec.ts-snapshots/
+          retention-days: 7

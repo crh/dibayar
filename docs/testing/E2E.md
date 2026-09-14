@@ -141,6 +141,37 @@ determinism. `firefox` and `webkit` projects exist in
 `playwright.e2e.config.ts` for a broader/nightly run
 (`npm run test:e2e:all-browsers`) -- not wired into the PR-gate CI job.
 
+**Browser used for `chromium`/`chromium-mobile`:** Playwright's own bundled
+Chromium (no `channel` set), not a `channel: "chrome"` project pointed at
+whatever system Google Chrome happens to be installed -- that channel
+resolves to whichever Chrome build the runner/host has, which drifts as
+Chrome auto-updates and isn't pinned to the `@playwright/test` version in
+`package.json`. That drift is what caused the `@visual` suite's baselines
+(`beranda-desktop`, `beranda-mobile`, `invoice-detail-desktop`, etc.) to go
+stale in CI. Install the pinned browser locally with:
+
+```bash
+npx playwright install chromium
+```
+
+Do not add `channel: "chrome"` back to either project without a documented,
+repository-specific reason.
+
+**To intentionally update a `@visual` baseline**: `npm run
+test:e2e:update-snapshots`. First run `npm run test:e2e:visual` (no
+`--update-snapshots`) and inspect every reported diff -- confirm the mismatch
+is stale-baseline/browser-rendering drift, not a real UI regression -- before
+regenerating. After regenerating, re-run `npm run test:e2e:visual` once more
+and confirm it passes clean with no further snapshot writes.
+
+A bare dev machine's Chromium (and even the official Playwright Docker image,
+pinned to the exact installed version) can still render a handful of pixels
+differently than the actual `ubuntu-latest` CI runner -- confirmed in
+practice, not just a theoretical risk. Use the `Update visual baselines`
+GitHub Actions workflow instead (`workflow_dispatch`-only); see
+`docs/testing/UX_AUDIT.md` "Browser strategy" for how to run it and where to
+get the regenerated PNGs from.
+
 ## Security safeguards (recap)
 
 - `scripts/e2e-fixtures.ts` will not run without `E2E_FIXTURE_CONFIRM=non-production`
@@ -154,6 +185,26 @@ determinism. `firefox` and `webkit` projects exist in
 
 ## Known limitations / not yet automated
 
+- **`e2e/visual/visual.spec.ts` has no committed `chromium-mobile` baselines.**
+  Neither `npm run test:e2e:visual` nor `ux:audit`'s own `@visual` step ever
+  select the `chromium-mobile` project (both pass `--project=chromium`
+  explicitly), so this has never been a gap in the actual CI gates
+  (`e2e-critical` excludes `@visual` via `--grep @critical`; `ux-audit`'s
+  `@visual` step is `chromium`-only). It only surfaces if someone runs the
+  unfiltered `npm run test:e2e` locally, where Playwright will auto-write (and
+  fail on) brand-new `-chromium-mobile-linux.png` files. Mobile coverage that
+  *is* intentional (`beranda-mobile`) is captured by resizing the viewport
+  inside the `chromium` project, not by a second project run. Adding a real
+  `chromium-mobile` `@visual` tier is a scope decision for whoever owns this
+  suite, not implied by this doc.
+- **`e2e/visual/visual.spec.ts` does not call `reseedFixtures()`.** Per "How
+  the data fixtures work" above, any spec that mutates the shared owner
+  fixture must reseed in `beforeEach`, or a later spec in the same invocation
+  inherits its mutation. `visual.spec.ts` doesn't, so running the full `npm
+  run test:e2e` (not `test:e2e:visual`, which runs `@visual` alone) can fail
+  its `Pengaturan main state` snapshot if `settings/settings.spec.ts` ran
+  first in the same invocation and changed the owner's saved name. Not
+  reachable from either real CI job for the same reason as the point above.
 - No cross-browser (Firefox/WebKit) run has been exercised in this sandboxed
   environment -- `npx playwright install` succeeded for the browsers, but
   `--with-deps` (system libraries) failed for lack of `sudo`, so Firefox/WebKit

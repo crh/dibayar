@@ -57,6 +57,38 @@ npm run ux:report                # regenerate the report from whatever JSON resu
 
 `ux:audit` needs the same local Postgres target as the rest of the repo (`127.0.0.1:55432/dibayar_test`, `.env.local`'s `DATABASE_URL`) -- see `docs/ux-implementation/` and `CLAUDE.md`'s "Database and migration process". Never point it at anything else.
 
+## Browser strategy
+
+`playwright.config.ts` and `playwright.e2e.config.ts`'s `chromium` project both use Playwright's own bundled Chromium (no `channel` set) -- **not** `channel: "chrome"`. A `channel: "chrome"` project launches whatever Google Chrome build happens to be installed on the machine running the tests; on CI that's whatever the `ubuntu-latest` runner image ships that week, which changes as the image updates and is not pinned to the Playwright version in `package.json`. That drift is exactly what caused the `beranda-desktop`/`beranda-mobile`/`invoice-detail-desktop` (and every other `@visual`) baseline to go stale: same UI, same content, different sub-pixel font rendering from a different browser build.
+
+Install the pinned browser locally with:
+
+```bash
+npx playwright install chromium
+```
+
+(matches CI's `npx playwright install --with-deps chromium` -- the `--with-deps` part only adds Ubuntu system libraries, irrelevant on a dev machine that already has them). Do not install/rely on `google-chrome`/`chrome` for this repo's Playwright suites, and do not add `channel: "chrome"` back without a documented, repository-specific reason -- it reintroduces the same non-reproducible baseline drift.
+
+**Never regenerate a baseline against an arbitrary system Chrome install.** Only regenerate against the pinned `npx playwright install chromium` binary, after confirming (screenshot diff, not just "tests pass") that the actual rendered UI -- not just pixels -- is correct. See "To update a visual baseline" below.
+
+**The same Chromium binary still isn't enough on its own -- generate baselines on the actual CI runner, not a dev machine.** Even with `channel: "chrome"` removed, a baseline generated on an arbitrary dev machine can mismatch the `ubuntu-latest` CI runner by a handful of pixels (OS font/fontconfig/freetype differences, not pinned by the Playwright version). This isn't hypothetical: baselines regenerated locally via `npx playwright install chromium`, and separately inside the official Playwright Docker image pinned to the exact installed version (`mcr.microsoft.com/playwright:v1.62.1-noble`), both still failed in CI with small anti-aliasing-level diffs (a handful of pixels out of hundreds of thousands). Only generating them on an actual `ubuntu-latest` GitHub Actions runner matched CI.
+
+**Use the `Update visual baselines` workflow** (`.github/workflows/update-visual-baselines.yml`, `workflow_dispatch`-only): Actions tab -> "Update visual baselines" -> "Run workflow" against your branch, then download the `updated-visual-baselines` artifact from the completed run and replace the files under `e2e/visual/visual.spec.ts-snapshots/` with its contents. Equivalently: `gh workflow run update-visual-baselines.yml --ref <your-branch>`, then `gh run download <run-id> -n updated-visual-baselines -D <dir>`.
+
+This still doesn't replace the inspection step -- a genuine UI regression regenerates "clean" on CI too. Always inspect the diff (or, for a fresh regeneration, the new image itself) before trusting it; see "To update a visual baseline" below.
+
+## PDF tooling
+
+`tests/ux-audit/fixtures.baseline.spec.ts` and `t27.verification.spec.ts` shell out directly to the `pdftotext`/`pdfinfo` binaries (`poppler-utils` on Debian/Ubuntu) to assert on real generated-PDF text/metadata, not just "a PDF-shaped file exists". Install locally:
+
+```bash
+sudo apt-get update && sudo apt-get install -y poppler-utils
+pdftotext -v
+pdfinfo -v
+```
+
+CI (`ux-audit` job in `.github/workflows/e2e.yml`) installs the same package before `npm run ux:audit`. Do not replace these tests' `pdftotext`/`pdfinfo` assertions with a weaker file-exists check to avoid installing the binary.
+
 ## Viewport matrix
 
 `support/viewport-matrix.ts`:
@@ -119,7 +151,7 @@ Seeded by `scripts/ux-fixtures.ts` (`npm run ux:fixtures -- seed|verify|cleanup`
 
 `routes/matrix.spec.ts` captures a curated, hand-picked set (not a full route x state x viewport cross product) at two representative bands, `mobile375` and `desktop1440` -- the same two-viewport pattern the task spec's own example matrix uses. 9 route/state pairs x 2 viewports = 18 screenshots under `artifacts/ux-audit/screenshots/`, each also checked for page-level overflow and sub-44px controls. To add a route/state: add one `test(...)` block following the existing pattern (login as the right fixture user, `goto200`, one semantic assertion that the right state actually loaded, then `captureAndCheck` per viewport).
 
-**Visual pixel regression is intentionally not re-implemented here.** `scripts/ux-fixtures.ts` uses relative dates (`now`/`past`/`future`), so a `toHaveScreenshot()` baseline built from it would drift every day -- exactly the "brittle baseline caused by timestamps" the harness is supposed to avoid. `e2e/visual/visual.spec.ts` already covers these same routes/states with a stable, fixed-calendar-date fixture pipeline (`scripts/e2e-fixtures.ts`); `ux:audit` runs it (`--grep @visual`) and the report's "Visual Regression status" reflects its result. **To update a visual baseline**: `npm run test:e2e:update-snapshots`, per `e2e/visual/visual.spec.ts`'s own header comment.
+**Visual pixel regression is intentionally not re-implemented here.** `scripts/ux-fixtures.ts` uses relative dates (`now`/`past`/`future`), so a `toHaveScreenshot()` baseline built from it would drift every day -- exactly the "brittle baseline caused by timestamps" the harness is supposed to avoid. `e2e/visual/visual.spec.ts` already covers these same routes/states with a stable, fixed-calendar-date fixture pipeline (`scripts/e2e-fixtures.ts`); `ux:audit` runs it (`--grep @visual`) and the report's "Visual Regression status" reflects its result. **To update a visual baseline**: `npm run test:e2e:update-snapshots`, per `e2e/visual/visual.spec.ts`'s own header comment. Before running it, first run `npm run test:e2e:visual` (no `--update-snapshots`) and inspect every reported diff -- actual vs. expected vs. the pixel diff, plus the DOM/fixture state -- to confirm the mismatch is stale-baseline/rendering drift and not a real product regression. Never regenerate a baseline solely because CI is red; if the rendered UI looks wrong, stop and report it instead of updating the snapshot. After regenerating, re-run `npm run test:e2e:visual` once more without `--update-snapshots` and confirm it passes clean -- that's the proof the new baseline is actually deterministic, not just "whatever this run happened to produce".
 
 ## Proving the detectors work
 
