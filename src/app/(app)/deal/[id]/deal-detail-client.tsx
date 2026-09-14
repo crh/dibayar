@@ -192,7 +192,7 @@ export default function DealDetailClient({
         {previousStage || nextStage || canCreateInvoice || invoice ? (
           <div className="mt-4 border-t border-line pt-4">
             <p className="text-[13px] font-semibold text-ink">{t("deal.detailNextActionTitle")}</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="mt-2 flex flex-col items-start gap-2 min-[360px]:flex-row min-[360px]:flex-wrap min-[360px]:items-center">
               {previousStage ? (
                 <button
                   type="button"
