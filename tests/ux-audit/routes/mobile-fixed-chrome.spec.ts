@@ -25,6 +25,30 @@
 // the last real interactive element never sits under the fixed nav or FAB
 // -- a deterministic geometry check, not a screenshot diff, per this
 // remediation's regression-coverage requirement.
+//
+// Follow-up (mobile-polish batch): the above only ever covered pages long
+// enough that scrolling the *document* to its end was meaningful. Beranda's
+// "3 deal terdekat" list is short and, with typical fixture data, the whole
+// page fits (or nearly fits) within the viewport -- so `window.scrollTo`
+// to the document's bottom was a no-op, and the padding-bottom clearance
+// reserved by app-shell.tsx (only reachable by scrolling *past* it) never
+// applied. The last card rendered wherever normal flow put it, which could
+// still be inside the FAB's reserved band even though this suite's
+// original "scroll rest" test above happened to pass (see git history for
+// the false-negative: a raw boundingBox() comparison between the card and
+// the FAB doesn't know the card is clipped out of view by an ancestor's
+// `overflow`, so it kept reporting "overlap" as geometrically true long
+// after the fix made it visually impossible).
+//
+// The fix (beranda-client.tsx) bounds the page's own <main> to
+// `100dvh - topbar - clearance` with `overflow-y: auto`, so the visible
+// content area's own bottom edge can never reach the FAB's band regardless
+// of how much (or little) content is on the page -- content that would
+// have landed there is clipped out of the initial view and reachable by
+// scrolling *within* `<main>` instead. The tests below assert that
+// invariant directly (main's rendered bottom edge vs. the FAB's top edge)
+// rather than repeating the same boundingBox-vs-FAB comparison that can't
+// distinguish "visible and overlapping" from "clipped and not shown".
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { loadUxFixtures, loginAs, goto200, type UxFixtureManifest } from "../support/session";
 import { UX_VIEWPORTS } from "../support/viewports";
@@ -93,20 +117,56 @@ test.describe("Mobile fixed-chrome (BottomNav + FAB) clearance at 390x844", () =
     expect(await rectsOverlap(signOut, fab), "Keluar must not sit under the FAB").toBe(false);
   });
 
-  test("beranda: the last nearest-deal card is not covered by the FAB at scroll rest", async ({ page, context, baseURL }) => {
+  for (const [viewportName, viewport] of [
+    ["390px", UX_VIEWPORTS.sm390],
+    ["320px", UX_VIEWPORTS.xs320],
+  ] as const) {
+    test(`beranda: the page's own content area never renders into the FAB's reserved band, even before any scroll (${viewportName})`, async ({
+      page,
+      context,
+      baseURL,
+    }) => {
+      if (!baseURL) throw new Error("baseURL required");
+      await loginAs(context, baseURL, fixtures, "owner");
+      await page.setViewportSize(viewport);
+      await goto200(page, "/");
+      // Deliberately no scroll: this is the cold-load state a real user sees
+      // first, and the one the FAB-clearance fix must hold for regardless of
+      // whether the page's content happens to be long enough to scroll at all.
+
+      const main = page.locator("main");
+      const fab = page.locator('a.fixed[href="/deal?tambah=1"]');
+      const [mainBox, fabBox] = await Promise.all([main.boundingBox(), fab.boundingBox()]);
+      if (!mainBox || !fabBox) throw new Error("Missing geometry for Beranda main/FAB");
+
+      expect(
+        mainBox.y + mainBox.height,
+        "Beranda's own scrollable content area must never extend past the FAB's top edge at rest",
+      ).toBeLessThanOrEqual(fabBox.y);
+    });
+  }
+
+  test("beranda: the last nearest-deal card is reachable and not covered by the FAB after scrolling the content area", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
     if (!baseURL) throw new Error("baseURL required");
     await loginAs(context, baseURL, fixtures, "owner");
     await page.setViewportSize(UX_VIEWPORTS.sm390);
     await goto200(page, "/");
-    await scrollToBottom(page);
 
     const nearestSection = page.locator('section[aria-labelledby="home-deal-terdekat"]');
     await expect(nearestSection).toBeVisible();
     const lastCard = nearestSection.locator("li").last();
     const fab = page.locator('a.fixed[href="/deal?tambah=1"]');
 
+    // Beranda's own <main> is the scroll container now (see the fix note
+    // above), not the document -- scroll it directly, the way a real touch
+    // scroll on this page would.
+    await lastCard.scrollIntoViewIfNeeded();
     await expect(lastCard).toBeVisible();
-    expect(await rectsOverlap(lastCard, fab), "the last nearest-deal card must not sit under the FAB").toBe(false);
+    expect(await rectsOverlap(lastCard, fab), "the last nearest-deal card must not sit under the FAB once scrolled to").toBe(false);
   });
 });
 
@@ -141,5 +201,33 @@ test.describe("Deals stage-filter reachability at 390x844", () => {
     const [chipBox, rowBox] = await Promise.all([lastChip.boundingBox(), row.boundingBox()]);
     if (!chipBox || !rowBox) throw new Error("Missing stage-filter chip geometry");
     expect(chipBox.x + chipBox.width, "the last stage chip must be fully within the scrolled row, not clipped").toBeLessThanOrEqual(rowBox.x + rowBox.width + 1);
+  });
+
+  // The row was already reachable by scroll before this batch (see the test
+  // above) -- what OBSERVATIONS.md found was that the partially-cut chip at
+  // rest read as a rendering glitch, not an intentional "scroll for more"
+  // cue, because the fade's `from-bg` gradient stop and the chip's own
+  // `bg-surface` background are only 1.5% apart in oklch lightness (see
+  // globals.css's --bg/--surface), making it nearly imperceptible. This
+  // guards against reverting to a same-as-background fade with no glyph.
+  test("the stage-filter row's scroll-hint is a perceptible affordance, not just a structurally-present one", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    if (!baseURL) throw new Error("baseURL required");
+    await loginAs(context, baseURL, fixtures, "owner");
+    await page.setViewportSize(UX_VIEWPORTS.sm390);
+    await goto200(page, "/deal");
+
+    const rightHint = page.getByTestId("stage-filter-scroll-hint-right");
+    await expect(rightHint).toHaveAttribute("data-visible", "true");
+
+    const chevron = rightHint.locator("span");
+    await expect(chevron).toBeVisible();
+    await expect(chevron).toHaveText("›");
+
+    const style = await rightHint.evaluate((el) => getComputedStyle(el).backgroundImage);
+    expect(style, "the hint's fade must use a tinted (not background-matched) gradient stop").toContain("0.25");
   });
 });

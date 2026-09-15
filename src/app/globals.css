@@ -35,6 +35,14 @@
      own 56px left the FAB uncovered. Update this if either component's
      height/gap changes. */
   --mobile-fixed-chrome-clearance: 128px;
+  /* TopBar's mobile height (top-bar.tsx's h-14). Used to cap a page's own
+     scroll region so its natural content height can never grow past the
+     FAB's fixed clearance band -- see beranda-client.tsx. Reserving space
+     via trailing padding alone (--mobile-fixed-chrome-clearance) only
+     helps once a page is scrolled to its true end; a short page that
+     never needs to scroll still renders its last element at whatever
+     height it naturally falls, which can land inside the FAB's band. */
+  --mobile-topbar-height: 56px;
 }
 
 @theme inline {

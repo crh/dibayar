@@ -84,18 +84,22 @@ export function StageFilter({
         aria-hidden="true"
         data-testid="stage-filter-scroll-hint-left"
         data-visible={canScrollLeft}
-        className={`pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-bg to-transparent transition-opacity ${
+        className={`pointer-events-none absolute inset-y-0 left-0 flex w-9 items-center justify-start pl-1 bg-gradient-to-r from-ink/25 to-transparent transition-opacity ${
           canScrollLeft ? "opacity-100" : "opacity-0"
         }`}
-      />
+      >
+        <span className="text-[16px] font-bold text-ink">‹</span>
+      </div>
       <div
         aria-hidden="true"
         data-testid="stage-filter-scroll-hint-right"
         data-visible={canScrollRight}
-        className={`pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-bg to-transparent transition-opacity ${
+        className={`pointer-events-none absolute inset-y-0 right-0 flex w-9 items-center justify-end pr-1 bg-gradient-to-l from-ink/25 to-transparent transition-opacity ${
           canScrollRight ? "opacity-100" : "opacity-0"
         }`}
-      />
+      >
+        <span className="text-[16px] font-bold text-ink">›</span>
+      </div>
     </div>
   );
 }
