@@ -86,10 +86,10 @@ describe("TopBar", () => {
     expect(wrapper.className).toContain("min-[640px]:flex");
   });
 
-  it("shows a Buat invoice link to /deal?tahap=INVOICE, visible only at the LG band by class contract", () => {
+  it("shows a Deal siap ditagih link to /deal?tahap=INVOICE, visible only at the LG band by class contract", () => {
     render(<TopBar pathname="/" />);
 
-    const link = screen.getByRole("link", { name: "Buat invoice" });
+    const link = screen.getByRole("link", { name: "Deal siap ditagih" });
     expect(link.getAttribute("href")).toBe("/deal?tahap=INVOICE");
     expect(link.className).toContain("hidden");
     expect(link.className).toContain("min-[1024px]:inline-flex");

@@ -7,22 +7,78 @@ import { useLanguage } from "@/components/language-switcher";
 import { formatMoney } from "@/lib/format/money";
 import { formatDate } from "@/lib/format/date";
 import type { DealRecord, DealStageTransitionRecord } from "@/lib/deals";
-import { PIPELINE_STAGE_KEYS } from "@/components/deals/deal-stages";
+import type { InvoiceRecord } from "@/lib/invoices";
+import { isOverdueByDueDate, daysUntilDue } from "@/lib/invoice-date-status";
+import { PIPELINE_STAGES, PIPELINE_STAGE_KEYS } from "@/components/deals/deal-stages";
 import { buildDealWhatsApp } from "@/lib/whatsapp";
 import { formatPhone } from "@/lib/format/phone";
 
 export default function DealDetailClient({
   initialDeal,
   history,
+  initialInvoice = null,
+  now,
 }: {
   initialDeal: DealRecord;
   history: DealStageTransitionRecord[];
+  initialInvoice?: InvoiceRecord | null;
+  now?: Date;
 }) {
   const { t } = useLanguage();
+  const referenceNow = now ?? new Date();
   const [deal, setDeal] = useState(initialDeal);
+  const [invoice, setInvoice] = useState(initialInvoice);
   const [contactName, setContactName] = useState(deal.contactName ?? "");
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const [isChangingStage, setIsChangingStage] = useState(false);
+  const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
+  const [nextActionMessage, setNextActionMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+
+  const stageIndex = PIPELINE_STAGES.findIndex((stage) => stage.value === deal.status);
+  const previousStage = stageIndex > 0 ? PIPELINE_STAGES[stageIndex - 1] : null;
+  const nextStage = stageIndex < PIPELINE_STAGES.length - 1 ? PIPELINE_STAGES[stageIndex + 1] : null;
+  const canCreateInvoice = deal.status === "INVOICE" && !invoice;
+  const isDeadlineOverdue = deal.status !== "DIBAYAR" && isOverdueByDueDate(deal.deadline, referenceNow);
+
+  async function handleStageChange(status: DealRecord["status"]) {
+    setIsChangingStage(true);
+    setNextActionMessage(null);
+    try {
+      const response = await fetch(`/api/deals/${deal.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error("dashboard.dealError");
+      setDeal(payload.deal);
+    } catch {
+      setNextActionMessage({ kind: "error", text: t("dashboard.dealError") });
+    } finally {
+      setIsChangingStage(false);
+    }
+  }
+
+  async function handleCreateInvoice() {
+    setIsCreatingInvoice(true);
+    setNextActionMessage(null);
+    try {
+      const response = await fetch("/api/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dealId: deal.id, withholdingTaxType: "NONE" }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error("dashboard.invoiceError");
+      setInvoice(payload.invoice);
+      setNextActionMessage({ kind: "success", text: t("deal.detailInvoiceCreatedLinkPrefix") });
+    } catch {
+      setNextActionMessage({ kind: "error", text: t("dashboard.invoiceError") });
+    } finally {
+      setIsCreatingInvoice(false);
+    }
+  }
 
   const [contactWaDraft, setContactWaDraft] = useState(deal.contactWa);
   const [isSavingContactWa, setIsSavingContactWa] = useState(false);
@@ -108,8 +164,15 @@ export default function DealDetailClient({
           </div>
           <div>
             <dt className="text-[12px] font-semibold text-muted">{t("deal.detailDeadline")}</dt>
-            <dd className="text-[14px] text-ink">
-              {deal.deadline ? formatDate(deal.deadline) : t("deal.detailDeadlineEmpty")}
+            <dd className={`text-[14px] ${isDeadlineOverdue ? "font-semibold text-overdue" : "text-ink"}`}>
+              {deal.deadline
+                ? isDeadlineOverdue
+                  ? t("deal.detailDeadlineOverdue", {
+                      date: formatDate(deal.deadline),
+                      days: String(Math.abs(daysUntilDue(deal.deadline, referenceNow))),
+                    })
+                  : formatDate(deal.deadline)
+                : t("deal.detailDeadlineEmpty")}
             </dd>
           </div>
           <div>
@@ -125,6 +188,60 @@ export default function DealDetailClient({
             <dd className="whitespace-pre-wrap break-words text-[14px] text-ink">{deal.scope}</dd>
           </div>
         </dl>
+
+        {previousStage || nextStage || canCreateInvoice || invoice ? (
+          <div className="mt-4 border-t border-line pt-4">
+            <p className="text-[13px] font-semibold text-ink">{t("deal.detailNextActionTitle")}</p>
+            <div className="mt-2 flex flex-col items-start gap-2 min-[360px]:flex-row min-[360px]:flex-wrap min-[360px]:items-center">
+              {previousStage ? (
+                <button
+                  type="button"
+                  disabled={isChangingStage}
+                  onClick={() => handleStageChange(previousStage.value)}
+                  className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[13px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60"
+                >
+                  {t("dashboard.moveToPreviousStage", { stage: t(PIPELINE_STAGE_KEYS[previousStage.value]) })}
+                </button>
+              ) : null}
+              {nextStage ? (
+                <button
+                  type="button"
+                  disabled={isChangingStage}
+                  onClick={() => handleStageChange(nextStage.value)}
+                  className="inline-flex h-11 items-center rounded-full border border-line px-4 text-[13px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60"
+                >
+                  {t("dashboard.moveToNextStage", { stage: t(PIPELINE_STAGE_KEYS[nextStage.value]) })}
+                </button>
+              ) : null}
+              {canCreateInvoice ? (
+                <button
+                  type="button"
+                  disabled={isCreatingInvoice}
+                  onClick={handleCreateInvoice}
+                  className="inline-flex h-11 items-center rounded-full bg-primary px-4 text-[13px] font-semibold text-surface hover:bg-primary-d disabled:cursor-wait disabled:opacity-60"
+                >
+                  {isCreatingInvoice ? t("dashboard.saving") : t("dashboard.createInvoice")}
+                </button>
+              ) : null}
+              {invoice ? (
+                <Link
+                  href={`/invoice/${invoice.id}`}
+                  className="inline-flex h-11 items-center rounded-full bg-primary px-4 text-[13px] font-semibold text-surface hover:bg-primary-d"
+                >
+                  {t("deal.detailViewInvoice", { number: invoice.number })}
+                </Link>
+              ) : null}
+            </div>
+            {nextActionMessage ? (
+              <p
+                role={nextActionMessage.kind === "error" ? "alert" : "status"}
+                className={`mt-2 text-[13px] ${nextActionMessage.kind === "error" ? "text-overdue" : "text-paid"}`}
+              >
+                {nextActionMessage.text}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className="mt-4 border-t border-line pt-4">
           <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink" htmlFor="contactName">

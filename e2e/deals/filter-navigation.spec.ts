@@ -171,7 +171,7 @@ test.describe("deal filter/navigation matrix", { tag: "@critical" }, () => {
     await page.getByRole("group", { name: /filter tahap deal/i }).getByRole("button", { name: "Dibayar", exact: true }).click();
     await expect(page).toHaveURL(/tahap=DIBAYAR/);
 
-    await page.getByRole("link", { name: "Buat invoice", exact: true }).click();
+    await page.getByRole("link", { name: "Deal siap ditagih", exact: true }).click();
 
     await expect(page).toHaveURL(/tahap=INVOICE/);
     await assertDealFilterState(page, {
@@ -188,7 +188,7 @@ test.describe("deal filter/navigation matrix", { tag: "@critical" }, () => {
     await page.getByRole("group", { name: /filter tahap deal/i }).getByRole("button", { name: "Dibayar", exact: true }).click();
     await expect(page).toHaveURL(/tahap=DIBAYAR/);
 
-    await page.getByRole("link", { name: "Buat invoice", exact: true }).click();
+    await page.getByRole("link", { name: "Deal siap ditagih", exact: true }).click();
 
     await expect(page).toHaveURL(/tahap=INVOICE/);
     await assertDealFilterState(page, {
