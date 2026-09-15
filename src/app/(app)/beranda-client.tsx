@@ -38,7 +38,7 @@ export default function BerandaClient({ deals, dealsError, invoices, invoicesErr
   }
 
   return (
-    <main className="mx-auto w-full px-4 py-6 min-[640px]:max-w-[720px] min-[640px]:px-6 min-[640px]:py-8 min-[1024px]:max-w-[1120px] min-[1024px]:px-8 min-[1440px]:max-w-[1280px]">
+    <main className="mx-auto max-h-[calc(100dvh-var(--mobile-topbar-height)-var(--mobile-fixed-chrome-clearance)-env(safe-area-inset-bottom))] w-full overflow-y-auto px-4 pt-6 pb-6 min-[640px]:max-h-none min-[640px]:max-w-[720px] min-[640px]:overflow-visible min-[640px]:px-6 min-[640px]:py-8 min-[1024px]:max-w-[1120px] min-[1024px]:px-8 min-[1440px]:max-w-[1280px]">
       <Grid className="gap-6">
         <div className="flex flex-col gap-6 min-[1024px]:col-start-1 min-[1024px]:col-span-8 min-[1024px]:row-start-1">
           <MonthlyIncomeSummary invoices={invoices} now={referenceNow} loading={false} error={invoicesError} onRetry={retry} />
