@@ -58,16 +58,14 @@ describe("prisma lazy client", () => {
     );
   });
 
-  it("falls back to DATABASE_URL on Preview when the integration variable is absent", async () => {
+  it("fails closed on Preview when the integration variable is absent, without falling back to DATABASE_URL", async () => {
     process.env.VERCEL_ENV = "preview";
     process.env.DATABASE_URL = "postgresql://fallback.example.invalid/test";
 
     const { prisma } = await import("./prisma");
-    (prisma as unknown as { $transaction(): boolean }).$transaction();
 
-    const { PrismaPg } = await import("@prisma/adapter-pg");
-    expect((PrismaPg as unknown as { lastConnectionString: string }).lastConnectionString).toBe(
-      "postgresql://fallback.example.invalid/test",
+    expect(() => (prisma as unknown as { $transaction(): boolean }).$transaction()).toThrow(
+      "DATABASE_URL_POSTGRES_URL is required for Vercel Preview database connections",
     );
   });
 

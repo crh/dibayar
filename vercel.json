@@ -1,3 +1,3 @@
 {
-  "buildCommand": "if [ \"$VERCEL_ENV\" = \"preview\" ] && [ -n \"$DATABASE_URL_POSTGRES_URL_NON_POOLING\" ]; then export DATABASE_URL=\"$DATABASE_URL_POSTGRES_URL_NON_POOLING\"; fi; if [ -n \"$DATABASE_URL\" ]; then npx prisma migrate deploy; fi && next build"
+  "buildCommand": "if [ \"$VERCEL_ENV\" = \"preview\" ]; then if [ -z \"$DATABASE_URL_POSTGRES_URL_NON_POOLING\" ]; then echo 'ERROR: DATABASE_URL_POSTGRES_URL_NON_POOLING is required for Vercel Preview migrations' >&2; exit 1; fi; export DATABASE_URL=\"$DATABASE_URL_POSTGRES_URL_NON_POOLING\"; fi; if [ -n \"$DATABASE_URL\" ]; then npx prisma migrate deploy; fi && next build"
 }
