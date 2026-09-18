@@ -8,9 +8,25 @@ const globalForPrisma = globalThis as unknown as {
 function getPrismaClient(): PrismaClient {
   if (globalForPrisma.prisma) return globalForPrisma.prisma;
 
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error("DATABASE_URL is required for database-backed M1 routes");
+  // On Preview, the Neon/Vercel integration writes per-branch connection
+  // strings under DATABASE_URL_* (a plain DATABASE_URL Secret already
+  // occupies that name project-wide). Falling back to that static secret
+  // when the integration variable is missing is exactly the failure mode
+  // that caused the original incident (a deleted Neon branch silently kept
+  // being read), so Preview must fail closed instead of falling back.
+  let connectionString: string | undefined;
+  if (process.env.VERCEL_ENV === "preview") {
+    connectionString = process.env.DATABASE_URL_POSTGRES_URL;
+    if (!connectionString) {
+      throw new Error(
+        "DATABASE_URL_POSTGRES_URL is required for Vercel Preview database connections",
+      );
+    }
+  } else {
+    connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error("DATABASE_URL is required for database-backed M1 routes");
+    }
   }
 
   const client = new PrismaClient({
