@@ -29,7 +29,7 @@ worktree `/home/kenji/code/dibayar-v6-1-production-hardening`, branch
    make Preview/Production state undconflatable in docs, formalize a
    migration strategy, add a smoke check, and define a release gate. Full
    detail, findings F-1 through F-6, validation evidence:
-   `DIBAYAR-V6-1-PRODUCTION-HARDENING-HANDOFF.md` (same directory as this
+   `docs/receipts/DIBAYAR-V6-1-PRODUCTION-HARDENING-HANDOFF.md` (same directory as this
    file).
 4. Along the way, moving the Production migration fix from an undocumented
    Vercel-dashboard Build Command override into a checked-in `vercel.json`
@@ -110,7 +110,7 @@ action — flag them, don't resolve them.
 
 ## 4. What I'm asking you to do
 
-Read `DIBAYAR-V6-1-PRODUCTION-HARDENING-HANDOFF.md` (findings F-1–F-6, full
+Read `docs/receipts/DIBAYAR-V6-1-PRODUCTION-HARDENING-HANDOFF.md` (findings F-1–F-6, full
 validation evidence) and `DEPLOYMENT.md`'s "Current verified state",
 "Migration strategy", and "Production release gate" sections for depth, then
 produce a prioritized next-steps recommendation. Distinguish clearly between:

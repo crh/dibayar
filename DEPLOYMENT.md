@@ -18,7 +18,7 @@ DEPLOYED_AT=2026-09-06T04:36Z (auto-deploy on merge) + at least 3 subsequent
 AUTH_STATUS=OK — verified 2026-09-06 via unauthenticated `curl` (`/` -> 307 to
             `/api/auth/signin`, `/api/auth/signin` -> 200) and, earlier the
             same day, a real user completing a live Google OAuth sign-in
-            (see `DIBAYAR-V6-1-POST-MERGE-PRODUCTION-HANDOFF.md`)
+            (see `docs/receipts/DIBAYAR-V6-1-PRODUCTION-HARDENING-HANDOFF.md`)
 DATABASE_CONNECTIVITY=inferred OK (see MIGRATION_STATUS; no dedicated health
             endpoint exists to check this independently — see
             `scripts/smoke-deployment.mjs`)
@@ -161,7 +161,7 @@ npx prisma migrate deploy && next build
 ```
 
 This was applied manually through the Vercel dashboard on 2026-09-06 during
-incident remediation (see `DIBAYAR-V6-1-POST-MERGE-PRODUCTION-HANDOFF.md`
+incident remediation (see `docs/receipts/DIBAYAR-V6-1-PRODUCTION-HARDENING-HANDOFF.md`
 §2.6) to backfill 12 never-applied migrations. It is **still active** as of
 this audit (confirmed via `vercel inspect <latest production url> --logs`,
 which shows the same command running and all 12 migrations re-applying
