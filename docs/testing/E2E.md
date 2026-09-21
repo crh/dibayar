@@ -25,11 +25,18 @@ rebasing this work later.
   to (not a replacement for) `scripts/ux-fixtures.ts`. Same safety guardrails:
   refuses to run against anything but `127.0.0.1:55432/dibayar_test`, requires
   `E2E_FIXTURE_CONFIRM=non-production`, and a hostname sanity check.
-- Runs against a **production build** (`next build` + `next start`), not
-  `next dev` -- `npm run e2e:build` before every `test:e2e*` script.
+- Runs against a **production build** (`next build --webpack` + `next start`),
+  not `next dev` -- `npm run e2e:build` runs before every `test:e2e*` script.
+  This is deliberately a different build strategy than the app's default
+  `npm run build` (Turbopack, what Vercel deploys with); CI's
+  `lint-typecheck-test` job runs the default build too, so a Turbopack-only
+  break still surfaces without giving browser tests two build strategies to
+  chase.
 - Projects: `chromium` (desktop) and `chromium-mobile` (390x844, Dibayar's
-  primary mobile target) are the PR-gate tier. `firefox` and `webkit` exist
-  for a broader/nightly tier, selected explicitly with `--project`.
+  primary mobile target) are the semantic PR-gate tier. Visuals use the
+  desktop project plus one explicitly scoped `chromium-mobile-visual` project
+  for a true mobile baseline. `firefox` and `webkit` exist for the scheduled
+  broader tier.
 
 ## How authentication works
 
@@ -92,13 +99,13 @@ reseed.
 | Command | What it does |
 |---|---|
 | `npm run e2e:fixtures -- seed\|verify\|cleanup` | Manual fixture control for local debugging |
-| `npm run e2e:build` | Production build (`next build`), needed before any `test:e2e*` run |
-| `npm run test:e2e` | Full suite, chromium + chromium-mobile |
+| `npm run e2e:build` | Reproducible webpack production build, needed before any `test:e2e*` run |
+| `npm run test:e2e` | Semantic journey suite, chromium + chromium-mobile; visual snapshots are separate |
 | `npm run test:e2e:critical` | `@critical`-tagged tests only, chromium + chromium-mobile -- the PR gate |
-| `npm run test:e2e:visual` | `@visual`-tagged screenshot suite, chromium only |
+| `npm run test:e2e:visual` | Curated `@visual` screenshots: desktop Chromium plus one true-mobile Chromium baseline |
 | `npm run test:e2e:a11y` | `@a11y`-tagged axe-core suite, chromium only |
 | `npm run test:e2e:update-snapshots` | Regenerate visual baselines intentionally |
-| `npm run test:e2e:all-browsers` | Full suite across chromium, chromium-mobile, firefox, webkit -- release/nightly tier |
+| `npm run test:e2e:all-browsers` | Semantic suite across chromium, chromium-mobile, Firefox, and WebKit -- scheduled/manual tier |
 | `npm run test:e2e:headed` | Headed chromium run (assumes a build already exists -- run `npm run e2e:build` first if not) |
 | `npm run test:e2e:ui` | Playwright UI mode |
 
@@ -130,9 +137,16 @@ convention.
 
 ## CI
 
-See `.github/workflows/e2e.yml`. Gate order: lint -> typecheck -> unit/component
-tests -> build -> `test:e2e:critical`. `workers: 1` (no sharding yet) --
-see "Known limitations" in the handoff for when to revisit.
+See `.github/workflows/e2e.yml`. The PR gate runs lint/typecheck/unit tests,
+then the Chromium desktop/mobile critical journeys. Accessibility runs in a
+separate blocking job with its own report artifacts. A weekday schedule and
+manual dispatch run the semantic suite in Firefox and WebKit as well.
+
+The shared Playwright fixture (`e2e/support/test.ts`) attaches browser
+diagnostics for page exceptions, unexpected console errors, failed requests,
+and HTTP 5xx responses. Expected App Router RSC cancellations and the known
+invalid-public-token 404 console message are narrowly excluded; other
+diagnostics fail an otherwise passing test.
 
 ## Cross-browser strategy
 
@@ -172,6 +186,23 @@ GitHub Actions workflow instead (`workflow_dispatch`-only); see
 `docs/testing/UX_AUDIT.md` "Browser strategy" for how to run it and where to
 get the regenerated PNGs from.
 
+**Telling drift apart from a real state change.** Host drift shows up as tens
+of differing pixels at *identical* image dimensions. A changed image height is
+never drift -- it means the page rendered different content, and the diff must
+be explained before any baseline moves. Worked example: after the fixture seed
+started writing `tokenCiphertext` on the seeded `InvoiceShare` (it previously
+wrote only `tokenHash`), `invoice-detail-desktop` went from 965px to 921px
+tall. `getInvoiceShare` (`src/lib/invoice-share.ts`) can only recover a share
+URL when the ciphertext is present, so the old hash-only row rendered the
+"link not available after reload" fallback with a disabled WhatsApp button --
+a state only a legacy pre-encryption row can produce. The taller baseline was
+therefore capturing behaviour a real share link never has; the shorter render
+is correct, and the matching semantic assertions live in
+`e2e/invoices/invoice-journeys.spec.ts` ("share link can be created, recovered
+after reload, regenerated, and revoked"). Pair every `@visual` baseline change
+with the semantic test that pins the same behaviour, so the next diff can be
+judged against an assertion rather than against a picture.
+
 ## Security safeguards (recap)
 
 - `scripts/e2e-fixtures.ts` will not run without `E2E_FIXTURE_CONFIRM=non-production`
@@ -185,34 +216,16 @@ get the regenerated PNGs from.
 
 ## Known limitations / not yet automated
 
-- **`e2e/visual/visual.spec.ts` has no committed `chromium-mobile` baselines.**
-  Neither `npm run test:e2e:visual` nor `ux:audit`'s own `@visual` step ever
-  select the `chromium-mobile` project (both pass `--project=chromium`
-  explicitly), so this has never been a gap in the actual CI gates
-  (`e2e-critical` excludes `@visual` via `--grep @critical`; `ux-audit`'s
-  `@visual` step is `chromium`-only). It only surfaces if someone runs the
-  unfiltered `npm run test:e2e` locally, where Playwright will auto-write (and
-  fail on) brand-new `-chromium-mobile-linux.png` files. Mobile coverage that
-  *is* intentional (`beranda-mobile`) is captured by resizing the viewport
-  inside the `chromium` project, not by a second project run. Adding a real
-  `chromium-mobile` `@visual` tier is a scope decision for whoever owns this
-  suite, not implied by this doc.
-- **`e2e/visual/visual.spec.ts` does not call `reseedFixtures()`.** Per "How
-  the data fixtures work" above, any spec that mutates the shared owner
-  fixture must reseed in `beforeEach`, or a later spec in the same invocation
-  inherits its mutation. `visual.spec.ts` doesn't, so running the full `npm
-  run test:e2e` (not `test:e2e:visual`, which runs `@visual` alone) can fail
-  its `Pengaturan main state` snapshot if `settings/settings.spec.ts` ran
-  first in the same invocation and changed the owner's saved name. Not
-  reachable from either real CI job for the same reason as the point above.
-- No cross-browser (Firefox/WebKit) run has been exercised in this sandboxed
-  environment -- `npx playwright install` succeeded for the browsers, but
-  `--with-deps` (system libraries) failed for lack of `sudo`, so Firefox/WebKit
-  may need those installed in whatever CI runner actually executes
-  `test:e2e:all-browsers`.
+- The scheduled Firefox/WebKit job is configured but has not been exercised
+  in this local environment; CI installs the required browser system
+  dependencies.
 - The Escape-key dialog-close test uses a short empirical `waitForTimeout`
   rather than a semantic wait -- see the comment at
   `e2e/deals/add-deal-dialog.spec.ts` for what was tried and why.
+- The due-date persistence journey is skipped only in `chromium-mobile`
+  because Chromium's emulated native date picker does not accept a stable
+  programmatic `fill()`; the same server-backed persistence path is exercised
+  on desktop, while mobile still covers invoice rendering and actions.
 - No sharding configured yet (`workers: 1` everywhere) -- deliberate until the
   suite has a longer track record; `playwright.e2e.config.ts` is a single
   place to add `shard` support later.

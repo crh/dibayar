@@ -7,7 +7,7 @@
 
 ## Why the existing suites can miss UX defects
 
-`e2e/` journey tests assert semantics (role, text, URL, `aria-pressed`) at two viewports (`chromium` desktop, `chromium-mobile` 390px) -- they don't measure geometry, so a column that's 40px too wide, an element sitting outside the viewport, or a touch target that shrank to 30px passes as long as the right text is on the page. Its own `@visual` suite catches *some* of that, but only as an undifferentiated pixel diff at whatever viewports it happens to cover, with no route x state x viewport matrix and no severity/reporting model.
+`e2e/` journey tests assert semantics (role, text, URL, `aria-pressed`) at two viewports (`chromium` desktop, `chromium-mobile` 390px) -- they don't measure geometry, so a column that's 40px too wide, an element sitting outside the viewport, or a touch target that shrank to 30px passes as long as the right text is on the page. Its own `@visual` suite adds curated desktop screenshots plus one true mobile (`isMobile`/touch) baseline, but remains an undifferentiated pixel diff rather than a route x state x viewport matrix or severity/reporting model.
 
 `tests/ux-audit/` predates this doc as a set of one-off historical proofs (`baseline.landing.spec.ts`, `fixtures.baseline.spec.ts`, `t27.verification.spec.ts`) for past tasks (T-00, T-27) -- solid detector code, but no reusable matrix, no CI wiring, and no dedicated Deals-desktop-scroll regression.
 
@@ -152,6 +152,12 @@ Seeded by `scripts/ux-fixtures.ts` (`npm run ux:fixtures -- seed|verify|cleanup`
 `routes/matrix.spec.ts` captures a curated, hand-picked set (not a full route x state x viewport cross product) at two representative bands, `mobile375` and `desktop1440` -- the same two-viewport pattern the task spec's own example matrix uses. 9 route/state pairs x 2 viewports = 18 screenshots under `artifacts/ux-audit/screenshots/`, each also checked for page-level overflow and sub-44px controls. To add a route/state: add one `test(...)` block following the existing pattern (login as the right fixture user, `goto200`, one semantic assertion that the right state actually loaded, then `captureAndCheck` per viewport).
 
 **Visual pixel regression is intentionally not re-implemented here.** `scripts/ux-fixtures.ts` uses relative dates (`now`/`past`/`future`), so a `toHaveScreenshot()` baseline built from it would drift every day -- exactly the "brittle baseline caused by timestamps" the harness is supposed to avoid. `e2e/visual/visual.spec.ts` already covers these same routes/states with a stable, fixed-calendar-date fixture pipeline (`scripts/e2e-fixtures.ts`); `ux:audit` runs it (`--grep @visual`) and the report's "Visual Regression status" reflects its result. **To update a visual baseline**: `npm run test:e2e:update-snapshots`, per `e2e/visual/visual.spec.ts`'s own header comment. Before running it, first run `npm run test:e2e:visual` (no `--update-snapshots`) and inspect every reported diff -- actual vs. expected vs. the pixel diff, plus the DOM/fixture state -- to confirm the mismatch is stale-baseline/rendering drift and not a real product regression. Never regenerate a baseline solely because CI is red; if the rendered UI looks wrong, stop and report it instead of updating the snapshot. After regenerating, re-run `npm run test:e2e:visual` once more without `--update-snapshots` and confirm it passes clean -- that's the proof the new baseline is actually deterministic, not just "whatever this run happened to produce".
+
+The visual command includes desktop Chromium and one explicitly scoped true-mobile
+visual project; the semantic E2E aggregate excludes all `@visual` tests. `ux:audit`
+runs both the `chromium` and `chromium-mobile-visual` projects for `@visual`, so
+the report's "Visual Regression status" reflects the full curated suite (desktop
+baselines plus the one true-mobile baseline), not desktop alone.
 
 ## Proving the detectors work
 

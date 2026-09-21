@@ -12,7 +12,7 @@
 // navigated to the URL that actually opens the dialog. Fixed to link to
 // /deal?tambah=1; "TopBar + Deal actually opens the dialog" below guards the
 // real click path, not just the URL contract.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../support/test";
 import { assertDealFilterState } from "../support/deal-filter";
 import { loadFixtureManifest } from "../support/manifest";
 

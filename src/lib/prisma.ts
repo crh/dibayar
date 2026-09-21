@@ -33,7 +33,10 @@ function getPrismaClient(): PrismaClient {
     adapter: new PrismaPg({ connectionString }),
   });
 
-  if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = client;
+  // Keep one client/pool per server process in every environment. Creating a
+  // fresh PrismaPg pool for each production request eventually exhausts the
+  // database connection budget under normal page/API navigation.
+  globalForPrisma.prisma = client;
   return client;
 }
 

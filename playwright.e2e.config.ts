@@ -75,6 +75,7 @@ export default defineConfig({
       // visual-regression baselines. See docs/testing/E2E.md "Browser
       // strategy".
       name: "chromium",
+      grepInvert: /@visual-mobile/,
       use: { ...devices["Desktop Chrome"] },
     },
     {
@@ -84,6 +85,21 @@ export default defineConfig({
       // Playwright's mobile device presets pin a specific browser engine
       // (iPhone 12 -> WebKit) or a different viewport, and this project must
       // stay on Chromium at exactly the 390px target width.
+      use: {
+        browserName: "chromium",
+        viewport: { width: 390, height: 844 },
+        isMobile: true,
+        hasTouch: true,
+        userAgent:
+          "Mozilla/5.0 (Linux; Android 13; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+      },
+    },
+    {
+      name: "chromium-mobile-visual",
+      grep: /@visual-mobile/,
+      // The visual tier gets one true mobile baseline: mobile emulation,
+      // touch input, and the same 390px target as semantic mobile journeys.
+      // Keeping its grep narrow avoids duplicating every desktop snapshot.
       use: {
         browserName: "chromium",
         viewport: { width: 390, height: 844 },

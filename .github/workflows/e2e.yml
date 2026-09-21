@@ -4,6 +4,9 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 2 * * 1-5"
 
 jobs:
   lint-typecheck-test:
@@ -18,6 +21,13 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      # Every E2E/UX-audit job below builds with `next build --webpack`
+      # (see docs/testing/E2E.md) for a reproducible browser-test target, so
+      # nothing else in this workflow exercises the default Turbopack build
+      # Vercel actually deploys with. Build-only, no services needed: every
+      # route is dynamic (ƒ), so no DATABASE_URL/AUTH_SECRET is read at
+      # build time -- confirmed by running with an empty environment.
+      - run: npm run build
 
   e2e-critical:
     runs-on: ubuntu-latest
@@ -63,7 +73,51 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: playwright-report/e2e
+          path: |
+            playwright-report/e2e
+            test-results/e2e
+          retention-days: 7
+
+  e2e-a11y:
+    runs-on: ubuntu-latest
+    needs: lint-typecheck-test
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dibayar_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/dibayar_test?schema=public
+      AUTH_SECRET: ci-only-placeholder-not-a-real-secret
+      AUTH_GOOGLE_ID: ci-only-placeholder
+      AUTH_GOOGLE_SECRET: ci-only-placeholder
+      E2E_FIXTURE_CONFIRM: non-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx prisma migrate deploy
+      - run: npm run test:e2e:a11y
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-a11y-artifacts
+          path: |
+            playwright-report/e2e
+            test-results/e2e
           retention-days: 7
 
   ux-audit:
@@ -118,5 +172,50 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ux-audit-report
-          path: artifacts/ux-audit
+          path: |
+            artifacts/ux-audit
+            playwright-report/e2e
+            test-results/e2e
           retention-days: 7
+
+  e2e-cross-browser:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dibayar_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/dibayar_test?schema=public
+      AUTH_SECRET: ci-only-placeholder-not-a-real-secret
+      AUTH_GOOGLE_ID: ci-only-placeholder
+      AUTH_GOOGLE_SECRET: ci-only-placeholder
+      E2E_FIXTURE_CONFIRM: non-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: npx prisma migrate deploy
+      - run: npm run test:e2e:all-browsers
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-cross-browser-artifacts
+          path: |
+            playwright-report/e2e
+            test-results/e2e
+          retention-days: 14

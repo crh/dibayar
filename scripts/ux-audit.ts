@@ -75,7 +75,11 @@ async function main() {
     UX_FIXTURE_CONFIRM: "non-production",
   });
 
-  runOrAbort("build", "npm", ["run", "build"]);
+  // Keep the browser server on the same explicit webpack build as the E2E
+  // commands. The app's general `build` script may use Next's default
+  // Turbopack path, while this verification job needs one reproducible build
+  // strategy across local and CI runners.
+  runOrAbort("build", "npm", ["run", "e2e:build"]);
 
   // Playwright's own exit code is otherwise informational here -- see header
   // comment -- but the run must at least have produced a results.json for
@@ -88,9 +92,23 @@ async function main() {
   runPlaywrightOrAbort("tests/ux-audit run", uxAuditArgs, path.resolve("test-results/ux-audit/results.json"));
 
   if (!routeArg) {
+    // chromium-mobile-visual carries the one curated true-mobile baseline
+    // (isMobile/touch at 390px -- see docs/testing/E2E.md "Browser
+    // strategy"); chromium carries every desktop baseline. Both must run so
+    // the report's Visual Regression status reflects the full @visual suite,
+    // not just its desktop subset.
     runPlaywrightOrAbort(
       "e2e @visual run",
-      ["playwright", "test", "-c", "playwright.e2e.config.ts", "--project=chromium", "--grep", "@visual"],
+      [
+        "playwright",
+        "test",
+        "-c",
+        "playwright.e2e.config.ts",
+        "--project=chromium",
+        "--project=chromium-mobile-visual",
+        "--grep",
+        "@visual",
+      ],
       path.resolve("test-results/e2e/results.json"),
     );
   }

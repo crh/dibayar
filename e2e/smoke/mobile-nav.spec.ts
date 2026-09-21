@@ -2,7 +2,7 @@
 // src/components/layout/bottom-nav.tsx) -- desktop uses TopBar's inline nav
 // instead, already covered indirectly by the deal-filter suite's TopBar
 // interactions. This file is mobile-viewport only.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../support/test";
 
 test.describe("mobile bottom navigation", { tag: "@critical" }, () => {
   test("bottom nav moves between Beranda, Deal, Invoice, and Pengaturan", async ({ page, isMobile }) => {

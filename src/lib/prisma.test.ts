@@ -3,11 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@prisma/adapter-pg", () => ({
   PrismaPg: class PrismaPg {
     static lastConnectionString: string | undefined;
+    // Each PrismaPg is a real pg connection pool in production, so counting
+    // constructions is what proves the client is reused rather than rebuilt.
+    static instances = 0;
     connectionString: string | undefined;
 
     constructor(options: { connectionString: string }) {
       this.connectionString = options.connectionString;
       PrismaPg.lastConnectionString = options.connectionString;
+      PrismaPg.instances += 1;
     }
   },
 }));
@@ -31,6 +35,7 @@ afterEach(() => {
   delete process.env.DATABASE_URL;
   delete process.env.DATABASE_URL_POSTGRES_URL;
   delete process.env.VERCEL_ENV;
+  vi.unstubAllEnvs();
   vi.resetModules();
 });
 
@@ -67,6 +72,27 @@ describe("prisma lazy client", () => {
     expect(() => (prisma as unknown as { $transaction(): boolean }).$transaction()).toThrow(
       "DATABASE_URL_POSTGRES_URL is required for Vercel Preview database connections",
     );
+  });
+
+  // Regression guard: `prisma` is a Proxy whose every property access calls
+  // getPrismaClient(). While the client was cached only outside production,
+  // production built a brand-new PrismaClient -- and a brand-new PrismaPg
+  // connection pool -- on each access, exhausting the database's connection
+  // budget under ordinary page/API navigation.
+  it("builds one client and one connection pool per process in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.DATABASE_URL = "postgresql://production.example.invalid/test";
+
+    const { PrismaPg } = await import("@prisma/adapter-pg");
+    const poolsBefore = (PrismaPg as unknown as { instances: number }).instances;
+
+    const { prisma } = await import("./prisma");
+    const client = prisma as unknown as { $transaction(): boolean };
+    client.$transaction();
+    client.$transaction();
+    client.$transaction();
+
+    expect((PrismaPg as unknown as { instances: number }).instances - poolsBefore).toBe(1);
   });
 
   it("ignores the Preview integration variable outside of Preview", async () => {
