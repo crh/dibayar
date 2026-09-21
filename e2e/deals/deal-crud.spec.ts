@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../support/test";
 import { loadFixtureManifest } from "../support/manifest";
 import { reseedFixtures } from "../support/reseed";
 
@@ -29,6 +29,9 @@ test.describe("deal create/update journeys", { tag: "@critical" }, () => {
     await expect(dialog).toHaveCount(0);
     await expect(page.getByRole("status")).toHaveText("Deal disimpan");
     await expect(page.getByText(brand, { exact: true })).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByText(brand, { exact: true })).toBeVisible();
   });
 
   test("opening the dialog and closing it without saving creates nothing", async ({ page }) => {
@@ -57,5 +60,9 @@ test.describe("deal create/update journeys", { tag: "@critical" }, () => {
     await page.getByRole("group", { name: /filter tahap deal/i }).getByRole("button", { name: "Nego", exact: true }).click();
     await expect(page.getByText(masukBrand, { exact: true })).toBeVisible();
     await expect(page.getByText(negoBrand, { exact: true })).toBeVisible();
+
+    await page.reload();
+    await page.getByRole("group", { name: /filter tahap deal/i }).getByRole("button", { name: "Nego", exact: true }).click();
+    await expect(page.getByText(masukBrand, { exact: true })).toBeVisible();
   });
 });

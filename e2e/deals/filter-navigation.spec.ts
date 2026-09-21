@@ -3,7 +3,7 @@
 // next/navigation, window.history, or router.push -- the V3/V4 regressions
 // this guards against were exactly bugs in how those four things agree with
 // each other, which a mocked unit test cannot see.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../support/test";
 import { assertDealFilterState } from "../support/deal-filter";
 import { loadFixtureManifest } from "../support/manifest";
 import { watchForDealNavigationRequests } from "../support/network";

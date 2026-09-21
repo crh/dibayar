@@ -17,6 +17,7 @@ import {
 } from "../src/generated/prisma/client";
 import { E2E_FIXTURE_PREFIX, E2E_OWNER_SESSION_TOKEN, E2E_OWNER_SIGNOUT_SESSION_TOKEN } from "../e2e/support/fixture-ids";
 import { FIXTURE_FUTURE_DATE, FIXTURE_PAST_DATE } from "../src/lib/e2e-fixture-dates";
+import { encryptShareToken } from "../src/lib/share-token-crypto";
 
 const action = process.argv[2];
 if (!["seed", "verify", "cleanup"].includes(action ?? "")) {
@@ -52,7 +53,10 @@ if (/(^|[.-])(prod|production)([.-]|$)/i.test(url.hostname)) {
 
 const prefix = E2E_FIXTURE_PREFIX;
 const manifestPath = path.resolve(".hermes-runtime/e2e-fixtures/fixtures.json");
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+// Keep the short-lived seed/verify process to one connection. The Next.js
+// server already owns the app pool during E2E runs, and the disposable
+// database has a deliberately small connection budget.
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString, max: 1 }) });
 
 const ids = { owner: `${prefix}-owner` };
 
@@ -85,6 +89,12 @@ const brands = {
 const invoiceIds = {
   sent: `${prefix}-invoice-sent`,
   paid: `${prefix}-invoice-paid`,
+};
+
+const shareTokens = {
+  active: `${prefix}-public-token-do-not-share`,
+  expired: `${prefix}-public-expired-token-do-not-share`,
+  invalid: `${prefix}-public-invalid-token-do-not-share`,
 };
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -145,7 +155,22 @@ async function seed() {
   });
 
   await prisma.invoiceShare.create({
-    data: { id: `${prefix}-share-sent`, invoiceId: invoiceIds.sent, tokenHash: sha256(`${prefix}-public-token-do-not-share`), expiresAt: FIXTURE_FUTURE_DATE },
+    data: {
+      id: `${prefix}-share-sent`,
+      invoiceId: invoiceIds.sent,
+      tokenHash: sha256(shareTokens.active),
+      tokenCiphertext: encryptShareToken(shareTokens.active),
+      expiresAt: FIXTURE_FUTURE_DATE,
+    },
+  });
+  await prisma.invoiceShare.create({
+    data: {
+      id: `${prefix}-share-expired`,
+      invoiceId: invoiceIds.paid,
+      tokenHash: sha256(shareTokens.expired),
+      tokenCiphertext: encryptShareToken(shareTokens.expired),
+      expiresAt: FIXTURE_PAST_DATE,
+    },
   });
 
   await prisma.userSettings.create({
@@ -171,6 +196,7 @@ async function seed() {
     deals: dealIds,
     brands,
     invoices: invoiceIds,
+    shareTokens,
   };
   await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });

@@ -2,7 +2,7 @@
 // e2e/support/auth.ts) covers "already authenticated" for every other
 // journey, so this file is the one place that also exercises the
 // unauthenticated redirect and the real Auth.js sign-out flow.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../support/test";
 import { E2E_OWNER_SIGNOUT_SESSION_TOKEN } from "../support/fixture-ids";
 import { reseedFixtures } from "../support/reseed";
 

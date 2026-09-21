@@ -75,7 +75,11 @@ async function main() {
     UX_FIXTURE_CONFIRM: "non-production",
   });
 
-  runOrAbort("build", "npm", ["run", "build"]);
+  // Keep the browser server on the same explicit webpack build as the E2E
+  // commands. The app's general `build` script may use Next's default
+  // Turbopack path, while this verification job needs one reproducible build
+  // strategy across local and CI runners.
+  runOrAbort("build", "npm", ["run", "e2e:build"]);
 
   // Playwright's own exit code is otherwise informational here -- see header
   // comment -- but the run must at least have produced a results.json for

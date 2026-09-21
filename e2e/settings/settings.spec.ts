@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../support/test";
 
 test.describe("issuer/bank settings", { tag: "@critical" }, () => {
   test("update issuer and bank details, happy path", async ({ page }) => {

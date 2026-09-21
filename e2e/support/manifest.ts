@@ -23,6 +23,7 @@ export type FixtureManifest = {
   };
   brands: Record<string, string>;
   invoices: { sent: string; paid: string };
+  shareTokens: { active: string; expired: string; invalid: string };
 };
 
 const manifestPath = path.resolve(".hermes-runtime/e2e-fixtures/fixtures.json");

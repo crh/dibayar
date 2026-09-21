@@ -13,10 +13,16 @@
 // wrapped line height) doesn't drift with the day a test happens to run,
 // which would fail these for reasons having nothing to do with a real
 // regression. No masking is needed to keep these stable across runs.
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../support/test";
 import { loadFixtureManifest } from "../support/manifest";
+import { reseedFixtures } from "../support/reseed";
 
 test.describe("visual regression", { tag: "@visual" }, () => {
+  // Visual runs can be composed with other E2E tiers in a local aggregate.
+  // Re-seed before every capture so a preceding mutating settings/deal test
+  // cannot change the screenshot's owner data.
+  test.beforeEach(reseedFixtures);
+
   test("Beranda desktop", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 2, name: "Net bulan ini" })).toBeVisible();
@@ -28,6 +34,12 @@ test.describe("visual regression", { tag: "@visual" }, () => {
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 2, name: "Net bulan ini" })).toBeVisible();
     await expect(page).toHaveScreenshot("beranda-mobile.png", { fullPage: true });
+  });
+
+  test("Beranda true mobile", { tag: "@visual-mobile" }, async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 2, name: "Net bulan ini" })).toBeVisible();
+    await expect(page).toHaveScreenshot("beranda-true-mobile.png", { fullPage: true });
   });
 
   test("Deals default (Semua)", async ({ page }) => {
