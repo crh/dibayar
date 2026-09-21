@@ -26,7 +26,7 @@ inline below where relevant).
 | Item | Status | Commit(s) | Evidence | Files |
 |---|---|---|---|---|
 | §1 Persist plan | **DONE** | `85d10de` (main) | `docs/PROJECT-PLAN-2026-09-22.md` present, referenced from `STATE.md` | `docs/PROJECT-PLAN-2026-09-22.md` |
-| P0-1 Merge PR #8 | **BLOCKED** | none | `gh pr merge 8 --merge` denied by the Claude Code auto-mode "Merge Without Review" classifier. Re-validated immediately before attempting: head `2e9ab13` unchanged, `MERGEABLE`/`CLEAN`. See §E. | — |
+| P0-1 Merge PR #8 | **DONE** | `5e33153` (merge commit on `main`) | Initial `gh pr merge 8 --merge` was denied by the Claude Code auto-mode "Merge Without Review" classifier; Chris then explicitly approved ("Execute the pr 8 merge. I approve") and the merge succeeded. Re-validated immediately before merging: head `2e9ab13` unchanged, `MERGEABLE`/`CLEAN`. `main` confirmed to contain PR #8's changes via `git pull --ff-only`. Post-merge push CI: run `35668448736` — see §C for result. | — |
 | Pre-merge cross-browser datapoint | **DONE** | — | Manual `workflow_dispatch` run `35660957102`: `lint-typecheck-test`/`e2e-critical`/`e2e-a11y`/`ux-audit` green; `e2e-cross-browser` failed with 3 distinct real findings (below) — none touch PR #8's own required checks | — |
 | P0-2 Reconcile STATE.md | **DONE** | `85d10de` (main) | 79/120 lines; names PR #8's blocked state, the cross-browser findings, and the plan path | `STATE.md` |
 | P0-3 Dependency audit | **DONE** | `85d10de` (main) | `npm audit --omit=dev` → 0 vulnerabilities | `SECURITY.md` |
@@ -34,7 +34,7 @@ inline below where relevant).
 | P1-4 Data minimisation | **DONE** | `85d10de` (main) | Both fields re-dispositioned with current-code evidence (grep + adapter source read); `SECURITY.md` checkbox flipped | `SECURITY.md` |
 | P2-1 Diagnostics negative control | **DONE** (on PR #9, unmerged) | `54525f3` | `npm run test:diagnostics-selftest` passes locally; confirmed via `playwright test --list` that the main config never collects the synthetic spec; PR #9's CI `e2e-critical` job (real Postgres, includes this self-test step) passed — run `35663407185`, conclusion `success` | `e2e/support/synthetic/diagnostics-negative-control.ts`, `playwright.diagnostics-selftest.config.ts`, `e2e/support/diagnostics-selftest.test.mjs`, `.github/workflows/e2e.yml`, `package.json`, `docs/testing/E2E.md`, `docs/testing/E2E-IMPROVEMENT-PLAN.md` |
 | P2-3 Remove empirical sleeps | **PARTIAL** (on PR #9, unmerged) | `441c5a3` | `filter-navigation.spec.ts` fixed (semantic `networkidle` wait); could not be run locally (no disposable Postgres in this environment), but PR #9's CI `e2e-critical` job (real Postgres) passed with this change — run `35663407185`, confirming it works against the real app. `add-deal-dialog.spec.ts` left as-is — existing comment already satisfies the "or document why" acceptance branch | `e2e/deals/filter-navigation.spec.ts` |
-| P2-2 Scheduled cross-browser evidence | **BLOCKED / WAITING FOR SCHEDULE** | — | Cannot start until PR #8 merges (schedule only fires on the default branch); one manual datapoint collected instead (see above) | — |
+| P2-2 Scheduled cross-browser evidence | **WAITING FOR SCHEDULE** | — | PR #8 is now merged, so the `schedule:` trigger (weekdays 02:17 UTC) is live on `main`; needs two consecutive scheduled runs before B3's acceptance is met — none have occurred yet. One manual datapoint already collected (see above) | — |
 | P2-4 Residual journey gaps | **DEFERRED** (all 6, explicitly, on PR #9) | `9477cde` | Each named with a concrete next step; none implemented — no disposable Postgres available to write and run new mutating specs | `docs/testing/E2E-IMPROVEMENT-PLAN.md` |
 | P1-1 / P1-2 Live cookie/header verification | **NOT STARTED — NEEDS CHRIS** | — | Requires a deployed environment; out of this session's authority | — |
 | P3 Product constants | **SURFACED, NOT DECIDED** | — | See §E | — |
@@ -61,8 +61,14 @@ Full narrative: `DAILY_LOG.md` "2026-09-22" entry.
 
 ## C. GitHub/CI evidence
 
-- PR #8: https://github.com/crh/dibayar/pull/8 — still `OPEN` at end of
-  session, head `2e9ab13` unchanged.
+- PR #8: https://github.com/crh/dibayar/pull/8 — **MERGED** (merge commit
+  `5e33153`, `2026-09-21T23:38:00Z`), after Chris's explicit approval
+  ("Execute the pr 8 merge. I approve") following the initial classifier
+  denial. `main` confirmed to contain the merged changes via
+  `git pull --ff-only`. Post-merge push CI: run `35668448736`, conclusion
+  `success` (`lint-typecheck-test`, `e2e-critical`, `e2e-a11y`, `ux-audit`;
+  `e2e-cross-browser` `skipped` — push events don't trigger it, only
+  `schedule`/`workflow_dispatch`).
 - Manual cross-browser dispatch: run `35660957102` (branch
   `codex/e2e-improvement-plan`), conclusion `failure` (see findings above);
   all PR-gate-equivalent jobs within it were `success`.
@@ -86,8 +92,9 @@ Full narrative: `DAILY_LOG.md` "2026-09-22" entry.
   to confirm — the rerun completed `success` on every job
   (`lint-typecheck-test`, `e2e-critical`, `e2e-a11y`, `ux-audit`), confirming
   the flake theory: same commit, clean the second time. **PR #9 is green.**
-- Scheduled-run count observed: 0 (schedule cannot fire until PR #8 merges
-  to `main`, per the plan's own §2 analysis — confirmed still true).
+- Scheduled-run count observed: 0. PR #8 is now merged, so the weekday
+  `schedule:` trigger (02:17 UTC, Mon–Fri) is live on `main` going forward;
+  the first scheduled run has not occurred yet as of this writing.
 
 ## D. Security state
 
@@ -105,39 +112,36 @@ Full narrative: `DAILY_LOG.md` "2026-09-22" entry.
 
 ## E. Human decisions needed
 
-1. **Merge PR #8** — run `gh pr merge 8 --merge` directly, or grant the
-   Claude Code auto-mode classifier permission for this action class. Every
-   downstream item in P0/P2-2 sequences behind this.
+1. **Review/merge PR #9** (`codex/post-pr8-hardening`) — new, unreviewed
+   work; this session did not merge it, per the plan's explicit scoping of
+   merge authorization to PR #8 only. CI is green (`e2e-critical`, which
+   exercises `filter-navigation.spec.ts`'s `networkidle` change against a
+   real database, passed twice — the one interleaved failure was a
+   confirmed transient Google-Fonts network flake, see §C), so this is
+   ready for review, not blocked on evidence.
 2. **Triage the 3 cross-browser findings above** before trusting the
-   eventual scheduled Firefox/WebKit signal as noise-free.
-3. **Review/merge PR #9** (`codex/post-pr8-hardening`) once #8 lands — it is
-   new, unreviewed work; this session did not merge it, per the plan's
-   explicit scoping of merge authorization to PR #8 only. CI is green
-   (`e2e-critical`, which exercises `filter-navigation.spec.ts`'s
-   `networkidle` change against a real database, passed twice — the one
-   interleaved failure was a confirmed transient Google-Fonts network
-   flake, see §C), so this is ready for review, not blocked on evidence.
-4. **A live-environment verification window** for P1-1/P1-2 (session
+   scheduled Firefox/WebKit signal (now live on `main`) as noise-free.
+3. **A live-environment verification window** for P1-1/P1-2 (session
    cookie attributes, deployed-origin security headers) — one trip covers
    both, per the plan.
-5. **The three provisional product constants**, current locations, unchanged:
+4. **The three provisional product constants**, current locations, unchanged:
    - 7-day due-soon window: `DUE_SOON_WINDOW_DAYS` at `src/lib/invoice-date-status.ts:8`.
    - 90-day share-link lifetime: `DEFAULT_SHARE_LIFETIME_DAYS` at `src/lib/invoice-share.ts:7`.
    - Invoice-issue-date income basis: `src/lib/income-summary.ts:30` filters
      the monthly income summary by `invoice.createdAt` (issue date), not
      paid date or due date.
    No behavioural change was made to any of the three.
-6. **M4 creator validation** and **Production public-access intent** —
+5. **M4 creator validation** and **Production public-access intent** —
    unchanged from the 2026-09-20 audit, still open.
 
 ## F. Next 3 actions
 
-1. Chris: merge PR #8 (`gh pr merge 8 --merge` or equivalent), then review
-   and merge PR #9.
-2. Once #8 is on `main`: confirm the `schedule:` trigger starts firing, and
-   triage the 3 cross-browser findings above (product-defect vs.
+1. Chris: review and merge PR #9 (https://github.com/crh/dibayar/pull/9),
+   CI green.
+2. Watch for the first scheduled `e2e-cross-browser` run (weekdays 02:17 UTC)
+   on `main`; triage the 3 cross-browser findings above (product-defect vs.
    infrastructure per the plan's own escalation rule) before counting any
-   scheduled run toward B3's two-consecutive-runs acceptance.
+   run toward B3's two-consecutive-runs acceptance.
 3. From an environment with `127.0.0.1:55432/dibayar_test` available:
    attempt `add-deal-dialog.spec.ts`'s remaining empirical sleep, and pick
    up one or more of the six P2-4 residual journey gaps named in
