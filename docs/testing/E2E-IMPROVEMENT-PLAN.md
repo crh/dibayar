@@ -274,6 +274,36 @@ Acceptance:
 - The visual suite passes twice on the baseline runner without writing files.
 - Mobile visual coverage has no implicit missing-baseline state.
 
+## 8a. Residual journey gaps (C1–C3) — status 2026-09-22
+
+`docs/PROJECT-PLAN-2026-09-22.md` P2-4 asks each deferred item below to be
+either implemented or explicitly retired here, not silently dropped. All six
+are **deferred, not retired** — not because they lack value, but because this
+environment had no disposable `127.0.0.1:55432/dibayar_test` Postgres
+available this session (CLAUDE.md forbids provisioning one via
+Docker/Compose), so new mutating E2E specs could not be written *and run* to
+confirm they pass before landing — attempting them blind risks landing
+untested, possibly-flaky specs, which is worse than leaving the gap named.
+Each remains individually actionable for the next session with DB access:
+
+- **Revoked-token recipient view after reload** (C1): needs a revoke
+  action + reload against a seeded share fixture.
+- **Long issuer/brand text at 390px** (C1): needs a fixture with
+  deliberately long strings and a layout assertion, not a snapshot.
+- **Blocked-popup/manual-link WhatsApp fallback** (C2): needs verifying
+  Playwright's popup-blocking behavior interacts as expected with the
+  existing `wa.me` link, which may need a product-side manual-link
+  fallback to exist first — check `src/lib/whatsapp.ts` before writing
+  the test.
+- **Stage-history entry assertions** (C3): needs asserting the
+  `DealStageTransition` row/timeline entry, not just the stage-badge UI
+  state, after a stage move + reload.
+- **Server-validation journey** (C3): needs a deliberately invalid
+  mutation request asserting the existing 400 contract end-to-end
+  through the UI, not just the API test suite.
+- **Ownership-denial journey** (C3): needs a second fixture user/session
+  asserting a 403/404 on another user's deal or invoice through the UI.
+
 ## 9. Proposed delivery sequence
 
 Implement as reviewable, independently reversible changes:
