@@ -104,6 +104,27 @@ Acceptance:
   creating untracked snapshot files.
 - Reversing spec order does not alter results.
 
+**P2-3 status (2026-09-22, `docs/PROJECT-PLAN-2026-09-22.md`), partial:**
+`e2e/deals/filter-navigation.spec.ts`'s "zero /deal network requests" test
+replaced its flat `waitForTimeout(300)` with `page.waitForLoadState("networkidle")`
+— the request watcher (`watchForDealNavigationRequests`) is event-driven
+(`page.on("request", ...)`), so it already captures a request the instant it's
+dispatched regardless of when the test checks; waiting for real network
+settlement (used for the same purpose earlier in this same test, line ~129)
+is strictly more reliable than an arbitrary sleep and resolves faster when
+nothing fires. `e2e/deals/add-deal-dialog.spec.ts`'s Escape-key
+`waitForTimeout(750)` was left unchanged: this environment has no disposable
+`127.0.0.1:55432/dibayar_test` available to run `test:e2e*` and empirically
+re-test a replacement (CLAUDE.md forbids provisioning one via
+Docker/Compose), so a change here could not be verified before landing it —
+worse than leaving a documented wait in place. The existing comment at that
+line already records a real, specific investigation (4/4 reproducible
+failures without a wait, the exact round-trip behavior observed, and why no
+DOM-observable signal was found), which already satisfies this workstream's
+"or document why no semantic condition exists" acceptance branch. Follow-up:
+re-attempt this one from an environment with the disposable Postgres target
+available.
+
 ## 5. Workstream B — CI signal and diagnostics
 
 ### B1. Promote accessibility to a maintained CI signal
@@ -218,6 +239,22 @@ Acceptance:
 
 - A deliberate unhandled page error and a deliberate API 500 each fail a harness
   verification test with actionable output.
+
+**Status: closed 2026-09-22** (`docs/PROJECT-PLAN-2026-09-22.md` P2-1, branch
+`codex/post-pr8-hardening`). `e2e/support/synthetic/diagnostics-negative-control.ts`
+(three specs: pageerror, 5xx, and a clean control) runs under its own isolated
+`playwright.diagnostics-selftest.config.ts` (no webServer/DB — fully synthetic
+via `page.setContent`/`page.route`), driven as a subprocess by
+`e2e/support/diagnostics-selftest.test.mjs` (`npm run test:diagnostics-selftest`),
+which asserts the child run exits non-zero and that the two deliberate-failure
+specs' JSON-report error text actually names the fixture's own
+"Unexpected browser diagnostics" message plus the specific injected string —
+not just "some test failed." The synthetic spec is named without
+`.spec.`/`.test.` so `playwright.e2e.config.ts`'s default `testDir` sweep never
+collects it (confirmed via `playwright test --list`); only the dedicated
+config's explicit `testMatch` runs it. Verified locally: the self-test passes,
+proving the fixture still fails on both cases and does not false-positive on
+the clean control.
 
 ## 8. Workstream E — visual and mobile policy
 

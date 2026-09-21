@@ -108,6 +108,7 @@ reseed.
 | `npm run test:e2e:all-browsers` | Semantic suite across chromium, chromium-mobile, Firefox, and WebKit -- scheduled/manual tier |
 | `npm run test:e2e:headed` | Headed chromium run (assumes a build already exists -- run `npm run e2e:build` first if not) |
 | `npm run test:e2e:ui` | Playwright UI mode |
+| `npm run test:diagnostics-selftest` | Negative-control proof that `browserDiagnostics` (below) still fails a test on a real pageerror/5xx; no build or database needed |
 
 `E2E_PORT` (default 3300) and `E2E_SKIP_WEBSERVER=1` (reuse an already-running
 server, e.g. for `test:e2e:headed`/`:ui` iteration) are available as env
@@ -146,7 +147,12 @@ The shared Playwright fixture (`e2e/support/test.ts`) attaches browser
 diagnostics for page exceptions, unexpected console errors, failed requests,
 and HTTP 5xx responses. Expected App Router RSC cancellations and the known
 invalid-public-token 404 console message are narrowly excluded; other
-diagnostics fail an otherwise passing test.
+diagnostics fail an otherwise passing test. `npm run test:diagnostics-selftest`
+proves this mechanism itself still works — a synthetic subprocess run
+(`e2e/support/synthetic/diagnostics-negative-control.ts`, isolated by its own
+`playwright.diagnostics-selftest.config.ts`) checks that a deliberate pageerror
+and a deliberate 5xx each still fail, and that a clean page doesn't
+false-positive, without touching application code.
 
 ## Cross-browser strategy
 
