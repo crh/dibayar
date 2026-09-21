@@ -181,6 +181,23 @@ GitHub Actions workflow instead (`workflow_dispatch`-only); see
 `docs/testing/UX_AUDIT.md` "Browser strategy" for how to run it and where to
 get the regenerated PNGs from.
 
+**Telling drift apart from a real state change.** Host drift shows up as tens
+of differing pixels at *identical* image dimensions. A changed image height is
+never drift -- it means the page rendered different content, and the diff must
+be explained before any baseline moves. Worked example: after the fixture seed
+started writing `tokenCiphertext` on the seeded `InvoiceShare` (it previously
+wrote only `tokenHash`), `invoice-detail-desktop` went from 965px to 921px
+tall. `getInvoiceShare` (`src/lib/invoice-share.ts`) can only recover a share
+URL when the ciphertext is present, so the old hash-only row rendered the
+"link not available after reload" fallback with a disabled WhatsApp button --
+a state only a legacy pre-encryption row can produce. The taller baseline was
+therefore capturing behaviour a real share link never has; the shorter render
+is correct, and the matching semantic assertions live in
+`e2e/invoices/invoice-journeys.spec.ts` ("share link can be created, recovered
+after reload, regenerated, and revoked"). Pair every `@visual` baseline change
+with the semantic test that pins the same behaviour, so the next diff can be
+judged against an assertion rather than against a picture.
+
 ## Security safeguards (recap)
 
 - `scripts/e2e-fixtures.ts` will not run without `E2E_FIXTURE_CONFIRM=non-production`
