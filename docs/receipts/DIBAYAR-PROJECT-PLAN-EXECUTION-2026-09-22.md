@@ -83,8 +83,9 @@ Full narrative: `DAILY_LOG.md` "2026-09-22" entry.
   and the prior run's identical build step had already succeeded). Classified
   as infrastructure per the plan's own escalation rule, not investigated
   further as a product defect; re-ran via `gh run rerun 35663530776 --failed`
-  to confirm — see the outcome recorded at the end of this section once
-  known, or `gh run view 35663530776` for current status.
+  to confirm — the rerun completed `success` on every job
+  (`lint-typecheck-test`, `e2e-critical`, `e2e-a11y`, `ux-audit`), confirming
+  the flake theory: same commit, clean the second time. **PR #9 is green.**
 - Scheduled-run count observed: 0 (schedule cannot fire until PR #8 merges
   to `main`, per the plan's own §2 analysis — confirmed still true).
 
@@ -111,11 +112,11 @@ Full narrative: `DAILY_LOG.md` "2026-09-22" entry.
    eventual scheduled Firefox/WebKit signal as noise-free.
 3. **Review/merge PR #9** (`codex/post-pr8-hardening`) once #8 lands — it is
    new, unreviewed work; this session did not merge it, per the plan's
-   explicit scoping of merge authorization to PR #8 only. Its
-   `filter-navigation.spec.ts` change could not be run against a real
-   database in this environment (no disposable Postgres available here);
-   CI's `e2e-critical` job is the real verification and should be checked
-   green before merging.
+   explicit scoping of merge authorization to PR #8 only. CI is green
+   (`e2e-critical`, which exercises `filter-navigation.spec.ts`'s
+   `networkidle` change against a real database, passed twice — the one
+   interleaved failure was a confirmed transient Google-Fonts network
+   flake, see §C), so this is ready for review, not blocked on evidence.
 4. **A live-environment verification window** for P1-1/P1-2 (session
    cookie attributes, deployed-origin security headers) — one trip covers
    both, per the plan.
