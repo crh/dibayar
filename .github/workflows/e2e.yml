@@ -21,6 +21,13 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      # Every E2E/UX-audit job below builds with `next build --webpack`
+      # (see docs/testing/E2E.md) for a reproducible browser-test target, so
+      # nothing else in this workflow exercises the default Turbopack build
+      # Vercel actually deploys with. Build-only, no services needed: every
+      # route is dynamic (ƒ), so no DATABASE_URL/AUTH_SECRET is read at
+      # build time -- confirmed by running with an empty environment.
+      - run: npm run build
 
   e2e-critical:
     runs-on: ubuntu-latest

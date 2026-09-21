@@ -92,9 +92,23 @@ async function main() {
   runPlaywrightOrAbort("tests/ux-audit run", uxAuditArgs, path.resolve("test-results/ux-audit/results.json"));
 
   if (!routeArg) {
+    // chromium-mobile-visual carries the one curated true-mobile baseline
+    // (isMobile/touch at 390px -- see docs/testing/E2E.md "Browser
+    // strategy"); chromium carries every desktop baseline. Both must run so
+    // the report's Visual Regression status reflects the full @visual suite,
+    // not just its desktop subset.
     runPlaywrightOrAbort(
       "e2e @visual run",
-      ["playwright", "test", "-c", "playwright.e2e.config.ts", "--project=chromium", "--grep", "@visual"],
+      [
+        "playwright",
+        "test",
+        "-c",
+        "playwright.e2e.config.ts",
+        "--project=chromium",
+        "--project=chromium-mobile-visual",
+        "--grep",
+        "@visual",
+      ],
       path.resolve("test-results/e2e/results.json"),
     );
   }

@@ -27,6 +27,11 @@ rebasing this work later.
   `E2E_FIXTURE_CONFIRM=non-production`, and a hostname sanity check.
 - Runs against a **production build** (`next build --webpack` + `next start`),
   not `next dev` -- `npm run e2e:build` runs before every `test:e2e*` script.
+  This is deliberately a different build strategy than the app's default
+  `npm run build` (Turbopack, what Vercel deploys with); CI's
+  `lint-typecheck-test` job runs the default build too, so a Turbopack-only
+  break still surfaces without giving browser tests two build strategies to
+  chase.
 - Projects: `chromium` (desktop) and `chromium-mobile` (390x844, Dibayar's
   primary mobile target) are the semantic PR-gate tier. Visuals use the
   desktop project plus one explicitly scoped `chromium-mobile-visual` project

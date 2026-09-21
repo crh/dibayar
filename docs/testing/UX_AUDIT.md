@@ -154,7 +154,10 @@ Seeded by `scripts/ux-fixtures.ts` (`npm run ux:fixtures -- seed|verify|cleanup`
 **Visual pixel regression is intentionally not re-implemented here.** `scripts/ux-fixtures.ts` uses relative dates (`now`/`past`/`future`), so a `toHaveScreenshot()` baseline built from it would drift every day -- exactly the "brittle baseline caused by timestamps" the harness is supposed to avoid. `e2e/visual/visual.spec.ts` already covers these same routes/states with a stable, fixed-calendar-date fixture pipeline (`scripts/e2e-fixtures.ts`); `ux:audit` runs it (`--grep @visual`) and the report's "Visual Regression status" reflects its result. **To update a visual baseline**: `npm run test:e2e:update-snapshots`, per `e2e/visual/visual.spec.ts`'s own header comment. Before running it, first run `npm run test:e2e:visual` (no `--update-snapshots`) and inspect every reported diff -- actual vs. expected vs. the pixel diff, plus the DOM/fixture state -- to confirm the mismatch is stale-baseline/rendering drift and not a real product regression. Never regenerate a baseline solely because CI is red; if the rendered UI looks wrong, stop and report it instead of updating the snapshot. After regenerating, re-run `npm run test:e2e:visual` once more without `--update-snapshots` and confirm it passes clean -- that's the proof the new baseline is actually deterministic, not just "whatever this run happened to produce".
 
 The visual command includes desktop Chromium and one explicitly scoped true-mobile
-visual project; the semantic E2E aggregate excludes all `@visual` tests.
+visual project; the semantic E2E aggregate excludes all `@visual` tests. `ux:audit`
+runs both the `chromium` and `chromium-mobile-visual` projects for `@visual`, so
+the report's "Visual Regression status" reflects the full curated suite (desktop
+baselines plus the one true-mobile baseline), not desktop alone.
 
 ## Proving the detectors work
 
