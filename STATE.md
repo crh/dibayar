@@ -17,16 +17,16 @@ day_count: 12
 repo_url: git@github.com:crh/dibayar.git
 prod_url: https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/
 last_deploy: 2026-09-19 — repository receipts report Production deployment from merged commit `f55b320`; not independently inspected today (no deployment action occurred this session). Current local checkout is `main` at this commit.
-build_status: green (2026-09-22) — `npm test` 80 files/768 tests, `npm run lint` (0 errors/0 warnings), `npm run typecheck`, `npm run build` (canonical Turbopack), `test:diagnostics-selftest`, `test:e2e:critical` (68 passed/8 skipped) all PASS on `codex/post-pr9-hardening`, verified locally and on PR #10's own CI (run `35697350409`, success).
-latest_validation: 2026-09-22 — PR #9 merged to `main` (048e4e2); PR #10 opened with all three cross-browser findings root-caused and fixed, CI green. See `docs/receipts/DIBAYAR-PR9-MERGE-AND-NEXT-STEPS-2026-09-22.md`.
+build_status: green (2026-09-22) — `npm test` 80 files/768 tests, `npm run lint` (0/0), `npm run typecheck`, `npm run build` (canonical Turbopack), `test:diagnostics-selftest`, `test:e2e:critical` (68 passed/8 skipped) all PASS; post-merge CI on `main` (run `35718148628`) green.
+latest_validation: 2026-09-22 — PR #9 (`048e4e2`) and PR #10 (`833825b`) both merged to `main`; all three cross-browser findings root-caused and fixed, plus a codex review finding on the WebKit fix itself addressed before merge. See `docs/receipts/DIBAYAR-PR9-MERGE-AND-NEXT-STEPS-2026-09-22.md`.
 stack: Next.js + TS + Tailwind + Postgres + Prisma + Auth.js (Google OAuth) + Vercel
 vercel_project: https://vercel.com/kenji-iwakura/dibayar (Chris-confirmed; linked to github.com/crh/dibayar)
 
 ## now
-current_milestone: Engineering MVP and UX work through T-27, PR #8's E2E hardening, and PR #9's diagnostics self-test/sleep-fix/revoked-token work are present in `main`. PR #10 (`codex/post-pr9-hardening`: all three cross-browser findings root-caused and fixed, plus two more found while verifying) is open, CI-green, awaiting Chris review. M4 creator validation and launch/access decisions remain open.
-active_branch: main (HEAD `048e4e2`, merge of PR #9). PR #10 (`codex/post-pr9-hardening`) open against `main`, CI green (run `35716293838`), MERGEABLE/CLEAN, not yet merged.
-latest_feature_commit: `048e4e2` — merge of PR #9 (`codex/post-pr8-hardening`) to `main`, 2026-09-22T05:43:23Z, after re-validation and explicit approval in this session.
-open_blockers: Full plan at `docs/PROJECT-PLAN-2026-09-22.md`; latest receipt at `docs/receipts/DIBAYAR-PR9-MERGE-AND-NEXT-STEPS-2026-09-22.md`. **PR #10 needs Chris review/merge** (https://github.com/crh/dibayar/pull/10) — CI green, all three original cross-browser findings root-caused and fixed (not worked around): Firefox's CSP `eval` block was Zod v4's `allowsEval` probe (not `@react-pdf/renderer`), fixed via `z.config({jitless:true})`; WebKit's 404-diagnostics allowlist correlates each suppressed console message to its own qualifying response URL (`Map<url, pendingCount>`, not a shared counter — tightened after a codex review comment found the counter could leak across unrelated 404s; see commit `885fce6`); the due-date "Tersimpan" toast race replaced with a deterministic `waitForResponse` on the save PATCH. P2-2's scheduled-run acceptance stays **WAITING FOR SCHEDULE** — 0 scheduled runs observed as of ~07:07 UTC 2026-09-22, past today's expected 02:17 UTC firing (a GitHub Actions scheduling delay, not actionable from here). Five P2-4 residual journey gaps remain deferred, one (ownership-denial) now known to need a new second fixture user — see `docs/testing/E2E-IMPROVEMENT-PLAN.md` §8a. Other product blockers unchanged: M4 creator validation, confirmation of Production edge/public-access intent, and decisions on the provisional 7-day due-soon window, 90-day share lifetime, and invoice-issue-date income basis.
+current_milestone: Engineering MVP and UX work through T-27, plus PR #8/#9/#10's E2E hardening (cross-browser CI tier, diagnostics self-test, all three original cross-browser findings root-caused and fixed), are present in `main`. No open engineering PRs. M4 creator validation and launch/access decisions remain open.
+active_branch: main (HEAD `833825b`, merge of PR #10). No open PRs.
+latest_feature_commit: `833825b` — merge of PR #10 (`codex/post-pr9-hardening`) to `main`, 2026-09-22T10:50:08Z, after explicit user approval ("merge pr #10"); post-merge CI (run `35718148628`) green.
+open_blockers: Full plan at `docs/PROJECT-PLAN-2026-09-22.md`; latest receipt at `docs/receipts/DIBAYAR-PR9-MERGE-AND-NEXT-STEPS-2026-09-22.md`. All three original cross-browser findings are now merged to `main`, root-caused and fixed (not worked around): Firefox's CSP `eval` block was Zod v4's `allowsEval` probe (not `@react-pdf/renderer`), fixed via `z.config({jitless:true})`; WebKit's 404-diagnostics allowlist correlates each suppressed console message to its own qualifying response URL (`Map<url, pendingCount>`); the due-date "Tersimpan" toast race replaced with a deterministic `waitForResponse` on the save PATCH. P2-2's scheduled-run acceptance stays **WAITING FOR SCHEDULE** — 0 scheduled runs observed as of ~07:07 UTC 2026-09-22, past today's expected 02:17 UTC firing (a GitHub Actions scheduling delay, not actionable from here). Five P2-4 residual journey gaps remain deferred, one (ownership-denial) now known to need a new second fixture user — see `docs/testing/E2E-IMPROVEMENT-PLAN.md` §8a. Other product blockers unchanged: M4 creator validation, confirmation of Production edge/public-access intent, and decisions on the provisional 7-day due-soon window, 90-day share lifetime, and invoice-issue-date income basis.
 completed_milestones:
   - Phase 0 discovery closed
   - M0 bootstrap and protected production deployment complete
@@ -57,10 +57,10 @@ open_blockers_continued: none beyond the ones listed above.
 - Older entries (through 2026-09-20: Phase 0–6/T-27 UX implementation, PR #7 Preview database-binding fix, and the 2026-09-20 truth audit) already live in full in `DAILY_LOG.md` per the 3-day retention rule; nothing was dropped, only relocated out of this file.
 
 ## approvals
-pending_from_chris: [2026-09-22] **Review/merge PR #10** (https://github.com/crh/dibayar/pull/10), CI green. [2026-09-20, still open] Confirm whether Production's no-Vercel-SSO edge reachability is intentional; decide recipient public-access policy; complete M4 validation/go-no-go; confirm or revise the provisional 7-day due-soon window, 90-day share lifetime, and invoice-issue-date income basis.
+pending_from_chris: [2026-09-20, still open] Confirm whether Production's no-Vercel-SSO edge reachability is intentional; decide recipient public-access policy; complete M4 validation/go-no-go; confirm or revise the provisional 7-day due-soon window, 90-day share lifetime, and invoice-issue-date income basis.
 pending_external: none
 
-granted_by_chris: standing autonomous milestone execution, code-fix, and protected Preview redeployment approval (Phases 4–6, unchanged). 2026-09-22: merge authorization exercised for PR #9 specifically (re-validated, then merged after explicit in-session approval once the harness's classifier denied the first unattended attempt) — PR #9 is now merged. That authorization does not extend to PR #10 or any other PR.
+granted_by_chris: standing autonomous milestone execution, code-fix, and protected Preview redeployment approval (Phases 4–6, unchanged). 2026-09-22: merge authorization exercised for PR #9 (re-validated, merged after in-session approval once the harness's classifier denied the first attempt) and PR #10 ("merge pr #10", clean merge, no classifier denial this time) — both now merged. No PR is currently open or pending Chris review.
 
 ## metrics (phase 2+ only)
 users_shown: 0
@@ -75,6 +75,6 @@ production_2026-09-06: PR #2 merged to `main` (`b6119d2`) auto-deployed Producti
 smoke: real browser automation against the live Preview deployment — see latest_validation for the exact Phase 6 checks; Phase 5 (2026-08-25), Phase 4 (2026-08-24), and Phase 3 (2026-08-23) UAT passed the same way
 
 ## next_3_tasks
-1. Chris: review and merge PR #10 (https://github.com/crh/dibayar/pull/10).
-2. Watch for the first scheduled `e2e-cross-browser` run on `main` (weekdays 02:17 UTC, none observed yet); once two consecutive qualifying runs land, close B3's acceptance.
-3. Pick up one of the five remaining P2-4 gaps (`docs/testing/E2E-IMPROVEMENT-PLAN.md` §8a) — ownership-denial needs a new second fixture user first; the others are more self-contained.
+1. Watch for the first scheduled `e2e-cross-browser` run on `main` (weekdays 02:17 UTC, none observed yet); once two consecutive qualifying runs land, close B3's acceptance.
+2. Pick up one of the five remaining P2-4 gaps (`docs/testing/E2E-IMPROVEMENT-PLAN.md` §8a) — ownership-denial needs a new second fixture user first; the others are more self-contained.
+3. Confirm Production edge/public-access intent, then resume M4 creator validation — unchanged from 2026-09-20, still the largest open item.
