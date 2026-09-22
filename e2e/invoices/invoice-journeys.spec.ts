@@ -144,4 +144,38 @@ test.describe("invoice journeys", { tag: "@critical" }, () => {
     expect(message).toContain("http://localhost:3300/i/");
     await popup.close();
   });
+
+  // E2E-IMPROVEMENT-PLAN.md C2: invoice-detail-client.tsx (search "F15
+  // fallback") already has a manual-link fallback for when window.open()
+  // comes back blocked -- this proves it, rather than assuming it works.
+  // Playwright doesn't expose a cross-browser "simulate a popup blocker"
+  // toggle, but the app's own detection is exactly "window.open() returned
+  // null" (see sendWhatsApp in invoice-detail-client.tsx), which is the
+  // real signal every browser's popup blocker actually produces -- so
+  // stubbing window.open() to return null via an init script reproduces
+  // the same code path a real blocked popup would take, deterministically
+  // and cross-browser, without depending on any one engine's own
+  // popup-blocking heuristics (which differ and aren't Playwright-
+  // controllable anyway).
+  test("a blocked WhatsApp popup falls back to a clickable manual link", async ({ page }) => {
+    const manifest = loadFixtureManifest();
+    await page.addInitScript(() => {
+      window.open = () => null;
+    });
+    await page.goto(`/invoice/${manifest.invoices.sent}`);
+
+    await expect(page.getByText("Buka WhatsApp")).toHaveCount(0);
+    await page.getByRole("button", { name: "Kirim lewat WhatsApp" }).click();
+
+    const fallbackLink = page.getByRole("link", { name: "Buka WhatsApp" });
+    await expect(fallbackLink).toBeVisible();
+    // buildWhatsAppShareUrl builds a wa.me link directly (see
+    // src/lib/whatsapp.ts); it only resolves to api.whatsapp.com/send on
+    // an actual navigation/redirect, which this test deliberately never
+    // triggers -- the point here is the fallback link itself exists and
+    // is correctly addressed, not the redirect target.
+    const href = await fallbackLink.getAttribute("href");
+    expect(href).toContain("https://wa.me/628110000006");
+    expect(await fallbackLink.getAttribute("target")).toBe("_blank");
+  });
 });
