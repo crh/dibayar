@@ -33,14 +33,31 @@ inline below where relevant).
 | P1-3 MFA design | **DONE** | `85d10de` (main) | New design doc; `SECURITY.md` checkbox flipped | `docs/security/MFA-DESIGN.md`, `SECURITY.md` |
 | P1-4 Data minimisation | **DONE** | `85d10de` (main) | Both fields re-dispositioned with current-code evidence (grep + adapter source read); `SECURITY.md` checkbox flipped | `SECURITY.md` |
 | P2-1 Diagnostics negative control | **DONE** (on PR #9, unmerged) | `54525f3` | `npm run test:diagnostics-selftest` passes locally; confirmed via `playwright test --list` that the main config never collects the synthetic spec; PR #9's CI `e2e-critical` job (real Postgres, includes this self-test step) passed — run `35663407185`, conclusion `success` | `e2e/support/synthetic/diagnostics-negative-control.ts`, `playwright.diagnostics-selftest.config.ts`, `e2e/support/diagnostics-selftest.test.mjs`, `.github/workflows/e2e.yml`, `package.json`, `docs/testing/E2E.md`, `docs/testing/E2E-IMPROVEMENT-PLAN.md` |
-| P2-3 Remove empirical sleeps | **PARTIAL** (on PR #9, unmerged) | `441c5a3` | `filter-navigation.spec.ts` fixed (semantic `networkidle` wait); could not be run locally (no disposable Postgres in this environment), but PR #9's CI `e2e-critical` job (real Postgres) passed with this change — run `35663407185`, confirming it works against the real app. `add-deal-dialog.spec.ts` left as-is — existing comment already satisfies the "or document why" acceptance branch | `e2e/deals/filter-navigation.spec.ts` |
+| P2-3 Remove empirical sleeps | **DONE** (on PR #9, unmerged) | `441c5a3`, `6dbe7e0` | `filter-navigation.spec.ts` fixed (semantic `networkidle` wait). `add-deal-dialog.spec.ts`'s wait: this receipt originally claimed no disposable Postgres was available to test it — **that was wrong**, see the correction note below §B; once corrected, empirically re-tested by removing the wait and running `--repeat-each=15` against the real database, which failed 7/15, reproducing the original investigation. Left in place with the re-confirmation recorded at the call site. Both changes verified with `npm run test:e2e:critical` locally (66/68 passed across the two runs) and in CI. | `e2e/deals/filter-navigation.spec.ts`, `e2e/deals/add-deal-dialog.spec.ts` |
 | P2-2 Scheduled cross-browser evidence | **WAITING FOR SCHEDULE** | — | PR #8 is now merged, so the `schedule:` trigger (weekdays 02:17 UTC) is live on `main`; needs two consecutive scheduled runs before B3's acceptance is met — none have occurred yet. One manual datapoint already collected (see above) | — |
-| P2-4 Residual journey gaps | **DEFERRED** (all 6, explicitly, on PR #9) | `9477cde` | Each named with a concrete next step; none implemented — no disposable Postgres available to write and run new mutating specs | `docs/testing/E2E-IMPROVEMENT-PLAN.md` |
+| P2-4 Residual journey gaps | **1 of 6 DONE, 5 DEFERRED** (on PR #9) | `9477cde`, `7273911` | Revoked-token recipient view: closed with a real, passing test (see correction note below). The other five remain deferred as a scope/priority choice for this session, each with a concrete next step — not because of any environment constraint (that framing was wrong; see below) | `docs/testing/E2E-IMPROVEMENT-PLAN.md`, `e2e/public/invoice.spec.ts` |
 | P1-1 / P1-2 Live cookie/header verification | **NOT STARTED — NEEDS CHRIS** | — | Requires a deployed environment; out of this session's authority | — |
 | P3 Product constants | **SURFACED, NOT DECIDED** | — | See §E | — |
 | M4 Creator validation | **NOT STARTED** | — | Requires external contact; Chris-gated per `BACKLOG.md` | — |
 
-Full narrative: `DAILY_LOG.md` "2026-09-22" entry.
+Full narrative: `DAILY_LOG.md` "2026-09-22" and "2026-09-22 (continued)" entries.
+
+### Correction: the "no disposable database available" claim was wrong
+
+This receipt originally stated the environment had no reachable
+`127.0.0.1:55432/dibayar_test` Postgres, based on a `/dev/tcp/...` bash
+redirection check in a zsh shell — which silently doesn't behave like bash
+there, producing a false negative. Chris shared a `docker ps` output showing
+a `postgres:17-alpine` container already mapped to that exact port and
+asked directly. `nc -zv 127.0.0.1 55432` then confirmed it was genuinely
+open; `.env.local` already had the matching `DATABASE_URL`; the schema was
+already current (`npx prisma migrate status`); `npm run e2e:fixtures --
+seed` seeded it cleanly. With a real database confirmed, both P2-3's
+`add-deal-dialog.spec.ts` wait and one of P2-4's six gaps (revoked-token
+recipient view) were actually tested and closed rather than left deferred
+on an incorrect premise — see the updated table rows above, `DAILY_LOG.md`
+"2026-09-22 (continued)", and `docs/testing/E2E-IMPROVEMENT-PLAN.md`'s
+corrected P2-3/P2-4 status notes.
 
 ### Cross-browser findings (from run `35660957102`), for whoever picks up P2-2/P2-4
 
@@ -91,7 +108,12 @@ Full narrative: `DAILY_LOG.md` "2026-09-22" entry.
   further as a product defect; re-ran via `gh run rerun 35663530776 --failed`
   to confirm — the rerun completed `success` on every job
   (`lint-typecheck-test`, `e2e-critical`, `e2e-a11y`, `ux-audit`), confirming
-  the flake theory: same commit, clean the second time. **PR #9 is green.**
+  the flake theory: same commit, clean the second time. Run `35674505221`
+  (add-deal-dialog re-confirmation commit `6dbe7e0`): `success` on every
+  job. Run `35675107083` (revoked-token test commit `7273911`): `success`
+  on every job (`lint-typecheck-test`, `e2e-critical` — includes the new
+  revoked-token test, `e2e-a11y`, `ux-audit`). **PR #9 is green across
+  every commit.**
 - Scheduled-run count observed: 0. PR #8 is now merged, so the weekday
   `schedule:` trigger (02:17 UTC, Mon–Fri) is live on `main` going forward;
   the first scheduled run has not occurred yet as of this writing.
@@ -114,10 +136,9 @@ Full narrative: `DAILY_LOG.md` "2026-09-22" entry.
 
 1. **Review/merge PR #9** (`codex/post-pr8-hardening`) — new, unreviewed
    work; this session did not merge it, per the plan's explicit scoping of
-   merge authorization to PR #8 only. CI is green (`e2e-critical`, which
-   exercises `filter-navigation.spec.ts`'s `networkidle` change against a
-   real database, passed twice — the one interleaved failure was a
-   confirmed transient Google-Fonts network flake, see §C), so this is
+   merge authorization to PR #8 only. CI is green across every push (see
+   §C), including the real `e2e-critical` job (exercises the `networkidle`
+   fix and the new revoked-token test against a real database), so this is
    ready for review, not blocked on evidence.
 2. **Triage the 3 cross-browser findings above** before trusting the
    scheduled Firefox/WebKit signal (now live on `main`) as noise-free.
@@ -142,10 +163,9 @@ Full narrative: `DAILY_LOG.md` "2026-09-22" entry.
    on `main`; triage the 3 cross-browser findings above (product-defect vs.
    infrastructure per the plan's own escalation rule) before counting any
    run toward B3's two-consecutive-runs acceptance.
-3. From an environment with `127.0.0.1:55432/dibayar_test` available:
-   attempt `add-deal-dialog.spec.ts`'s remaining empirical sleep, and pick
-   up one or more of the six P2-4 residual journey gaps named in
-   `docs/testing/E2E-IMPROVEMENT-PLAN.md`.
+3. Pick up one or more of the remaining five P2-4 residual journey gaps
+   named in `docs/testing/E2E-IMPROVEMENT-PLAN.md` — a disposable database
+   is confirmed available for this (see the correction note above §C).
 
 ## G. Guardrail confirmation
 
@@ -162,3 +182,10 @@ worked around with the equivalent `git branch` + `git switch` (creating a
 local branch pointer, not merging anything) rather than treated as a signal
 to retry the actual merge through another tool — consistent with the
 harness's own instruction not to route around a denial's intent.
+
+One correction, not a guardrail breach: this receipt originally claimed no
+disposable Postgres was reachable in this environment. That was wrong — a
+shell-specific false negative, not a real constraint — and was corrected
+once Chris pointed to a running container on the expected port. See the
+correction note above §C for the full account and what changed as a
+result.
