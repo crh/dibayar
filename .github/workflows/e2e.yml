@@ -69,6 +69,10 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npx prisma migrate deploy
       - run: npm run test:e2e:critical
+      # Negative control for the browserDiagnostics fixture itself (see
+      # docs/testing/E2E.md) -- needs only the Chromium install above, no
+      # database or build, so it runs here rather than its own job.
+      - run: npm run test:diagnostics-selftest
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

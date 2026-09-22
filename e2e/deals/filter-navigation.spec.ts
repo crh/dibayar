@@ -132,8 +132,13 @@ test.describe("deal filter/navigation matrix", { tag: "@critical" }, () => {
 
     await group.getByRole("button", { name: "Invoice", exact: true }).click();
     await expect(group.getByRole("button", { name: "Invoice", exact: true })).toHaveAttribute("aria-pressed", "true");
-    // Give any accidental navigation request a moment to fire before asserting none did.
-    await page.waitForTimeout(300);
+    // Give any accidental navigation request a moment to fire before asserting
+    // none did -- networkidle (not a flat sleep) since watchForDealNavigationRequests
+    // is event-driven (page.on("request", ...)) and captures a request the instant
+    // it's dispatched, so waiting for real network settlement is strictly more
+    // reliable than an arbitrary timeout: it resolves fast when nothing fires, and
+    // fully waits out a slow-starting erroneous request when something does.
+    await page.waitForLoadState("networkidle");
 
     watch.dispose();
     expect(

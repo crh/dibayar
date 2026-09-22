@@ -104,6 +104,28 @@ Acceptance:
   creating untracked snapshot files.
 - Reversing spec order does not alter results.
 
+**P2-3 status (2026-09-22, `docs/PROJECT-PLAN-2026-09-22.md`), closed:**
+`e2e/deals/filter-navigation.spec.ts`'s "zero /deal network requests" test
+replaced its flat `waitForTimeout(300)` with `page.waitForLoadState("networkidle")`
+— the request watcher (`watchForDealNavigationRequests`) is event-driven
+(`page.on("request", ...)`), so it already captures a request the instant it's
+dispatched regardless of when the test checks; waiting for real network
+settlement (used for the same purpose earlier in this same test, line ~129)
+is strictly more reliable than an arbitrary sleep and resolves faster when
+nothing fires. Verified against a real disposable `127.0.0.1:55432/dibayar_test`
+database (initially thought unavailable in this environment; it was in fact
+already running and reachable, corrected mid-session) via `npm run
+test:e2e:critical` (66 passed) and CI (`e2e-critical`, twice green).
+
+`e2e/deals/add-deal-dialog.spec.ts`'s Escape-key `waitForTimeout(750)` was
+re-investigated with the same database, not left on faith: removing it and
+relying on `toHaveCount(0)`'s own polling was run 15 times
+(`--repeat-each=15`) and failed 7/15 — reproducing the original
+investigation's finding rather than assuming it still held. Left in place,
+with the re-confirmation recorded at the call site. This is now a
+positively re-verified "no semantic condition exists" case, not an
+unverified assumption.
+
 ## 5. Workstream B — CI signal and diagnostics
 
 ### B1. Promote accessibility to a maintained CI signal
@@ -219,6 +241,22 @@ Acceptance:
 - A deliberate unhandled page error and a deliberate API 500 each fail a harness
   verification test with actionable output.
 
+**Status: closed 2026-09-22** (`docs/PROJECT-PLAN-2026-09-22.md` P2-1, branch
+`codex/post-pr8-hardening`). `e2e/support/synthetic/diagnostics-negative-control.ts`
+(three specs: pageerror, 5xx, and a clean control) runs under its own isolated
+`playwright.diagnostics-selftest.config.ts` (no webServer/DB — fully synthetic
+via `page.setContent`/`page.route`), driven as a subprocess by
+`e2e/support/diagnostics-selftest.test.mjs` (`npm run test:diagnostics-selftest`),
+which asserts the child run exits non-zero and that the two deliberate-failure
+specs' JSON-report error text actually names the fixture's own
+"Unexpected browser diagnostics" message plus the specific injected string —
+not just "some test failed." The synthetic spec is named without
+`.spec.`/`.test.` so `playwright.e2e.config.ts`'s default `testDir` sweep never
+collects it (confirmed via `playwright test --list`); only the dedicated
+config's explicit `testMatch` runs it. Verified locally: the self-test passes,
+proving the fixture still fails on both cases and does not false-positive on
+the clean control.
+
 ## 8. Workstream E — visual and mobile policy
 
 - Re-run the three current visual failures on the GitHub-hosted baseline runner.
@@ -236,6 +274,50 @@ Acceptance:
 
 - The visual suite passes twice on the baseline runner without writing files.
 - Mobile visual coverage has no implicit missing-baseline state.
+
+## 8a. Residual journey gaps (C1–C3) — status 2026-09-22
+
+`docs/PROJECT-PLAN-2026-09-22.md` P2-4 asks each deferred item below to be
+either implemented or explicitly retired here, not silently dropped. This
+was first written believing no disposable `127.0.0.1:55432/dibayar_test`
+Postgres was available in this environment — that was wrong (Chris pointed
+out a running container on the expected port; the earlier check had a false
+negative), corrected mid-session once a real database was confirmed
+reachable and seeded.
+
+- **Revoked-token recipient view after reload** (C1): **closed.**
+  `e2e/public/invoice.spec.ts` "revoked token becomes unusable to the
+  recipient after reload" — revokes the shared invoice's real active share
+  through the owner's actual UI (a second, separately-authenticated
+  browser context via `browser.newContext`/`ownerSessionCookie`, not a raw
+  API call), then confirms the recipient's already-open `/i/[token]` tab
+  gets the generic 404/not-found state on reload, identical to an unknown
+  token. `test.beforeEach(reseedFixtures)` was added to the whole file
+  since this is now the one mutating test in it, protecting every other
+  test (this file, the other Chromium project sharing the same database,
+  and any later spec file) from inheriting the revoked state. Verified:
+  12/12 passed across both `chromium`/`chromium-mobile` on this file alone,
+  and the full `test:e2e:critical` run (68 passed, 8 intentionally skipped).
+
+Remaining five stay **deferred, not retired** — not because they lack
+value, but as a scope/priority choice for this session (see
+`docs/receipts/DIBAYAR-PROJECT-PLAN-EXECUTION-2026-09-22.md`), now that a
+database is confirmed available for whoever picks these up next:
+- **Long issuer/brand text at 390px** (C1): needs a fixture with
+  deliberately long strings and a layout assertion, not a snapshot.
+- **Blocked-popup/manual-link WhatsApp fallback** (C2): needs verifying
+  Playwright's popup-blocking behavior interacts as expected with the
+  existing `wa.me` link, which may need a product-side manual-link
+  fallback to exist first — check `src/lib/whatsapp.ts` before writing
+  the test.
+- **Stage-history entry assertions** (C3): needs asserting the
+  `DealStageTransition` row/timeline entry, not just the stage-badge UI
+  state, after a stage move + reload.
+- **Server-validation journey** (C3): needs a deliberately invalid
+  mutation request asserting the existing 400 contract end-to-end
+  through the UI, not just the API test suite.
+- **Ownership-denial journey** (C3): needs a second fixture user/session
+  asserting a 403/404 on another user's deal or invoice through the UI.
 
 ## 9. Proposed delivery sequence
 
