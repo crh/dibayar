@@ -94,15 +94,31 @@ test.describe("invoice journeys", { tag: "@critical" }, () => {
     await page.goto(`/invoice/${manifest.invoices.sent}`);
 
     const dueDate = page.getByLabel("Tanggal jatuh tempo");
+    const patchUrl = (response: Awaited<ReturnType<typeof page.waitForResponse>>) =>
+      response.request().method() === "PATCH" && new URL(response.url()).pathname === `/api/invoices/${manifest.invoices.sent}`;
+
+    // The "Tersimpan" toast is a 2-second-lived UI affordance (see
+    // src/components/date-field.tsx's SAVED_DISPLAY_MS), already covered
+    // deterministically with fake timers in date-field.test.tsx. Asserting
+    // on it here raced real wall-clock time against browser/network speed
+    // under load -- WebKit failed this specifically when the full
+    // e2e-cross-browser suite ran under local machine contention (this
+    // file's own test in isolation, and every other project, passed). The
+    // product requirement this journey test actually owns is persistence,
+    // not toast timing: wait for the PATCH that saves the due date to
+    // resolve (the real "did it save" signal), then prove persistence with
+    // a reload, exactly as this test already did for the value itself.
+    const savePatch = page.waitForResponse(patchUrl);
     await dueDate.fill("2030-01-15");
-    await expect(page.getByText("Tersimpan")).toBeVisible();
+    expect((await savePatch).ok()).toBe(true);
     await expect(dueDate).toHaveValue("2030-01-15");
 
     await page.reload();
     await expect(dueDate).toHaveValue("2030-01-15");
 
+    const clearPatch = page.waitForResponse(patchUrl);
     await page.getByRole("button", { name: "Kosongkan" }).click();
-    await expect(page.getByText("Tersimpan")).toBeVisible();
+    expect((await clearPatch).ok()).toBe(true);
     await page.reload();
     await expect(dueDate).toHaveValue("");
   });

@@ -2,6 +2,10 @@
 
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { getLanguage, translate, type Language } from "@/lib/i18n";
+// Side-effect import: must run before any client-side zod parse. See
+// src/lib/zod-runtime-config.ts. LanguageProvider wraps every page, so its
+// module is guaranteed to evaluate before any page-specific client code.
+import "@/lib/zod-runtime-config";
 
 const STORAGE_KEY = "dibayar-language";
 const COOKIE_KEY = "dibayar-language";
