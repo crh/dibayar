@@ -104,7 +104,7 @@ Acceptance:
   creating untracked snapshot files.
 - Reversing spec order does not alter results.
 
-**P2-3 status (2026-09-22, `docs/PROJECT-PLAN-2026-09-22.md`), partial:**
+**P2-3 status (2026-09-22, `docs/PROJECT-PLAN-2026-09-22.md`), closed:**
 `e2e/deals/filter-navigation.spec.ts`'s "zero /deal network requests" test
 replaced its flat `waitForTimeout(300)` with `page.waitForLoadState("networkidle")`
 — the request watcher (`watchForDealNavigationRequests`) is event-driven
@@ -112,18 +112,19 @@ replaced its flat `waitForTimeout(300)` with `page.waitForLoadState("networkidle
 dispatched regardless of when the test checks; waiting for real network
 settlement (used for the same purpose earlier in this same test, line ~129)
 is strictly more reliable than an arbitrary sleep and resolves faster when
-nothing fires. `e2e/deals/add-deal-dialog.spec.ts`'s Escape-key
-`waitForTimeout(750)` was left unchanged: this environment has no disposable
-`127.0.0.1:55432/dibayar_test` available to run `test:e2e*` and empirically
-re-test a replacement (CLAUDE.md forbids provisioning one via
-Docker/Compose), so a change here could not be verified before landing it —
-worse than leaving a documented wait in place. The existing comment at that
-line already records a real, specific investigation (4/4 reproducible
-failures without a wait, the exact round-trip behavior observed, and why no
-DOM-observable signal was found), which already satisfies this workstream's
-"or document why no semantic condition exists" acceptance branch. Follow-up:
-re-attempt this one from an environment with the disposable Postgres target
-available.
+nothing fires. Verified against a real disposable `127.0.0.1:55432/dibayar_test`
+database (initially thought unavailable in this environment; it was in fact
+already running and reachable, corrected mid-session) via `npm run
+test:e2e:critical` (66 passed) and CI (`e2e-critical`, twice green).
+
+`e2e/deals/add-deal-dialog.spec.ts`'s Escape-key `waitForTimeout(750)` was
+re-investigated with the same database, not left on faith: removing it and
+relying on `toHaveCount(0)`'s own polling was run 15 times
+(`--repeat-each=15`) and failed 7/15 — reproducing the original
+investigation's finding rather than assuming it still held. Left in place,
+with the re-confirmation recorded at the call site. This is now a
+positively re-verified "no semantic condition exists" case, not an
+unverified assumption.
 
 ## 5. Workstream B — CI signal and diagnostics
 
@@ -277,17 +278,31 @@ Acceptance:
 ## 8a. Residual journey gaps (C1–C3) — status 2026-09-22
 
 `docs/PROJECT-PLAN-2026-09-22.md` P2-4 asks each deferred item below to be
-either implemented or explicitly retired here, not silently dropped. All six
-are **deferred, not retired** — not because they lack value, but because this
-environment had no disposable `127.0.0.1:55432/dibayar_test` Postgres
-available this session (CLAUDE.md forbids provisioning one via
-Docker/Compose), so new mutating E2E specs could not be written *and run* to
-confirm they pass before landing — attempting them blind risks landing
-untested, possibly-flaky specs, which is worse than leaving the gap named.
-Each remains individually actionable for the next session with DB access:
+either implemented or explicitly retired here, not silently dropped. This
+was first written believing no disposable `127.0.0.1:55432/dibayar_test`
+Postgres was available in this environment — that was wrong (Chris pointed
+out a running container on the expected port; the earlier check had a false
+negative), corrected mid-session once a real database was confirmed
+reachable and seeded.
 
-- **Revoked-token recipient view after reload** (C1): needs a revoke
-  action + reload against a seeded share fixture.
+- **Revoked-token recipient view after reload** (C1): **closed.**
+  `e2e/public/invoice.spec.ts` "revoked token becomes unusable to the
+  recipient after reload" — revokes the shared invoice's real active share
+  through the owner's actual UI (a second, separately-authenticated
+  browser context via `browser.newContext`/`ownerSessionCookie`, not a raw
+  API call), then confirms the recipient's already-open `/i/[token]` tab
+  gets the generic 404/not-found state on reload, identical to an unknown
+  token. `test.beforeEach(reseedFixtures)` was added to the whole file
+  since this is now the one mutating test in it, protecting every other
+  test (this file, the other Chromium project sharing the same database,
+  and any later spec file) from inheriting the revoked state. Verified:
+  12/12 passed across both `chromium`/`chromium-mobile` on this file alone,
+  and the full `test:e2e:critical` run (68 passed, 8 intentionally skipped).
+
+Remaining five stay **deferred, not retired** — not because they lack
+value, but as a scope/priority choice for this session (see
+`docs/receipts/DIBAYAR-PROJECT-PLAN-EXECUTION-2026-09-22.md`), now that a
+database is confirmed available for whoever picks these up next:
 - **Long issuer/brand text at 390px** (C1): needs a fixture with
   deliberately long strings and a layout assertion, not a snapshot.
 - **Blocked-popup/manual-link WhatsApp fallback** (C2): needs verifying

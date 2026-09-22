@@ -1,9 +1,18 @@
 import { expect, test } from "../support/test";
 import { loadFixtureManifest } from "../support/manifest";
 import { assertNoSeriousA11yViolations } from "../support/a11y";
+import { ownerSessionCookie } from "../support/auth";
+import { reseedFixtures } from "../support/reseed";
 
 test.describe("recipient invoice journey", { tag: ["@critical", "@a11y"] }, () => {
   test.use({ storageState: { cookies: [], origins: [] } });
+
+  // This file's own tests are read-only, but the revoke test below mutates
+  // the shared "sent" invoice's share -- reseed before every test so that
+  // mutation can never leak into another test in this file, another
+  // project's run of it (chromium/chromium-mobile share one database within
+  // an invocation -- see e2e/support/reseed.ts), or a later spec file.
+  test.beforeEach(reseedFixtures);
 
   test("valid share link renders recipient-safe invoice content and PDF action", async ({ page }, testInfo) => {
     const manifest = loadFixtureManifest();
@@ -58,5 +67,37 @@ test.describe("recipient invoice journey", { tag: ["@critical", "@a11y"] }, () =
 
     expect(response.status()).toBe(404);
     expect(await response.json()).toEqual({ error: "Invoice tidak ditemukan." });
+  });
+
+  // E2E-IMPROVEMENT-PLAN.md C1: a revoked token must become unusable to the
+  // recipient, not only stop appearing in the owner's UI. Uses the real
+  // revoke action (owner UI, not a raw API call) so this exercises the same
+  // path a real owner takes, mirroring invoice-journeys.spec.ts's own
+  // create/regenerate/revoke test but from the recipient's side afterward.
+  // Placed last in this file: it is the only test here that mutates the
+  // shared active share, and test.beforeEach(reseedFixtures) above protects
+  // every other test (in this file, the other project, or a later spec
+  // file) from ever seeing that mutation.
+  test("revoked token becomes unusable to the recipient after reload", async ({ page, browser, baseURL }) => {
+    const manifest = loadFixtureManifest();
+    const activePath = `/i/${manifest.shareTokens.active}`;
+
+    await page.goto(activePath);
+    await expect(page.getByText(/Nomor invoice:\s*E2E\/SENT\/001/)).toBeVisible();
+
+    const ownerContext = await browser.newContext({
+      storageState: { cookies: [ownerSessionCookie(baseURL!)], origins: [] },
+    });
+    const ownerPage = await ownerContext.newPage();
+    await ownerPage.goto(`/invoice/${manifest.invoices.sent}`);
+    await ownerPage.getByRole("button", { name: "Cabut tautan" }).click();
+    await ownerPage.getByRole("button", { name: "Ya, cabut tautan" }).click();
+    await expect(ownerPage.getByText("Belum ada tautan berbagi untuk invoice ini.")).toBeVisible();
+    await ownerContext.close();
+
+    const response = await page.reload();
+    expect(response?.status()).toBe(404);
+    await expect(page.locator('p[role="alert"]')).toHaveText("Tautan ini tidak ditemukan.");
+    await expect(page.getByText("E2E/SENT/001", { exact: true })).toHaveCount(0);
   });
 });
