@@ -91,4 +91,15 @@ test("browserDiagnostics negative control: fixture fails on a real pageerror and
   const matchedINotFoundSpec = byTitle["suppresses only the matched /i/ 404 console error (control)"];
   assert.ok(matchedINotFoundSpec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
   assert.equal(matchedINotFoundSpec.ok, true, "the matched /i/ 404 case must still pass (suppressed)");
+
+  // Regression coverage for a codex review finding: suppression must be
+  // keyed to the specific response URL, not a bare counter shared across
+  // all 404s -- otherwise a suppressed /i/ 404 could leak into an unrelated
+  // 404 that happens to fire around the same time.
+  const concurrentSpec = byTitle["does not suppress an unrelated 404 fired concurrently with a suppressed /i/ 404"];
+  assert.ok(concurrentSpec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
+  assert.equal(concurrentSpec.ok, false, "the unrelated concurrent 404 must still be reported as failed");
+  const concurrentText = specErrorText(concurrentSpec);
+  assert.match(concurrentText, /Unexpected browser diagnostics/);
+  assert.match(concurrentText, /404 \(Not Found\)/);
 });

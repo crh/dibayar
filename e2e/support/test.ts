@@ -59,18 +59,30 @@ export const test = base.extend<{ browserDiagnostics: BrowserDiagnostics }>({
       // console events arrive in the same relative order in both engines,
       // only the page-URL bookkeeping lags in WebKit), so that gate silently
       // never matched and let the message through as an unexplained
-      // failure. Track the specific 404 via its own response event instead
-      // -- the authoritative signal for "was this actually the expected
-      // not-found response" -- rather than page navigation state.
-      let expectedNotFoundResponses = 0;
+      // failure.
+      //
+      // A first fix tracked the 404 via its own response event using a bare
+      // counter -- but a counter has no notion of *which* 404 it's for: if a
+      // qualifying /i/ 404 response ever occurred without producing this
+      // exact console message (engine variance, timing), the counter would
+      // stay positive and silently swallow the next unrelated resource that
+      // happens to log the same generic text, on a completely different
+      // page. message.text() alone never carries a URL, but
+      // message.location().url does (confirmed empirically, both Chromium
+      // and WebKit -- it's the failed resource's own URL), so key the
+      // pairing on that instead: only ever suppress a console message whose
+      // location matches a URL this fixture itself just saw a qualifying
+      // 404 response for.
+      const pendingNotFoundResponseUrls = new Map<string, number>();
       const onConsole = (message: ConsoleMessage) => {
         if (message.type() === "error") {
-          if (
-            message.text() === "Failed to load resource: the server responded with a status of 404 (Not Found)"
-            && expectedNotFoundResponses > 0
-          ) {
-            expectedNotFoundResponses--;
-            return;
+          if (message.text() === "Failed to load resource: the server responded with a status of 404 (Not Found)") {
+            const url = message.location().url;
+            const pending = pendingNotFoundResponseUrls.get(url) ?? 0;
+            if (pending > 0) {
+              pendingNotFoundResponseUrls.set(url, pending - 1);
+              return;
+            }
           }
           diagnostics.consoleErrors.push(message.text());
         }
@@ -97,9 +109,12 @@ export const test = base.extend<{ browserDiagnostics: BrowserDiagnostics }>({
         if (response.status() >= 500) diagnostics.serverErrors.push(`${response.status()} ${response.url()}`);
         // The invalid-token journey's own 404 -- see the onConsole comment
         // above. Only /i/ paths qualify: a 404 anywhere else in the app
-        // stays a real, actionable diagnostic.
+        // stays a real, actionable diagnostic. Keyed by the exact URL, not
+        // just counted, so a pending entry for one URL can never be
+        // consumed by a console message about a different one.
         if (response.status() === 404 && new URL(response.url()).pathname.startsWith("/i/")) {
-          expectedNotFoundResponses++;
+          const url = response.url();
+          pendingNotFoundResponseUrls.set(url, (pendingNotFoundResponseUrls.get(url) ?? 0) + 1);
         }
       };
 
