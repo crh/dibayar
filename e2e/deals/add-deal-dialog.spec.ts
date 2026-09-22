@@ -116,7 +116,10 @@ test.describe("tambah=1 add-deal dialog journey", { tag: "@critical" }, () => {
     // marking "the keydown listener is attached" was found to poll on
     // instead -- see docs/testing/E2E.md "Known limitations". Bumped from
     // 300ms to 750ms after one flake under a full multi-file suite run
-    // (heavier CPU contention widens the same race).
+    // (heavier CPU contention widens the same race). Re-confirmed 2026-09-22
+    // with a disposable database available: removing the wait failed 7/15
+    // repeats here too -- this is a real, reproducible race, not stale
+    // folklore.
     await page.waitForTimeout(750);
     await expect(dialog).toHaveCount(0);
 
