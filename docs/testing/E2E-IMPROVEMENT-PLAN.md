@@ -315,9 +315,53 @@ database is confirmed available for whoever picks these up next:
   state, after a stage move + reload.
 - **Server-validation journey** (C3): needs a deliberately invalid
   mutation request asserting the existing 400 contract end-to-end
-  through the UI, not just the API test suite.
+  through the UI, not just the API test suite. 2026-09-22 investigation
+  (below): the due-date field's 400 (`invoice-validation.ts`'s
+  `z.coerce.date()`) is hard to trigger through the real UI because the
+  native `<input type="date">` mostly refuses to hold malformed text in
+  the first place — `fill()` either gets rejected by the browser or
+  produces a well-formed `YYYY-MM-DD` string. Whoever picks this up
+  should look for a mutation whose invalid shape *can* originate from
+  normal UI interaction (e.g. a text-input field with a narrower server
+  contract than its client-side constraints) rather than the due-date
+  field specifically.
 - **Ownership-denial journey** (C3): needs a second fixture user/session
   asserting a 403/404 on another user's deal or invoice through the UI.
+  No second user currently exists in `scripts/e2e-fixtures.ts` /
+  `e2e/support/fixture-ids.ts` (only a second *session* for the same
+  owner, used by the sign-out journey) — this needs a real new fixture
+  user seeded and reviewed carefully, since every other E2E test's
+  shared-database assumptions are built around exactly one owner
+  existing; not attempted 2026-09-22 for that reason.
+
+### 2026-09-22 (continued) — PR #9 merged; all three original cross-browser findings root-caused and fixed
+
+Executed `DIBAYAR-CLAUDE-CODE-MERGE-PR9-AND-CONTINUE-2026-09-22.md`. PR #9
+merged (`048e4e2`). All three cross-browser findings from run `35660957102`
+were root-caused (not just worked around) and fixed on PR #10
+(`codex/post-pr9-hardening`, unmerged pending Chris review):
+Firefox's CSP `eval()` block was Zod v4's `allowsEval` capability probe,
+not `@react-pdf/renderer`; WebKit's 404-diagnostics allowlist relied on
+page-navigation state that lags in WebKit, replaced with response-based
+correlation; the due-date "Tersimpan" toast assertion was racing real
+wall-clock time against a 2-second-lived UI affordance, replaced with a
+`waitForResponse` on the actual save-completing PATCH. Two more true gaps
+(Firefox `NS_BINDING_ABORTED`, WebKit's cancelled-prefetch pageerror/
+failedRequests text) were found and fixed the same way while verifying the
+above via the full non-visual cross-browser sweep. Full detail, evidence,
+and the residual local-sandbox flake-rate finding (not a product defect):
+`docs/receipts/DIBAYAR-PR9-MERGE-AND-NEXT-STEPS-2026-09-22.md`.
+P2-2's scheduled-run acceptance remains **WAITING FOR SCHEDULE** — 0
+scheduled runs observed as of this writing (`schedule:` is `17 2 * * 1-5`,
+live on `main` since PR #8 merged 2026-09-21T23:38 UTC; checked twice this
+session, ~06:03 and ~07:07 UTC 2026-09-22, both zero, past when today's
+run should have fired — a GitHub Actions scheduling delay, not something
+this session can accelerate; not investigated further per the plan's
+explicit "do not modify the schedule to accelerate acceptance"
+instruction). The remaining five P2-4 gaps above were reviewed but not
+implemented this session (investigated the server-validation journey
+specifically; see its updated note above for why it wasn't bounded enough
+to finish safely today).
 
 ## 9. Proposed delivery sequence
 
