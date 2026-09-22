@@ -27,18 +27,51 @@ export const test = base.extend<{ browserDiagnostics: BrowserDiagnostics }>({
       };
 
       const onPageError = (error: Error) => {
-        diagnostics.pageErrors.push(errorMessage(error));
+        // WebKit surfaces Next.js App Router's own cancelled RSC-prefetch
+        // fetches (aborted via AbortController when a second navigation
+        // supersedes an in-flight prefetch -- see onRequestFailed's `_rsc`
+        // handling below) as an uncaught "Fetch API cannot load ... due to
+        // access control checks" TypeError instead of a caught AbortError.
+        // A WebKit-only quirk in how it reports fetch() aborts, not an app
+        // defect: reproduced via repeated local WebKit runs, always for a
+        // `_rsc`-tagged prefetch URL, never a real application request.
+        // Chromium/Firefox don't raise this as a pageerror at all.
+        //
+        // `error.message` alone is unreliable here -- confirmed empirically
+        // it's sometimes missing its own "Fetch API cannot load http:"
+        // prefix (a WebKit/Playwright serialization quirk), while
+        // `error.stack` (what errorMessage() below actually returns)
+        // consistently carries the full text followed by a stack frame, so
+        // match against that and don't anchor the end.
+        const message = errorMessage(error);
+        if (/^Fetch API cannot load https?:\/\/\S*[?&]_rsc=[^&\s]+ due to access control checks\./.test(message)) {
+          return;
+        }
+        diagnostics.pageErrors.push(message);
       };
+      // Both Chromium and WebKit log the expected document 404 used by the
+      // invalid-token journey (e2e/public/invoice.spec.ts) as a console
+      // error, but they disagree on *when*: Chromium's console event fires
+      // after the page's own URL already reflects the failed navigation, so
+      // gating on `message.page().url()` worked there. WebKit fires the
+      // console event while the page is still on the previous
+      // location/about:blank (confirmed empirically -- the response and
+      // console events arrive in the same relative order in both engines,
+      // only the page-URL bookkeeping lags in WebKit), so that gate silently
+      // never matched and let the message through as an unexplained
+      // failure. Track the specific 404 via its own response event instead
+      // -- the authoritative signal for "was this actually the expected
+      // not-found response" -- rather than page navigation state.
+      let expectedNotFoundResponses = 0;
       const onConsole = (message: ConsoleMessage) => {
         if (message.type() === "error") {
-          const pagePath = message.page() ? new URL(message.page()!.url()).pathname : "";
-          // Chromium logs the expected document 404 used by the invalid-token
-          // journey as a console error. The response status remains asserted
-          // by that test; keep unrelated console errors actionable.
           if (
             message.text() === "Failed to load resource: the server responded with a status of 404 (Not Found)"
-            && pagePath.startsWith("/i/")
-          ) return;
+            && expectedNotFoundResponses > 0
+          ) {
+            expectedNotFoundResponses--;
+            return;
+          }
           diagnostics.consoleErrors.push(message.text());
         }
       };
@@ -49,12 +82,25 @@ export const test = base.extend<{ browserDiagnostics: BrowserDiagnostics }>({
         // Next App Router cancels superseded RSC navigations by design when a
         // second history/router update wins the race. These requests carry
         // the internal `_rsc` query marker; keep all other failed requests
-        // visible to the test guard.
-        if (errorText === "net::ERR_ABORTED" && url.searchParams.has("_rsc")) return;
+        // visible to the test guard. Each engine reports the cancellation
+        // with its own errorText: Chromium "net::ERR_ABORTED", Firefox
+        // "NS_BINDING_ABORTED", WebKit "Load request cancelled" (all three
+        // confirmed via repeated local e2e-cross-browser Firefox+WebKit
+        // runs surfacing this exact race under load).
+        if (
+          (errorText === "net::ERR_ABORTED" || errorText === "NS_BINDING_ABORTED" || errorText === "Load request cancelled")
+          && url.searchParams.has("_rsc")
+        ) return;
         diagnostics.failedRequests.push(`${request.url()}${errorText ? ` — ${errorText}` : ""}`);
       };
       const onResponse = (response: { status(): number; url(): string }) => {
         if (response.status() >= 500) diagnostics.serverErrors.push(`${response.status()} ${response.url()}`);
+        // The invalid-token journey's own 404 -- see the onConsole comment
+        // above. Only /i/ paths qualify: a 404 anywhere else in the app
+        // stays a real, actionable diagnostic.
+        if (response.status() === 404 && new URL(response.url()).pathname.startsWith("/i/")) {
+          expectedNotFoundResponses++;
+        }
       };
 
       page.on("pageerror", onPageError);

@@ -76,4 +76,19 @@ test("browserDiagnostics negative control: fixture fails on a real pageerror and
   const controlSpec = byTitle["does not fail a clean test (control)"];
   assert.ok(controlSpec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
   assert.equal(controlSpec.ok, true, "the control spec must still pass");
+
+  // Regression coverage for the WebKit cross-browser finding: the /i/ 404
+  // allowlist in e2e/support/test.ts must stay narrow (a 404 elsewhere keeps
+  // failing) and must actually fire for its one intended case (an /i/ 404
+  // gets suppressed, not silently broken by a future edit).
+  const outsideINotFoundSpec = byTitle["does not suppress a 404 console error outside /i/ paths"];
+  assert.ok(outsideINotFoundSpec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
+  assert.equal(outsideINotFoundSpec.ok, false, "a 404 outside /i/ paths must still be reported as failed");
+  const outsideIText = specErrorText(outsideINotFoundSpec);
+  assert.match(outsideIText, /Unexpected browser diagnostics/);
+  assert.match(outsideIText, /404 \(Not Found\)/);
+
+  const matchedINotFoundSpec = byTitle["suppresses only the matched /i/ 404 console error (control)"];
+  assert.ok(matchedINotFoundSpec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
+  assert.equal(matchedINotFoundSpec.ok, true, "the matched /i/ 404 case must still pass (suppressed)");
 });
