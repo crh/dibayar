@@ -72,7 +72,15 @@ export function DealCard({
       className={`rounded-xl border border-line bg-bg p-3 ${isDragging ? "opacity-50" : ""}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <h4 className="font-semibold text-ink">{deal.brand}</h4>
+        {/* min-w-0 is load-bearing: without it, a flex item's automatic
+            minimum size is its content's min-content width, which for an
+            unbreakable brand name (no spaces) is the full string -- the
+            heading refuses to shrink, overflows past the card's edge, and
+            pushes the actions menu button (shrink-0, below) off-screen
+            entirely, making it unreachable. truncate then gives the
+            now-shrinkable heading a single-line ellipsis instead of a
+            silent, unindicated clip. */}
+        <h4 className="min-w-0 truncate font-semibold text-ink">{deal.brand}</h4>
         <div ref={menuRef} className="relative shrink-0">
           <button
             type="button"

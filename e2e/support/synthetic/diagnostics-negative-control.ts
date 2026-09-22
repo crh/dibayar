@@ -76,4 +76,32 @@ test.describe("browserDiagnostics negative control (synthetic, no application co
       ]),
     );
   });
+
+  // Regression coverage for expectedErrorResponses (see its type comment in
+  // ../test.ts): a test-level opt-in for a deliberately-triggered 4xx, used
+  // by e2e/deals/deal-crud.spec.ts's server-validation journey. Proves both
+  // directions: without opting in, a deliberate 400 still fails the guard
+  // (same as any unexplained error); with a matching opt-in, it's
+  // suppressed.
+  test("fails a test on a deliberate 400 that was not opted into expectedErrorResponses", async ({ page }) => {
+    await page.route("https://example.invalid/synthetic-400-no-optin", (route) =>
+      route.fulfill({ status: 400, contentType: "text/plain", body: "synthetic-400-no-optin-selftest" }),
+    );
+    await page.setContent("<html></html>");
+    await page.evaluate(() => fetch("https://example.invalid/synthetic-400-no-optin").catch(() => {}));
+  });
+
+  test.describe("with expectedErrorResponses opted in", () => {
+    test.use({
+      expectedErrorResponses: [{ method: "GET", pathname: "/synthetic-400-opted-in" }],
+    });
+
+    test("suppresses a deliberate 400 matching expectedErrorResponses (control)", async ({ page }) => {
+      await page.route("https://example.invalid/synthetic-400-opted-in", (route) =>
+        route.fulfill({ status: 400, contentType: "text/plain", body: "synthetic-400-opted-in-selftest" }),
+      );
+      await page.setContent("<html></html>");
+      await page.evaluate(() => fetch("https://example.invalid/synthetic-400-opted-in").catch(() => {}));
+    });
+  });
 });

@@ -152,7 +152,16 @@ export default function DealDetailClient({
       </Link>
 
       <div className="rounded-xl border border-line bg-bg p-4">
-        <h1 className="text-xl font-bold text-ink">{deal.brand}</h1>
+        {/* break-words (not truncate): unlike the board card, this is the
+            page's own primary heading -- hiding part of it behind an
+            ellipsis loses information a detail page shouldn't lose. An
+            unbreakable brand name (no spaces) otherwise overflows this
+            block element past the viewport at 390px with no ancestor
+            scroll container to absorb it (unlike deal-card.tsx's board,
+            which sits inside its own horizontal-scroll carousel) --
+            confirmed a genuine page-level horizontal-scroll bug, not
+            hypothetical. */}
+        <h1 className="text-xl font-bold break-words text-ink">{deal.brand}</h1>
         <p className="mt-1 text-[13px] font-semibold text-muted">
           {t("deal.detailStatus")}: {t(PIPELINE_STAGE_KEYS[deal.status])}
         </p>

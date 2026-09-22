@@ -102,4 +102,18 @@ test("browserDiagnostics negative control: fixture fails on a real pageerror and
   const concurrentText = specErrorText(concurrentSpec);
   assert.match(concurrentText, /Unexpected browser diagnostics/);
   assert.match(concurrentText, /404 \(Not Found\)/);
+
+  // Regression coverage for expectedErrorResponses (the server-validation
+  // journey's opt-in mechanism): a deliberate 4xx not opted into must still
+  // fail, and one that is opted in must be suppressed.
+  const noOptinSpec = byTitle["fails a test on a deliberate 400 that was not opted into expectedErrorResponses"];
+  assert.ok(noOptinSpec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
+  assert.equal(noOptinSpec.ok, false, "a non-opted-in 400 must still be reported as failed");
+  const noOptinText = specErrorText(noOptinSpec);
+  assert.match(noOptinText, /Unexpected browser diagnostics/);
+  assert.match(noOptinText, /400 \(Bad Request\)/);
+
+  const optedInSpec = byTitle["suppresses a deliberate 400 matching expectedErrorResponses (control)"];
+  assert.ok(optedInSpec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
+  assert.equal(optedInSpec.ok, true, "an opted-in 400 must still pass (suppressed)");
 });

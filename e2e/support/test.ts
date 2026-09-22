@@ -7,6 +7,18 @@ type BrowserDiagnostics = {
   serverErrors: string[];
 };
 
+// Opt-in for a test that deliberately triggers a 4xx response and needs the
+// browser's own "Failed to load resource" console log for it not to count
+// as an unexplained failure -- e.g. a server-validation or ownership-denial
+// journey. Unlike the /i/ 404 case below (a cross-cutting property of one
+// route that every test hitting it would trigger), this is inherently
+// test-specific: only the one test that deliberately sends bad data
+// expects it, so it's a per-test opt-in via `test.use(...)`, not baked into
+// this shared fixture's always-on behavior. Match narrowly (method +
+// pathname), same reasoning as the /i/ case: a 4xx anywhere else stays a
+// real, actionable diagnostic.
+type ExpectedErrorResponse = { method: string; pathname: string };
+
 function errorMessage(error: Error): string {
   return error.stack ?? error.message;
 }
@@ -16,9 +28,13 @@ function errorMessage(error: Error): string {
 // network requests, and HTTP 5xx responses. Expected 4xx flows (invalid tokens,
 // auth redirects, and validation responses) remain testable without an
 // allowlist that could accidentally hide application failures.
-export const test = base.extend<{ browserDiagnostics: BrowserDiagnostics }>({
+export const test = base.extend<{
+  browserDiagnostics: BrowserDiagnostics;
+  expectedErrorResponses: ExpectedErrorResponse[];
+}>({
+  expectedErrorResponses: [[], { option: true }],
   browserDiagnostics: [
-    async ({ page }, useFixture, testInfo) => {
+    async ({ page, expectedErrorResponses }, useFixture, testInfo) => {
       const diagnostics: BrowserDiagnostics = {
         pageErrors: [],
         consoleErrors: [],
@@ -72,15 +88,18 @@ export const test = base.extend<{ browserDiagnostics: BrowserDiagnostics }>({
       // and WebKit -- it's the failed resource's own URL), so key the
       // pairing on that instead: only ever suppress a console message whose
       // location matches a URL this fixture itself just saw a qualifying
-      // 404 response for.
-      const pendingNotFoundResponseUrls = new Map<string, number>();
+      // response for. Generalized beyond the original 404-only case to
+      // cover any status text a test opted into via expectedErrorResponses
+      // (see its type comment above) -- same correlation mechanism, same
+      // narrowness guarantee.
+      const pendingExpectedResponseUrls = new Map<string, number>();
       const onConsole = (message: ConsoleMessage) => {
         if (message.type() === "error") {
-          if (message.text() === "Failed to load resource: the server responded with a status of 404 (Not Found)") {
+          if (/^Failed to load resource: the server responded with a status of \d+ \(.+\)$/.test(message.text())) {
             const url = message.location().url;
-            const pending = pendingNotFoundResponseUrls.get(url) ?? 0;
+            const pending = pendingExpectedResponseUrls.get(url) ?? 0;
             if (pending > 0) {
-              pendingNotFoundResponseUrls.set(url, pending - 1);
+              pendingExpectedResponseUrls.set(url, pending - 1);
               return;
             }
           }
@@ -105,16 +124,23 @@ export const test = base.extend<{ browserDiagnostics: BrowserDiagnostics }>({
         ) return;
         diagnostics.failedRequests.push(`${request.url()}${errorText ? ` — ${errorText}` : ""}`);
       };
-      const onResponse = (response: { status(): number; url(): string }) => {
+      const onResponse = (response: { status(): number; url(): string; request(): { method(): string } }) => {
         if (response.status() >= 500) diagnostics.serverErrors.push(`${response.status()} ${response.url()}`);
+        if (response.status() < 400 || response.status() >= 500) return;
+
+        const url = new URL(response.url());
         // The invalid-token journey's own 404 -- see the onConsole comment
         // above. Only /i/ paths qualify: a 404 anywhere else in the app
-        // stays a real, actionable diagnostic. Keyed by the exact URL, not
-        // just counted, so a pending entry for one URL can never be
-        // consumed by a console message about a different one.
-        if (response.status() === 404 && new URL(response.url()).pathname.startsWith("/i/")) {
-          const url = response.url();
-          pendingNotFoundResponseUrls.set(url, (pendingNotFoundResponseUrls.get(url) ?? 0) + 1);
+        // stays a real, actionable diagnostic.
+        const isPublicInvalidTokenNotFound = response.status() === 404 && url.pathname.startsWith("/i/");
+        const isOptedIn = expectedErrorResponses.some(
+          (expected) => expected.method === response.request().method() && expected.pathname === url.pathname,
+        );
+        // Keyed by the exact URL, not just counted, so a pending entry for
+        // one URL can never be consumed by a console message about a
+        // different one.
+        if (isPublicInvalidTokenNotFound || isOptedIn) {
+          pendingExpectedResponseUrls.set(response.url(), (pendingExpectedResponseUrls.get(response.url()) ?? 0) + 1);
         }
       };
 

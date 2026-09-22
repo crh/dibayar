@@ -46,6 +46,55 @@ test.describe("deal create/update journeys", { tag: "@critical" }, () => {
     await expect(page.getByText("Should Not Be Saved", { exact: true })).toHaveCount(0);
   });
 
+  test.describe("server-validation journey", () => {
+    // Chromium/WebKit both log the browser's own generic "Failed to load
+    // resource" console error for this deliberately-triggered 400, which
+    // browserDiagnostics (e2e/support/test.ts) would otherwise treat as an
+    // unexplained failure. Narrowly opts this one test's one deliberate
+    // request into being recognized as expected -- see
+    // expectedErrorResponses's type comment in that file for why this is a
+    // per-test opt-in rather than baked into the shared fixture.
+    test.use({ expectedErrorResponses: [{ method: "POST", pathname: "/api/deals" }] });
+
+    // E2E-IMPROVEMENT-PLAN.md C3: proves the existing server-side 400
+    // contract (deal-validation.ts's contactWa: min(6)) end-to-end through
+    // the real UI, not just the API test suite. deal-form.tsx's WhatsApp
+    // field has no client-side minlength/pattern -- only `required` -- so
+    // a too-short number (here, 5 digits) passes native HTML validation
+    // and genuinely reaches the server, unlike the earlier investigation
+    // into the due-date field (a native <input type="date"> mostly
+    // refuses to hold malformed text at all, making it a poor fit for
+    // this kind of test).
+    test("a server-rejected deal (WhatsApp number too short) shows an error and saves nothing", async ({ page }) => {
+      await page.goto("/deal?tambah=1");
+      const dialog = page.getByRole("dialog", { name: "Tambah deal" });
+      const brand = `E2E Should Not Save ${Date.now()}`;
+      await dialog.getByLabel("Nama brand").fill(brand);
+      // deal-validation.ts requires at least 6 chars; deal-form.tsx applies
+      // no client-side length constraint, so this reaches the server.
+      await dialog.getByLabel("Kontak WhatsApp").fill("12345");
+      await dialog.getByLabel("Scope pekerjaan").fill("E2E server-validation check");
+      await dialog.getByLabel("Fee (Rp)").fill("1000000");
+
+      const createResponse = page.waitForResponse(
+        (response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/deals",
+      );
+      await dialog.getByRole("button", { name: "Simpan deal" }).click();
+      expect((await createResponse).status()).toBe(400);
+
+      // The dialog stays open and shows an error -- deal-client.tsx's
+      // handleSubmit only closes it and clears the form on the success path.
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole("alert")).toHaveText("Deal belum bisa disimpan.");
+      await expect(dialog.getByLabel("Nama brand")).toHaveValue(brand);
+
+      await dialog.getByRole("button", { name: "Tutup" }).click();
+      await expect(page.getByText(brand, { exact: true })).toHaveCount(0);
+      await page.reload();
+      await expect(page.getByText(brand, { exact: true })).toHaveCount(0);
+    });
+  });
+
   test("moving a deal to the next stage via its card menu updates the board", async ({ page }) => {
     const manifest = loadFixtureManifest();
     const masukBrand = manifest.brands[manifest.deals.masuk];
@@ -64,5 +113,116 @@ test.describe("deal create/update journeys", { tag: "@critical" }, () => {
     await page.reload();
     await page.getByRole("group", { name: /filter tahap deal/i }).getByRole("button", { name: "Nego", exact: true }).click();
     await expect(page.getByText(masukBrand, { exact: true })).toBeVisible();
+  });
+
+  // E2E-IMPROVEMENT-PLAN.md C3: the board-level test above only proves the
+  // board UI reflects a stage move. It doesn't touch the stage-history
+  // timeline (deal-detail-client.tsx's "Riwayat tahap" section, backed by
+  // DealStageTransition -- see src/lib/deals.ts), which is populated only
+  // by the server component on load (deal/[id]/page.tsx's
+  // listDealStageTransitions), not re-fetched client-side after a move
+  // (handleStageChange only calls setDeal, never touches history). So the
+  // real persistence contract for the history entry can only be proven
+  // with a reload, same pattern as the due-date field.
+  test("moving a deal's stage records a stage-history entry that persists after reload", async ({ page }) => {
+    const manifest = loadFixtureManifest();
+    const masukBrand = manifest.brands[manifest.deals.masuk];
+
+    await page.goto(`/deal/${manifest.deals.masuk}`);
+    await expect(page.getByRole("heading", { name: masukBrand })).toBeVisible();
+    await expect(page.getByText("Tahap saat ini: Masuk")).toBeVisible();
+
+    // Every fixture deal is seeded with its own initial transition (see
+    // scripts/e2e-fixtures.ts), mirroring what a real createDeal() call
+    // records -- so the history list is never actually empty here.
+    await expect(page.getByText("Deal dibuat langsung di tahap Masuk")).toBeVisible();
+
+    const stagePatch = page.waitForResponse(
+      (response) => response.request().method() === "PATCH" && new URL(response.url()).pathname === `/api/deals/${manifest.deals.masuk}`,
+    );
+    await page.getByRole("button", { name: "Lanjut ke Nego" }).click();
+    expect((await stagePatch).ok()).toBe(true);
+    await expect(page.getByText("Tahap saat ini: Nego")).toBeVisible();
+
+    // Not yet in the history list -- it's a static server-rendered prop,
+    // unaffected by the client-side PATCH above.
+    await expect(page.getByText("Masuk → Nego")).toHaveCount(0);
+
+    await page.reload();
+    await expect(page.getByText("Masuk → Nego")).toBeVisible();
+    // The original creation entry must still be there too -- a reload
+    // proves the new entry was recorded, not substituted for the old one.
+    await expect(page.getByText("Deal dibuat langsung di tahap Masuk")).toBeVisible();
+  });
+
+  // E2E-IMPROVEMENT-PLAN.md C1: a long brand name is a real product input
+  // (brand is user-entered, up to 120 chars per deal-validation.ts), not a
+  // hypothetical. A genuine bug was found and fixed while writing this
+  // test: deal-card.tsx's header row is `flex items-start justify-between`
+  // with the brand heading as a flex item that had no `min-w-0`. A flex
+  // item's automatic minimum size defaults to its content's min-content
+  // width -- for an unbreakable brand name (no spaces) that's the full
+  // string -- so the heading refused to shrink and pushed the card's own
+  // "..." actions menu button completely off-screen, making it
+  // unreachable. Confirmed visually (screenshot) before fixing with
+  // `min-w-0 truncate` on the heading.
+  //
+  // A page-level `document.documentElement.scrollWidth` check does *not*
+  // catch this: deal-board.tsx's mobile column is already its own
+  // horizontal-scroll carousel (`overflow-x-auto`), so the overflow stays
+  // contained within it and never grows the page's own scrollWidth even
+  // with the bug present -- confirmed empirically (that assertion passed
+  // both before and after the fix). The real, catchable symptom is that
+  // the menu button becomes unreachable, so assert that directly instead.
+  test("a long unbreakable brand name does not push the deal card's actions menu off-screen at 390px", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-mobile", "this test is specifically about the 390px mobile board layout");
+
+    const longBrand = "E2ELongBrandNameWithNoSpacesWhatsoeverToStressTestHorizontalOverflowHandlingOnTheDealBoardAtNarrowWidths";
+    await page.goto("/deal?tambah=1");
+    const dialog = page.getByRole("dialog", { name: "Tambah deal" });
+    await dialog.getByLabel("Nama brand").fill(longBrand);
+    await dialog.getByLabel("Kontak WhatsApp").fill("628177000001");
+    await dialog.getByLabel("Scope pekerjaan").fill("E2E long-brand overflow check");
+    await dialog.getByLabel("Fee (Rp)").fill("1000000");
+    await dialog.getByRole("button", { name: "Simpan deal" }).click();
+    await expect(dialog).toHaveCount(0);
+
+    const card = page.locator("article", { hasText: longBrand });
+    const menuButton = card.getByRole("button", { name: `Aksi lain untuk deal ${longBrand}` });
+    await expect(menuButton).toBeVisible();
+    await expect(menuButton).toBeInViewport();
+    await menuButton.click();
+    await expect(page.getByRole("menuitem", { name: "Lihat detail" })).toBeVisible();
+  });
+
+  // Companion to the card test above: deal-detail-client.tsx's own <h1>
+  // brand heading sits in a plain block container, not a flex row, so it
+  // was never subject to the min-width:auto trap -- but a long unbreakable
+  // word still overflows a plain block by default (no `overflow-wrap`/
+  // `break-words` applied). Unlike the board, this page has no ancestor
+  // horizontal-scroll container to absorb it, so it's a genuine page-level
+  // scroll bug -- confirmed via screenshot before fixing with
+  // `break-words` on the heading. Here scrollWidth is the right check.
+  test("a long unbreakable brand name does not cause horizontal page overflow on the deal detail page at 390px", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium-mobile", "this test is specifically about the 390px mobile detail-page layout");
+
+    const longBrand = "E2ELongBrandNameWithNoSpacesWhatsoeverToStressTestHorizontalOverflowHandlingOnTheDealDetailPageAtNarrowWidths";
+    await page.goto("/deal?tambah=1");
+    const dialog = page.getByRole("dialog", { name: "Tambah deal" });
+    await dialog.getByLabel("Nama brand").fill(longBrand);
+    await dialog.getByLabel("Kontak WhatsApp").fill("628177000002");
+    await dialog.getByLabel("Scope pekerjaan").fill("E2E long-brand detail overflow check");
+    await dialog.getByLabel("Fee (Rp)").fill("1000000");
+    const createResponse = page.waitForResponse(
+      (response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/deals",
+    );
+    await dialog.getByRole("button", { name: "Simpan deal" }).click();
+    const { deal } = await (await createResponse).json();
+
+    await page.goto(`/deal/${deal.id}`);
+    await expect(page.getByRole("heading", { name: longBrand })).toBeVisible();
+
+    const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+    expect(hasHorizontalOverflow).toBe(false);
   });
 });
