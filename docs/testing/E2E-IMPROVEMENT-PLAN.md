@@ -299,40 +299,52 @@ reachable and seeded.
   12/12 passed across both `chromium`/`chromium-mobile` on this file alone,
   and the full `test:e2e:critical` run (68 passed, 8 intentionally skipped).
 
-Remaining five stay **deferred, not retired** — not because they lack
-value, but as a scope/priority choice for this session (see
-`docs/receipts/DIBAYAR-PROJECT-PLAN-EXECUTION-2026-09-22.md`), now that a
-database is confirmed available for whoever picks these up next:
-- **Long issuer/brand text at 390px** (C1): needs a fixture with
-  deliberately long strings and a layout assertion, not a snapshot.
-- **Blocked-popup/manual-link WhatsApp fallback** (C2): needs verifying
-  Playwright's popup-blocking behavior interacts as expected with the
-  existing `wa.me` link, which may need a product-side manual-link
-  fallback to exist first — check `src/lib/whatsapp.ts` before writing
-  the test.
-- **Stage-history entry assertions** (C3): needs asserting the
-  `DealStageTransition` row/timeline entry, not just the stage-badge UI
-  state, after a stage move + reload.
-- **Server-validation journey** (C3): needs a deliberately invalid
-  mutation request asserting the existing 400 contract end-to-end
-  through the UI, not just the API test suite. 2026-09-22 investigation
-  (below): the due-date field's 400 (`invoice-validation.ts`'s
-  `z.coerce.date()`) is hard to trigger through the real UI because the
-  native `<input type="date">` mostly refuses to hold malformed text in
-  the first place — `fill()` either gets rejected by the browser or
-  produces a well-formed `YYYY-MM-DD` string. Whoever picks this up
-  should look for a mutation whose invalid shape *can* originate from
-  normal UI interaction (e.g. a text-input field with a narrower server
-  contract than its client-side constraints) rather than the due-date
-  field specifically.
-- **Ownership-denial journey** (C3): needs a second fixture user/session
-  asserting a 403/404 on another user's deal or invoice through the UI.
-  No second user currently exists in `scripts/e2e-fixtures.ts` /
-  `e2e/support/fixture-ids.ts` (only a second *session* for the same
-  owner, used by the sign-out journey) — this needs a real new fixture
-  user seeded and reviewed carefully, since every other E2E test's
-  shared-database assumptions are built around exactly one owner
-  existing; not attempted 2026-09-22 for that reason.
+Four of the remaining five were closed 2026-09-22 (continued, P2-4 round),
+each with a real product bug or gap found and fixed, not just documented
+— full detail in `DAILY_LOG.md`'s "2026-09-22 (continued, P2-4)" entry:
+
+- **Long issuer/brand text at 390px** (C1): **closed.** Two real bugs
+  found and fixed: `deal-card.tsx`'s brand heading (a flex item with no
+  `min-w-0`) refused to shrink for an unbreakable long name, pushing the
+  card's own actions menu off-screen — fixed with `min-w-0 truncate`, and
+  as a side effect corrected every board card's brand line from an
+  unnecessary 2-3-line wrap to a clean single line (visual baselines
+  regenerated via `update-visual-baselines.yml`, diffed before
+  replacing). `deal-detail-client.tsx`'s `<h1>` and
+  `blocks.tsx`'s `IssuerBlock`/`ClientBlock` (the public `/i/[token]`
+  document) had no `overflow-wrap`, causing genuine page-level horizontal
+  scroll at 390px — fixed with `break-words`. Regression tests added for
+  all three; each verified to actually fail against the pre-fix code.
+- **Blocked-popup/manual-link WhatsApp fallback** (C2): **closed.** The
+  product-side fallback already existed (`invoice-detail-client.tsx`'s
+  "F15 fallback"); added a test proving it, using `page.addInitScript`
+  to stub `window.open()` returning `null` (the same signal every real
+  popup blocker produces) rather than relying on any one browser's own
+  popup-blocking heuristics, which Playwright can't control anyway.
+- **Stage-history entry assertions** (C3): **closed.** Proved the actual
+  persistence contract (a reload, not just the client-side stage badge)
+  since `deal-detail-client.tsx`'s history list is a static server-side
+  prop never re-fetched after a move.
+- **Server-validation journey** (C3): **closed.** The due-date field
+  (the earlier candidate) turned out impractical — its native
+  `<input type="date">` mostly refuses to hold malformed text at all, so
+  `fill()` either gets rejected by the browser or produces a well-formed
+  value, never reaching the server's `z.coerce.date()` check. `contactWa`
+  (no client-side `minlength`/`pattern`, only `required`) is the right
+  field instead — a too-short number genuinely reaches the server's
+  `min(6)` check. Required generalizing `e2e/support/test.ts`'s
+  `browserDiagnostics` fixture with a new `expectedErrorResponses`
+  per-test opt-in (`test.use({...})`) for deliberately-triggered 4xx
+  responses, reusing the existing URL-keyed correlation mechanism rather
+  than a new one-off allowlist.
+- **Ownership-denial journey** (C3): still **deferred** — needs a second
+  fixture user/session asserting a 403/404 on another user's deal or
+  invoice through the UI. No second user currently exists in
+  `scripts/e2e-fixtures.ts`/`e2e/support/fixture-ids.ts` (only a second
+  *session* for the same owner, used by sign-out) — adding one safely
+  requires reviewing every other E2E test's shared-single-owner-database
+  assumption first; not attempted, since that review is a real piece of
+  work in its own right, not a quick add.
 
 ### 2026-09-22 (continued) — PR #9 merged; all three original cross-browser findings root-caused and fixed
 
@@ -362,6 +374,31 @@ instruction). The remaining five P2-4 gaps above were reviewed but not
 implemented this session (investigated the server-validation journey
 specifically; see its updated note above for why it wasn't bounded enough
 to finish safely today).
+
+### 2026-09-22 (continued, P2-4 round) — four of five remaining gaps closed
+
+Picked up the five P2-4 gaps left open above. Closed four (see the
+updated §8a bullets); ownership-denial remains deferred, now with a
+concrete reason (needs a new fixture user, needs reviewing every other
+test's single-owner assumption first). Three real product bugs found
+and fixed along the way, not just test gaps closed: `deal-card.tsx`'s
+missing `min-w-0` (pushed the board card's own actions menu off-screen
+for a long brand name, and separately caused every short brand name to
+wrap 2-3 lines unnecessarily), `deal-detail-client.tsx`'s and
+`blocks.tsx`'s missing `overflow-wrap` (genuine page-level horizontal
+scroll on the deal-detail page and the public `/i/[token]` invoice
+document at 390px). `e2e/support/test.ts`'s `browserDiagnostics` fixture
+gained a new `expectedErrorResponses` per-test opt-in for the
+server-validation test's deliberately-triggered 400.
+
+Process note: this round's four commits landed directly on `main`
+without a PR, breaking from this session's own established
+merge-after-review pattern (PR #9, PR #10). A follow-on CI failure on
+`main` (ux-audit, run `35741269441`) from the `deal-card.tsx` visual
+change was caught and fixed the same way any CI failure gets fixed
+(regenerated the affected baselines via `update-visual-baselines.yml`,
+diffed before replacing) — not glossed over. Full detail:
+`DAILY_LOG.md`'s "2026-09-22 (continued, P2-4)" entry.
 
 ## 9. Proposed delivery sequence
 
