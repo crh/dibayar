@@ -26,10 +26,19 @@ export function IssuerBlock({ issuer }: { issuer: InvoiceDocumentModel["issuer"]
   return (
     <div>
       <h2 className="text-[13px] font-bold text-muted">Dari</h2>
-      <p className="mt-1 text-[15px] font-semibold text-ink">{issuer.name}</p>
+      {/* break-words: an owner-entered issuer/business name with no
+          spaces (a plausible real value -- see user-settings-validation.ts's
+          120-char max) otherwise overflows this block past the viewport at
+          390px, since block elements don't break unbreakable words by
+          default and this is a formal document a recipient reads in full,
+          not a space-constrained card that could truncate instead.
+          Confirmed as a genuine horizontal-scroll bug on the public
+          recipient-facing /i/[token] route, this component's only web
+          consumer, before this fix. */}
+      <p className="mt-1 break-words text-[15px] font-semibold text-ink">{issuer.name}</p>
       {issuer.address ? <p className="mt-0.5 text-[14px] text-ink">{issuer.address}</p> : null}
       {issuer.whatsapp ? <p className="mt-0.5 text-[14px] text-ink">{issuer.whatsapp}</p> : null}
-      {issuer.email ? <p className="mt-0.5 text-[14px] text-ink">{issuer.email}</p> : null}
+      {issuer.email ? <p className="mt-0.5 break-words text-[14px] text-ink">{issuer.email}</p> : null}
     </div>
   );
 }
@@ -38,7 +47,9 @@ export function ClientBlock({ client }: { client: InvoiceDocumentModel["client"]
   return (
     <div>
       <h2 className="text-[13px] font-bold text-muted">Ditagihkan kepada</h2>
-      <p className="mt-1 text-[15px] font-semibold text-ink">{client.brand}</p>
+      {/* Same reasoning as IssuerBlock above -- client.brand is the same
+          user-entered field (deal-validation.ts's 120-char brand). */}
+      <p className="mt-1 break-words text-[15px] font-semibold text-ink">{client.brand}</p>
       {client.contactName ? <p className="mt-0.5 text-[14px] text-ink">{client.contactName}</p> : null}
     </div>
   );
