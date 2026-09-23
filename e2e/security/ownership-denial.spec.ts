@@ -146,12 +146,37 @@ test.describe("cross-owner ownership denial", { tag: "@critical" }, () => {
     });
     const otherOwnerPage = await otherOwnerContext.newPage();
     try {
+      // Negative-only assertions ("none of the primary owner's data
+      // appears") would pass vacuously if this route redirected to
+      // sign-in or errored -- neither would show the primary owner's
+      // data either. This context's own page isn't covered by
+      // e2e/support/test.ts's auto `browserDiagnostics` fixture (it only
+      // instruments the test's injected `page`, not a manually created
+      // `browser.newContext()`), so assert the authenticated board
+      // actually rendered: stay on `/deal` (no sign-in redirect) and show
+      // the stage-filter group and a stage column heading, both always
+      // present regardless of deal count -- unlike a column's own
+      // empty-state paragraph, which deal-board.tsx only renders for a
+      // column that isn't collapsed, and every column collapses to a
+      // header-only block on the default unfiltered board when it has
+      // zero deals (true for all of them here, since the second owner
+      // genuinely has none).
       await otherOwnerPage.goto("/deal");
+      await expect(otherOwnerPage).toHaveURL(/\/deal$/);
+      await expect(otherOwnerPage.getByRole("group", { name: /filter tahap deal/i })).toBeVisible();
+      await expect(otherOwnerPage.getByRole("heading", { name: "Masuk" })).toBeVisible();
       for (const brand of Object.values(manifest.brands)) {
         await expect(otherOwnerPage.getByText(brand, { exact: true })).toHaveCount(0);
       }
 
+      // Same reasoning for the invoice list: the <h1> only renders past
+      // the page's own auth redirect, and the empty state is the real,
+      // positive signal that this owner's authenticated, invoice-free
+      // list actually loaded.
       await otherOwnerPage.goto("/invoice");
+      await expect(otherOwnerPage).toHaveURL(/\/invoice$/);
+      await expect(otherOwnerPage.getByRole("heading", { level: 1, name: "Invoice" })).toBeVisible();
+      await expect(otherOwnerPage.getByText("Belum ada invoice. Pindahkan deal ke tahap Invoice, lalu buat drafnya dari kartu deal.")).toBeVisible();
       await expect(otherOwnerPage.getByText("E2E/SENT/001", { exact: true })).toHaveCount(0);
       await expect(otherOwnerPage.getByText("E2E/PAID/002", { exact: true })).toHaveCount(0);
     } finally {
