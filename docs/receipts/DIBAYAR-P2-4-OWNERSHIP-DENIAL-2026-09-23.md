@@ -358,11 +358,12 @@ P2-2 remains **pending**, unrelated to and not blocking this PR.
 
 - Branch: `codex/p2-4-ownership-denial`, pushed to `origin`.
 - PR: **#11** — https://github.com/crh/dibayar/pull/11 — `codex/p2-4-ownership-denial` → `main`.
-- CI: **green**. Final run (`35803473975`, after the `e2e-critical` job's
-  one transient-network retry — see §9b) — `lint-typecheck-test`,
-  `e2e-a11y`, `e2e-critical`, `ux-audit` all `success`;
-  `e2e-cross-browser` correctly `skipped` (schedule/workflow_dispatch
-  only). `mergeable: MERGEABLE`, `mergeStateStatus: CLEAN`.
+- CI: **green**. Final run on the head commit (`35804513613`, after the
+  `e2e-critical` job's second transient-network retry — see §9b/§14) —
+  `lint-typecheck-test`, `e2e-a11y`, `e2e-critical`, `ux-audit` all
+  `success`; `e2e-cross-browser` correctly `skipped`
+  (schedule/workflow_dispatch only). `mergeable: MERGEABLE`,
+  `mergeStateStatus: CLEAN`.
 - Review: one automated codex review, one substantive P2 finding — fixed
   and replied to on the thread (§9a). No unresolved findings as of this
   receipt.
@@ -379,6 +380,18 @@ P2-2 remains **pending**, unrelated to and not blocking this PR.
 - The one classified local-infrastructure webkit flake (§10) is pre-existing
   and unrelated to this branch; no action taken or recommended beyond the
   classification already on record from the prior PR #9/#10 work.
+- **New observation, worth a maintainer's attention (not fixed here, out of
+  this task's scope):** the `next/font/google` build-time network error
+  described in §9b recurred a second time on this same PR, on a docs-only
+  commit with zero code changes (run `35804513613`) — same exact error,
+  same job, resolved by the same bare retry. Two occurrences in one PR is
+  enough to note as a pattern rather than a one-off: CI's `e2e-critical`/
+  `ux-audit`/build jobs depend on reaching Google's font CDN at build time
+  from the GitHub Actions runner, and that dependency has now visibly
+  flaked twice in quick succession. Not chased further here (no code in
+  this PR touches fonts or the build pipeline, and self-hosting/pinning
+  the font is a build-configuration decision outside this task's scope),
+  but worth flagging for whoever owns CI reliability next.
 - Standing Chris-gated product decisions, unchanged from 2026-09-20 and out
   of this task's scope: Production's no-Vercel-SSO edge reachability
   (intentional or not), recipient public-access policy, M4 creator
