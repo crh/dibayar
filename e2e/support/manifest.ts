@@ -12,6 +12,7 @@ export type FixtureManifest = {
   port: string;
   database: string;
   owner: { id: string; sessionToken: string; email: string };
+  otherOwner: { id: string; sessionToken: string; email: string };
   deals: {
     masuk: string;
     nego: string;

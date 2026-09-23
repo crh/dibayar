@@ -337,14 +337,34 @@ each with a real product bug or gap found and fixed, not just documented
   per-test opt-in (`test.use({...})`) for deliberately-triggered 4xx
   responses, reusing the existing URL-keyed correlation mechanism rather
   than a new one-off allowlist.
-- **Ownership-denial journey** (C3): still **deferred** — needs a second
-  fixture user/session asserting a 403/404 on another user's deal or
-  invoice through the UI. No second user currently exists in
-  `scripts/e2e-fixtures.ts`/`e2e/support/fixture-ids.ts` (only a second
-  *session* for the same owner, used by sign-out) — adding one safely
-  requires reviewing every other E2E test's shared-single-owner-database
-  assumption first; not attempted, since that review is a real piece of
-  work in its own right, not a quick add.
+- **Ownership-denial journey** (C3): **closed 2026-09-23**
+  (`docs/receipts/DIBAYAR-P2-4-OWNERSHIP-DENIAL-2026-09-23.md`, PR #11).
+  Audited every E2E spec/support file for single-owner assumptions first
+  (none found that a second owner would break — every list/aggregate
+  query in the app is already `userId`-scoped server-side, and every
+  test selects fixture rows by explicit manifest ID, never by count or
+  index). Added a second, minimal fixture user
+  (`E2E_OTHER_OWNER_ID`/`E2E_OTHER_OWNER_SESSION_TOKEN`,
+  `e2e/support/fixture-ids.ts`) with zero deals/invoices/settings of its
+  own — distinct from the existing second *session*
+  (`E2E_OWNER_SIGNOUT_SESSION_TOKEN`), which authenticates as the same
+  owner and so cannot prove cross-user denial.
+  `e2e/security/ownership-denial.spec.ts` covers: viewing and API-reading
+  a primary-owner deal/invoice as the second owner, attempting a real
+  owner-only mutation (deal stage move, invoice due-date edit) as the
+  second owner, and confirming the second owner's own board/invoice list
+  never renders primary-owner data. The exact denial contract was
+  determined empirically, not assumed: API routes (Route Handlers)
+  return a real HTTP 404; page navigation (`/deal/[id]`, `/invoice/[id]`)
+  returns HTTP 200 with Next's default not-found UI rendered in place of
+  the page, because Next's RSC streaming has already flushed the 200
+  status by the time a plain async Server Component's `notFound()`
+  resolves — a first draft of this test asserted 404 for page navigation
+  and failed, corrected after investigating with curl and a real
+  rendered page against `node_modules/next/dist/docs/.../functions/
+  not-found.md`. No application code changed — this is coverage closure
+  for an already-correct `userId`-scoped authorization boundary
+  (`src/lib/deals.ts`/`src/lib/invoices.ts`), not a bug fix.
 
 ### 2026-09-22 (continued) — PR #9 merged; all three original cross-browser findings root-caused and fixed
 
@@ -399,6 +419,16 @@ change was caught and fixed the same way any CI failure gets fixed
 (regenerated the affected baselines via `update-visual-baselines.yml`,
 diffed before replacing) — not glossed over. Full detail:
 `DAILY_LOG.md`'s "2026-09-22 (continued, P2-4)" entry.
+
+### 2026-09-23 — ownership-denial closed, on a proper PR this time
+
+Closed the fifth and last P2-4 residual gap (see the updated §8a bullet
+above for the full technical writeup). Landed on branch
+`codex/p2-4-ownership-denial`, PR #11 — restoring the merge-after-review
+process the prior round deviated from. Also performed the read-only
+retroactive review of the four prior direct-to-main P2-4 commits that
+round's process note called for: no actionable defect found in any of
+them. Full detail: `docs/receipts/DIBAYAR-P2-4-OWNERSHIP-DENIAL-2026-09-23.md`.
 
 ## 9. Proposed delivery sequence
 

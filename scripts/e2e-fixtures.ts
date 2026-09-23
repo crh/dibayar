@@ -15,7 +15,13 @@ import {
   PrismaClient,
   WithholdingTaxType,
 } from "../src/generated/prisma/client";
-import { E2E_FIXTURE_PREFIX, E2E_OWNER_SESSION_TOKEN, E2E_OWNER_SIGNOUT_SESSION_TOKEN } from "../e2e/support/fixture-ids";
+import {
+  E2E_FIXTURE_PREFIX,
+  E2E_OTHER_OWNER_ID,
+  E2E_OTHER_OWNER_SESSION_TOKEN,
+  E2E_OWNER_SESSION_TOKEN,
+  E2E_OWNER_SIGNOUT_SESSION_TOKEN,
+} from "../e2e/support/fixture-ids";
 import { FIXTURE_FUTURE_DATE, FIXTURE_PAST_DATE } from "../src/lib/e2e-fixture-dates";
 import { encryptShareToken } from "../src/lib/share-token-crypto";
 
@@ -58,13 +64,17 @@ const manifestPath = path.resolve(".hermes-runtime/e2e-fixtures/fixtures.json");
 // database has a deliberately small connection budget.
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString, max: 1 }) });
 
-const ids = { owner: `${prefix}-owner` };
+const ids = { owner: `${prefix}-owner`, otherOwner: E2E_OTHER_OWNER_ID };
 
 // A real, database-backed Auth.js session row -- not a bypass endpoint. See
 // e2e/support/auth.ts, which sets this value as the `authjs.session-token`
 // cookie so Playwright authenticates through the exact mechanism production
 // uses, only skipping the interactive Google OAuth click-through.
-const sessionTokens = { owner: E2E_OWNER_SESSION_TOKEN, ownerSignout: E2E_OWNER_SIGNOUT_SESSION_TOKEN };
+const sessionTokens = {
+  owner: E2E_OWNER_SESSION_TOKEN,
+  ownerSignout: E2E_OWNER_SIGNOUT_SESSION_TOKEN,
+  otherOwner: E2E_OTHER_OWNER_SESSION_TOKEN,
+};
 
 const dealIds = {
   masuk: `${prefix}-deal-masuk`,
@@ -100,7 +110,7 @@ const shareTokens = {
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 async function cleanupRows() {
-  await prisma.user.deleteMany({ where: { id: ids.owner } });
+  await prisma.user.deleteMany({ where: { id: { in: [ids.owner, ids.otherOwner] } } });
 }
 
 async function seed() {
@@ -115,10 +125,22 @@ async function seed() {
   await prisma.user.create({
     data: { id: ids.owner, name: "E2E Fixture Owner", email: `${prefix}-owner@example.invalid`, language: "id" },
   });
+  // Ownership-denial fixture (docs/testing/E2E-IMPROVEMENT-PLAN.md C3): a
+  // genuinely different user, deliberately given none of the primary
+  // owner's deals/invoices/settings -- the point of this row is to have
+  // nothing of its own to see, so any test using it that DOES see the
+  // primary owner's data has found a real authorization defect, not a
+  // fixture artifact. See e2e/support/fixture-ids.ts for why a second
+  // session for the SAME owner (E2E_OWNER_SIGNOUT_SESSION_TOKEN) can't
+  // substitute for this.
+  await prisma.user.create({
+    data: { id: ids.otherOwner, name: "E2E Fixture Other Owner", email: `${prefix}-other-owner@example.invalid`, language: "id" },
+  });
   await prisma.session.createMany({
     data: [
       { sessionToken: sessionTokens.owner, userId: ids.owner, expires: sessionExpiry },
       { sessionToken: sessionTokens.ownerSignout, userId: ids.owner, expires: sessionExpiry },
+      { sessionToken: sessionTokens.otherOwner, userId: ids.otherOwner, expires: sessionExpiry },
     ],
   });
 
@@ -193,6 +215,7 @@ async function seed() {
     port: url.port,
     database: actualDatabase,
     owner: { id: ids.owner, sessionToken: sessionTokens.owner, email: `${prefix}-owner@example.invalid` },
+    otherOwner: { id: ids.otherOwner, sessionToken: sessionTokens.otherOwner, email: `${prefix}-other-owner@example.invalid` },
     deals: dealIds,
     brands,
     invoices: invoiceIds,
@@ -216,6 +239,15 @@ async function verify() {
       sessions: { select: { sessionToken: true } },
     },
   });
+  const otherOwner = await prisma.user.findUnique({
+    where: { id: ids.otherOwner },
+    select: {
+      id: true,
+      deals: { select: { id: true } },
+      invoices: { select: { id: true } },
+      sessions: { select: { sessionToken: true } },
+    },
+  });
   const dealStages = new Set(owner?.deals.map((deal) => deal.status));
   const checks = {
     ownerExists: owner != null,
@@ -226,6 +258,15 @@ async function verify() {
       && ["issuerName", "bankName", "bankAccountNumber", "bankAccountHolder"].every((field) => (owner.settings as Record<string, string | null>)[field]),
     sessionPresent: owner?.sessions.some((session) => session.sessionToken === sessionTokens.owner) === true,
     signoutSessionPresent: owner?.sessions.some((session) => session.sessionToken === sessionTokens.ownerSignout) === true,
+    // The other owner's whole reason for existing is to have nothing of the
+    // primary owner's -- verify isolation itself, not just presence, so a
+    // future reseed change that accidentally attaches fixture data to this
+    // user fails loudly here instead of silently weakening the
+    // ownership-denial journey.
+    otherOwnerExists: otherOwner != null,
+    otherOwnerHasNoDeals: otherOwner?.deals.length === 0,
+    otherOwnerHasNoInvoices: otherOwner?.invoices.length === 0,
+    otherOwnerSessionPresent: otherOwner?.sessions.some((session) => session.sessionToken === sessionTokens.otherOwner) === true,
   };
   if (Object.values(checks).some((value) => !value)) throw new Error(`E2E fixture verification failed: ${JSON.stringify(checks)}`);
   console.log(JSON.stringify({ action: "verify", host: normalizedHost, prefix, checks }));
@@ -233,7 +274,7 @@ async function verify() {
 
 async function cleanup() {
   await cleanupRows();
-  const remaining = await prisma.user.count({ where: { id: ids.owner } });
+  const remaining = await prisma.user.count({ where: { id: { in: [ids.owner, ids.otherOwner] } } });
   if (remaining !== 0) throw new Error(`E2E fixture cleanup read-back failed: ${remaining} users remain`);
   await rm(manifestPath, { force: true });
   console.log(JSON.stringify({ action: "cleanup", host: normalizedHost, prefix, remainingUsers: remaining }));

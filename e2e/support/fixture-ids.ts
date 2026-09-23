@@ -11,3 +11,14 @@ export const E2E_OWNER_SESSION_TOKEN = `${E2E_FIXTURE_PREFIX}-session-owner-do-n
 // invalidate the cookie every other test's storageState relies on, breaking
 // any test that happens to run afterward in the same worker.
 export const E2E_OWNER_SIGNOUT_SESSION_TOKEN = `${E2E_FIXTURE_PREFIX}-session-owner-signout-do-not-share`;
+
+// A second, genuinely different *user* -- not another session for the same
+// owner (E2E_OWNER_SIGNOUT_SESSION_TOKEN above still authenticates as
+// `${E2E_FIXTURE_PREFIX}-owner`). Only a distinct owned-by-someone-else
+// identity can prove server-side ownership *denial*: a second session for
+// the same user would authenticate fine and legitimately see every fixture
+// deal/invoice, proving nothing about cross-user isolation. Used by the
+// ownership-denial journey (e2e/security/ownership-denial.spec.ts) to
+// authenticate as a user who owns none of the primary owner's fixture data.
+export const E2E_OTHER_OWNER_ID = `${E2E_FIXTURE_PREFIX}-other-owner`;
+export const E2E_OTHER_OWNER_SESSION_TOKEN = `${E2E_FIXTURE_PREFIX}-session-other-owner-do-not-share`;

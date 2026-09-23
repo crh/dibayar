@@ -16,16 +16,16 @@
 // guardrails in scripts/e2e-fixtures.ts refuse to run against anything but
 // 127.0.0.1:55432/dibayar_test.
 import type { Cookie } from "@playwright/test";
-import { E2E_OWNER_SESSION_TOKEN } from "./fixture-ids";
+import { E2E_OTHER_OWNER_SESSION_TOKEN, E2E_OWNER_SESSION_TOKEN } from "./fixture-ids";
 
 const SESSION_COOKIE_NAME = "authjs.session-token";
 
-export function ownerSessionCookie(baseURL: string): Cookie {
+function sessionCookie(baseURL: string, sessionToken: string): Cookie {
   const origin = new URL(baseURL);
   const future = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 14;
   return {
     name: SESSION_COOKIE_NAME,
-    value: E2E_OWNER_SESSION_TOKEN,
+    value: sessionToken,
     domain: origin.hostname,
     path: "/",
     expires: future,
@@ -33,6 +33,17 @@ export function ownerSessionCookie(baseURL: string): Cookie {
     secure: origin.protocol === "https:",
     sameSite: "Lax",
   };
+}
+
+export function ownerSessionCookie(baseURL: string): Cookie {
+  return sessionCookie(baseURL, E2E_OWNER_SESSION_TOKEN);
+}
+
+// A different, real, database-backed session belonging to the ownership-
+// denial fixture's second user (see e2e/support/fixture-ids.ts for why a
+// second session for the SAME owner can't substitute for this).
+export function otherOwnerSessionCookie(baseURL: string): Cookie {
+  return sessionCookie(baseURL, E2E_OTHER_OWNER_SESSION_TOKEN);
 }
 
 export function unauthenticatedStorageState() {
