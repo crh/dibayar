@@ -203,6 +203,13 @@ gh run list --workflow=e2e.yml --event schedule --limit 15 --json databaseId,cre
 
 git push -u origin codex/p2-4-ownership-denial
 gh pr create --base main --head codex/p2-4-ownership-denial ...
+
+# after the codex review finding (§9a):
+npx playwright test -c playwright.e2e.config.ts --project=chromium --project=chromium-mobile --project=firefox --project=webkit e2e/security/ownership-denial.spec.ts
+npm run lint && npm run typecheck && npm run test:e2e:critical
+git push
+gh api repos/crh/dibayar/pulls/11/comments/4077909188/replies -f body="..."
+gh run rerun 35803473975 --failed   # CI transient-failure retry, see §9b
 ```
 
 ## 8. Test counts/results
@@ -226,6 +233,58 @@ gh pr create --base main --head codex/p2-4-ownership-denial ...
   assertions.
 - Full non-visual sweep, firefox+webkit, **whole suite** (not just the new
   file): 97 passed, 8 skipped, 1 failed (see §10).
+
+## 9a. Codex review finding and fix
+
+The PR's automated codex review left one substantive inline finding
+(P2, `e2e/security/ownership-denial.spec.ts:151`): the board/list
+isolation test's assertions were negative-only ("none of the primary
+owner's data appears"), which would pass vacuously if `/deal` or
+`/invoice` redirected to sign-in or errored — neither would show the
+primary owner's data either — and this isn't rescued by the shared
+`browserDiagnostics` health guard, which only instruments the test's
+injected `page`, not a manually created `browser.newContext()` (this
+test's `otherOwnerPage`).
+
+Fixed (commit `6ad79c3`): added positive assertions that the
+authenticated, empty views actually rendered — the final URL (no
+sign-in redirect), an always-present authenticated-only element (the
+stage-filter group and a stage heading for `/deal`, the page's own
+`<h1>` for `/invoice`), and the real empty-state copy for `/invoice`.
+One assumption was corrected while implementing the fix, not just
+assumed: `deal-board.tsx` only renders a stage column's own empty-state
+paragraph when that column isn't collapsed, and every column collapses
+to a header-only block on the default unfiltered board when it has zero
+deals — true for all seven stages here, so the `/deal` positive
+assertion uses a stage heading (always rendered regardless of collapse
+state) instead; the first version of this assertion (checking for the
+empty-state text) was run against the real page and failed, not trusted
+on faith. Re-verified full 4-browser matrix (12/12), full
+`test:e2e:critical` (83 passed/11 skipped, no regressions), lint 0/0,
+typecheck clean. Replied on the review thread explaining the fix and
+the corrected assumption (`gh api .../pulls/11/comments/4077909188/replies`).
+
+## 9b. CI transient-failure retry
+
+The push containing the review-finding fix (`6ad79c3`) first came back
+`e2e-critical: failure` on CI (run `35803473975`) — but not from
+anything in this branch's diff. The failure was a webpack build error
+in `src/app/layout.tsx`'s `next/font/google` loader
+(`TypeError: Cannot read properties of null (reading '1')` inside
+`next/dist/compiled/@next/font/dist/google/loader.js`), the well-known
+symptom of `next/font/google` failing to reach Google's font API from
+the CI runner's network at build time — unrelated to any file this
+branch touches. The same commit's two earlier CI runs on this exact
+environment/setup (`35801788589`, `35802063090`) had both already
+succeeded, including `e2e-critical`, making a real regression from a
+test-only diff implausible. Re-ran only the failed job
+(`gh run rerun 35803473975 --failed`) rather than pushing new code or
+weakening anything: it passed cleanly on retry, confirming a transient
+CI-runner network blip, not a regression. Final state: all four
+required jobs green (`lint-typecheck-test`, `e2e-a11y`,
+`e2e-critical`, `ux-audit`); `e2e-cross-browser` correctly `skipped`
+(that job only runs on `schedule`/`workflow_dispatch`, not
+`pull_request`, by design).
 
 ## 10. Failures and root-cause classification
 
@@ -299,11 +358,14 @@ P2-2 remains **pending**, unrelated to and not blocking this PR.
 
 - Branch: `codex/p2-4-ownership-denial`, pushed to `origin`.
 - PR: **#11** — https://github.com/crh/dibayar/pull/11 — `codex/p2-4-ownership-denial` → `main`.
-- CI: triggered on push (run `35801788589`); status as of the PR-open
-  evidence in this receipt was `in_progress`. (If this receipt is read
-  before that run completes, re-check `gh run list --branch
-  codex/p2-4-ownership-denial` for the current conclusion — the PR itself
-  is the source of truth, not this snapshot.)
+- CI: **green**. Final run (`35803473975`, after the `e2e-critical` job's
+  one transient-network retry — see §9b) — `lint-typecheck-test`,
+  `e2e-a11y`, `e2e-critical`, `ux-audit` all `success`;
+  `e2e-cross-browser` correctly `skipped` (schedule/workflow_dispatch
+  only). `mergeable: MERGEABLE`, `mergeStateStatus: CLEAN`.
+- Review: one automated codex review, one substantive P2 finding — fixed
+  and replied to on the thread (§9a). No unresolved findings as of this
+  receipt.
 - Not merged. Per the task's explicit stop point, this session stops
   before merge and hands the PR back to Chris for review.
 
