@@ -368,3 +368,43 @@ criterion, per the task's explicit instruction.
   untouched).
 - PR left open, unmerged, per the task's stop-point instruction — awaiting
   Chris's review.
+
+## 15. Addendum 2026-09-24 — Codex review finding fixed
+
+A follow-up session picked up PR #12 to check its current state and found
+Codex's automated PR review (`chatgpt-codex-connector`, submitted
+2026-09-23T22:28Z against commit `c281e84`) had left one substantive P1
+finding on `src/app/i/[token]/fonts/LICENSE-OFL.txt`: the file's copyright
+line read "Google Inc.", but the bundled `.woff2` files identify themselves
+(via their own name-table metadata) as Adobe-originated Source Serif 4 —
+OFL condition 2 requires the applicable copyright notice to travel with
+every redistributed copy, and this one didn't apply.
+
+Root cause: `@fontsource/source-serif-4@5.3.0`'s own shipped `LICENSE` file
+(verified via `npm pack` + extraction, not assumed) carries this same
+generic "Google Inc." header — the §7/§6 claim above that the license file
+was "copied verbatim" from that package was accurate, but the package's own
+source is wrong for this particular font. Fetched the canonical notice
+directly from Google Fonts' own upstream metadata repo
+(`raw.githubusercontent.com/google/fonts/main/ofl/sourceserif4/OFL.txt`):
+"Copyright 2014 The Source Serif 4 Project Authors
+(https://github.com/adobe-fonts/source-serif)". Diffed the fetched file
+against the repo's copy: only the copyright line and the OFL FAQ URL
+(`http://scripts.sil.org/OFL` → `https://openfontlicense.org`, matching the
+same upstream file) differed — same license text, same font files. Also
+checked `plus-jakarta-sans`'s `LICENSE-OFL.txt` the same way: its copyright
+line was already correct ("The Plus Jakarta Sans Project Authors"), only
+Fontsource's own cosmetic per-file-variant suffix differed — left
+untouched, not a compliance issue.
+
+Fixed in commit `f23e0c5`, pushed to `codex/ci-font-self-hosting`, replied
+to the Codex review thread (`gh api .../pulls/12/comments`,
+`in_reply_to=4087930579`) documenting the fix. Re-ran CI on the new commit
+(run `35938850849`): `lint-typecheck-test`/`e2e-critical`/`e2e-a11y` PASS
+(unchanged), `ux-audit` **still FAIL** — confirmed via job log diff
+(`sub-44px-interactive-target` finding, identical 16370/14476/12917
+pixel-diff counts across all three `@visual` baselines) that this is the
+exact same §12/§13 finding, byte-for-byte identical, not a new regression —
+expected, since a `.txt` license file has no rendering effect. §13's
+remaining risk (the touch-target/visual-baseline decision) is unchanged and
+still awaiting Chris.
