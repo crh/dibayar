@@ -24,7 +24,7 @@
   --radius-pill: 999px;
   --shadow-sm: 0 1px 2px oklch(30% 0.02 50 / 0.07), 0 1px 1px oklch(30% 0.02 50 / 0.05);
   --shadow-md: 0 12px 28px oklch(30% 0.02 50 / 0.14);
-  --font-sans: "Plus Jakarta Sans", var(--font-system);
+  --font-sans: var(--font-plus-jakarta), var(--font-system);
   --font-serif: "Source Serif 4", Georgia, serif;
   /* Mobile fixed chrome: BottomNav is 56px (bottom-nav.tsx's h-14) and
      FloatingActionButton is a 56px circle floating 16px above it

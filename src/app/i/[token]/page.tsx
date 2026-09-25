@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
-import { Source_Serif_4 } from "next/font/google";
+import localFont from "next/font/local";
 import { getPublicInvoiceDocumentByToken, type PublicInvoiceDocumentLookupDb } from "@/lib/invoice-share";
 import { publicInvoicePageRateLimiter } from "@/lib/rate-limit";
 import { bestEffortClientIp } from "@/lib/request-ip";
@@ -10,7 +10,16 @@ import { buildInvoiceDocumentModel } from "@/components/documents/invoice-docume
 import { InvoiceDocumentHtml } from "@/components/documents/invoice-document/html";
 import { PublicErrorCard } from "./public-error-card";
 
-const sourceSerif = Source_Serif_4({ subsets: ["latin"], display: "swap", weight: ["500", "600"], variable: "--font-source-serif" });
+// Self-hosted (not next/font/google) so `next build` never depends on
+// reaching Google's font CDN -- see src/app/fonts/NOTICE.md.
+const sourceSerif = localFont({
+  src: [
+    { path: "./fonts/source-serif-4-latin-500-normal.woff2", weight: "500", style: "normal" },
+    { path: "./fonts/source-serif-4-latin-600-normal.woff2", weight: "600", style: "normal" },
+  ],
+  display: "swap",
+  variable: "--font-source-serif",
+});
 
 export const dynamic = "force-dynamic";
 
