@@ -408,3 +408,75 @@ exact same §12/§13 finding, byte-for-byte identical, not a new regression —
 expected, since a `.txt` license file has no rendering effect. §13's
 remaining risk (the touch-target/visual-baseline decision) is unchanged and
 still awaiting Chris.
+
+## 16. Addendum 2026-09-25 — §13's touch-target/baseline decision resolved, PR fully green
+
+Chris responded to §13's flagged decision directly: "Fix all the issues to
+make [it] green." Executed both remaining items rather than leaving them as
+a maintainer choice:
+
+**Touch-target fix.** Root-caused in §12: `.ds-tap-target`'s `::before`
+overlay sizes to `max(100%, 44.5px)`, but `nearest-deals.tsx`'s "Lihat
+semua" link's own box was only ~19.5px tall (13px text), so the overlay had
+to extend ~12.5px past the link on each side to reach 44.5px — past the
+header row's own boundary into the neighboring deal-card list's real
+hit-testable area. `top-bar.tsx`'s nav links already avoid this exact
+problem with an explicit `h-11` (44px) box on the link itself, so the
+overlay barely needs to extend at all; applied the identical
+`inline-flex h-11 items-center` pattern to `nearest-deals.tsx`'s link.
+`follow-up-queue.tsx`'s "Lihat semua" link has byte-identical
+markup/CSS shape (same header-row layout, same missing height) and
+therefore the same latent risk, even though this run's detector didn't
+happen to flag it — fixed both for consistency rather than only the one
+CI caught. Commit `443243c`. Local `npm run ux:audit -- --route=/`: 69/69
+`tests/ux-audit` specs passed, 0 findings (this route-focused mode skips
+the separate `@visual` suite — see `scripts/ux-audit.ts`'s own header
+comment). CI run `36063596051` on this commit confirmed the fix
+structurally: all 69 non-`@visual` `tests/ux-audit` specs passed
+(`sub-44px-interactive-target` gone), leaving only `@visual` baseline
+pixel-diffs failing — now larger (21180/19340 vs. the prior 16370/14476)
+because Beranda's two header rows are now genuinely taller, exactly as
+expected from a real 44px-tall touch target.
+
+**Baseline regeneration.** Triggering
+`.github/workflows/update-visual-baselines.yml` via
+`gh workflow run` was initially denied by Claude Code's auto-mode
+CI-bypass classifier; Chris then explicitly granted permission for that
+specific command ("I grant you permission for 'gh workflow run'
+command"), and it was used for nothing else. Ran on
+`codex/ci-font-self-hosting` (workflow run `36075887821`, succeeded on
+`ubuntu-latest`, the real CI runner — not local/Docker, per that
+workflow's own documented rationale: even a matched Docker Playwright
+install renders a handful of pixels differently than the actual runner's
+font/fontconfig/freetype stack, and this repo's `@visual` suite has no
+`maxDiffPixel` tolerance configured, so any drift would keep failing).
+Downloaded the `updated-visual-baselines` artifact (9 files, one per
+existing baseline). Did not skip the inspection step: diffed every
+old/new pair (`compare -metric AE`, ImageMagick) — all 9 changed, 8 at
+identical pixel dimensions, `pengaturan-desktop` 1px taller
+(1996→1997px, `fullPage: true` on a long stacked-form page, consistent
+with cumulative sub-pixel line-height rounding from the font swap, not a
+layout defect) — then visually inspected the full old/new images and a
+red-overlay diff for Beranda desktop/mobile, Pengaturan, Invoice detail,
+and the true-mobile Beranda shot: correct family/weights, fully legible,
+no missing/broken content, no unintended overlap; the only visible
+change beyond text hinting is Beranda's two header rows sitting slightly
+taller, matching the intentional tap-target fix. Replaced all 9 files
+under `e2e/visual/visual.spec.ts-snapshots/`, commit `fd6f650`.
+
+**Final CI (run `36076264127`, this branch's current head `fd6f650`):**
+`lint-typecheck-test` PASS, `ux-audit` **PASS**, `e2e-critical` PASS,
+`e2e-cross-browser` skipped (pull_request, by design). `e2e-a11y`
+initially failed on this run with a pure infrastructure error (`Error
+response from daemon: failed to set up container networking ... address
+already in use` on port 55432 — a Docker port-bind conflict, unrelated
+to any code in this PR, most likely two service containers landing on
+the same runner within minutes of each other from the baseline-update
+workflow run immediately before it); GitHub Actions' own automatic retry
+re-ran that job and it passed clean on the retry. **PR #12 is now fully
+green** — every required check passing, `mergeable: MERGEABLE`, no new
+Codex review findings on the latest commit. §13's remaining risk is
+resolved, not merely accepted.
+
+PR left open, unmerged, per the original task's stop-point instruction —
+Chris authorized fixing the failures, not merging.
