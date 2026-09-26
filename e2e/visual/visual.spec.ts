@@ -25,20 +25,20 @@ test.describe("visual regression", { tag: "@visual" }, () => {
 
   test("Beranda desktop", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 2, name: "Net bulan ini" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Ditagihkan bulan ini" })).toBeVisible();
     await expect(page).toHaveScreenshot("beranda-desktop.png", { fullPage: true });
   });
 
   test("Beranda mobile", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 2, name: "Net bulan ini" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Ditagihkan bulan ini" })).toBeVisible();
     await expect(page).toHaveScreenshot("beranda-mobile.png", { fullPage: true });
   });
 
   test("Beranda true mobile", { tag: "@visual-mobile" }, async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 2, name: "Net bulan ini" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Ditagihkan bulan ini" })).toBeVisible();
     await expect(page).toHaveScreenshot("beranda-true-mobile.png", { fullPage: true });
   });
 

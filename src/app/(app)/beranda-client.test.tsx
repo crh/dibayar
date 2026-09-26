@@ -74,7 +74,7 @@ describe("BerandaClient — populated root", () => {
     const regions = screen.getAllByRole("region");
     expect(regions).toHaveLength(3);
     const headingTexts = regions.map((region) => within(region).getByRole("heading", { level: 2 }).textContent);
-    expect(headingTexts).toEqual(["Net bulan ini", "Perlu dikejar", "3 deal terdekat"]);
+    expect(headingTexts).toEqual(["Ditagihkan bulan ini", "Perlu dikejar", "3 deal terdekat"]);
 
     // No leftover board/invoice-list/add-deal-form landmarks from the old dashboard-client.
     expect(container.querySelector("[data-testid='pipeline-rail']")).toBeNull();
@@ -115,7 +115,7 @@ describe("BerandaClient — §4.1 copy and Indonesian money/date formatting", ()
     const invoice = makeInvoice({ id: "invoice-1", dealId: "deal-1", subtotalIdr: 500_000 });
     const { container } = renderBeranda({ deals: [deal], invoices: [invoice] }, "id");
 
-    expect(screen.getByText("Net bulan ini")).toBeDefined();
+    expect(screen.getByText("Ditagihkan bulan ini")).toBeDefined();
     expect(screen.getByText("Perlu dikejar")).toBeDefined();
     expect(screen.getByText("3 deal terdekat")).toBeDefined();
     expect(screen.getAllByText(normalizedMoney(deal.feeIdr)).length).toBeGreaterThan(0);
@@ -128,7 +128,7 @@ describe("BerandaClient — §4.1 copy and Indonesian money/date formatting", ()
     const invoice = makeInvoice({ id: "invoice-1", dealId: "deal-1", subtotalIdr: 500_000 });
     const { container } = renderBeranda({ deals: [deal], invoices: [invoice] }, "en");
 
-    expect(screen.getByText("Net this month")).toBeDefined();
+    expect(screen.getByText("Invoiced this month")).toBeDefined();
     expect(screen.getByText("Needs chasing")).toBeDefined();
     expect(screen.getByText("3 nearest deals")).toBeDefined();
     // Money/date formatting must never switch to English grouping/format.
@@ -154,7 +154,7 @@ describe("BerandaClient — responsive class contracts", () => {
     expect(chaseWrapper?.className).toContain("min-[1024px]:sticky");
     expect(chaseWrapper?.className).toContain("min-[1024px]:top-[88px]");
 
-    const incomeHeading = screen.getByRole("heading", { level: 2, name: "Net bulan ini" });
+    const incomeHeading = screen.getByRole("heading", { level: 2, name: "Ditagihkan bulan ini" });
     const incomeWrapper = incomeHeading.closest("section")?.parentElement;
     expect(incomeWrapper?.className).not.toContain("sticky");
 

@@ -99,7 +99,7 @@ test.describe("Curated route x state x viewport screenshot corpus", () => {
   test("home / normal (owner, actionable Needs Chasing)", async ({ page, context, baseURL }) => {
     if (!baseURL) throw new Error("baseURL required");
     await forEachPrimaryViewport(page, context, baseURL, "owner", "/", "home", "normal", async () => {
-      await expect(page.getByRole("heading", { level: 2, name: "Net bulan ini" })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 2, name: "Ditagihkan bulan ini" })).toBeVisible();
     });
     for (const viewport of PRIMARY_VIEWPORTS) assertNoBlockingFindings("home", "normal", viewport);
   });
