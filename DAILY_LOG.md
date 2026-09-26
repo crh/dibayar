@@ -683,3 +683,16 @@ Starting state verified fresh: `main` = `origin/main` = `a60dfdf`, no open PRs, 
 - Gates: lint, typecheck, `npm test` 80 files/771 tests, `npm run build` all clean. E2E not run (no UI/route/navigation change).
 - Not done, by design: no manual P2-2 run, no CI/cron change, no Production access or deployment, no public-access change, no secrets read, no external contact.
 - Full detail: `docs/receipts/DIBAYAR-M4-READINESS-2026-09-26.md`.
+
+## 2026-09-26 (continued) — PR #13 merged; "Ditagihkan bulan ini" relabel (PR #14)
+
+- PR #13 was still OPEN at session start (prior auto-mode classifier denied the merge). Stopped at the gate, reported, and merged only after Chris's explicit "Merge is authorized" — `86eff1d`, 2026-09-26T02:42Z. Local `main` fast-forwarded; `src/generated/` (root-owned, untracked) left untouched.
+- P2-2 rechecked: no scheduled run since `36109870314` (09-26 is a Saturday) — still 1 of 2, WAITING FOR SCHEDULE. No manual trigger, no cron change.
+- Classified every income-wording hit before editing. Changed: visible heading `home.netThisMonth` ("Net bulan ini"/"Net this month" -> "Ditagihkan bulan ini"/"Invoiced this month"), the unused `dashboard.income` label, tests asserting the heading (unit, e2e, ux-audit), and the implementation-spec string table/section names. Left as-is: internal identifiers (key name, `home-net-bulan-ini` id, component/function names), accurate helper notes (`dashboard.incomeUnpaidNote` etc.), and general copy ("melacak pemasukan"). Calculation, schema, constants untouched; pinned income tests pass.
+- Doc fix: `M4-READINESS.md` §3 claimed neither Production option needs repo changes; corrected (Option B needs none; Option A needs a distributed rate limiter before public/non-SSO recipient access). Limiter not implemented.
+- M4 kit: moderator checklist (`M4-READINESS.md` §5, follows `DEPLOYMENT.md` Preview policy: demo data only) and `M4-SESSION-TRACKER.md` (anonymized IDs). §4 template stays canonical. Open question for Chris: is a moderated screen-share within the Preview policy's "not shared with users"?
+- CI on PR #14: first run red only on 3 Beranda `@visual` baselines (761px, heading text). Regenerated via `Update visual baselines` (run `36213322701`) on the branch; 6 other baselines byte-identical; inspected before accepting.
+- No metric changes: users_shown / feedback_logged / wtp_signals remain 0.
+- Guardrail confirmation: no Production access/data/deployment, no public-access, SSO, or OAuth change, no secrets read, no creator contact.
+- Full detail: `docs/receipts/DIBAYAR-M4-INVOICED-THIS-MONTH-2026-09-26.md`.
+
