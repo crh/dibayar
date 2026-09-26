@@ -66,7 +66,7 @@ describe("MonthlyIncomeSummary — populated", () => {
 
     renderSummary({ invoices: [paidThisMonth, sentThisMonth, paidLastMonth, draftThisMonth] });
 
-    expect(screen.getByRole("heading", { level: 2, name: "Ditagihkan bulan ini" })).toBeDefined();
+    expect(screen.getByRole("heading", { level: 2, name: "Net ditagihkan bulan ini" })).toBeDefined();
     // Net = (1,000,000 - 50,000 PPh21) + 500,000 = 1,450,000; only the two current-month, non-DRAFT invoices count.
     expect(screen.getByText(normalizedMoney(1_450_000))).toBeDefined();
     expect(screen.getByText(/1 invoice lunas/)).toBeDefined();

@@ -69,7 +69,7 @@ Absent on `/i/:token` and `/masuk` — `/i/:token` renders zero app navigation, 
 **Purpose:** answer "how am I doing and who owes me" in one screen. Nothing else.
 
 **Contains, in order:**
-1. `Ditagihkan bulan ini` — the existing monthly income summary, single figure in serif, with the month label and a secondary line for count of paid invoices.
+1. `Net ditagihkan bulan ini` — the existing monthly income summary, single figure in serif, with the month label and a secondary line for count of paid invoices.
 2. `Perlu dikejar` — the follow-up queue: invoices overdue, plus invoices due within 7 days. Each row: brand, amount, due date, relative urgency label, one action → `Kirim pengingat` (WhatsApp).
 3. `3 deal terdekat` — the three deals with the nearest deadline that are not in the final stage. Each row: brand, fee, deadline, stage. Row → `/deal/:id`.
 
@@ -88,7 +88,7 @@ Per-section empty states when other data exists: `Perlu dikejar` → `Tidak ada 
 
 **Contains:** filter row (see §4.2), then the board. No summary bar, no invoice list, no add form. Adding a deal is the global `+ Deal` action, which opens the add-deal form as a full-screen sheet (<640) or a modal dialog (≥640) — the form itself is unchanged apart from tokens and button sizing.
 
-**Moved off:** pipeline summary bar → `/` (it duplicated the counts the board already shows; retain only the "Ditagihkan bulan ini" figure, drop the per-stage count strip). Invoice list → `/invoice`. Add-deal form → global action.
+**Moved off:** pipeline summary bar → `/` (it duplicated the counts the board already shows; retain only the "Net ditagihkan bulan ini" figure, drop the per-stage count strip). Invoice list → `/invoice`. Add-deal form → global action.
 
 **Empty state:** `Belum ada deal` / `No deals yet` + `+ Deal`, centred, board columns not rendered.
 
@@ -208,7 +208,7 @@ Any bookmark, WhatsApp message, or link previously pointing at `/dashboard` must
 - XS/SM: bottom sheet — full width, rounded top 16px, 16px padding, drag handle 36×4px, backdrop 40% black, slide-up 200ms, respects `prefers-reduced-motion` (no transform animation, opacity only).
 - Contents both forms: user email (truncated, non-interactive), `Pengaturan` / `Settings` → `/pengaturan`, `Keluar` / `Sign out`. The language switch **moves out of this menu** into Settings.
 - Dismiss: outside click, `Esc`, route change, item selection. Focus returns to the avatar button.
-- **Acceptance:** at 1440, 1024, 768, 390 and 320, with the menu open, no pixel of the menu overlaps the "Ditagihkan bulan ini" figure or hides `Lihat semua →`. At 320 and 390 the sheet does not cover the value it was opened over because it is anchored to the viewport bottom, not the trigger.
+- **Acceptance:** at 1440, 1024, 768, 390 and 320, with the menu open, no pixel of the menu overlaps the "Net ditagihkan bulan ini" figure or hides `Lihat semua →`. At 320 and 390 the sheet does not cover the value it was opened over because it is anchored to the viewport bottom, not the trigger.
 
 **Global strings**
 
@@ -227,17 +227,17 @@ Any bookmark, WhatsApp message, or link previously pointing at `/dashboard` must
 
 ### 4.1 `/` — Beranda
 
-**XS / SM.** Single column. Order: `Ditagihkan bulan ini` card → `Perlu dikejar` → `3 deal terdekat`. Each section header 16px semibold with `Lihat semua →` right-aligned where a fuller list exists. Queue rows are full-width, 64px min height, tappable, with the `Kirim pengingat` action as a 44px trailing icon-button; the whole row navigates to the invoice.
+**XS / SM.** Single column. Order: `Net ditagihkan bulan ini` card → `Perlu dikejar` → `3 deal terdekat`. Each section header 16px semibold with `Lihat semua →` right-aligned where a fuller list exists. Queue rows are full-width, 64px min height, tappable, with the `Kirim pengingat` action as a 44px trailing icon-button; the whole row navigates to the invoice.
 
 **MD.** Same order, content max 720px centred. Queue row action becomes a labelled button.
 
-**LG / XL.** Two-column: main 8 cols = `Ditagihkan bulan ini` (full width of the main column, figure at the existing display size) + `3 deal terdekat`. Right rail 4 cols = `Perlu dikejar`, sticky at `top: 88px`. Rail min-width 280px; below that, collapse to single column (this is why the rail starts at 1024 and not 960).
+**LG / XL.** Two-column: main 8 cols = `Net ditagihkan bulan ini` (full width of the main column, figure at the existing display size) + `3 deal terdekat`. Right rail 4 cols = `Perlu dikejar`, sticky at `top: 88px`. Rail min-width 280px; below that, collapse to single column (this is why the rail starts at 1024 and not 960).
 
 **Strings**
 
 | Key | Indonesian | English |
 |---|---|---|
-| home.netThisMonth | Ditagihkan bulan ini | Invoiced this month |
+| home.netThisMonth | Net ditagihkan bulan ini | Net invoiced this month |
 | home.paidCount | {n} invoice lunas | {n} invoices paid |
 | home.chaseQueue | Perlu dikejar | Needs chasing |
 | home.nearestDeals | 3 deal terdekat | 3 nearest deals |
@@ -594,7 +594,7 @@ Closes: F2
 Files: `src/components/AccountMenu.tsx`, `TopBar.tsx`
 Depends on: T-04
 Acceptance:
-- At 1440, 1024, 768, 390, 320 with the menu open, a screenshot shows zero overlap between the menu and the "Ditagihkan bulan ini" figure, and `Lihat semua →` is fully visible and clickable.
+- At 1440, 1024, 768, 390, 320 with the menu open, a screenshot shows zero overlap between the menu and the "Net ditagihkan bulan ini" figure, and `Lihat semua →` is fully visible and clickable.
 - Menu max-width is 260px and its top edge is 8px below the avatar's bottom edge at ≥640.
 - At 390 and 320 the menu is a bottom sheet anchored to the viewport bottom with a backdrop.
 - `Esc`, outside click, and route change all close it; focus returns to the avatar button.

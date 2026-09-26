@@ -31,7 +31,7 @@ invented scope.
 |---|---|---|---|
 | Due-soon window | 7 days (`DUE_SOON_WINDOW_DAYS`) | `src/lib/invoice-date-status.ts` | Invoices due in 0–7 days (Jakarta calendar) appear in Beranda's follow-up queue as "due soon"; day 8 does not. Overdue always appears. |
 | Share-link lifetime | 90 days from create **or regenerate** (`DEFAULT_SHARE_LIFETIME_DAYS`) | `src/lib/invoice-share.ts` | A link sent to a client stops working (uniform 404) 90 days after creation; regenerating resets the clock. |
-| Income basis | `Invoice.createdAt` in Asia/Jakarta; all non-DRAFT statuses | `src/lib/income-summary.ts` | Beranda card headed **"Ditagihkan bulan ini"** / "Invoiced this month" (was "Net bulan ini" / "Net this month") = invoices created this month, paid or not; the figure is net of estimated PPh. Wording only was changed; the calculation is unchanged. |
+| Income basis | `Invoice.createdAt` in Asia/Jakarta; all non-DRAFT statuses; figure = subtotal minus estimated PPh | `src/lib/income-summary.ts` | Beranda card headed **"Net ditagihkan bulan ini"** / "Net invoiced this month" (was "Net bulan ini" / "Net this month"; briefly "Ditagihkan bulan ini" on PR #14 before review found that heading dropped the net-of-PPh meaning) = invoices created this month, paid or not, net of estimated PPh. Wording only was changed; the calculation is unchanged. |
 
 **Discrepancy found (documentation vs. code), reported, not resolved:**
 `ROADMAP.md` M3 and `STATE.md` call the income basis "issue-date". There is no
@@ -40,11 +40,15 @@ creation timestamp. In practice:
 
 - An invoice created Aug 31 and sent or paid in September stays in **August**.
 - Unpaid `SENT`/`DUE`/`OVERDUE` invoices count toward "income" the same as `PAID`.
+- The displayed figure is `subtotalIdr` minus estimated PPh per invoice
+  (`round(subtotal × rate)`), i.e. **net of estimated PPh**, not gross.
 - Before the relabel, the card was headed "Net bulan ini" and the docs called it
   "income", which a creator could read as *money received*. It is now headed
-  "Ditagihkan bulan ini" (*invoiced this month*). The heading does not say the
-  figure is net of estimated PPh; whether creators notice or care is a question
-  for the sessions (§5, task 5).
+  "Net ditagihkan bulan ini" (*net invoiced this month*): "ditagihkan" says
+  unpaid invoices count, "Net" says PPh is already deducted. The card has no
+  helper line explaining either, on purpose: whether creators read it as
+  invoiced or received, and whether they notice it is net of PPh, is a question
+  for the sessions (§5, tasks 4–5).
 
 Options for Chris: (a) keep as "invoiced this month" — the relabel is now in
 place, the basis itself still awaits ratification; (b) count only `PAID` and add a paid-date basis (needs a
@@ -100,6 +104,39 @@ authorization. Rollback per `DEPLOYMENT.md` brief §6.
 **Recommendation:** none. Existing docs establish no default; the deciding
 factor is how much of the recipient-link experience M4 needs to test.
 
+### 3.1 Preview-policy interpretation packet (decision needed; policy not changed)
+
+**Current policy text** (`DEPLOYMENT.md` "Preview policy"): "A confidential,
+access-restricted preview may be used for **technical verification only** when
+it contains no real customer or financial data, does not process payments, and
+is **not announced or shared with users**. An openly accessible or unrestricted
+preview requires Chris's approval."
+
+**Proposed M4 usage (Option B above):** the moderator signs in to the
+Vercel-SSO-protected Preview and screen-shares demo data to a creator, to collect
+product feedback.
+
+**Why it is ambiguous.** The build stays protected and holds no real data, which
+fits the policy. But the purpose is product validation, not "technical
+verification only", and the creator is a prospective user seeing the product,
+which can be read as "shared with users". Existing docs do not say which reading
+is intended, so this is not silently treated as compatible.
+
+- **Option A — allow moderated screen-share of the protected Preview.** Amend the
+  policy sentence to name it (e.g. "…or a moderated, moderator-driven screen-share
+  with demo data only; no creator gets a login or a link"). Implications: no
+  credential or URL reaches the creator; exposure is what the screen shows.
+  Demo data only, so no PII beyond what the creator says aloud; do not record
+  sessions without the creator's consent.
+- **Option B — use another explicitly approved environment.** For example a
+  dedicated demo deployment. Implications: needs a new Chris-approved environment
+  (and, if it is open-edge, the Production/access gates in §3).
+
+**Recommended wording change if Chris approves Option A:** add the clause above
+to `DEPLOYMENT.md` "Preview policy". **Chris decision still needed;** nothing in
+this PR changes the policy, and no creator has been or will be contacted by
+Claude.
+
 ## 4. Feedback log template (paste into `DAILY_LOG.md`, one per creator)
 
 ```
@@ -110,7 +147,7 @@ factor is how much of the recipient-link experience M4 needs to test.
 - Task 1 — capture a real/typical deal: <completed? confusion?>
 - Task 2 — create and read an invoice (PPh choice): <…>
 - Task 3 — chase a payment via WhatsApp link: <…>
-- Task 4 — read the monthly summary ("Ditagihkan bulan ini"): <did they read it as invoiced or received? did they notice it is net of PPh?>
+- Task 4 — read the monthly summary ("Net ditagihkan bulan ini"): <did they read it as invoiced or received? did they notice it is net of PPh?>
 - Verbatim quotes (Bahasa Indonesia as spoken): <…>
 - Would they use it for their next deal? <yes/no/why>
 - Willingness to pay signal (M5 evidence, do not solicit payment): <stated / shown / none>
@@ -129,7 +166,7 @@ per creator; the outcome goes into the §4 template, which stays the only
 feedback format. Track recruiting in `M4-SESSION-TRACKER.md`.
 
 **Before the session (moderator)**
-- [ ] Preview build contains commit `_______` and shows "Ditagihkan bulan ini" on Beranda.
+- [ ] Preview build contains commit `_______` and shows "Net ditagihkan bulan ini" on Beranda.
 - [ ] Preview is the protected, non-Production one on its own database (`DEPLOYMENT.md` "Preview policy": no real customer or financial data). Confirm with Chris that a moderated screen-share is within that policy.
 - [ ] Demo/typical deal data only. Creators are not asked to enter real brands, contacts, or amounts.
 - [ ] Moderator, not the creator, signs in (Vercel SSO stays on).
@@ -140,7 +177,7 @@ feedback format. Track recruiting in `M4-SESSION-TRACKER.md`.
 2. Create/read an invoice, including the PPh choice.
 3. Chase a payment via the WhatsApp link.
 4. Read the monthly summary.
-5. Ask: how do you read "Ditagihkan bulan ini" / "Invoiced this month"?
+5. Ask: how do you read "Net ditagihkan bulan ini" / "Net invoiced this month"?
 6. Ask: would you use Dibayar for your next deal?
 7. Note any willingness-to-pay signal. Do not solicit payment.
 
@@ -161,7 +198,7 @@ feedback format. Track recruiting in `M4-SESSION-TRACKER.md`.
 ## 6. Status vocabulary
 
 - DONE — engineering readiness above (PR #13, merged; `86eff1d`).
-- IN PR — "Ditagihkan bulan ini" relabel, §3 correction, §5 checklist and tracker.
+- IN PR — "Net ditagihkan bulan ini" relabel, §3 correction, §5 checklist and tracker.
 - WAITING FOR SCHEDULE — P2-2, one more consecutive scheduled success.
 - WAITING FOR PRODUCT DECISION — §2: 7-day due-soon window, 90-day share lifetime, and ratification of the `createdAt` summary basis (the wording is already changed).
 - WAITING FOR PRODUCTION AUTHORIZATION — §3; also P1-1/P1-2 live verification.

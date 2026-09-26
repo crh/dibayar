@@ -19,7 +19,7 @@ test.describe("auth/session", { tag: "@critical" }, () => {
 
   test("authenticated Beranda loads with real seeded data", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { level: 2, name: "Ditagihkan bulan ini" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Net ditagihkan bulan ini" })).toBeVisible();
     await expect(page.getByRole("heading", { level: 2, name: "Perlu dikejar" })).toBeVisible();
     await expect(page.getByRole("heading", { level: 2, name: "3 deal terdekat" })).toBeVisible();
   });
