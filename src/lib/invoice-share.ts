@@ -4,6 +4,9 @@ import { decryptShareToken, encryptShareToken } from "./share-token-crypto";
 import type { InvoiceDocumentInput } from "@/components/documents/invoice-document/model";
 
 const TOKEN_BYTES = 32;
+// Provisional (M4 pre-validation): 90 days from create/regenerate, not yet
+// ratified by Chris or validated with creators; see
+// docs/validation/M4-READINESS.md.
 export const DEFAULT_SHARE_LIFETIME_DAYS = 90;
 
 export function generateShareToken(): string {
