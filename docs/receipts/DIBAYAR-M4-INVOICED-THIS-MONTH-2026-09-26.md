@@ -52,13 +52,14 @@ CI:
 
 - `36212894657` (PR #14, first push): `lint-typecheck-test`, `e2e-a11y`, `e2e-critical` success; `e2e-cross-browser` skipped (by design on PR); `ux-audit` **failure** — 69 passed, only the three Beranda `@visual` tests failed (761 differing pixels each, heading text). Real, intentional diff, not a flake.
 - `36213322701` (`Update visual baselines`, `workflow_dispatch` on the branch, success): regenerated baselines. Only the three Beranda PNGs differed; the other six were byte-identical. Inspected the new mobile baseline against the old one before accepting: only the heading changed and it stays on one line at 390px.
-- Final PR CI after the baseline commit: see PR #14 checks (addendum below if recorded).
+- `36221177682` (PR #14 at `4ad0594`, after the baselines): `lint-typecheck-test`, `e2e-critical`, `e2e-a11y`, `ux-audit` **success**; `e2e-cross-browser` skipped (by design on PR). PR is MERGEABLE.
+- **Vercel Preview status on PR #14 is `failure`** (not a required check: `mergeStateStatus` UNSTABLE, not BLOCKED). Deployments `dpl_6h6yYMgfpxkQkTkz9CYX1tPJ1yQ7` (latest) and an earlier one from the first push both ended `Error` with `Builds . [0ms]`; `vercel inspect --logs` / `vercel logs` report logs unavailable because the deployment never reached READY, so **the cause is not confirmed**. PR #13's head deployed Preview successfully. Context: `scripts/vercel-build.sh` makes Preview builds fail unless `DATABASE_URL_POSTGRES_URL_NON_POOLING` (per-branch Neon integration variable) is set; a new branch missing it is a plausible cause but unproven. Nothing was changed in Vercel; the change under review is text/docs/tests only and the same commits pass the full local build and CI build.
 
 ## 7. Security / Production
 
 - Production accessed? **No.**
 - Production data modified? **No.**
-- Deployment intentionally performed? **No.** Note: per `STATE.md` and prior receipts, merging to `main` triggers Vercel's normal GitHub-integration Production redeploy. That is inferred from earlier documented behaviour (PR #2, PR #7), **not verified** for PR #13's merge (Vercel was not inspected). PR #13 was docs/tests/comments only, so the redeploy would carry no behaviour change. **PR #14 changes user-visible text**, so merging it will redeploy a changed heading to Production — a Chris decision; PR #14 was not merged.
+- Deployment intentionally performed? **No.** Note: per `STATE.md` and prior receipts, merging to `main` triggers Vercel's normal GitHub-integration Production redeploy. Verified after the fact with read-only `vercel ls`/`vercel inspect`: Production deployment `dpl_79SE2frguvDdhTY6reTv4cFFVdwg` (target production, Ready, aliased `dibayar.vercel.app`) was created 2026-09-26 02:42:09 UTC — the same second PR #13 merged. So Chris's authorized merge of #13 did redeploy Production. PR #13 was docs/tests/comments only, so that redeploy carried no behaviour change. **PR #14 changes user-visible text**, so merging it will redeploy a changed heading to Production — a Chris decision; PR #14 was not merged.
 - Branch pushes also create protected Preview builds via the Git integration (normal repo behaviour).
 - Public access changed? **No.** SSO changed? **No.** OAuth changed? **No.**
 - Secrets read/printed? **No.** (Lint/test logs were reviewed; no `.env` opened.)
