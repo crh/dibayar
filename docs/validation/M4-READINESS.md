@@ -166,6 +166,7 @@ per creator; the outcome goes into the §4 template, which stays the only
 feedback format. Track recruiting in `M4-SESSION-TRACKER.md`.
 
 **Before the session (moderator)**
+- [ ] **Blocked as of 2026-09-26:** no Preview for PR #14 is READY (Neon 10-branch limit; `DEPLOYMENT.md` "Preview failure mode"). Confirm a Ready Preview exists before scheduling anything.
 - [ ] Preview build contains commit `_______` and shows "Net ditagihkan bulan ini" on Beranda.
 - [ ] Preview is the protected, non-Production one on its own database (`DEPLOYMENT.md` "Preview policy": no real customer or financial data). Confirm with Chris that a moderated screen-share is within that policy.
 - [ ] Demo/typical deal data only. Creators are not asked to enter real brands, contacts, or amounts.
@@ -200,6 +201,7 @@ feedback format. Track recruiting in `M4-SESSION-TRACKER.md`.
 - DONE — engineering readiness above (PR #13, merged; `86eff1d`).
 - IN PR — "Net ditagihkan bulan ini" relabel, §3 correction, §5 checklist and tracker.
 - WAITING FOR SCHEDULE — P2-2, one more consecutive scheduled success.
-- WAITING FOR PRODUCT DECISION — §2: 7-day due-soon window, 90-day share lifetime, and ratification of the `createdAt` summary basis (the wording is already changed).
+- WAITING FOR PRODUCT DECISION — §2: 7-day due-soon window, 90-day share lifetime, ratification of the `createdAt` summary basis (the wording is already changed), and the Preview-policy reading in §3.1 (moderated screen-share vs "technical verification only").
+- BLOCKED — a READY Preview for the moderated sessions (Neon branch limit; Chris must free or raise it), and PR #14 must not merge while its Preview is broken.
 - WAITING FOR PRODUCTION AUTHORIZATION — §3; also P1-1/P1-2 live verification.
 - NON-CODE — recruiting and running creator sessions.

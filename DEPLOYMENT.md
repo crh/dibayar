@@ -263,6 +263,27 @@ before treating this as closed for Production specifically. Preview-build
 success is evidence the mechanism works, not evidence Production has been
 rebuilt with it yet.
 
+## Preview failure mode: Neon branch limit (observed 2026-09-26; BLOCKED, awaiting Chris)
+
+Symptom: a Vercel Preview for a new git branch ends `ERROR`, `errorCode`
+`BUILD_FAILED`, `errorMessage` "Resource provisioning failed", `Builds` `[0ms]`,
+no build logs (`vercel logs` says the deployment never reached READY). The
+integrations step fails in ~1.5 s, **before** `scripts/vercel-build.sh` runs, so
+the missing-`DATABASE_URL_POSTGRES_URL_NON_POOLING` guard is not involved
+(that variable exists project-wide for Preview).
+
+Evidence (read-only): Neon project `neon-dijual` is on `free_v3` with
+`branches_limit: 10` and holds exactly 10 branches (8 ready, 2 archived); there
+is no `preview/codex/m4-invoiced-this-month` branch. Seven of the ten are Neon
+preview branches for **merged** PRs (#7–#13) whose git branches still exist on
+`origin`. Every deployment since PR #14's first commit (5 so far, all with the
+same error) failed this way; the last Ready Preview was PR #13's. Neon's own
+provisioning error text is not exposed, so this is a high-confidence cause, not
+a directly confirmed one. Nothing in the repo can fix it; the fix (deleting
+stale Neon branches, or a plan change) is Chris's. Do not delete Neon
+branches or `origin` branches without approval. Action packet:
+`docs/receipts/DIBAYAR-PR14-PREVIEW-AND-MONTHLY-SUMMARY-REMEDIATION-2026-09-26.md` §2.
+
 ## Deployment verification record (convention, established 2026-09-06)
 
 Every meaningful Preview or Production verification — a manual check, a
