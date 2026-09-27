@@ -94,6 +94,7 @@ Key invariants:
 
 - `main` is Production.
 - `staging` is the long-lived integration/M4 environment. It may not exist yet; verify before assuming it does.
+- While `staging` is not yet provisioned, do not start new ordinary `feature/*`/`fix/*`/`chore/*` work. Only the bootstrap/in-flight/hotfix exceptions in `docs/DEVELOPMENT-WORKFLOW.md` may target `main`, and every `main` merge needs Chris's explicit authorization.
 - Ordinary `feature/*`, `fix/*`, and `chore/*` branches are CI-only and must not create Vercel/Neon Preview environments unless the task explicitly requires an isolated Preview.
 - Isolated Preview environments are exceptional and must follow the documented lifecycle and cleanup rules.
 - Do not add a Google OAuth redirect URI for every ordinary feature branch.

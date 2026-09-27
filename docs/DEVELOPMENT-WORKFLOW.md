@@ -24,7 +24,63 @@ branch, its Vercel deployment, its Neon branch, and its OAuth callback exist
 check `git ls-remote --heads origin staging` and `DEPLOYMENT.md` before acting
 on any staging-specific step. Rules that need no new infrastructure (ordinary
 branches are CI-only in intent, no per-branch OAuth URIs, cleanup, authorization
-boundaries) apply immediately.
+boundaries) apply immediately. The PR-target rules below do not apply until the
+transition ends; see [Pre-staging transition](#pre-staging-transition).
+
+## Pre-staging transition
+
+Until the transition ends, the [Normal flow](#normal-flow) cannot be used
+because its PR target (`staging`) does not exist. Do not improvise a substitute.
+
+```text
+New ordinary feature/fix/chore development:
+  BLOCKED from starting under the target workflow until staging is provisioned.
+
+Allowed main-targeting exceptions (only these):
+  1. already-open legacy PRs that predate the staging workflow
+     (PR #14 and PR #15);
+  2. the one-time staging-bootstrap / workflow-rollout PR;
+  3. urgent Production hotfixes (see Hotfix).
+
+Every merge into main:
+  requires Chris's explicit authorization, per PR (merging to main deploys
+  Production).
+```
+
+The bootstrap is a one-time exception, not ongoing development. `staging` cannot
+be its own PR target, so it is the only work that branches from and targets
+`main`:
+
+```text
+main -> bootstrap/workflow branch -> PR -> main
+```
+
+An agent that is handed ordinary feature/fix/chore work while the transition is
+open must not open it against `main`. It stops and reports that the work is
+blocked on staging, unless Chris explicitly names it as one of the exceptions
+above.
+
+**The transition ends only when all of the following are verified** (recorded in
+`STATE.md`, with evidence per `DEPLOYMENT.md`):
+
+```text
+staging branch exists
+AND stable Vercel staging environment is verified
+AND stable Neon staging branch is verified
+AND staging OAuth redirect is configured
+AND feature/fix/chore auto-deploy suppression is verified
+AND staging CI path is verified
+```
+
+From that point the [Normal flow](#normal-flow) is the only path:
+
+```text
+feature|fix|chore/*  -> staging
+staging              -> main   (release PR)
+```
+
+No ordinary PR targets `main`. Only release PRs, hotfixes, and explicitly
+authorized workflow/infrastructure exceptions do.
 
 ## Branches
 
@@ -50,11 +106,14 @@ hotfix/*    urgent Production fix
 
 ## Normal flow
 
+Applies once the [transition](#pre-staging-transition) has ended. Before that,
+ordinary work is blocked, not redirected to `main`.
+
 ```text
 feature|fix|chore/*  --PR-->  staging  --validate-->  PR  -->  main
 ```
 
-1. Branch from `staging` (from `main` only while `staging` does not yet exist).
+1. Branch from `staging`.
 2. Open a PR into `staging`. CI must be green; independent review is recorded
    per `REVIEW_CHECKLIST.md`. Merge only when the task or Chris explicitly
    authorizes the merge; otherwise leave the PR review-ready.
@@ -177,7 +236,7 @@ client's trusted surface. Any change in the Google console needs Chris.
 | Open a PR into `staging` or `main` | Routine; leave review-ready |
 | Merge a PR into `staging` | Only when the task or Chris explicitly authorizes the merge |
 | Open a `preview/*` branch | Routine, with the justification recorded in the PR |
-| Merge/deploy to **Production** (`staging -> main`, `hotfix/* -> main`) | **Chris**, explicit per release/hotfix PR |
+| Merge/deploy to **Production** (`staging -> main`, `hotfix/* -> main`, and during the [pre-staging transition](#pre-staging-transition) any legacy or bootstrap PR into `main`) | **Chris**, explicit per PR |
 | Production data change, production migration outside the build | **Chris**, explicit scope |
 | Public / non-SSO access change on any environment | **Chris** |
 | Google OAuth console change (add/remove redirect URI, client changes) | **Chris** |

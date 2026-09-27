@@ -12,7 +12,9 @@ owned by `STATE.md`.
 
 Target model from `docs/DEVELOPMENT-WORKFLOW.md`. Each row states what must be
 true; the **Implemented** column is the honest current state and must be
-re-verified (Vercel/Neon/`git ls-remote`) before anyone relies on it.
+re-verified (Vercel/Neon/`git ls-remote`) before anyone relies on it. Until
+staging is provisioned, follow the transitional rollout rules in
+`docs/DEVELOPMENT-WORKFLOW.md`.
 
 | Branch | Vercel | Neon | Google OAuth callback | Access | Implemented |
 |---|---|---|---|---|---|
@@ -220,7 +222,7 @@ unrestricted staging/preview requires Chris's approval. Ordinary
 
 ## Production policy
 
-The first production deployment, production-domain assignment, public launch, announcement, or real-user access requires Chris's approval. Routine deployments after explicit approval still require all applicable lint, typecheck, test, build, security, and smoke checks to pass. Destructive migrations, payment processing, new paid services, material data-collection changes, or material security changes require renewed approval. Because merging to `main` deploys Production, every `staging -> main` and `hotfix/* -> main` merge needs Chris's explicit authorization for that PR; the authorization matrix is in `docs/DEVELOPMENT-WORKFLOW.md`.
+The first production deployment, production-domain assignment, public launch, announcement, or real-user access requires Chris's approval. Routine deployments after explicit approval still require all applicable lint, typecheck, test, build, security, and smoke checks to pass. Destructive migrations, payment processing, new paid services, material data-collection changes, or material security changes require renewed approval. Because merging to `main` deploys Production, every `staging -> main` and `hotfix/* -> main` merge (and, during the pre-staging transition, every legacy or bootstrap PR into `main`) needs Chris's explicit authorization for that PR; the authorization matrix is in `docs/DEVELOPMENT-WORKFLOW.md`.
 
 ## Rollback
 
