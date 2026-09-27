@@ -21,19 +21,25 @@ staging is provisioned, follow the transitional rollout rules in
 | `main` | Production (auto-deploy on merge) | Production branch (`main`, `DATABASE_URL`) | Production domain | see "Current verified state" | Yes |
 | `staging` | one stable deployment on a stable domain | one stable branch, never pruned | stable staging domain | Vercel SSO | **No** — no `staging` branch or environment exists yet |
 | `preview/*` | temporary, per-branch | temporary, one per branch (integration-created) | none by default | Vercel SSO | Partly — today *every* pushed branch deploys and gets a Neon branch |
-| other branches | none (CI only) | none | none | n/a | **No** — not yet enforced |
+| other branches | none (CI only) | none | none | n/a | **Repo config added 2026-09-27** (`vercel.json` `ignoreCommand` -> `scripts/vercel-ignore-build.sh`, unit-tested); **NOT YET LIVE-VERIFIED** — no branch has pushed against it yet. Confirm on the bootstrap PR's own CI-only branch that no Vercel deployment and no Neon branch appear. |
 
 Mechanics to apply when implementing the not-yet-implemented rows. Every one is
 a Vercel/Neon/Google settings change and therefore needs Chris
 (`docs/DEVELOPMENT-WORKFLOW.md`, "Authorization"); confirm each against the
 current Vercel/Neon docs before acting:
 
-- **CI-only ordinary branches:** a Vercel *Ignored Build Step* that skips every
-  branch except `main`, `staging`, and `preview/*` (Vercel exposes
-  `VERCEL_GIT_COMMIT_REF`; exit `0` skips the build, exit `1` builds). Skipping
-  the build also prevents the Neon integration from provisioning a branch for
-  it — confirm that on the first skipped branch, since the integration step is
-  where "Resource provisioning failed" occurs.
+- **CI-only ordinary branches:** implemented repo-side via `vercel.json`'s
+  `ignoreCommand`, which Vercel runs before every build
+  (`scripts/vercel-ignore-build.sh`; allowlists `main`, `staging`, `preview/*`,
+  fails open — builds — if `VERCEL_GIT_COMMIT_REF` is ever unset). This is the
+  checked-in equivalent of the dashboard "Ignored Build Step" field; **verify
+  the dashboard field is empty/default** so this file is authoritative and the
+  two don't silently disagree (same class of risk as the former dashboard
+  Build Command override under "Migration strategy" below). Skipping the build
+  is expected to also prevent the Neon integration from provisioning a branch
+  for it, but this is **not yet confirmed live** — confirm on the first
+  skipped branch, since the integration step is where "Resource provisioning
+  failed" occurs.
 - **Staging:** either a Vercel custom environment or the ordinary Preview
   deployment of the long-lived `staging` git branch. Whichever is chosen it
   must have a stable domain, a Neon branch that is never pruned, its own
@@ -41,15 +47,22 @@ current Vercel/Neon docs before acting:
   `scripts/vercel-build.sh` treats `VERCEL_ENV=preview` as integration-managed
   and requires `DATABASE_URL_POSTGRES_URL_NON_POOLING`; a staging deployment
   running as Preview inherits that behavior, a custom environment may not.
+  `src/auth.ts` sets `trustHost: true` and reads no `AUTH_URL`/`NEXTAUTH_URL`,
+  so no base-URL env var is needed beyond the callback registration itself.
 - **Neon capacity:** the project `neon-dijual` is on plan `free_v3` with
-  `branches_limit: 10` (observed 2026-09-27). Budget: `main` + `staging` + at
-  most 3 concurrent isolated previews. Failure signature at the cap: a Preview
-  for a new git branch ends `BUILD_FAILED` / "Resource provisioning failed" in
-  ~1.5 s with no build logs (the integration step fails before
-  `scripts/vercel-build.sh` runs); confirmed by intervention on 2026-09-27 when
-  freeing one Neon branch let the next redeploy succeed.
+  `branches_limit: 10`. Observed 2026-09-27 (this session, read-only): **7/10**
+  (`main` + preview branches for PR #7, #11, #12, #13, #14, #15 — all but #14
+  and #15 are merged PRs whose git branches still exist on `origin`, since
+  GitHub "delete merged branches" remains off). Budget once staging exists:
+  `main` + `staging` + at most 3 concurrent isolated previews. Failure
+  signature at the cap: a Preview for a new git branch ends `BUILD_FAILED` /
+  "Resource provisioning failed" in ~1.5 s with no build logs (the integration
+  step fails before `scripts/vercel-build.sh` runs); confirmed by intervention
+  on 2026-09-27 when freeing one Neon branch let the next redeploy succeed.
 - **Branch hygiene:** GitHub "Automatically delete head branches" is currently
-  off; enabling it is a repository setting for Chris.
+  off; enabling it is a repository setting — see the bootstrap action packet
+  (`docs/receipts/DIBAYAR-STAGING-BOOTSTRAP-2026-09-27.md`) for whether this
+  session's GitHub credentials could apply it directly or it needs Chris.
 
 ## Current verified state (2026-09-06, V6.1 production-hardening audit)
 
@@ -227,6 +240,14 @@ The first production deployment, production-domain assignment, public launch, an
 ## Rollback
 
 Rollback expectations (revert PR or promote the previous Vercel deployment; forward-only migrations; smoke check afterward) are in `docs/DEVELOPMENT-WORKFLOW.md`. The concrete Vercel/Neon rollback procedure and identifiers are **not yet verified** here. Do not claim a deployment or rollback until the resulting Vercel status and URL have been checked directly; when the procedure is first exercised and verified, record it in this section.
+
+**Deployment filtering (`vercel.json` `ignoreCommand`), added 2026-09-27, not yet live-verified.** If the allowlist in `scripts/vercel-ignore-build.sh` incorrectly blocks a deployment that must go through (e.g. an unforeseen branch-naming case):
+
+- Fastest: set the Vercel dashboard's **Ignored Build Step** field to a value that always builds (e.g. blank, or `exit 1`) — a dashboard setting overrides nothing in this repo's `vercel.json`, so verify empirically which one Vercel actually honors before relying on either during an incident. This is a Vercel project setting; per `docs/DEVELOPMENT-WORKFLOW.md` "Authorization", changing it is Chris's.
+- Repo-side: revert or edit the `vercel.json`/`scripts/vercel-ignore-build.sh` commit and push; the next build picks up the new ignore logic (no redeploy of past commits needed, since the check runs fresh on each new build trigger).
+- This mechanism only ever *skips* a build; it cannot itself break a build that does run, so there is no build-content rollback needed — only the allow/deny decision.
+
+**CI staging trigger (`.github/workflows/e2e.yml`).** To revert, remove `staging` from the `push: branches:` list in a new commit and push; already-queued runs are unaffected, and no other workflow file references the change.
 
 ## Migration strategy (established 2026-09-06, post-V6.1 incident)
 
@@ -494,9 +515,9 @@ node scripts/cron-guard.mjs -- <command> [args...]   # runs <command> only if RE
 
 It inspects, without modifying the repo:
 
-- the repo is a Git worktree on branch `hermes/m2-invoice` (default; `--repo`/`--date`/`--expected-branch` exist only for deterministic testing);
+- the repo is a Git worktree on branch `main` (default; `--repo`/`--date`/`--expected-branch` exist only for deterministic testing);
 - the tracked/untracked working tree is clean;
-- local `HEAD` equals `origin/hermes/m2-invoice` exactly (no implicit fetch — an absent, ahead, behind, or diverged remote ref fails closed);
+- local `HEAD` equals `origin/main` exactly (default; no implicit fetch — an absent, ahead, behind, or diverged remote ref fails closed);
 - `STATE.md` exists and is at most 120 lines;
 - the last `DAILY_LOG.md` rubric rollup for the requested Asia/Jakarta calendar day exists, all six dimensions from `REPORT_RUBRIC.md` are present exactly once as an integer `x/2`, their sum equals the reported `Total x/12`, the total is at least 10, and no dimension is `0` (a single `0` blocks regardless of total, matching the rubric's anti-gaming clause).
 

@@ -17,7 +17,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const DEFAULT_EXPECTED_BRANCH = "hermes/m2-invoice";
+export const DEFAULT_EXPECTED_BRANCH = "main";
 export const REQUIRED_DIMENSIONS = [
   "evidence honesty",
   "shipped completeness",

@@ -272,8 +272,8 @@ test("jakartaDateToday returns YYYY-MM-DD shape", () => {
   assert.match(jakartaDateToday(), /^\d{4}-\d{2}-\d{2}$/);
 });
 
-test("default expected branch constant matches this repo's branch", () => {
-  assert.equal(DEFAULT_EXPECTED_BRANCH, "hermes/m2-invoice");
+test("default expected branch constant matches this repo's default branch", () => {
+  assert.equal(DEFAULT_EXPECTED_BRANCH, "main");
 });
 
 // --- Wrapper (CLI) behavior ---
