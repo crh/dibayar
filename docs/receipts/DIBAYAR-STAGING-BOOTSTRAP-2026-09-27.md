@@ -109,7 +109,7 @@ All 6 non-`main` branches correspond to already-merged PRs whose GitHub git bran
 
 - Production: unaffected this session; no deployment, redeploy, or settings change made or attempted.
 - Staging: does not exist yet (this PR only adds the repo-side pieces that a future staging deployment will use).
-- Ordinary-branch suppression: repo-side mechanism (`vercel.json` `ignoreCommand`) is committed and unit-tested at the script level, but **not yet live-verified** — it has not seen a real Vercel build event, because this branch had not been pushed before this session.
+- Ordinary-branch suppression: repo-side mechanism (`vercel.json` `ignoreCommand`) is committed and unit-tested at the script level. Suggestive but **not conclusively confirmed** live: both of this session's pushes to `bootstrap/staging-workflow` (non-allowlisted) show as Vercel deployments with `status: Canceled`, 5s duration, timed to match the two pushes exactly (`vercel ls dibayar`). This is consistent with the `ignoreCommand` skip path, but `vercel inspect --json` did not return the git ref/ignore-reason field to confirm the cause outright (CLI output didn't include it in this run), so it is recorded as observed-but-not-fully-attributed rather than a confirmed pass. The disposable-branch smoke test in Phase 9 of the recovery prompt is the definitive check.
 - Preview behavior: unchanged this session; PR #14's now-merged Preview history is documented in the pre-existing `DIBAYAR-PR14-FINAL-RECEIPT-2026-09-27.md`.
 
 ## 8. OAuth
