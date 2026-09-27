@@ -104,23 +104,31 @@ authorization. Rollback per `DEPLOYMENT.md` brief §6.
 **Recommendation:** none. Existing docs establish no default; the deciding
 factor is how much of the recipient-link experience M4 needs to test.
 
-### 3.1 Preview-policy interpretation packet (decision needed; policy not changed)
+### 3.1 Preview-policy interpretation packet (decision needed; policy not changed by this PR)
 
-**Current policy text** (`DEPLOYMENT.md` "Preview policy"): "A confidential,
-access-restricted preview may be used for **technical verification only** when
-it contains no real customer or financial data, does not process payments, and
-is **not announced or shared with users**. An openly accessible or unrestricted
-preview requires Chris's approval."
+**Current policy text** (`DEPLOYMENT.md` "Preview and staging policy", updated
+by PR #15 after this packet was first written): "Staging and isolated
+`preview/*` deployments are confidential, access-restricted (Vercel SSO), and
+may be used for **technical verification and M4 validation prep** only when
+they contain no real customer or financial data, do not process payments, and
+are **not announced or shared with users**. An openly accessible or
+unrestricted staging/preview requires Chris's approval."
+
+PR #15 already resolved half of this packet's original ambiguity: "M4
+validation prep" is now explicitly named as an allowed Preview/staging use, so
+that part no longer needs a Chris decision. The remaining open question is
+narrower than before:
 
 **Proposed M4 usage (Option B above):** the moderator signs in to the
 Vercel-SSO-protected Preview and screen-shares demo data to a creator, to collect
 product feedback.
 
-**Why it is ambiguous.** The build stays protected and holds no real data, which
-fits the policy. But the purpose is product validation, not "technical
-verification only", and the creator is a prospective user seeing the product,
-which can be read as "shared with users". Existing docs do not say which reading
-is intended, so this is not silently treated as compatible.
+**Why it is still ambiguous.** The build stays protected and holds no real
+data, and "M4 validation prep" now covers the purpose. What is not settled is
+whether a moderator screen-sharing to a prospective creator counts as
+"shared with users" — the creator never gets a login or a URL, but they are a
+real prospective user seeing the product on a call. Existing docs do not say
+which reading is intended, so this is not silently treated as compatible.
 
 - **Option A — allow moderated screen-share of the protected Preview.** Amend the
   policy sentence to name it (e.g. "…or a moderated, moderator-driven screen-share
@@ -129,13 +137,15 @@ is intended, so this is not silently treated as compatible.
   Demo data only, so no PII beyond what the creator says aloud; do not record
   sessions without the creator's consent.
 - **Option B — use another explicitly approved environment.** For example a
-  dedicated demo deployment. Implications: needs a new Chris-approved environment
-  (and, if it is open-edge, the Production/access gates in §3).
+  dedicated demo deployment, or (once provisioned) the stable `staging`
+  environment under the same "not shared with users" question. Implications:
+  needs a new Chris-approved environment (and, if it is open-edge, the
+  Production/access gates in §3).
 
 **Recommended wording change if Chris approves Option A:** add the clause above
-to `DEPLOYMENT.md` "Preview policy". **Chris decision still needed;** nothing in
-this PR changes the policy, and no creator has been or will be contacted by
-Claude.
+to `DEPLOYMENT.md` "Preview and staging policy". **Chris decision still
+needed;** nothing in this PR changes the policy, and no creator has been or
+will be contacted by Claude.
 
 ## 4. Feedback log template (paste into `DAILY_LOG.md`, one per creator)
 
@@ -166,9 +176,9 @@ per creator; the outcome goes into the §4 template, which stays the only
 feedback format. Track recruiting in `M4-SESSION-TRACKER.md`.
 
 **Before the session (moderator)**
-- [ ] Confirm a READY, SSO-protected Preview exists. As of 2026-09-27 PR #14's is READY (`dpl_F2phqqXnFK8qSU35PdYHwaccThg5`) after one Neon branch was freed, and Neon was pruned to 6/10 branches on 2026-09-27 (4 free slots); prune merged-PR preview branches again before it nears 10 (`DEPLOYMENT.md` "Preview failure mode").
+- [ ] Confirm a READY, SSO-protected Preview exists. As of 2026-09-27 PR #14's is READY (`dpl_F2phqqXnFK8qSU35PdYHwaccThg5`) after one Neon branch was freed, and Neon was pruned to 6/10 branches on 2026-09-27 (4 free slots). This Preview is a **pre-staging legacy exception** (`docs/DEVELOPMENT-WORKFLOW.md` "Pre-staging transition"), not the target M4 environment — once `staging` is provisioned, M4 should move there. Until then, if capacity nears 10 again, prune merged-PR preview branches (`DEPLOYMENT.md` "Preview failure mode").
 - [ ] Preview build contains commit `_______` and shows "Net ditagihkan bulan ini" on Beranda.
-- [ ] Preview is the protected, non-Production one on its own database (`DEPLOYMENT.md` "Preview policy": no real customer or financial data). Confirm with Chris that a moderated screen-share is within that policy.
+- [ ] Preview is the protected, non-Production one on its own database (`DEPLOYMENT.md` "Preview and staging policy": no real customer or financial data). Confirm with Chris that a moderated screen-share is within that policy (§3.1).
 - [ ] Demo/typical deal data only. Creators are not asked to enter real brands, contacts, or amounts.
 - [ ] Moderator, not the creator, signs in (Vercel SSO stays on).
 - [ ] Provisional values noted as active: due-soon 7d · share 90d · summary basis `createdAt`.
@@ -201,7 +211,7 @@ feedback format. Track recruiting in `M4-SESSION-TRACKER.md`.
 - DONE — engineering readiness above (PR #13, merged; `86eff1d`).
 - IN PR — "Net ditagihkan bulan ini" relabel, §3 correction, §5 checklist and tracker.
 - WAITING FOR SCHEDULE — P2-2, one more consecutive scheduled success.
-- WAITING FOR PRODUCT DECISION — §2: 7-day due-soon window, 90-day share lifetime, ratification of the `createdAt` summary basis (the wording is already changed), and the Preview-policy reading in §3.1 (moderated screen-share vs "technical verification only").
-- DONE — PR #14 Preview READY (2026-09-27). Neon pruned to 6/10 (2026-09-27); prune merged-PR preview branches periodically.
+- WAITING FOR PRODUCT DECISION — §2: 7-day due-soon window, 90-day share lifetime, ratification of the `createdAt` summary basis (the wording is already changed), and the narrower Preview-policy question in §3.1 (moderated screen-share vs "shared with users"; "M4 validation prep" itself is already allowed per PR #15).
+- DONE — PR #14 Preview READY (2026-09-27) as a **pre-staging legacy exception**; Neon pruned to 6/10 (2026-09-27). Prune merged-PR preview branches again if capacity nears 10 before `staging` is provisioned; this pruning need should become exceptional, not routine, once ordinary branches stop deploying (`docs/DEVELOPMENT-WORKFLOW.md` "Pre-staging transition").
 - WAITING FOR PRODUCTION AUTHORIZATION — §3; also P1-1/P1-2 live verification.
 - NON-CODE — recruiting and running creator sessions.

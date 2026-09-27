@@ -368,8 +368,16 @@ Preview redeploy (`dpl_F2phqqXnFK8qSU35PdYHwaccThg5`, commit `d58c0de`) provisio
 protected. The project was then back at 10/10, so Chris deleted four more (5 in total);
 as verified 2026-09-27 it is at **6/10** (`main` plus 5 preview branches: PR #7, #11,
 #12, #13 and this PR's), 4 free slots. Preview branches accumulate one per git
-branch, so prune merged-PR ones again before it reaches 10. Nothing in the repo can
-fix this; deleting Neon branches or `origin` branches needs Chris's approval. Action packet:
+branch **only under today's pre-transition behavior**, where every pushed
+branch still deploys and gets a Neon branch (see "Environment mechanics"
+above). Until the CI-only-ordinary-branches mechanic is implemented, prune
+merged-PR preview branches again before capacity nears 10. This is a
+transitional workaround, not a permanent operating procedure: once ordinary
+`feature/*`/`fix/*`/`chore/*` branches stop deploying at all (the
+[pre-staging transition](docs/DEVELOPMENT-WORKFLOW.md#pre-staging-transition)),
+this failure mode should become exceptional rather than recurring. Nothing in
+the repo can fix the underlying cap; deleting Neon branches or `origin`
+branches needs Chris's approval. Action packet:
 `docs/receipts/DIBAYAR-PR14-PREVIEW-AND-MONTHLY-SUMMARY-REMEDIATION-2026-09-26.md` §2.
 
 ## Deployment verification record (convention, established 2026-09-06)
