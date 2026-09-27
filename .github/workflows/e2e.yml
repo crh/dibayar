@@ -21,6 +21,11 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      # Shell-script suite for scripts/vercel-ignore-build.sh: not covered by
+      # `npm test` (vitest.config.ts scopes that to src/**/*.test.{ts,tsx}),
+      # so it must run explicitly or a regression in the inverted exit-code
+      # behavior/branch allowlist could merge with green CI (PR #16 Codex P2).
+      - run: npm run test:vercel-ignore-build
       # Every E2E/UX-audit job below builds with `next build --webpack`
       # (see docs/testing/E2E.md) for a reproducible browser-test target, so
       # nothing else in this workflow exercises the default Turbopack build

@@ -33,6 +33,7 @@ GitHub-settings action that belongs to Chris.**
 | `vercel.json` | added `ignoreCommand: bash scripts/vercel-ignore-build.sh` | live file content |
 | `scripts/vercel-ignore-build.sh` (new) | Vercel Ignored-Build-Step allowlist: builds `main`, `staging`, `preview/*`; skips everything else; fails open (builds) if `VERCEL_GIT_COMMIT_REF` is unset | read in full; logic matches `DEPLOYMENT.md`'s described mechanics |
 | `scripts/vercel-ignore-build.test.mjs` (new) | 11 `node:test` cases covering the allowlist, the fail-open path, and the `previewish-branch` non-match edge case | `npm run test:vercel-ignore-build` — all pass (see §3) |
+| `.github/workflows/e2e.yml` (follow-up, PR #16 remediation) | `lint-typecheck-test` job now runs `npm run test:vercel-ignore-build` explicitly, after `npm test` | Codex P2 review finding on PR #16: `npm test` is Vitest-only (`src/**/*.test.{ts,tsx}`) and never executed this `node:test` shell-script suite, so a regression in the allowlist or inverted exit-code behavior could merge with green CI. Fixed, not just documented — see PR #16 CI run for live evidence. |
 | `package.json` | added `test:vercel-ignore-build` script | diff only |
 | `scripts/cron-guard.mjs` | `DEFAULT_EXPECTED_BRANCH` changed `hermes/m2-invoice` -> `main` | diff; code already parameterizes on this constant elsewhere (no other hardcoded branch name in the script) |
 | `scripts/cron-guard.test.mjs` | matching assertion updated | diff |
@@ -53,6 +54,8 @@ npm test           -> 80 test files, 771 tests, all passed (105.58s)
 npm run build      -> Next.js 16.3.3 (Turbopack) production build succeeded, all 21 routes compiled
 npm run test:vercel-ignore-build -> new script's own suite, all cases passed
 ```
+
+**PR #16 remediation (same day, follow-up commit):** the suite above was runnable locally but not yet wired into required CI — `npm test` is Vitest-only and never executed it, so a regression in the allowlist or inverted exit-code behavior could have merged with green CI (Codex P2 finding on PR #16, thread `PRRT_kwDOTVT6hM6mZi3t`). Fixed by adding `npm run test:vercel-ignore-build` as an explicit step in `.github/workflows/e2e.yml`'s `lint-typecheck-test` job. This makes the suite CI-enforced for every PR and every push to `main`/`staging`; it still only proves the script's own logic in isolation, not live Vercel build-skipping behavior (gate 5 below remains unverified until a real branch push is observed).
 
 Tool execution behaved normally throughout this session: `printf 'shell-ok'` returned immediately before any long-running command was attempted, and every subsequent command (including the 105s test run and the build) completed and returned control normally. Nothing hung. This corroborates the hung-session hypothesis (tool-layer stall, not a Dibayar build/test problem) rather than contradicting it.
 
