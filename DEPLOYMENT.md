@@ -21,7 +21,7 @@ staging is provisioned, follow the transitional rollout rules in
 | `main` | Production (auto-deploy on merge) | Production branch (`main`, `DATABASE_URL`) | Production domain | see "Current verified state" | Yes |
 | `staging` | one stable deployment on a stable domain | one stable branch, never pruned | stable staging domain | Vercel SSO | **Partly** — `staging` git branch exists (created 2026-09-27 from the PR #16 merge commit, `4c2f868`) and its push-triggered CI is live-verified; no Vercel staging environment/domain, no Neon staging branch, and no staging OAuth callback exist yet — all Chris-only, see the action packet in `docs/receipts/DIBAYAR-STAGING-ACTIVATION-2026-09-27.md` |
 | `preview/*` | temporary, per-branch | temporary, one per branch (integration-created) | none by default | Vercel SSO | Partly — today *every* pushed branch deploys and gets a Neon branch |
-| other branches | Vercel build suppressed (live-verified 2026-09-27) | **still provisions a Neon preview branch — live-verified NOT suppressed** | none | n/a | **Partial.** `vercel.json` `ignoreCommand` -> `scripts/vercel-ignore-build.sh` correctly cancels the Vercel build for an ordinary branch (`Canceled`, ~4s, confirmed live on a disposable `chore/workflow-ci-only-smoke` branch 2026-09-27). But the Vercel↔Neon integration provisioned `preview/chore/workflow-ci-only-smoke` anyway — the build-skip does not stop Neon branch creation. This is a real gap, not yet fixed: see "Ordinary-branch Neon suppression gap" below. |
+| other branches | Vercel build suppressed (live-verified 2026-09-27, re-confirmed 2026-09-28) | **still provisions a Neon preview branch — live-verified NOT suppressed, twice** | none | n/a | **Partial.** `vercel.json` `ignoreCommand` -> `scripts/vercel-ignore-build.sh` correctly cancels the Vercel build for an ordinary branch (`Canceled`, ~4–7s, confirmed live on two independent ordinary branches: `chore/workflow-ci-only-smoke` 2026-09-27 and `chore/staging-activation-2026-09-27` 2026-09-28). But the Vercel↔Neon integration provisioned a Neon branch for both anyway — the build-skip does not stop Neon branch creation. Real, unresolved gap: see "Ordinary-branch Neon suppression gap" below and `docs/receipts/DIBAYAR-STAGING-ACTIVATION-R2-SELECTIVE-NEON-2026-09-28.md` for the R2 audit and the selective-branching architecture adopted to work around it. |
 
 Mechanics to apply when implementing the not-yet-implemented rows. Every one is
 a Vercel/Neon/Google settings change and therefore needs Chris
@@ -45,7 +45,7 @@ current Vercel/Neon docs before acting:
   Neon integration from provisioning a branch — see "Ordinary-branch Neon
   suppression gap" below.
 
-### Ordinary-branch Neon suppression gap (found 2026-09-27, unresolved)
+### Ordinary-branch Neon suppression gap (found 2026-09-27, re-confirmed and scoped 2026-09-28, unresolved)
 
 The `vercel.json` `ignoreCommand` stops the Vercel *build* for an ordinary
 branch, but the push to that branch still made the Vercel↔Neon integration
@@ -57,11 +57,50 @@ rather than only on an actual build. Practical effect: ordinary
 `feature/*`/`fix/*`/`chore/*` branches still consume Neon capacity even
 though they no longer deploy, so the Neon 10-branch cap (see "Preview failure
 mode" below) is not actually relieved by the CI-only-branch mechanism as
-originally hoped. This needs further investigation (a Vercel/Neon
-integration setting that scopes branch-database creation the same way
-`ignoreCommand` scopes builds, if one exists) and is not yet fixed. Until
-then, continue pruning merged-PR Neon preview branches periodically
-regardless of the CI-only-branch mechanism's build-suppression success.
+originally hoped.
+
+**2026-09-28 (R2 audit) re-confirmation.** The gap is not a one-off: pushing
+this very documentation branch, `chore/staging-activation-2026-09-27` (an
+ordinary `chore/*` branch), produced the identical pattern a second time —
+two `Canceled` Vercel Preview deployments (`~4–7s`, build correctly
+suppressed) and a new Neon branch, `preview/chore/staging-activation-2026-09-27`
+(confirmed via `neon branches list`). No fresh disposable smoke branch was
+created this session to re-prove it a third time, since Neon is already at
+its hard cap (see "Neon capacity" below) and this live corroborating instance
+is sufficient evidence that nothing changed.
+
+**2026-09-28 (R2 audit) — searched for a branch-pattern/allowlist fix and did
+not find one inspectable from this session:**
+- `neon branches --help` / the Neon CLI's `branches` command group has no
+  setting for scoping *which* Git branches get an auto-created preview
+  branch — only lifecycle operations (create/delete/rename/reset/restore) on
+  branches that already exist.
+- `vercel target list` returns exactly the three built-in targets
+  (`Production`, `Preview` = "All unassigned git branches", `Development`) —
+  this is Vercel's default target set, present on every plan, and is **not**
+  evidence that this project has the paid Custom Environments feature. No
+  custom environment (e.g. a `staging` target distinct from `Preview`) exists.
+  Whether Custom Environments are available on this account's plan remains
+  unconfirmed and would need a Chris dashboard check (Project Settings →
+  Environments → "Add Environment").
+- Neither the Vercel CLI nor the Neon CLI exposes the Neon-Vercel
+  integration's own configuration (which Vercel environments it's connected
+  to, whether "create a branch per Preview deployment" is toggled, or any
+  database-specific branch-pattern allowlist). That configuration lives only
+  in the Vercel dashboard's Integrations page for the Neon integration (or
+  the Neon Console's "Connect to Vercel" panel) and could not be read without
+  UI access this session did not have. **This is the single most important
+  open question for closing gate 5** — see the action packet below.
+
+Until a Chris dashboard check confirms whether that setting exists, treat
+automatic per-branch Neon provisioning as environment-wide and not
+branch-filterable, and adopt the selective-branching architecture in
+`docs/receipts/DIBAYAR-STAGING-ACTIVATION-R2-SELECTIVE-NEON-2026-09-28.md`
+(persistent `main` + persistent `staging` Neon branches; no automatic Neon
+branch for ordinary branches; explicit, manually-provisioned Neon branches
+only for justified `preview/*` isolation) rather than continuing to rely on
+periodic pruning as the primary mechanism. Pruning remains necessary as a
+backstop regardless of which model is adopted.
 - **Staging:** either a Vercel custom environment or the ordinary Preview
   deployment of the long-lived `staging` git branch. Whichever is chosen it
   must have a stable domain, a Neon branch that is never pruned, its own
@@ -72,21 +111,26 @@ regardless of the CI-only-branch mechanism's build-suppression success.
   `src/auth.ts` sets `trustHost: true` and reads no `AUTH_URL`/`NEXTAUTH_URL`,
   so no base-URL env var is needed beyond the callback registration itself.
 - **Neon capacity:** the project `neon-dijual` is on plan `free_v3` with
-  `branches_limit: 10`. Observed 2026-09-27 (staging-activation session,
-  read-only, after PR #16 merged): **9/10** — `main` plus preview branches for
-  merged PRs #7, #11, #12, #13, #14, #15, #16 (`bootstrap/staging-workflow`),
-  plus `preview/chore/workflow-ci-only-smoke` created by this session's own
-  gate-5 live smoke test (git branch already deleted; the Neon branch is not —
-  deletion is Chris-only). All 8 preview branches are cleanup candidates —
-  every corresponding PR is merged and none is `main`/`staging` — see the
-  action packet in `docs/receipts/DIBAYAR-STAGING-ACTIVATION-2026-09-27.md`.
-  No `staging` Neon branch exists yet; creating one now, before pruning, would
-  hit the 10-branch cap. Budget once staging exists and cleanup is done:
-  `main` + `staging` + at most a few concurrent isolated previews. Failure
-  signature at the cap: a Preview for a new git branch ends `BUILD_FAILED` /
-  "Resource provisioning failed" in ~1.5 s with no build logs (the integration
-  step fails before `scripts/vercel-build.sh` runs); confirmed by intervention
-  on 2026-09-27 when freeing one Neon branch let the next redeploy succeed.
+  `branches_limit: 10`. **Observed 2026-09-28 (R2 audit, read-only): 10/10 —
+  at the hard cap.** `main` plus 9 preview branches: the 8 cleanup candidates
+  verified on 2026-09-27 (merged PRs #7, #11, #12, #13, #14, #15, #16, plus
+  `preview/chore/workflow-ci-only-smoke`, whose git branch is already
+  deleted) are all still present, unchanged — **no deletion has happened
+  yet** (Chris-only). A 9th branch, `preview/chore/staging-activation-2026-09-27`,
+  is new since the last audit: it is this session's own PR #17 branch
+  (`docs: staging activation six-gate verification receipt`), which is
+  **still open, not merged** — it is **not** a cleanup candidate and must not
+  be included in the deletion packet below until PR #17 merges or closes.
+  No `staging` Neon branch exists yet; creating one now, even after pruning
+  all 8 disposable branches, would land at 2/10 (`main` + `staging`) — safe —
+  but the 9th (PR #17's own, still-active) branch must be left alone.
+  Failure signature at the cap: a Preview for a new git branch ends
+  `BUILD_FAILED` / "Resource provisioning failed" in ~1.5 s with no build
+  logs (the integration step fails before `scripts/vercel-build.sh` runs);
+  confirmed by intervention on 2026-09-27 when freeing one Neon branch let
+  the next redeploy succeed. **At 10/10 right now, any further push to a new
+  branch (including another disposable Gate-5 smoke test) will fail this way
+  until Chris prunes.**
 - **Branch hygiene:** GitHub "Automatically delete head branches" is currently
   off; this session attempted to enable it directly via the GitHub API and
   the attempt was blocked by this session's own tooling — see the action
