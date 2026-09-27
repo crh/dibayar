@@ -29,8 +29,9 @@ export function getJakartaMonthBounds(now: Date) {
 // Provisional (M4 pre-validation): the month basis is Invoice.createdAt in
 // Asia/Jakarta -- there is no separate issue-date column -- and every
 // non-DRAFT status (SENT/DUE/OVERDUE/PAID) is counted, paid or not. So this is
-// an "invoiced this month" view, not cash received; an invoice created on
-// Aug 31 and paid in September stays in August. Not yet ratified by Chris or
+// a "net invoiced this month" view (subtotal minus estimated PPh), not cash
+// received; an invoice created on Aug 31 and paid in September stays in
+// August. Not yet ratified by Chris or
 // validated with creators; see docs/validation/M4-READINESS.md. Pinned by
 // income-summary.test.ts so a change here is deliberate.
 export function summarizeMonthlyIncome(invoices: InvoiceRecord[], now: Date): MonthlyIncomeSummary {

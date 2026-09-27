@@ -345,6 +345,41 @@ before treating this as closed for Production specifically. Preview-build
 success is evidence the mechanism works, not evidence Production has been
 rebuilt with it yet.
 
+## Preview failure mode: Neon branch limit (observed 2026-09-26; resolved 2026-09-27, capacity still at the limit)
+
+Symptom: a Vercel Preview for a new git branch ends `ERROR`, `errorCode`
+`BUILD_FAILED`, `errorMessage` "Resource provisioning failed", `Builds` `[0ms]`,
+no build logs (`vercel logs` says the deployment never reached READY). The
+integrations step fails in ~1.5 s, **before** `scripts/vercel-build.sh` runs, so
+the missing-`DATABASE_URL_POSTGRES_URL_NON_POOLING` guard is not involved
+(that variable exists project-wide for Preview).
+
+Evidence (read-only): Neon project `neon-dijual` is on `free_v3` with
+`branches_limit: 10` and holds exactly 10 branches (8 ready, 2 archived); there
+is no `preview/codex/m4-invoiced-this-month` branch. Seven of the ten are Neon
+preview branches for **merged** PRs (#7–#13) whose git branches still exist on
+`origin`. Every deployment since PR #14's first commit (5 so far, all with the
+same error) failed this way; the last Ready Preview was PR #13's. Neon's own
+provisioning error text is not exposed, but the cause is **confirmed by
+intervention**: on 2026-09-27 Chris deleted the oldest preview branch
+(`preview/claude/dibayar-week-2026-09-07`, archived, no PR), and the very next
+Preview redeploy (`dpl_F2phqqXnFK8qSU35PdYHwaccThg5`, commit `d58c0de`) provisioned
+`preview/codex/m4-invoiced-this-month` and reached READY, still Vercel-SSO
+protected. The project was then back at 10/10, so Chris deleted four more (5 in total);
+as verified 2026-09-27 it is at **6/10** (`main` plus 5 preview branches: PR #7, #11,
+#12, #13 and this PR's), 4 free slots. Preview branches accumulate one per git
+branch **only under today's pre-transition behavior**, where every pushed
+branch still deploys and gets a Neon branch (see "Environment mechanics"
+above). Until the CI-only-ordinary-branches mechanic is implemented, prune
+merged-PR preview branches again before capacity nears 10. This is a
+transitional workaround, not a permanent operating procedure: once ordinary
+`feature/*`/`fix/*`/`chore/*` branches stop deploying at all (the
+[pre-staging transition](docs/DEVELOPMENT-WORKFLOW.md#pre-staging-transition)),
+this failure mode should become exceptional rather than recurring. Nothing in
+the repo can fix the underlying cap; deleting Neon branches or `origin`
+branches needs Chris's approval. Action packet:
+`docs/receipts/DIBAYAR-PR14-PREVIEW-AND-MONTHLY-SUMMARY-REMEDIATION-2026-09-26.md` §2.
+
 ## Deployment verification record (convention, established 2026-09-06)
 
 Every meaningful Preview or Production verification — a manual check, a
