@@ -12,7 +12,8 @@ The engineering MVP is implemented on `main`. The latest current-truth summary i
 - [PRODUCT.md](PRODUCT.md) — customer, problem, MVP scope, and non-goals
 - [ROADMAP.md](ROADMAP.md) — milestone status
 - [BACKLOG.md](BACKLOG.md) — deferred work
-- [DEPLOYMENT.md](DEPLOYMENT.md) — deployment, migration, and release gates
+- [docs/DEVELOPMENT-WORKFLOW.md](docs/DEVELOPMENT-WORKFLOW.md) — branching, promotion (`feature -> staging -> main`), and environment lifecycle
+- [DEPLOYMENT.md](DEPLOYMENT.md) — Vercel/Neon mechanics, migration, and release gates
 - [SECURITY.md](SECURITY.md) — security controls and known gaps
 
 ## Development

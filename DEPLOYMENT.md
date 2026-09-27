@@ -1,5 +1,54 @@
 # Dibayar deployment
 
+**Ownership.** This file is canonical for Vercel/Neon deployment mechanics,
+environment variables, per-environment access, and deployment approval and
+security gates. The Git branch model, promotion flow, environment lifecycle,
+OAuth redirect strategy, and cleanup rules are owned by
+[`docs/DEVELOPMENT-WORKFLOW.md`](docs/DEVELOPMENT-WORKFLOW.md) — read it first;
+if it conflicts with this file on workflow, it wins. Current project status is
+owned by `STATE.md`.
+
+## Environment mechanics
+
+Target model from `docs/DEVELOPMENT-WORKFLOW.md`. Each row states what must be
+true; the **Implemented** column is the honest current state and must be
+re-verified (Vercel/Neon/`git ls-remote`) before anyone relies on it.
+
+| Branch | Vercel | Neon | Google OAuth callback | Access | Implemented |
+|---|---|---|---|---|---|
+| `main` | Production (auto-deploy on merge) | Production branch (`main`, `DATABASE_URL`) | Production domain | see "Current verified state" | Yes |
+| `staging` | one stable deployment on a stable domain | one stable branch, never pruned | stable staging domain | Vercel SSO | **No** — no `staging` branch or environment exists yet |
+| `preview/*` | temporary, per-branch | temporary, one per branch (integration-created) | none by default | Vercel SSO | Partly — today *every* pushed branch deploys and gets a Neon branch |
+| other branches | none (CI only) | none | none | n/a | **No** — not yet enforced |
+
+Mechanics to apply when implementing the not-yet-implemented rows. Every one is
+a Vercel/Neon/Google settings change and therefore needs Chris
+(`docs/DEVELOPMENT-WORKFLOW.md`, "Authorization"); confirm each against the
+current Vercel/Neon docs before acting:
+
+- **CI-only ordinary branches:** a Vercel *Ignored Build Step* that skips every
+  branch except `main`, `staging`, and `preview/*` (Vercel exposes
+  `VERCEL_GIT_COMMIT_REF`; exit `0` skips the build, exit `1` builds). Skipping
+  the build also prevents the Neon integration from provisioning a branch for
+  it — confirm that on the first skipped branch, since the integration step is
+  where "Resource provisioning failed" occurs.
+- **Staging:** either a Vercel custom environment or the ordinary Preview
+  deployment of the long-lived `staging` git branch. Whichever is chosen it
+  must have a stable domain, a Neon branch that is never pruned, its own
+  `AUTH_SECRET`, and (if Google sign-in is needed) its own registered callback.
+  `scripts/vercel-build.sh` treats `VERCEL_ENV=preview` as integration-managed
+  and requires `DATABASE_URL_POSTGRES_URL_NON_POOLING`; a staging deployment
+  running as Preview inherits that behavior, a custom environment may not.
+- **Neon capacity:** the project `neon-dijual` is on plan `free_v3` with
+  `branches_limit: 10` (observed 2026-09-27). Budget: `main` + `staging` + at
+  most 3 concurrent isolated previews. Failure signature at the cap: a Preview
+  for a new git branch ends `BUILD_FAILED` / "Resource provisioning failed" in
+  ~1.5 s with no build logs (the integration step fails before
+  `scripts/vercel-build.sh` runs); confirmed by intervention on 2026-09-27 when
+  freeing one Neon branch let the next redeploy succeed.
+- **Branch hygiene:** GitHub "Automatically delete head branches" is currently
+  off; enabling it is a repository setting for Chris.
+
 ## Current verified state (2026-09-06, V6.1 production-hardening audit)
 
 This section is the current authoritative summary. It supersedes any
@@ -45,6 +94,12 @@ marked until Chris confirms this is the intended state.
 
 ## Current status (historical — see "Current verified state" above for what is actually true today)
 
+The bullets in this section are dated records of what was believed at the time.
+Where they describe branch-scoped Preview deployments, per-branch OAuth
+callbacks, or a shared Preview/Production database, they describe the
+pre-workflow past, not the current policy; see "Environment mechanics" above and
+`docs/DEVELOPMENT-WORKFLOW.md`.
+
 - Target: Vercel.
 - M0 local scaffold: verified.
 - M1 local vertical slice: implemented; 21 tests, lint, typecheck, production build, and local HTTP smoke verified.
@@ -55,7 +110,7 @@ marked until Chris confirms this is the intended state.
 - Production URL: `https://dibayar-mgcd6p1j7-kenji-iwakura.vercel.app/`.
 - Production access: URL reachable, but Vercel Authentication redirects unauthenticated visitors to Vercel login.
 - Authenticated smoke: Chris confirmed the Dibayar title, Bahasa coming-soon content, absence of the default Next.js template, and approximately 390px mobile layout.
-- Preview deployment: Ready; the existing Vercel Neon resource `neon-dijual` is available, but Preview and Production currently resolve to the same Neon `DATABASE_URL`; do not migrate until Preview has a separate database/branch.
+- Preview deployment: Ready; the existing Vercel Neon resource `neon-dijual` is available, but Preview and Production currently resolve to the same Neon `DATABASE_URL`; do not migrate until Preview has a separate database/branch. (Later resolved: Preview databases are Neon branches created per Preview deployment.)
 - Production launch and real-user access require Chris's explicit approval.
 - M2 Preview (2026-07-17): Chris approved pushing the 8 local M2 commits (`745353e..5385f1b`, including Task D error-handling hardening and the Task E cron preflight guard) to `origin/hermes/m2-invoice`. The push triggered protected Preview `dpl_FpTHqmwmxHyxDj7p7pTU8LLFdDaz` (commit `5385f1b3601a33ea6758d3ef21315b3c63012b83`), Ready, still Vercel-Authentication protected (302 on both the immutable URL and the stable alias). Authenticated smoke confirmed `/dashboard` renders correctly with empty pipeline/invoice data; no data was created. Production and public/recipient-facing access remain untouched and still require separate approval.
 - M2 Preview (2026-07-19) — share-link expiry rollout complete on protected Preview: remote `58eed07` includes `53032e3` (expiry code) and the governance closeout; isolated Preview migration `20260719075600_invoice_share_expiry` is applied to `preview/hermes/m2-invoice` / `neondb`; protected Preview `dpl_CgARDeZex6BpTFx3UVmXQ8dibXSp` is Ready at https://dibayar-mhk536jix-kenji-iwakura.vercel.app and the stable alias remains Vercel-SSO protected. Prior authenticated owner/recipient E2E evidence remains recorded below. M2 is accepted; Production and public/non-SSO recipient access remain separately gated and untouched.
@@ -99,57 +154,77 @@ git check-ignore .env.local
 
 Never commit `.env.local`, real credentials, database URLs, OAuth secrets, or tokens. Vercel environment variables must be configured through the approved deployment environment, not source control.
 
-## Next deployment step
+## Deployment steps
 
-The repository is already linked to Vercel and the protected production page has passed authenticated smoke. Keep it protected; do not make it public without Chris's explicit approval. Before applying M1 migrations, configure a separate Preview database and then configure `DATABASE_URL`, `AUTH_SECRET`, `AUTH_GOOGLE_ID`, and `AUTH_GOOGLE_SECRET` in the approved Vercel environment.
+Promotion, branching, and which branch deploys where are defined in
+`docs/DEVELOPMENT-WORKFLOW.md`. Production stays protected by the approval gates
+below: merging to `main` auto-deploys Production, so a `staging -> main` (or
+`hotfix/* -> main`) merge is a Production deployment and needs Chris's explicit
+authorization. Required variables per environment are `DATABASE_URL`,
+`AUTH_SECRET`, `AUTH_GOOGLE_ID`, and `AUTH_GOOGLE_SECRET`, configured in the
+approved Vercel environment, never in source control.
 
 ## Where environment values come from
 
 | Variable | Source | Notes |
 |---|---|---|
-| `DATABASE_URL` | Existing Vercel Neon resource `neon-dijual` / Neon Console | Preview uses a branch-scoped connection string. The checked-in M1 migration was applied successfully to that Preview database. |
-| `AUTH_SECRET` | Generate locally with `openssl rand -base64 48` | Already generated and stored as a sensitive Preview branch variable. Never commit or paste it into chat. |
+| `DATABASE_URL` | Existing Vercel Neon resource `neon-dijual` / Neon Console | One value per environment (Production, staging, each isolated preview) — never shared. On Preview the Neon integration supplies the per-branch connection as `DATABASE_URL_POSTGRES_URL*`, which `scripts/vercel-build.sh` and `src/lib/prisma.ts` use instead of the static value. |
+| `AUTH_SECRET` | Generate locally with `openssl rand -base64 48` | A distinct value per environment, stored as a sensitive Vercel variable. Never commit or paste it into chat. |
 | `AUTH_GOOGLE_ID` | Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client IDs | Create a **Web application** client. This is the client ID, not the secret. |
 | `AUTH_GOOGLE_SECRET` | Same Google Cloud OAuth Web application | Store only in Vercel as a sensitive value. |
 
-Google OAuth redirect URIs to add:
+Google OAuth redirect URIs — exactly three long-lived entries (strategy and
+rationale: `docs/DEVELOPMENT-WORKFLOW.md`, "Google OAuth redirect strategy"):
 
 ```text
-https://dibayar-git-hermes-day-001-m0-bootstrap-kenji-iwakura.vercel.app/api/auth/callback/google
-https://dibayar-kwpldc7bh-kenji-iwakura.vercel.app/api/auth/callback/google
 http://localhost:3000/api/auth/callback/google
+https://<staging-domain>/api/auth/callback/google
+https://<production-domain>/api/auth/callback/google
 ```
+
+Do not register per-branch or per-deployment Vercel hostnames. Any change to
+the Google console needs Chris. Redirect URIs already registered for old
+`hermes/*` branch aliases predate this policy; removing them is a Google-console
+change for Chris and is not done here.
 
 Google setup path:
 
 1. Open https://console.cloud.google.com/projectselector2/home/dashboard and select/create the project.
 2. Configure the OAuth consent screen under **Google Auth Platform**; keep it in Testing and add Chris as a test user while validating.
 3. Open https://console.cloud.google.com/apis/credentials → **Create credentials** → **OAuth client ID** → **Web application**.
-4. Add the redirect URIs above and copy the generated client ID and client secret.
+4. Add the redirect URIs above (Chris, in the Google console) and copy the generated client ID and client secret.
 
-Add the Google values without sending them through chat:
+Add Google values to Vercel without sending them through chat, scoped to the
+target environment (Chris performs or approves each `vercel env add`; agents do
+not, and never print values):
 
 ```bash
 read -rp 'Google client ID: ' GOOGLE_ID
 read -rsp 'Google client secret: ' GOOGLE_SECRET; printf '\n'
-vercel env add AUTH_GOOGLE_ID preview hermes/day-001-m0-bootstrap --sensitive --yes --value "$GOOGLE_ID"
-vercel env add AUTH_GOOGLE_SECRET preview hermes/day-001-m0-bootstrap --sensitive --yes --value "$GOOGLE_SECRET"
+vercel env add AUTH_GOOGLE_ID <production|preview [git-branch]> --sensitive --yes --value "$GOOGLE_ID"
+vercel env add AUTH_GOOGLE_SECRET <production|preview [git-branch]> --sensitive --yes --value "$GOOGLE_SECRET"
 unset GOOGLE_ID GOOGLE_SECRET
 ```
 
-The Preview branch deployment is configured and Ready. The checked-in M1 migration was applied successfully to the Preview database. Google provider preflight reaches `accounts.google.com`; complete one real test-user login before claiming authenticated CRUD smoke.
+Complete one real test-user login on an environment before claiming authenticated CRUD smoke there.
 
-## Preview policy
+## Preview and staging policy
 
-A confidential, access-restricted preview may be used for technical verification only when it contains no real customer or financial data, does not process payments, and is not announced or shared with users. An openly accessible or unrestricted preview requires Chris's approval.
+Staging and isolated `preview/*` deployments are confidential, access-restricted
+(Vercel SSO), and may be used for technical verification and M4 validation prep
+only when they contain no real customer or financial data, do not process
+payments, and are not announced or shared with users. An openly accessible or
+unrestricted staging/preview requires Chris's approval. Ordinary
+`feature/*`/`fix/*`/`chore/*` branches do not get a hosted deployment at all
+(`docs/DEVELOPMENT-WORKFLOW.md`).
 
 ## Production policy
 
-The first production deployment, production-domain assignment, public launch, announcement, or real-user access requires Chris's approval. Routine deployments after explicit approval still require all applicable lint, typecheck, test, build, security, and smoke checks to pass. Destructive migrations, payment processing, new paid services, material data-collection changes, or material security changes require renewed approval.
+The first production deployment, production-domain assignment, public launch, announcement, or real-user access requires Chris's approval. Routine deployments after explicit approval still require all applicable lint, typecheck, test, build, security, and smoke checks to pass. Destructive migrations, payment processing, new paid services, material data-collection changes, or material security changes require renewed approval. Because merging to `main` deploys Production, every `staging -> main` and `hotfix/* -> main` merge needs Chris's explicit authorization for that PR; the authorization matrix is in `docs/DEVELOPMENT-WORKFLOW.md`.
 
 ## Rollback
 
-Rollback procedure and Vercel project identifiers are not yet verified. Do not claim a deployment or rollback until the resulting Vercel status and URL have been checked directly.
+Rollback expectations (revert PR or promote the previous Vercel deployment; forward-only migrations; smoke check afterward) are in `docs/DEVELOPMENT-WORKFLOW.md`. The concrete Vercel/Neon rollback procedure and identifiers are **not yet verified** here. Do not claim a deployment or rollback until the resulting Vercel status and URL have been checked directly; when the procedure is first exercised and verified, record it in this section.
 
 ## Migration strategy (established 2026-09-06, post-V6.1 incident)
 
@@ -184,6 +259,11 @@ was turned off (by the user) so `vercel.json` is authoritative:
   "buildCommand": "if [ -n \"$DATABASE_URL\" ]; then npx prisma migrate deploy; fi && next build"
 }
 ```
+
+*(Superseded 2026-09: `vercel.json` now calls `bash scripts/vercel-build.sh`,
+which keeps the same guard and adds Preview-specific Neon variable handling and
+a fail-closed check. The snippet above is what this section's regression story
+describes, not the current file — read `vercel.json` and `scripts/vercel-build.sh`.)*
 
 This is **not** the same string as the original dashboard override —a real
 regression was caught and fixed before this reached `main`, see below.
