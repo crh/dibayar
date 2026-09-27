@@ -166,7 +166,7 @@ per creator; the outcome goes into the §4 template, which stays the only
 feedback format. Track recruiting in `M4-SESSION-TRACKER.md`.
 
 **Before the session (moderator)**
-- [ ] Confirm a READY, SSO-protected Preview exists. As of 2026-09-27 PR #14's is READY (`dpl_F2phqqXnFK8qSU35PdYHwaccThg5`) after one Neon branch was freed, but Neon is back at 10/10 branches, so a new branch's Preview will fail until more are pruned (`DEPLOYMENT.md` "Preview failure mode").
+- [ ] Confirm a READY, SSO-protected Preview exists. As of 2026-09-27 PR #14's is READY (`dpl_F2phqqXnFK8qSU35PdYHwaccThg5`) after one Neon branch was freed, and Neon was pruned to 6/10 branches on 2026-09-27 (4 free slots); prune merged-PR preview branches again before it nears 10 (`DEPLOYMENT.md` "Preview failure mode").
 - [ ] Preview build contains commit `_______` and shows "Net ditagihkan bulan ini" on Beranda.
 - [ ] Preview is the protected, non-Production one on its own database (`DEPLOYMENT.md` "Preview policy": no real customer or financial data). Confirm with Chris that a moderated screen-share is within that policy.
 - [ ] Demo/typical deal data only. Creators are not asked to enter real brands, contacts, or amounts.
@@ -202,6 +202,6 @@ feedback format. Track recruiting in `M4-SESSION-TRACKER.md`.
 - IN PR — "Net ditagihkan bulan ini" relabel, §3 correction, §5 checklist and tracker.
 - WAITING FOR SCHEDULE — P2-2, one more consecutive scheduled success.
 - WAITING FOR PRODUCT DECISION — §2: 7-day due-soon window, 90-day share lifetime, ratification of the `createdAt` summary basis (the wording is already changed), and the Preview-policy reading in §3.1 (moderated screen-share vs "technical verification only").
-- DONE — PR #14 Preview READY (2026-09-27). Standing risk: Neon at 10/10 branches; Chris to prune merged-PR preview branches or raise the plan.
+- DONE — PR #14 Preview READY (2026-09-27). Neon pruned to 6/10 (2026-09-27); prune merged-PR preview branches periodically.
 - WAITING FOR PRODUCTION AUTHORIZATION — §3; also P1-1/P1-2 live verification.
 - NON-CODE — recruiting and running creator sessions.

@@ -283,10 +283,11 @@ intervention**: on 2026-09-27 Chris deleted the oldest preview branch
 (`preview/claude/dibayar-week-2026-09-07`, archived, no PR), and the very next
 Preview redeploy (`dpl_F2phqqXnFK8qSU35PdYHwaccThg5`, commit `d58c0de`) provisioned
 `preview/codex/m4-invoiced-this-month` and reached READY, still Vercel-SSO
-protected. **The project is back at 10/10 branches**, so the next new git branch
-will fail the same way until more are freed; the seven preview branches of merged
-PRs #7–#13 are the candidates. Nothing in the repo can fix this; deleting Neon
-branches or `origin` branches needs Chris's approval. Action packet:
+protected. The project was then back at 10/10, so Chris deleted four more (5 in total);
+as verified 2026-09-27 it is at **6/10** (`main` plus 5 preview branches: PR #7, #11,
+#12, #13 and this PR's), 4 free slots. Preview branches accumulate one per git
+branch, so prune merged-PR ones again before it reaches 10. Nothing in the repo can
+fix this; deleting Neon branches or `origin` branches needs Chris's approval. Action packet:
 `docs/receipts/DIBAYAR-PR14-PREVIEW-AND-MONTHLY-SUMMARY-REMEDIATION-2026-09-26.md` §2.
 
 ## Deployment verification record (convention, established 2026-09-06)
