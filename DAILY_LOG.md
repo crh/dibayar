@@ -704,3 +704,10 @@ Starting state verified fresh: `main` = `origin/main` = `a60dfdf`, no open PRs, 
 - Visual: 3 Beranda baselines regenerated on the real runner (`36236175674`); 6 others byte-identical; 390px render inspected. Gates: lint, typecheck, `npm test` 80 files/771 tests, `npm run build` clean.
 - Guardrails: no Production access/data/deployment, no public-access, SSO or OAuth change, no secret values read (env var names only), no creator contact; M4 counters unchanged at 0.
 - Full detail: `docs/receipts/DIBAYAR-PR14-PREVIEW-AND-MONTHLY-SUMMARY-REMEDIATION-2026-09-26.md`.
+
+## 2026-09-27 — PR #14 Preview unblocked
+
+- Chris deleted the oldest Neon preview branch (`preview/claude/dibayar-week-2026-09-07`, archived, no PR) — the auto-mode classifier had blocked the delete and the redeploy when attempted from this session, so Chris ran the delete via `!` and the Vercel dashboard Redeploy.
+- Verified independently: `dpl_F2phqqXnFK8qSU35PdYHwaccThg5` READY on `d58c0de`; Vercel commit status `success`; Neon created `preview/codex/m4-invoiced-this-month`; unauthenticated request to the Preview and its alias 302s to Vercel SSO (protection intact); PR #14 `CLEAN` / `MERGEABLE`; required CI green (`36236499806`). Root cause reclassified **CONFIRMED** (by intervention). Beranda itself not inspected on Preview (SSO-protected; no authenticated session used).
+- Neon is back at 10/10 branches: the next new feature branch will fail the same way until the seven merged-PR preview branches (#7–#13) are pruned or the plan is raised. Chris decision. No further deletions were made.
+- PR #14 not merged; merge left to Chris. Production, SSO, OAuth, public access untouched; no secrets read; no creator contact.

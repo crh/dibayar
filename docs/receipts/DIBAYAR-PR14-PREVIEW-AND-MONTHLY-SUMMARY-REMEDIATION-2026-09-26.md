@@ -1,8 +1,9 @@
 # Dibayar — PR #14 remediation: Preview failure diagnosis and monthly-summary heading (2026-09-26)
 
-Status: **PR #14 is NOT merge-ready.** Its Vercel Preview cannot deploy, and the
-fix is an external Neon action that only Chris should take. The heading fix,
-docs, tests and visual baselines are done and green locally.
+Status (updated 2026-09-27, see §9): **PR #14 is now merge-ready pending Chris.** The
+Preview was blocked by the Neon branch limit; Chris freed one branch and the
+Preview is READY. The heading fix, docs, tests and visual baselines are done and
+green. Sections 1–8 below describe the state at the end of 2026-09-26.
 
 ## 1. Starting state
 
@@ -174,3 +175,12 @@ weakened.
 - **Recruitment / creator-session execution:** NON-CODE, Chris; nothing contacted.
 - **Production authorization:** unchanged (WAITING FOR PRODUCTION AUTHORIZATION).
 - **Post-session proceed / iterate / pivot:** Chris, after ≥5 real sessions.
+
+## 9. Addendum 2026-09-27 — Preview unblocked, cause confirmed
+
+- Chris deleted Neon branch `preview/claude/dibayar-week-2026-09-07` (`br-dry-sunset-aos4tyln`, the oldest, archived, no PR) and redeployed from the Vercel dashboard. (Both actions were blocked by the auto-mode classifier when attempted from Claude Code, so I did not perform them.)
+- Verified by me afterwards: `dpl_F2phqqXnFK8qSU35PdYHwaccThg5` READY on `d58c0de`; commit status `success`; Neon now has `preview/codex/m4-invoiced-this-month`; Preview and alias 302 to Vercel SSO unauthenticated; PR #14 `mergeStateStatus` CLEAN, MERGEABLE; CI `36236499806` green.
+- **Classification upgraded to `CONFIRMED_ROOT_CAUSE`** (by intervention: freeing exactly one branch flipped provisioning from failing to succeeding).
+- **Standing risk:** Neon is again at 10/10 branches, so the next new git branch's Preview will fail identically until more are pruned. Candidates: the seven preview branches of merged PRs #7–#13 (§2). Chris decision; nothing else deleted.
+- Not verified: the Beranda page on Preview (needs an authenticated, SSO-protected session; none used). Mobile rendering evidence is the CI-runner screenshot in §5.
+- Merge status: not merged. Merging redeploys Production with the new heading; that is Chris's call.
