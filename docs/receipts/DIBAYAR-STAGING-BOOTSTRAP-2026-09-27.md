@@ -122,9 +122,9 @@ All 6 non-`main` branches correspond to already-merged PRs whose GitHub git bran
 ## 9. Git / PR
 
 - Branch: `bootstrap/staging-workflow`, created from `main` @ `4d92f87` (the exact commit named in `docs/DEVELOPMENT-WORKFLOW.md`'s allowed-exceptions list, post-PR #14/#15 merge).
-- Commits: this session's commit(s) — see the PR itself for the exact list; no force-push, no history rewrite, no squash of pre-existing work.
-- PR: opened into `main` this session (see PR link/number in the handoff message) — the documented one-time bootstrap exception. Left review-ready, **not merged**.
-- CI: triggered on push/PR open; see the PR's checks tab for the live result (not restated here to avoid a stale snapshot going out of date the moment a new run fires).
+- Commits: `ec849c3` (this session's full recovery + repo-side changeset), plus this small follow-up commit adding the PR number to `STATE.md`. No force-push, no history rewrite, no squash of pre-existing work.
+- PR: **#16** (`bootstrap/staging-workflow` -> `main`), opened this session — the documented one-time bootstrap exception. Left review-ready, **not merged**.
+- CI: run `36312256822` triggered on PR open; see the PR's checks tab for the live/final result (not restated here to avoid a stale snapshot going out of date the moment a new run fires).
 - Merge status: **not merged.** Requires Chris's explicit per-PR authorization per `docs/DEVELOPMENT-WORKFLOW.md` "Authorization" (merging to `main` deploys Production).
 
 ## 10. Remaining work

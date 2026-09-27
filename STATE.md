@@ -70,10 +70,10 @@ open_blockers_continued: none beyond the ones listed above.
 - Older entries (through 2026-09-24) already live in full in `DAILY_LOG.md` per the 3-day retention rule; nothing was dropped, only relocated out of this file.
 
 ## approvals
-pending_from_chris: [2026-09-27, new] Staging bootstrap action packet (Vercel Ignored-Build-Step/domain verification, Neon `staging` branch creation, Google OAuth staging redirect URI, GitHub "delete merged branches" setting) — see bootstrap PR body / receipt. Do not merge `bootstrap/staging-workflow` into `main` without Chris's explicit authorization (every `main` merge needs it during the pre-staging transition). [2026-09-20, still open] Confirm whether Production's no-Vercel-SSO edge reachability is intentional; decide recipient public-access policy; complete M4 validation/go-no-go; confirm or revise the provisional 7-day due-soon window, 90-day share lifetime, and invoice-issue-date income basis; decide the moderated-Preview-vs-policy question (`M4-READINESS.md` §3.1).
+pending_from_chris: [2026-09-27, new] PR #16 (`bootstrap/staging-workflow` -> `main`) open, review-ready. Staging bootstrap action packet (Vercel Ignored-Build-Step/domain verification, Neon `staging` branch creation, Google OAuth staging redirect URI, GitHub "delete merged branches" setting) — see PR #16 body / `docs/receipts/DIBAYAR-STAGING-BOOTSTRAP-2026-09-27.md`. Do not merge PR #16 without Chris's explicit authorization (every `main` merge needs it during the pre-staging transition). [2026-09-20, still open] Confirm whether Production's no-Vercel-SSO edge reachability is intentional; decide recipient public-access policy; complete M4 validation/go-no-go; confirm or revise the provisional 7-day due-soon window, 90-day share lifetime, and invoice-issue-date income basis; decide the moderated-Preview-vs-policy question (`M4-READINESS.md` §3.1).
 pending_external: none
 
-granted_by_chris: standing autonomous milestone execution, code-fix, and protected Preview redeployment approval (Phases 4–6, unchanged). PR #13/#14/#15 all merged on Chris's explicit authorization or direct action. No PR is currently open other than `bootstrap/staging-workflow` (to be opened this session, review-ready, not for auto-merge).
+granted_by_chris: standing autonomous milestone execution, code-fix, and protected Preview redeployment approval (Phases 4–6, unchanged). PR #13/#14/#15 all merged on Chris's explicit authorization or direct action. PR #16 (`bootstrap/staging-workflow`) is open, review-ready, not for auto-merge.
 
 ## metrics (phase 2+ only)
 users_shown: 0
@@ -88,6 +88,6 @@ production_2026-09-06: PR #2 merged to `main` (`b6119d2`) auto-deployed Producti
 smoke: real browser automation against the live Preview deployment — see latest_validation for the exact Phase 6 checks; Phase 5 (2026-08-25), Phase 4 (2026-08-24), and Phase 3 (2026-08-23) UAT passed the same way
 
 ## next_3_tasks
-1. Get `bootstrap/staging-workflow` reviewed and, on Chris's explicit authorization, merged to `main`; then create `staging` from that known-good commit (never from an open feature branch) and work through the Vercel/Neon/OAuth/GitHub items in the action packet.
+1. Get PR #16 (`bootstrap/staging-workflow` -> `main`) reviewed and, on Chris's explicit authorization, merged; then create `staging` from that known-good commit (never from an open feature branch) and work through the Vercel/Neon/OAuth/GitHub items in the action packet.
 2. Watch for one more qualifying scheduled `e2e-cross-browser` run to close P2-2's acceptance — `36109870314` (2026-09-25) is 1 of 2 needed.
 3. Once all six pre-staging conditions are verified and marked complete, resume ordinary feature/fix/chore work targeting `staging`. Until then: confirm Production edge/public-access intent and resume M4 creator validation (unchanged largest open item, non-code, needs Chris).
