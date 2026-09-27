@@ -15,9 +15,7 @@ Verified from `STATE.md` and the repository planning documents:
 - Auth.js with Google OAuth
 - Vercel deployment target
 
-Current status: UX implementation Phase 0 foundations T-00 through T-03 are accepted on local branch `hermes/ux-phase-0`. T-00 fixture-backed evidence, T-01 locale/formatters and default-only migration, T-02 breakpoint/Grid primitives, and T-03 route scaffolding/redirects passed independent review and local gates. No Preview or Production deployment/public-access change occurred; T-04 is next.
-
-**This paragraph describes a much earlier point in the project's history and is stale relative to `main` (UX phases through T-27, a Playwright E2E suite, and PR #2's v6.1 account-menu fix have since merged).** It was not rewritten as part of the 2026-09-06 production-hardening audit — that audit's scope was Preview/Production deployment-state accuracy, not the UX phase-tracking narrative, which is Hermes/`STATE.md`-owned. For current, independently-verified Preview/Production state, do not rely on this file — see `DEPLOYMENT.md`'s "Current verified state" section, which supersedes any Preview/Production claim here or in `STATE.md`.
+Current project status, active work, and pending decisions live in `STATE.md` (and `docs/status/`, `docs/receipts/`); do not infer them from this file. For Preview/Production deployment state, see `DEPLOYMENT.md` "Current verified state".
 
 ## Repository structure
 
@@ -31,7 +29,8 @@ Verified top-level documents:
 - `REVIEW_CHECKLIST.md` — pre-commit validation gates
 - `CLAUDE_TASK_TEMPLATE.md` — implementation-task delegation contract
 - `REPORT_RUBRIC.md` — reporting expectations
-- `DEPLOYMENT.md` — local verification and deployment approval boundaries
+- `docs/DEVELOPMENT-WORKFLOW.md` — canonical Git branching, promotion, and environment lifecycle
+- `DEPLOYMENT.md` — Vercel/Neon deployment mechanics, environment variables, and deployment approval boundaries
 - `BACKLOG.md` and `DAILY_LOG.md` — project work tracking
 
 ## Hermes multi-agent roles
@@ -87,11 +86,21 @@ Planned design verified from `STATE.md`, `PRODUCT.md`, and `SECURITY.md`: Auth.j
 
 Verified database process: use the approved disposable local PostgreSQL target only (`127.0.0.1:55432/dibayar_test`) with credentials from the protected test environment; never invoke Docker/Compose or expose credentials. Prisma schema/migration and fixture procedures are documented under `docs/ux-implementation/`. Never modify production data or run production migrations without explicit scope and approval. All tenant/user-owned records remain scoped to the authenticated user.
 
-## Deployment workflow
+## Git and deployment workflow
 
-Deployment target is Vercel and project linkage is confirmed in `STATE.md`. Phase 0 was verified locally only; Preview is currently non-isolated from Production, so no Preview migration/capture or Production/public release is authorized. Follow `DEPLOYMENT.md`; secrets belong in the deployment environment, never in source control.
+Before creating branches, opening PRs, deploying, or making database/environment changes, read `docs/DEVELOPMENT-WORKFLOW.md` and `DEPLOYMENT.md`. Do not restate or improvise the workflow here or in task output; those files are canonical (workflow: `docs/DEVELOPMENT-WORKFLOW.md`; deployment mechanics and gates: `DEPLOYMENT.md`).
 
-**This is stale as of 2026-09-06.** Production has since been migrated (all 12 checked-in migrations applied) and its auth secrets configured, following a real post-merge incident on 2026-09-06 documented in `docs/receipts/DIBAYAR-V6-1-PRODUCTION-HARDENING-HANDOFF.md`; Production is also currently reachable at the Vercel edge without an SSO gate (verified by unauthenticated `curl`, not merely inferred), which was never a deliberate public-launch decision — see `DEPLOYMENT.md`'s "Current verified state" and "Production release gate" sections for what is actually true now and what remains an open Chris decision. Do not treat "no Production/public release is authorized" as still accurate without re-checking that section first.
+Key invariants:
+
+- `main` is Production.
+- `staging` is the long-lived integration/M4 environment. It may not exist yet; verify before assuming it does.
+- While `staging` is not yet provisioned, do not start new ordinary `feature/*`/`fix/*`/`chore/*` work. Only the bootstrap/in-flight/hotfix exceptions in `docs/DEVELOPMENT-WORKFLOW.md` may target `main`, and every `main` merge needs Chris's explicit authorization.
+- Ordinary `feature/*`, `fix/*`, and `chore/*` branches are CI-only and must not create Vercel/Neon Preview environments unless the task explicitly requires an isolated Preview.
+- Isolated Preview environments are exceptional and must follow the documented lifecycle and cleanup rules.
+- Do not add a Google OAuth redirect URI for every ordinary feature branch.
+- Do not merge/deploy to Production without the authorization required by the repository governance. Merging to `main` deploys Production.
+- Deleting Neon branches, Vercel deployments/env vars, or others' remote branches, and changing Vercel/Neon/Google OAuth settings, are Chris-only actions: identify the need and stop.
+- Never commit or print secrets; secrets belong in the deployment environment.
 
 ## Security requirements
 
