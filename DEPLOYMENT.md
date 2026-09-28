@@ -51,8 +51,8 @@ current Vercel/Neon docs before acting:
   dashboard Build Command override under "Migration strategy" below).
   `scripts/vercel-ignore-build.test.mjs` asserts the exact rule set and that
   both layers agree. **Gate 5 stays pending live remote verification** until a
-  disposable ordinary branch is pushed (after Chris frees Neon capacity) and
-  shows no Vercel deployment and no Neon preview branch.
+  ordinary branch is pushed and shows no Vercel deployment and no Neon preview
+  branch.
 
 ### Ordinary-branch Neon suppression gap (found 2026-09-27, re-confirmed and scoped 2026-09-28, unresolved)
 
@@ -128,7 +128,11 @@ backstop regardless of which model is adopted.
   `src/auth.ts` sets `trustHost: true` and reads no `AUTH_URL`/`NEXTAUTH_URL`,
   so no base-URL env var is needed beyond the callback registration itself.
 - **Neon capacity:** the project `neon-dijual` is on plan `free_v3` with
-  `branches_limit: 10`. **Observed 2026-09-28 (R2 audit, read-only): 10/10 —
+  `branches_limit: 10`. **Observed 2026-09-29 (read-only): 2/10** — `main`
+  and `preview/chore/staging-activation-2026-09-27`; the 8 earlier cleanup
+  candidates below are gone. PR #17 is now merged, so its preview branch is a
+  cleanup candidate (Chris-only). Historical 2026-09-28 observation follows.
+  **Observed 2026-09-28 (R2 audit, read-only): 10/10 —
   at the hard cap.** `main` plus 9 preview branches: the 8 cleanup candidates
   verified on 2026-09-27 (merged PRs #7, #11, #12, #13, #14, #15, #16, plus
   `preview/chore/workflow-ci-only-smoke`, whose git branch is already
