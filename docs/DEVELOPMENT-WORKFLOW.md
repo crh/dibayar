@@ -144,6 +144,17 @@ feature|fix|chore/*  --PR-->  staging  --validate-->  PR  -->  main
   Neon branch;
 - **not** require a Google OAuth redirect registration.
 
+Mechanism (details in `DEPLOYMENT.md` "Environment mechanics"): the intentional
+deployable branches are exactly `main`, `staging`, and `preview/**`.
+`vercel.json`'s `git.deploymentEnabled` is the **primary** gate that stops Vercel
+creating an automatic deployment for anything else; `ignoreCommand` is only
+secondary defense in depth (it runs after a deployment exists, and does not by
+itself stop the Neon integration from provisioning a branch). Neon preview
+provisioning should therefore only happen after Vercel actually creates an
+allowed deployment. This is repo config only until a disposable ordinary branch
+is live-verified to create no Vercel deployment and no Neon branch; do not treat
+the suppression as verified before then.
+
 Verify behavior locally against the disposable test database
 (`docs/testing/E2E.md`), not against a hosted environment. Every hosted
 Preview costs a Neon branch (the Vercel/Neon integration creates one per
