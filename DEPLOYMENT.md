@@ -19,27 +19,105 @@ staging is provisioned, follow the transitional rollout rules in
 | Branch | Vercel | Neon | Google OAuth callback | Access | Implemented |
 |---|---|---|---|---|---|
 | `main` | Production (auto-deploy on merge) | Production branch (`main`, `DATABASE_URL`) | Production domain | see "Current verified state" | Yes |
-| `staging` | one stable deployment on a stable domain | one stable branch, never pruned | stable staging domain | Vercel SSO | **No** — no `staging` branch or environment exists yet |
+| `staging` | one stable deployment on a stable domain | one stable branch, never pruned | stable staging domain | Vercel SSO | **Partly** — `staging` git branch exists (created 2026-09-27 from the PR #16 merge commit, `4c2f868`) and its push-triggered CI is live-verified; no Vercel staging environment/domain, no Neon staging branch, and no staging OAuth callback exist yet — all Chris-only, see the action packet in `docs/receipts/DIBAYAR-STAGING-ACTIVATION-2026-09-27.md` |
 | `preview/*` | temporary, per-branch | temporary, one per branch (integration-created) | none by default | Vercel SSO | Partly — today *every* pushed branch deploys and gets a Neon branch |
-| other branches | none (CI only) | none | none | n/a | **Repo config added 2026-09-27** (`vercel.json` `ignoreCommand` -> `scripts/vercel-ignore-build.sh`, unit-tested); **NOT YET LIVE-VERIFIED** — no branch has pushed against it yet. Confirm on the bootstrap PR's own CI-only branch that no Vercel deployment and no Neon branch appear. |
+| other branches | none (CI only) | none | none | n/a | **Repo config in place (2026-09-28), Gate 5 PENDING live remote verification.** Primary gate: `vercel.json` `git.deploymentEnabled` (`"**": false`, then `main`/`staging`/`preview/**` `true`) stops Vercel creating an automatic deployment at all. Secondary: `ignoreCommand` -> `scripts/vercel-ignore-build.sh` cancels the build if a non-allowlisted ref still reaches it. `ignoreCommand` alone was **live-disproved** as a Neon suppressor, twice (`chore/workflow-ci-only-smoke` 2026-09-27 and PR #17's `chore/staging-activation-2026-09-27` 2026-09-28: build `Canceled` in ~4–7s, yet the Vercel-Neon integration still provisioned a Neon branch — see "Ordinary-branch Neon suppression gap" below). Not proven until a disposable ordinary branch shows no Vercel deployment **and** no Neon branch. |
 
 Mechanics to apply when implementing the not-yet-implemented rows. Every one is
 a Vercel/Neon/Google settings change and therefore needs Chris
 (`docs/DEVELOPMENT-WORKFLOW.md`, "Authorization"); confirm each against the
 current Vercel/Neon docs before acting:
 
-- **CI-only ordinary branches:** implemented repo-side via `vercel.json`'s
-  `ignoreCommand`, which Vercel runs before every build
-  (`scripts/vercel-ignore-build.sh`; allowlists `main`, `staging`, `preview/*`,
-  fails open — builds — if `VERCEL_GIT_COMMIT_REF` is ever unset). This is the
-  checked-in equivalent of the dashboard "Ignored Build Step" field; **verify
-  the dashboard field is empty/default** so this file is authoritative and the
-  two don't silently disagree (same class of risk as the former dashboard
-  Build Command override under "Migration strategy" below). Skipping the build
-  is expected to also prevent the Neon integration from provisioning a branch
-  for it, but this is **not yet confirmed live** — confirm on the first
-  skipped branch, since the integration step is where "Resource provisioning
-  failed" occurs.
+- **CI-only ordinary branches:** two layers, both checked in.
+  **Primary — `git.deploymentEnabled`** in `vercel.json`: `{"**": false,
+  "main": true, "staging": true, "preview/**": true}`. Vercel matches branch
+  names with [minimatch](https://github.com/isaacs/minimatch) and deploys when
+  *any* matching rule is `true` (unmatched defaults to `true`), so the `"**"`
+  catch-all denies everything and the three allowlist rules re-enable the
+  intentional branches. It must be `"**"`, not `"*"`: minimatch's `*` does not
+  cross `/`, so `"*": false` would leave `chore/foo` and `fix/foo` deployable.
+  This is meant to stop the automatic deployment from being created at all;
+  Neon preview provisioning should then only happen for a deployment Vercel
+  actually creates (`main`, `staging`, `preview/**`).
+  **Secondary — `ignoreCommand`** (`scripts/vercel-ignore-build.sh`; same
+  allowlist, fails open — builds — if `VERCEL_GIT_COMMIT_REF` is ever unset):
+  defense in depth that cancels the build if a non-allowlisted ref reaches
+  Vercel anyway (e.g. a manual redeploy). It runs only *after* a deployment
+  exists and therefore does **not** stop Neon branch provisioning on its own
+  (live-verified twice, see PR #17 and the R2 receipt). `ignoreCommand` is also
+  the checked-in equivalent of the dashboard "Ignored Build Step" field;
+  **verify the dashboard field is empty/default** so this file is authoritative
+  and the two don't silently disagree (same class of risk as the former
+  dashboard Build Command override under "Migration strategy" below).
+  `scripts/vercel-ignore-build.test.mjs` asserts the exact rule set and that
+  both layers agree. **Gate 5 stays pending live remote verification** until a
+  ordinary branch is pushed and shows no Vercel deployment and no Neon preview
+  branch.
+
+### Ordinary-branch Neon suppression gap (found 2026-09-27, re-confirmed and scoped 2026-09-28, unresolved)
+
+**Proposed fix (Gate 5):** the `git.deploymentEnabled` primary gate described
+in the "CI-only ordinary branches" bullet above targets this gap by stopping
+the automatic deployment — and therefore the integration's Neon provisioning —
+from being created for ordinary branches at all. See
+`docs/receipts/DIBAYAR-VERCEL-PREDEPLOYMENT-GATE5-FIX-2026-09-28.md`. The
+history below stays accurate for `ignoreCommand` alone; treat the gap as
+open until Gate 5 is live-verified.
+
+The `vercel.json` `ignoreCommand` stops the Vercel *build* for an ordinary
+branch, but the push to that branch still made the Vercel↔Neon integration
+create a Neon preview branch (`preview/chore/workflow-ci-only-smoke`,
+confirmed via `neon branches list`). The Neon branch is provisioned as part
+of the deployment's integration step, which appears to run (or at least
+reserve the branch) before or independently of `ignoreCommand` evaluation,
+rather than only on an actual build. Practical effect: ordinary
+`feature/*`/`fix/*`/`chore/*` branches still consume Neon capacity even
+though they no longer deploy, so the Neon 10-branch cap (see "Preview failure
+mode" below) is not actually relieved by the CI-only-branch mechanism as
+originally hoped.
+
+**2026-09-28 (R2 audit) re-confirmation.** The gap is not a one-off: pushing
+this very documentation branch, `chore/staging-activation-2026-09-27` (an
+ordinary `chore/*` branch), produced the identical pattern a second time —
+two `Canceled` Vercel Preview deployments (`~4–7s`, build correctly
+suppressed) and a new Neon branch, `preview/chore/staging-activation-2026-09-27`
+(confirmed via `neon branches list`). No fresh disposable smoke branch was
+created this session to re-prove it a third time, since Neon is already at
+its hard cap (see "Neon capacity" below) and this live corroborating instance
+is sufficient evidence that nothing changed.
+
+**2026-09-28 (R2 audit) — searched for a branch-pattern/allowlist fix and did
+not find one inspectable from this session:**
+- `neon branches --help` / the Neon CLI's `branches` command group has no
+  setting for scoping *which* Git branches get an auto-created preview
+  branch — only lifecycle operations (create/delete/rename/reset/restore) on
+  branches that already exist.
+- `vercel target list` returns exactly the three built-in targets
+  (`Production`, `Preview` = "All unassigned git branches", `Development`) —
+  this is Vercel's default target set, present on every plan, and is **not**
+  evidence that this project has the paid Custom Environments feature. No
+  custom environment (e.g. a `staging` target distinct from `Preview`) exists.
+  Whether Custom Environments are available on this account's plan remains
+  unconfirmed and would need a Chris dashboard check (Project Settings →
+  Environments → "Add Environment").
+- Neither the Vercel CLI nor the Neon CLI exposes the Neon-Vercel
+  integration's own configuration (which Vercel environments it's connected
+  to, whether "create a branch per Preview deployment" is toggled, or any
+  database-specific branch-pattern allowlist). That configuration lives only
+  in the Vercel dashboard's Integrations page for the Neon integration (or
+  the Neon Console's "Connect to Vercel" panel) and could not be read without
+  UI access this session did not have. **This is the single most important
+  open question for closing gate 5** — see the action packet below.
+
+Until a Chris dashboard check confirms whether that setting exists, treat
+automatic per-branch Neon provisioning as environment-wide and not
+branch-filterable, and adopt the selective-branching architecture in
+`docs/receipts/DIBAYAR-STAGING-ACTIVATION-R2-SELECTIVE-NEON-2026-09-28.md`
+(persistent `main` + persistent `staging` Neon branches; no automatic Neon
+branch for ordinary branches; explicit, manually-provisioned Neon branches
+only for justified `preview/*` isolation) rather than continuing to rely on
+periodic pruning as the primary mechanism. Pruning remains necessary as a
+backstop regardless of which model is adopted.
 - **Staging:** either a Vercel custom environment or the ordinary Preview
   deployment of the long-lived `staging` git branch. Whichever is chosen it
   must have a stable domain, a Neon branch that is never pruned, its own
@@ -50,19 +128,35 @@ current Vercel/Neon docs before acting:
   `src/auth.ts` sets `trustHost: true` and reads no `AUTH_URL`/`NEXTAUTH_URL`,
   so no base-URL env var is needed beyond the callback registration itself.
 - **Neon capacity:** the project `neon-dijual` is on plan `free_v3` with
-  `branches_limit: 10`. Observed 2026-09-27 (this session, read-only): **7/10**
-  (`main` + preview branches for PR #7, #11, #12, #13, #14, #15 — all but #14
-  and #15 are merged PRs whose git branches still exist on `origin`, since
-  GitHub "delete merged branches" remains off). Budget once staging exists:
-  `main` + `staging` + at most 3 concurrent isolated previews. Failure
-  signature at the cap: a Preview for a new git branch ends `BUILD_FAILED` /
-  "Resource provisioning failed" in ~1.5 s with no build logs (the integration
-  step fails before `scripts/vercel-build.sh` runs); confirmed by intervention
-  on 2026-09-27 when freeing one Neon branch let the next redeploy succeed.
+  `branches_limit: 10`. **Observed 2026-09-29 (read-only): 2/10** — `main`
+  and `preview/chore/staging-activation-2026-09-27`; the 8 earlier cleanup
+  candidates below are gone. PR #17 is now merged, so its preview branch is a
+  cleanup candidate (Chris-only). Historical 2026-09-28 observation follows.
+  **Observed 2026-09-28 (R2 audit, read-only): 10/10 —
+  at the hard cap.** `main` plus 9 preview branches: the 8 cleanup candidates
+  verified on 2026-09-27 (merged PRs #7, #11, #12, #13, #14, #15, #16, plus
+  `preview/chore/workflow-ci-only-smoke`, whose git branch is already
+  deleted) are all still present, unchanged — **no deletion has happened
+  yet** (Chris-only). A 9th branch, `preview/chore/staging-activation-2026-09-27`,
+  is new since the last audit: it is this session's own PR #17 branch
+  (`docs: staging activation six-gate verification receipt`), which is
+  **still open, not merged** — it is **not** a cleanup candidate and must not
+  be included in the deletion packet below until PR #17 merges or closes.
+  No `staging` Neon branch exists yet; creating one now, even after pruning
+  all 8 disposable branches, would land at 2/10 (`main` + `staging`) — safe —
+  but the 9th (PR #17's own, still-active) branch must be left alone.
+  Failure signature at the cap: a Preview for a new git branch ends
+  `BUILD_FAILED` / "Resource provisioning failed" in ~1.5 s with no build
+  logs (the integration step fails before `scripts/vercel-build.sh` runs);
+  confirmed by intervention on 2026-09-27 when freeing one Neon branch let
+  the next redeploy succeed. **At 10/10 right now, any further push to a new
+  branch (including another disposable Gate-5 smoke test) will fail this way
+  until Chris prunes.**
 - **Branch hygiene:** GitHub "Automatically delete head branches" is currently
-  off; enabling it is a repository setting — see the bootstrap action packet
-  (`docs/receipts/DIBAYAR-STAGING-BOOTSTRAP-2026-09-27.md`) for whether this
-  session's GitHub credentials could apply it directly or it needs Chris.
+  off; this session attempted to enable it directly via the GitHub API and
+  the attempt was blocked by this session's own tooling — see the action
+  packet in `docs/receipts/DIBAYAR-STAGING-ACTIVATION-2026-09-27.md` for the
+  exact manual steps for Chris.
 
 ## Current verified state (2026-09-06, V6.1 production-hardening audit)
 
@@ -241,11 +335,12 @@ The first production deployment, production-domain assignment, public launch, an
 
 Rollback expectations (revert PR or promote the previous Vercel deployment; forward-only migrations; smoke check afterward) are in `docs/DEVELOPMENT-WORKFLOW.md`. The concrete Vercel/Neon rollback procedure and identifiers are **not yet verified** here. Do not claim a deployment or rollback until the resulting Vercel status and URL have been checked directly; when the procedure is first exercised and verified, record it in this section.
 
-**Deployment filtering (`vercel.json` `ignoreCommand`), added 2026-09-27, not yet live-verified.** If the allowlist in `scripts/vercel-ignore-build.sh` incorrectly blocks a deployment that must go through (e.g. an unforeseen branch-naming case):
+**Deployment filtering (`vercel.json` `git.deploymentEnabled` + `ignoreCommand`), `git.deploymentEnabled` added 2026-09-28, not yet live-verified.** If the allowlist incorrectly blocks a deployment that must go through (e.g. an unforeseen branch-naming case):
 
-- Fastest: set the Vercel dashboard's **Ignored Build Step** field to a value that always builds (e.g. blank, or `exit 1`) — a dashboard setting overrides nothing in this repo's `vercel.json`, so verify empirically which one Vercel actually honors before relying on either during an incident. This is a Vercel project setting; per `docs/DEVELOPMENT-WORKFLOW.md` "Authorization", changing it is Chris's.
-- Repo-side: revert or edit the `vercel.json`/`scripts/vercel-ignore-build.sh` commit and push; the next build picks up the new ignore logic (no redeploy of past commits needed, since the check runs fresh on each new build trigger).
-- This mechanism only ever *skips* a build; it cannot itself break a build that does run, so there is no build-content rollback needed — only the allow/deny decision.
+- Fastest for a one-off deploy: a branch that should deploy must match `main`, `staging`, or `preview/**`; rename/re-push it as `preview/<name>` rather than editing config. Both layers (`git.deploymentEnabled` and `scripts/vercel-ignore-build.sh`) must be edited together if the allowlist itself needs to change; `scripts/vercel-ignore-build.test.mjs` fails if they disagree.
+- Dashboard: the **Ignored Build Step** field can be set to always build (e.g. blank, or `exit 1`), but it does **not** override `git.deploymentEnabled` — that only controls whether Vercel creates the deployment in the first place. Verify empirically which one Vercel honors before relying on either during an incident. Changing project settings is Chris's per `docs/DEVELOPMENT-WORKFLOW.md` "Authorization".
+- Repo-side: revert or edit the `vercel.json`/`scripts/vercel-ignore-build.sh` commit and push; the next push picks up the new rules (no redeploy of past commits needed).
+- These mechanisms only ever *prevent or skip* a deployment/build; they cannot themselves break a build that does run, so there is no build-content rollback needed — only the allow/deny decision.
 
 **CI staging trigger (`.github/workflows/e2e.yml`).** To revert, remove `staging` from the `push: branches:` list in a new commit and push; already-queued runs are unaffected, and no other workflow file references the change.
 

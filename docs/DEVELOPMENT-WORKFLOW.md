@@ -131,15 +131,36 @@ feature|fix|chore/*  --PR-->  staging  --validate-->  PR  -->  main
 `feature/*`, `fix/*`, `chore/*` (and legacy-prefixed branches) must:
 
 - run CI (lint, typecheck, unit, E2E, UX audit as configured in `.github/`);
-- **not** create a Vercel deployment;
-- **not** create a Neon branch;
+- **not** create a Vercel deployment (build) — **live-verified true** as of
+  2026-09-27/28: `vercel.json`'s `ignoreCommand` cancels the build in ~4–7s;
+- **not** create a Neon branch — **this is the target, not the current
+  behavior.** Live-verified 2026-09-27 and again 2026-09-28 (two independent
+  ordinary branches): the Vercel↔Neon integration still provisions a Neon
+  preview branch for an ordinary branch even though its Vercel build is
+  correctly skipped. See `DEPLOYMENT.md` "Ordinary-branch Neon suppression
+  gap" and `docs/receipts/DIBAYAR-STAGING-ACTIVATION-R2-SELECTIVE-NEON-2026-09-28.md`
+  for the audit and the selective-branching model adopted around this gap.
+  Do not claim this bullet is satisfied until a live smoke test shows no new
+  Neon branch;
 - **not** require a Google OAuth redirect registration.
+
+Mechanism (details in `DEPLOYMENT.md` "Environment mechanics"): the intentional
+deployable branches are exactly `main`, `staging`, and `preview/**`.
+`vercel.json`'s `git.deploymentEnabled` is the **primary** gate that stops Vercel
+creating an automatic deployment for anything else; `ignoreCommand` is only
+secondary defense in depth (it runs after a deployment exists, and does not by
+itself stop the Neon integration from provisioning a branch). Neon preview
+provisioning should therefore only happen after Vercel actually creates an
+allowed deployment. This is repo config only until a disposable ordinary branch
+is live-verified to create no Vercel deployment and no Neon branch; do not treat
+the suppression as verified before then.
 
 Verify behavior locally against the disposable test database
 (`docs/testing/E2E.md`), not against a hosted environment. Every hosted
 Preview costs a Neon branch (the Vercel/Neon integration creates one per
 deployed git branch and the plan has a small hard cap), so hosted previews are
-opt-in, never the default.
+opt-in, never the default. As of 2026-09-28 the project is at the 10-branch
+cap; see `DEPLOYMENT.md` "Neon capacity".
 
 ## Isolated preview (exception)
 
