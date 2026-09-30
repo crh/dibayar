@@ -18,6 +18,13 @@ invariants and pointers only.
 
 ## Rollout status
 
+**2026-09-30: the pre-staging transition has ended** — all six conditions below
+are verified (`STATE.md`, `docs/receipts/DIBAYAR-HOBBY-STAGING-ACTIVATION-2026-09-29.md`).
+On the Vercel Hobby plan, `staging` is the Preview deployment of the `staging`
+branch with branch-scoped Preview env vars, not a Custom Environment (mechanics:
+`DEPLOYMENT.md`, "Staging (Hobby preview phase)"). The [Normal flow](#normal-flow)
+now applies; the text below is kept as history.
+
 This document defines the **approved target workflow**. Until the `staging`
 branch, its Vercel deployment, its Neon branch, and its OAuth callback exist
 (implementation is tracked in `STATE.md`, not here), do not assume they exist:
