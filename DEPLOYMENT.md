@@ -21,7 +21,7 @@ staging is provisioned, follow the transitional rollout rules in
 | `main` | Production (auto-deploy on merge) | Production branch (`main`, `DATABASE_URL`) | Production domain | see "Current verified state" | Yes |
 | `staging` | one stable deployment on a stable domain | one stable branch, never pruned | stable staging domain | Vercel SSO | **Yes (2026-09-30)** — Vercel Preview deployments of Git branch `staging` (Hobby "multiple preview phases"; no Custom Environment), stable alias `https://dibayar-git-staging-kenji-iwakura.vercel.app`; persistent Neon `staging` (`br-late-grass-aoea90yk`) bound via Preview (staging) branch-scoped vars; staging OAuth callback registered and live-verified. See "Staging (Hobby preview phase)" below and `docs/receipts/DIBAYAR-HOBBY-STAGING-ACTIVATION-2026-09-29.md` |
 | `preview/*` | temporary, per-branch | temporary, one per branch (integration-created) | none by default | Vercel SSO | Partly — today *every* pushed branch deploys and gets a Neon branch |
-| other branches | none (CI only) | none | none | n/a | **Repo config in place (2026-09-28), Gate 5 PENDING live remote verification.** Primary gate: `vercel.json` `git.deploymentEnabled` (`"**": false`, then `main`/`staging`/`preview/**` `true`) stops Vercel creating an automatic deployment at all. Secondary: `ignoreCommand` -> `scripts/vercel-ignore-build.sh` cancels the build if a non-allowlisted ref still reaches it. `ignoreCommand` alone was **live-disproved** as a Neon suppressor, twice (`chore/workflow-ci-only-smoke` 2026-09-27 and PR #17's `chore/staging-activation-2026-09-27` 2026-09-28: build `Canceled` in ~4–7s, yet the Vercel-Neon integration still provisioned a Neon branch — see "Ordinary-branch Neon suppression gap" below). Not proven until a disposable ordinary branch shows no Vercel deployment **and** no Neon branch. |
+| other branches | none (CI only) | none | none | n/a | **Yes — Gate 5 live-verified 2026-09-30** after PR #18 merged: push of ordinary `chore/staging-activation-docs-2026-09-30` created no Vercel deployment and no Neon branch. Primary gate: `vercel.json` `git.deploymentEnabled` (`"**": false`, then `main`/`staging`/`preview/**` `true`) stops Vercel creating an automatic deployment at all. Secondary: `ignoreCommand` -> `scripts/vercel-ignore-build.sh` cancels the build if a non-allowlisted ref still reaches it. `ignoreCommand` alone was **live-disproved** as a Neon suppressor, twice (`chore/workflow-ci-only-smoke` 2026-09-27 and PR #17's `chore/staging-activation-2026-09-27` 2026-09-28: build `Canceled` in ~4–7s, yet the Vercel-Neon integration still provisioned a Neon branch — see "Ordinary-branch Neon suppression gap" below). Not proven until a disposable ordinary branch shows no Vercel deployment **and** no Neon branch. |
 
 Mechanics to apply when implementing the not-yet-implemented rows. Every one is
 a Vercel/Neon/Google settings change and therefore needs Chris
@@ -50,11 +50,11 @@ current Vercel/Neon docs before acting:
   and the two don't silently disagree (same class of risk as the former
   dashboard Build Command override under "Migration strategy" below).
   `scripts/vercel-ignore-build.test.mjs` asserts the exact rule set and that
-  both layers agree. **Gate 5 stays pending live remote verification** until a
-  ordinary branch is pushed and shows no Vercel deployment and no Neon preview
+  both layers agree. **Gate 5 live-verified 2026-09-30**: an ordinary `chore/*`
+  push after PR #18 merged showed no Vercel deployment and no Neon preview
   branch.
 
-### Ordinary-branch Neon suppression gap (found 2026-09-27, re-confirmed and scoped 2026-09-28, unresolved)
+### Ordinary-branch Neon suppression gap (found 2026-09-27, re-confirmed 2026-09-28, closed by Gate 5 2026-09-30)
 
 **Proposed fix (Gate 5):** the `git.deploymentEnabled` primary gate described
 in the "CI-only ordinary branches" bullet above targets this gap by stopping
