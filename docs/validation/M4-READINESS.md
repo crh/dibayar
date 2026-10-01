@@ -108,7 +108,7 @@ point it at Production; the endpoint guard refuses anyway.
 - [ ] Tracker row set to `scheduled`; a blank §5 feedback entry ready.
 
 ### During the session (in order)
-1. **Typical brand deal:** ask the creator to describe their last deal; capture it as a new deal (fictional amounts are fine).
+1. **Typical brand deal:** ask the creator about the workflow of a typical deal without requesting or recording real brand, client, contact, campaign, scope, financial, tax, or banking details. Together invent a wholly fictional example, including its brand/name, contact, scope, deliverables, dates, amounts, and terms; enter **only invented values** in staging. Do not copy identifying details from the creator's actual work.
 2. **Deal status / next action:** on the Deal board, use a card's **⋮** menu (move stage / *Lihat detail*; the card itself is not a link) on *Kopi Lereng Merapi*; ask what they would do next.
 3. **Invoice:** open *Serum Daun Kelor*'s draft from *Invoice*; ask what they would change before sending.
 4. **PPh choice:** the app has **no PPh picker**: invoices created in the UI are always "Tidak ada" PPh (see receipt `DIBAYAR-M4-STAGING-KICKOFF-2026-09-30.md`). Show *Dompet Rapi* (PPh 23) and *Teh Tarik Nusantara* (PPh 21) and ask which option their brands use and how they would expect to set it. Do not promise the feature.
