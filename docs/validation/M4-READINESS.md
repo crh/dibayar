@@ -1,217 +1,162 @@
-# M4 creator-validation readiness — 2026-09-26
+# M4 creator-validation readiness — updated 2026-09-30
 
-Purpose: give Chris one place to see what M4 needs, which parts are engineering
-(done or not needed), and which parts only Chris can decide or perform. This
-document decides nothing. It does not authorize any external contact,
-deployment, or access change.
+Purpose: one place for what M4 needs, what engineering has prepared, and what
+only Chris can do. This document does not authorize external contact,
+Production changes, or public access.
 
 `ROADMAP.md` M4 = (1) product shown to ≥5 real Indonesian creators with
 feedback logged in `DAILY_LOG.md`; (2) a proceed / iterate / pivot decision,
-which requires Chris's approval. Current metrics (`STATE.md`): users_shown 0,
-feedback_logged 0, wtp_signals 0.
+which requires Chris's approval. Counters live in `STATE.md` (`users_shown`,
+`feedback_logged`, `wtp_signals`).
 
-## 1. Dependency map
+## 1. Environment and mode
 
-| M4 requirement | Engineering status | Blocked on |
-|---|---|---|
-| Creators can actually reach and sign in to a running build | Code complete (Auth.js + Google OAuth; owner surfaces need sign-in) | **Chris**: which environment (Production vs. Preview) and whether OAuth stays in Testing (see §3) |
-| Recipient share link works for a creator's client | Code complete, verified on protected Preview | **Chris**: public/non-SSO access decision (`DEPLOYMENT.md` "Public / non-SSO recipient access — decision brief") |
-| Behaviour shown is ratified | Three provisional constants exist (§2) | **Chris**: confirm or change |
-| Recruit ≥5 creators | None (non-code) | **Chris**: external contact is an approval gate (`BACKLOG.md`) |
-| Feedback logged | Template in §4 | Real sessions |
-| Proceed / iterate / pivot | None | **Chris** |
+- **M4 environment:** staging, `https://dibayar-git-staging-kenji-iwakura.vercel.app`
+  (Vercel Preview of the long-lived `staging` branch, Deployment Protection/SSO
+  on, own Neon `staging` database, Google OAuth working). This replaces the
+  PR #14 Preview used as a pre-staging stopgap.
+- **Session mode (first round):** moderated. The moderator signs in and drives
+  the browser; the creator watches by screen-share or in person. No creator gets
+  a URL, login, or infrastructure credential. Synthetic demo data only. No
+  recording without the participant's explicit consent. Allowed by
+  `DEPLOYMENT.md` "Preview and staging policy".
+- **Not in scope:** Production or public/non-SSO access (§5), self-serve creator
+  sign-up, and real recipient (brand) access to share links. The share-link
+  flow can be demonstrated but not experienced by a real client.
 
-Executable engineering for M4 is exhausted: nothing else in the repo's roadmap
-is specified and unblocked. Extra product features before feedback would be
-invented scope.
+| M4 requirement | Status |
+|---|---|
+| Running build creators can see | READY — staging, moderated |
+| Synthetic demo workspace | READY — `npm run m4:demo-data` (§3) |
+| Hypotheses under test | Noted, unchanged (§2) |
+| Creator can choose PPh 21/23 on an invoice | **GAP** — no UI control; API supports it. Demonstrated with seeded invoices. Build or not: **Chris** |
+| Recruit ≥5 creators | **Chris** — external contact is an approval gate |
+| Sessions + feedback logged | Not started — tracker `M4-SESSION-TRACKER.md` |
+| Proceed / iterate / pivot | **Chris**, after sessions |
 
-## 2. The three provisional decisions — verified against code (not changed)
+## 2. Hypotheses under test (current behaviour, not decisions)
 
-| Decision | Value in code | Where | What creators would see |
+Keep these fixed across Creator 01–05. If one changes between sessions, record
+the boundary (date, build SHA, old → new) in `DAILY_LOG.md` and in the tracker
+note of the first session that uses the new value.
+
+| Hypothesis | Value in code | Where | What the creator sees |
 |---|---|---|---|
-| Due-soon window | 7 days (`DUE_SOON_WINDOW_DAYS`) | `src/lib/invoice-date-status.ts` | Invoices due in 0–7 days (Jakarta calendar) appear in Beranda's follow-up queue as "due soon"; day 8 does not. Overdue always appears. |
-| Share-link lifetime | 90 days from create **or regenerate** (`DEFAULT_SHARE_LIFETIME_DAYS`) | `src/lib/invoice-share.ts` | A link sent to a client stops working (uniform 404) 90 days after creation; regenerating resets the clock. |
-| Income basis | `Invoice.createdAt` in Asia/Jakarta; all non-DRAFT statuses; figure = subtotal minus estimated PPh | `src/lib/income-summary.ts` | Beranda card headed **"Net ditagihkan bulan ini"** / "Net invoiced this month" (was "Net bulan ini" / "Net this month"; briefly "Ditagihkan bulan ini" on PR #14 before review found that heading dropped the net-of-PPh meaning) = invoices created this month, paid or not, net of estimated PPh. Wording only was changed; the calculation is unchanged. |
+| Due-soon window | 7 days (`DUE_SOON_WINDOW_DAYS`) | `src/lib/invoice-date-status.ts` | Invoices due in 0–7 Jakarta calendar days appear in Beranda's follow-up queue; overdue always appears. |
+| Share-link lifetime | 90 days from create or regenerate (`DEFAULT_SHARE_LIFETIME_DAYS`) | `src/lib/invoice-share.ts` | Link stops working (uniform 404) after 90 days; regenerating resets it. |
+| Monthly summary basis | `Invoice.createdAt`, Asia/Jakarta month, all non-DRAFT statuses (paid or unpaid), subtotal minus estimated PPh | `src/lib/income-summary.ts` | Beranda card **"Net ditagihkan bulan ini"** / "Net invoiced this month". |
 
-**Discrepancy found (documentation vs. code), reported, not resolved:**
-`ROADMAP.md` M3 and `STATE.md` call the income basis "issue-date". There is no
-issue-date field in `prisma/schema.prisma`; the basis is the invoice record's
-creation timestamp. In practice:
+Facts about the summary a moderator must not "explain away" during a session:
+an invoice created Aug 31 and paid in September stays in August; unpaid
+SENT/DUE/OVERDUE count the same as PAID; the figure is net of *estimated* PPh
+(PPh 21 5%, PPh 23 2%). There is no issue-date field (older docs said
+"issue-date"). The card has no helper text on purpose: whether creators read it
+as invoiced or received, and whether they notice it is net of PPh, is what the
+sessions ask. Alternatives if it fails (Chris decides after evidence): count
+only PAID with a new paid-date field, or add an explicit issue date. Do not let
+feedback turn PPh into a tax-filing feature.
 
-- An invoice created Aug 31 and sent or paid in September stays in **August**.
-- Unpaid `SENT`/`DUE`/`OVERDUE` invoices count toward "income" the same as `PAID`.
-- The displayed figure is `subtotalIdr` minus estimated PPh per invoice
-  (`round(subtotal × rate)`), i.e. **net of estimated PPh**, not gross.
-- Before the relabel, the card was headed "Net bulan ini" and the docs called it
-  "income", which a creator could read as *money received*. It is now headed
-  "Net ditagihkan bulan ini" (*net invoiced this month*): "ditagihkan" says
-  unpaid invoices count, "Net" says PPh is already deducted. The card has no
-  helper line explaining either, on purpose: whether creators read it as
-  invoiced or received, and whether they notice it is net of PPh, is a question
-  for the sessions (§5, tasks 4–5).
+## 3. Demo data (synthetic, staging only)
 
-Options for Chris: (a) keep as "invoiced this month" — the relabel is now in
-place, the basis itself still awaits ratification; (b) count only `PAID` and add a paid-date basis (needs a
-schema field — `updatedAt` is not a reliable paid date); (c) add an explicit
-issue date. Each changes what M4 creators react to, which is why this should be
-settled first. PPh values remain estimates; do not let feedback turn this into a
-tax feature (`docs/PROJECT-PLAN-2026-09-22.md` P4).
+`scripts/m4-demo-data.ts` (dataset in `src/lib/m4-demo-dataset.ts`, unit-tested)
+builds the moderator's staging workspace through the app's own
+deal/invoice/settings functions. It refuses any database other than the Neon
+`staging` endpoint (`ep-gentle-morning-aofsje23`) and requires
+`M4_DEMO_CONFIRM=staging`. It never prints the connection string or email.
 
-What the readiness PR (#13) did: added "Provisional" comments at the share-lifetime and
-income-basis constants (the due-soon constant already had one), and pinned the
-current income behaviour in `src/lib/income-summary.test.ts`. That file's
-existing test named "…excluding drafts" actually asserted a month-boundary
-result and never tested draft exclusion; it is now split into an honestly named
-boundary test plus real tests for draft exclusion, status-independence, and
-creation-month stability. These tests describe present behaviour; they are not
-a ratification.
+| Deal (fictional) | Stage | Invoice | Demonstrates |
+|---|---|---|---|
+| Kopi Lereng Merapi | Nego | — | active negotiation, notes |
+| Serum Daun Kelor | Konten (deadline +5d) | DRAFT, no PPh | deliverables in progress; draft excluded from summary |
+| Dompet Rapi | Invoice | SENT, PPh 23, due +3d | due-soon + WhatsApp reminder |
+| Teh Tarik Nusantara | Invoice | OVERDUE, PPh 21, due −4d | overdue chase |
+| Batik Sekar Ayu | Dibayar | PAID, no PPh | completed/paid |
 
-## 3. Production / access decision packet (nothing changed)
+Expected summary right after seeding: 3 invoices, gross Rp 8.250.000, estimated
+PPh Rp 205.000, **net Rp 8.045.000**. Issuer persona "Nadia Putri (contoh)",
+"Bank Contoh". Contact numbers are invented `0812000001xx` values: **show the
+prefilled WhatsApp message, never press Send.** No share link is seeded (links
+are encrypted with the deployment's key); the moderator creates one live.
 
-**Decision required.** (1) Is Production's reachability without a Vercel SSO
-gate intended? (2) Which environment do M4 creators use? (3) Is recipient
-(non-SSO) access to `/i/[token]` wanted?
+**Re-seed before every session.** Dates are relative to the run time, and the
+summary is month-based: in the dry run, a 30 Sep seed showed "Rp 0 · Oktober
+2026" on 1 Oct while the overdue invoice was still unpaid.
 
-**Current verified behaviour.** Last verified 2026-09-06 by unauthenticated
-`curl` (`DEPLOYMENT.md` "Current verified state"): Production
-(`dibayar.vercel.app`) returns the app's own Auth.js redirect, not a Vercel SSO
-wall. Not re-checked this session (no Production access was made).
-`PRODUCTION_READY` is unmarked pending Chris.
+```bash
+# the moderator must have signed in to staging once with this Google account
+DATABASE_URL="$(neon connection-string br-late-grass-aoea90yk --pooled)" \
+M4_DEMO_CONFIRM=staging M4_DEMO_OWNER_EMAIL='<moderator staging email>' \
+npm run m4:demo-data -- seed     # reset + create + verify
+# also: verify (read-only checks) | reset (delete owner's deals/invoices)
+```
 
-**Option A — treat Production as the M4 environment (open edge).** Creators sign
-in with Google directly; recipient links work without SSO.
-Implications: `DEPLOYMENT.md`'s setup steps keep the Google OAuth consent screen in
-**Testing**; if it still is, each creator's Google account must be added as a test user
-(or the app published) in Google Cloud Console — Chris-only; the current
-consent-screen state was not verified this session. The distributed rate limiter
-becomes a prerequisite before public/non-SSO recipient access
-(`SECURITY.md` trigger; in-memory limiters are per instance). P1-1/P1-2
-(live cookie/header checks) should be run first.
+`reset`/`seed` delete **all** of the demo owner's staging deals and invoices,
+including deals created live during a session, and overwrite their staging
+settings with the persona. The user, Google link, and sessions are kept. Never
+point it at Production; the endpoint guard refuses anyway.
 
-**Option B — keep Vercel SSO on; run M4 as moderated sessions.** Chris (or a
-Vercel-authenticated person) drives or screen-shares a protected Preview with
-fixture/demo data. No public exposure, no limiter prerequisite; recipient-link
-flow can only be demonstrated, not experienced by a real client.
+## 4. Moderator kit
 
-**Code/config that would change:** Option B (moderated protected Preview) needs
-no repo code/config change and no public-access change. Option A needs a
-Vercel/Google console change **and** — before public/non-SSO recipient access —
-a distributed rate limiter, which is a repo code change that does not exist yet
-(the in-memory limiter is per instance and insufficient for that mode; see
-`SECURITY.md`). Not implemented here, and this section is not a Production
-authorization. Rollback per `DEPLOYMENT.md` brief §6.
+### Before the session
+- [ ] Staging deployment READY (`vercel ls` / dashboard) and serving the expected commit: `staging` HEAD `_______`.
+- [ ] Demo data re-seeded today; `verify` reports all checks true and net Rp 8.045.000.
+- [ ] Moderator signed in to staging (not the creator). Vercel SSO stays on.
+- [ ] Browser window in front and visible: a minimized/fully covered Chrome window never finishes loading pages (streamed content waits for `requestAnimationFrame`), which looks like a stuck "Memuat…".
+- [ ] No Production data or real brand/contact/bank/tax data on screen. Close other tabs.
+- [ ] Consent: session purpose explained; recording only with explicit consent (note yes/no).
+- [ ] Hypotheses active: due-soon 7d · share 90d · summary basis `createdAt` · "Net ditagihkan bulan ini" net-of-PPh wording.
+- [ ] Tracker row set to `scheduled`; a blank §5 feedback entry ready.
 
-**Recommendation:** none. Existing docs establish no default; the deciding
-factor is how much of the recipient-link experience M4 needs to test.
+### During the session (in order)
+1. **Typical brand deal:** ask the creator about the workflow of a typical deal without requesting or recording real brand, client, contact, campaign, scope, financial, tax, or banking details. Together invent a wholly fictional example, including its brand/name, contact, scope, deliverables, dates, amounts, and terms; enter **only invented values** in staging. Do not copy identifying details from the creator's actual work.
+2. **Deal status / next action:** on the Deal board, use a card's **⋮** menu (move stage / *Lihat detail*; the card itself is not a link) on *Kopi Lereng Merapi*; ask what they would do next.
+3. **Invoice:** open *Serum Daun Kelor*'s draft from *Invoice*; ask what they would change before sending.
+4. **PPh choice:** the app has **no PPh picker**: invoices created in the UI are always "Tidak ada" PPh (see receipt `DIBAYAR-M4-STAGING-KICKOFF-2026-09-30.md`). Show *Dompet Rapi* (PPh 23) and *Teh Tarik Nusantara* (PPh 21) and ask which option their brands use and how they would expect to set it. Do not promise the feature.
+5. **WhatsApp / payment follow-up:** from Beranda's queue open *Teh Tarik Nusantara* (overdue), create the share link, open the WhatsApp reminder, and show the prefilled message. **Do not send.**
+6. **Monthly summary:** ask them to read "Net ditagihkan bulan ini" aloud and say what it means.
+7. Ask: is that money you have *invoiced* or money you have *received*?
+8. Ask: is PPh already taken out of that number?
+9. Ask: would you use Dibayar for your next deal? Why / why not?
+10. Willingness to pay: note only what they say or do unprompted, or answer to "what would this be worth to you?". **Never solicit payment.**
 
-### 3.1 Preview-policy interpretation packet (decision needed; policy not changed by this PR)
+### After the session
+Record in `DAILY_LOG.md` (template §5) and the tracker:
+- task completion (1–6) · friction/confusion · verbatim quotes (Bahasa as spoken)
+- bugs/blockers · feature requests (unprioritised) · would-use signal · WTP signal
+- build SHA · session mode · recording consent yes/no
+- Then update `STATE.md` counters only from what actually happened, and `reset`
+  or re-`seed` the demo data.
 
-**Current policy text** (`DEPLOYMENT.md` "Preview and staging policy", updated
-by PR #15 after this packet was first written): "Staging and isolated
-`preview/*` deployments are confidential, access-restricted (Vercel SSO), and
-may be used for **technical verification and M4 validation prep** only when
-they contain no real customer or financial data, do not process payments, and
-are **not announced or shared with users**. An openly accessible or
-unrestricted staging/preview requires Chris's approval."
+### Evidence discipline
+- Do not prioritise feature requests after one session; only patterns across sessions count.
+- Politeness ("bagus kok", "menarik") is not validation. A would-use signal needs a reason or a concrete next deal.
+- Do not infer WTP. Record `stated` / `shown` / `none` only from what they said or did.
+- Do not change a hypothesis between sessions without recording the boundary (§2).
+- Feedback is evidence, not a roadmap commitment. Chris decides after ≥5 sessions.
 
-PR #15 already resolved half of this packet's original ambiguity: "M4
-validation prep" is now explicitly named as an allowed Preview/staging use, so
-that part no longer needs a Chris decision. The remaining open question is
-narrower than before:
-
-**Proposed M4 usage (Option B above):** the moderator signs in to the
-Vercel-SSO-protected Preview and screen-shares demo data to a creator, to collect
-product feedback.
-
-**Why it is still ambiguous.** The build stays protected and holds no real
-data, and "M4 validation prep" now covers the purpose. What is not settled is
-whether a moderator screen-sharing to a prospective creator counts as
-"shared with users" — the creator never gets a login or a URL, but they are a
-real prospective user seeing the product on a call. Existing docs do not say
-which reading is intended, so this is not silently treated as compatible.
-
-- **Option A — allow moderated screen-share of the protected Preview.** Amend the
-  policy sentence to name it (e.g. "…or a moderated, moderator-driven screen-share
-  with demo data only; no creator gets a login or a link"). Implications: no
-  credential or URL reaches the creator; exposure is what the screen shows.
-  Demo data only, so no PII beyond what the creator says aloud; do not record
-  sessions without the creator's consent.
-- **Option B — use another explicitly approved environment.** For example a
-  dedicated demo deployment, or (once provisioned) the stable `staging`
-  environment under the same "not shared with users" question. Implications:
-  needs a new Chris-approved environment (and, if it is open-edge, the
-  Production/access gates in §3).
-
-**Recommended wording change if Chris approves Option A:** add the clause above
-to `DEPLOYMENT.md` "Preview and staging policy". **Chris decision still
-needed;** nothing in this PR changes the policy, and no creator has been or
-will be contacted by Claude.
-
-## 4. Feedback log template (paste into `DAILY_LOG.md`, one per creator)
+## 5. Feedback log template (paste into `DAILY_LOG.md`, one per creator)
 
 ```
-### M4 feedback — Creator N of ≥5 — YYYY-MM-DD
-- Creator: <handle or anonymised ID> · approx. followers band · niche
-- How shown: <moderated demo | self-serve> · environment · build commit
-- Provisional values active during session: due-soon 7d · share 90d · monthly-summary basis createdAt (or as changed)
-- Task 1 — capture a real/typical deal: <completed? confusion?>
-- Task 2 — create and read an invoice (PPh choice): <…>
-- Task 3 — chase a payment via WhatsApp link: <…>
-- Task 4 — read the monthly summary ("Net ditagihkan bulan ini"): <did they read it as invoiced or received? did they notice it is net of PPh?>
-- Verbatim quotes (Bahasa Indonesia as spoken): <…>
-- Would they use it for their next deal? <yes/no/why>
-- Willingness to pay signal (M5 evidence, do not solicit payment): <stated / shown / none>
-- Bugs or blockers observed: <…>
+### M4 feedback — Creator NN of 05 — YYYY-MM-DD
+- Creator: Creator NN (anonymised) · follower band · niche
+- Mode: moderated screen-share | in person · staging · build <sha> · recording consent yes/no
+- Hypotheses active: due-soon 7d · share 90d · summary basis createdAt · "Net ditagihkan bulan ini"
+- Task 1 deal capture: <completed? friction?>
+- Task 2 deal status / next action: <…>
+- Task 3–4 invoice + PPh choice: <…>
+- Task 5 WhatsApp follow-up: <…>
+- Task 6–8 summary: read as invoiced or received? noticed net of PPh? <…>
+- Verbatim quotes: <…>
+- Would use for next deal: <yes/no + reason>
+- WTP (do not solicit): <stated / shown / none + what exactly>
+- Bugs/blockers: <…>
 - Feature requests (unprioritised, not commitments): <…>
 ```
 
-After each session update `STATE.md` `users_shown` / `feedback_logged` /
-`wtp_signals` only from what actually happened.
+## 6. Production / public access (unchanged, Chris)
 
-## 5. Moderator checklist — moderated Preview sessions
-
-First-round M4 mode: **moderated Preview sessions** (Option B). Nothing here
-authorizes contacting anyone or changing Production/public access. One session
-per creator; the outcome goes into the §4 template, which stays the only
-feedback format. Track recruiting in `M4-SESSION-TRACKER.md`.
-
-**Before the session (moderator)**
-- [ ] Confirm a READY, SSO-protected Preview exists. As of 2026-09-27 PR #14's is READY (`dpl_F2phqqXnFK8qSU35PdYHwaccThg5`) after one Neon branch was freed, and Neon was pruned to 6/10 branches on 2026-09-27 (4 free slots). This Preview is a **pre-staging legacy exception** (`docs/DEVELOPMENT-WORKFLOW.md` "Pre-staging transition"), not the target M4 environment — once `staging` is provisioned, M4 should move there. Until then, if capacity nears 10 again, prune merged-PR preview branches (`DEPLOYMENT.md` "Preview failure mode").
-- [ ] Preview build contains commit `_______` and shows "Net ditagihkan bulan ini" on Beranda.
-- [ ] Preview is the protected, non-Production one on its own database (`DEPLOYMENT.md` "Preview and staging policy": no real customer or financial data). Confirm with Chris that a moderated screen-share is within that policy (§3.1).
-- [ ] Demo/typical deal data only. Creators are not asked to enter real brands, contacts, or amounts.
-- [ ] Moderator, not the creator, signs in (Vercel SSO stays on).
-- [ ] Provisional values noted as active: due-soon 7d · share 90d · summary basis `createdAt`.
-
-**During the session — tasks (same order as §4)**
-1. Capture a real or typical deal (demo data).
-2. Create/read an invoice, including the PPh choice.
-3. Chase a payment via the WhatsApp link.
-4. Read the monthly summary.
-5. Ask: how do you read "Net ditagihkan bulan ini" / "Net invoiced this month"?
-6. Ask: would you use Dibayar for your next deal?
-7. Note any willingness-to-pay signal. Do not solicit payment.
-
-**Record for each session**
-- [ ] Session date · Preview build/commit
-- [ ] Creator anonymized ID · niche · follower band · session mode
-- [ ] Provisional values active during the session
-- [ ] Task completion (1–4) · confusion/friction
-- [ ] Bugs/blockers
-- [ ] Willingness-to-pay signal (stated / shown / none)
-
-**After the session**
-- [ ] §4 feedback entry pasted into `DAILY_LOG.md`.
-- [ ] Tracker row updated (Session status, Feedback logged?, WTP signal?).
-- [ ] `STATE.md` `users_shown` / `feedback_logged` / `wtp_signals` updated only from what actually happened.
-- [ ] Session complete.
-
-## 6. Status vocabulary
-
-- DONE — engineering readiness above (PR #13, merged; `86eff1d`).
-- IN PR — "Net ditagihkan bulan ini" relabel, §3 correction, §5 checklist and tracker.
-- WAITING FOR SCHEDULE — P2-2, one more consecutive scheduled success.
-- WAITING FOR PRODUCT DECISION — §2: 7-day due-soon window, 90-day share lifetime, ratification of the `createdAt` summary basis (the wording is already changed), and the narrower Preview-policy question in §3.1 (moderated screen-share vs "shared with users"; "M4 validation prep" itself is already allowed per PR #15).
-- DONE — PR #14 Preview READY (2026-09-27) as a **pre-staging legacy exception**; Neon pruned to 6/10 (2026-09-27). Prune merged-PR preview branches again if capacity nears 10 before `staging` is provisioned; this pruning need should become exceptional, not routine, once ordinary branches stop deploying (`docs/DEVELOPMENT-WORKFLOW.md` "Pre-staging transition").
-- WAITING FOR PRODUCTION AUTHORIZATION — §3; also P1-1/P1-2 live verification.
-- NON-CODE — recruiting and running creator sessions.
+Still open and **not needed for moderated M4**: whether Production's
+reachability without a Vercel SSO gate is intended; whether recipients get
+non-SSO access to `/i/[token]` (requires a distributed rate limiter first,
+`SECURITY.md`); whether the Google OAuth consent screen is published. See
+`DEPLOYMENT.md` "Public / non-SSO recipient access — decision brief".

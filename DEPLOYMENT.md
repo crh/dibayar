@@ -349,7 +349,16 @@ Staging and isolated `preview/*` deployments are confidential, access-restricted
 (Vercel SSO), and may be used for technical verification and M4 validation prep
 only when they contain no real customer or financial data, do not process
 payments, and are not announced or shared with users. An openly accessible or
-unrestricted staging/preview requires Chris's approval. Ordinary
+unrestricted staging/preview requires Chris's approval.
+
+**Moderated M4 creator sessions on `staging` are allowed** under the same
+restrictions. A moderator signs in and drives the protected staging deployment
+while a creator watches, by screen-share or in person. Only synthetic/demo data
+is shown (`npm run m4:demo-data`, see `docs/validation/M4-READINESS.md`). No
+creator receives a URL, login, Vercel access, or any infrastructure credential,
+and nothing is recorded without the participant's explicit consent. This does
+not count as "shared with users"; a creator using staging themselves does, and
+needs Chris's approval. Ordinary
 `feature/*`/`fix/*`/`chore/*` branches do not get a hosted deployment at all
 (`docs/DEVELOPMENT-WORKFLOW.md`).
 
@@ -361,7 +370,7 @@ The first production deployment, production-domain assignment, public launch, an
 
 Rollback expectations (revert PR or promote the previous Vercel deployment; forward-only migrations; smoke check afterward) are in `docs/DEVELOPMENT-WORKFLOW.md`. The concrete Vercel/Neon rollback procedure and identifiers are **not yet verified** here. Do not claim a deployment or rollback until the resulting Vercel status and URL have been checked directly; when the procedure is first exercised and verified, record it in this section.
 
-**Deployment filtering (`vercel.json` `git.deploymentEnabled` + `ignoreCommand`), `git.deploymentEnabled` added 2026-09-28, not yet live-verified.** If the allowlist incorrectly blocks a deployment that must go through (e.g. an unforeseen branch-naming case):
+**Deployment filtering (`vercel.json` `git.deploymentEnabled` + `ignoreCommand`), `git.deploymentEnabled` added 2026-09-28, live-verified 2026-09-30.** If the allowlist incorrectly blocks a deployment that must go through (e.g. an unforeseen branch-naming case):
 
 - Fastest for a one-off deploy: a branch that should deploy must match `main`, `staging`, or `preview/**`; rename/re-push it as `preview/<name>` rather than editing config. Both layers (`git.deploymentEnabled` and `scripts/vercel-ignore-build.sh`) must be edited together if the allowlist itself needs to change; `scripts/vercel-ignore-build.test.mjs` fails if they disagree.
 - Dashboard: the **Ignored Build Step** field can be set to always build (e.g. blank, or `exit 1`), but it does **not** override `git.deploymentEnabled` — that only controls whether Vercel creates the deployment in the first place. Verify empirically which one Vercel honors before relying on either during an incident. Changing project settings is Chris's per `docs/DEVELOPMENT-WORKFLOW.md` "Authorization".
