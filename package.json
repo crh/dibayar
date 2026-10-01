@@ -13,6 +13,7 @@
     "test:ux-detectors": "UX_SKIP_WEBSERVER=1 playwright test detectors.selftest.spec.ts",
     "test:ux-baseline": "npm run build && playwright test baseline.landing.spec.ts",
     "ux:fixtures": "tsx scripts/ux-fixtures.ts",
+    "m4:demo-data": "tsx scripts/m4-demo-data.ts",
     "ux:audit": "tsx scripts/ux-audit.ts",
     "ux:report": "tsx scripts/ux-report.ts",
     "e2e:fixtures": "E2E_FIXTURE_CONFIRM=non-production tsx --env-file-if-exists=.env.local scripts/e2e-fixtures.ts",

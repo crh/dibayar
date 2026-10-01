@@ -23,7 +23,7 @@
 ## M3 — Payment Chasing (vertical slice #3)
 - [x] Due-date reminders (in-app first; email if cheap) — Jakarta-aware overdue/due-soon dashboard surface; email intentionally not built
 - [x] One-tap WhatsApp follow-up: prefilled polite Bahasa message via wa.me link — owner-only contact fetch, normalized numbers, encoded share URL
-- [x] Monthly income summary view — Jakarta month boundary, gross/estimated PPh/net arithmetic; issue-date basis documented
+- [x] Monthly income summary view — Jakarta month boundary, gross/estimated PPh/net arithmetic; basis is `Invoice.createdAt` (no issue-date field), provisional — see `docs/validation/M4-READINESS.md` §2
 
 ## M4 — Validation Gate  ⛔ Chris approval to pass
 - [ ] Product shown to ≥5 real Indonesian creators; feedback logged in DAILY_LOG.md
