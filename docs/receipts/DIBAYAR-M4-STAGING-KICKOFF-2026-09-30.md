@@ -1,5 +1,7 @@
 # Dibayar — M4 staging validation kickoff (2026-09-30 → 2026-10-01)
 
+PR: **#21** (`chore/m4-staging-kickoff-2026-09-30` → `staging`, open, not merged).
+
 Outcome: **staging, demo data, docs, and moderator kit READY for Creator 01**,
 with one product gap for Chris (no PPh picker). No creator was contacted. No
 Production access. No secrets in this receipt.
@@ -75,7 +77,7 @@ build 0 · `git diff --check` clean.
 None for running Creator 01. Product gap (PPh picker) is a Chris decision, not a session blocker.
 
 ## Chris-only next actions
-1. Review and **authorize merge** of this PR into `staging` (includes the moderated-session policy clause).
+1. Review and **authorize merge** of PR #21 into `staging` (includes the moderated-session policy clause).
 2. Decide on the PPh-picker gap: leave for M4 evidence, or schedule a fix PR before Creator 01.
 3. **Recruit/schedule Creator 01–05** (external contact is yours).
 4. Before each session: re-seed (`M4-READINESS.md` §3), run the §4 checklist.
