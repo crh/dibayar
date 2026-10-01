@@ -12,7 +12,15 @@
 // scripts/e2e-fixtures.ts -- specifically so the formatted text (and its
 // wrapped line height) doesn't drift with the day a test happens to run,
 // which would fail these for reasons having nothing to do with a real
-// regression. No masking is needed to keep these stable across runs.
+// regression.
+//
+// The one intentional exception is Beranda's monthly-income subtitle
+// (data-testid="home-income-subtitle"), which renders the *current* calendar
+// month by design ("Oktober 2026 · ..."). It can't be pinned by fixture data,
+// so the three Beranda snapshots mask exactly that element -- not the whole
+// income card -- so the baselines don't need regenerating every month. Keep
+// any future masking just as narrow, and prefer fixed fixture dates wherever
+// the rendered date comes from data rather than the clock.
 import { expect, test } from "../support/test";
 import { loadFixtureManifest } from "../support/manifest";
 import { reseedFixtures } from "../support/reseed";
@@ -26,20 +34,26 @@ test.describe("visual regression", { tag: "@visual" }, () => {
   test("Beranda desktop", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 2, name: "Net ditagihkan bulan ini" })).toBeVisible();
-    await expect(page).toHaveScreenshot("beranda-desktop.png", { fullPage: true });
+    const incomeSubtitle = page.getByTestId("home-income-subtitle");
+    await expect(incomeSubtitle).toBeVisible();
+    await expect(page).toHaveScreenshot("beranda-desktop.png", { fullPage: true, mask: [incomeSubtitle] });
   });
 
   test("Beranda mobile", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 2, name: "Net ditagihkan bulan ini" })).toBeVisible();
-    await expect(page).toHaveScreenshot("beranda-mobile.png", { fullPage: true });
+    const incomeSubtitle = page.getByTestId("home-income-subtitle");
+    await expect(incomeSubtitle).toBeVisible();
+    await expect(page).toHaveScreenshot("beranda-mobile.png", { fullPage: true, mask: [incomeSubtitle] });
   });
 
   test("Beranda true mobile", { tag: "@visual-mobile" }, async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { level: 2, name: "Net ditagihkan bulan ini" })).toBeVisible();
-    await expect(page).toHaveScreenshot("beranda-true-mobile.png", { fullPage: true });
+    const incomeSubtitle = page.getByTestId("home-income-subtitle");
+    await expect(incomeSubtitle).toBeVisible();
+    await expect(page).toHaveScreenshot("beranda-true-mobile.png", { fullPage: true, mask: [incomeSubtitle] });
   });
 
   test("Deals default (Semua)", async ({ page }) => {
