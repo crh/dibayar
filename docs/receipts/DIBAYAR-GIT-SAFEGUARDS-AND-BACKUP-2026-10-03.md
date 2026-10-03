@@ -31,7 +31,8 @@ timer-driven run on 2026-10-04 03:00 WIB.
   `gh api`. Not changed.
 - Branch protection: `GET /branches/main/protection` → 403 "Upgrade to GitHub
   Pro or make this repository public".
-- PR: see the PR URL recorded in the follow-up section at the end.
+- Commits: `c077bf3` (implementation, docs, tests), plus a follow-up recording this PR URL and making `install-backup-timer.sh` executable.
+- PR: **https://github.com/crh/dibayar/pull/24** (`chore/git-safeguards-backup-2026-10-03` → `staging`), open, not merged.
 
 Changed files:
 
