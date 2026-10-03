@@ -113,4 +113,7 @@ No product source changed in the committed diff. No Production or hosted-staging
 
 ## Delivery
 
-(filled in after push)
+- PR: https://github.com/crh/dibayar/pull/25 (`chore/journey-coverage-2026-10-03` → `staging`), **not merged**; merge needs authorization per `docs/DEVELOPMENT-WORKFLOW.md`.
+- Implementation commit: `ded4ba2` (this receipt's delivery section is a follow-up docs commit).
+- CI run `37120793919` on `ded4ba2`: `lint-typecheck-test` success (vitest 780/780, journey-coverage self-test 9/9, `coverage:journeys` OK), `e2e-critical` success (91 passed incl. 3 expected failures, 13 skipped — identical to local), `e2e-a11y` success, `ux-audit` success, `e2e-cross-browser` skipped (schedule/dispatch only, by design).
+- Gate 5 check (read-only): 0 GitHub deployments and no Vercel commit status for the branch. Neon branch list was not checked in this session.
