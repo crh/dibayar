@@ -124,7 +124,7 @@ variables, GitHub settings/issues/PR discussions, or any secret.
 | Latest pointer | `…/LAST_SUCCESS` | 0600 |
 | Logs | `…/logs/<ts>.ok.log`, `…/logs/<ts>.FAILED.log` | 0600 |
 | Installed script | `~/.local/lib/dibayar-git-backup/dibayar-git-backup.sh` | 0700 |
-| Optional config | `~/.config/dibayar-git-backup/env` (`DIBAYAR_BACKUP_*`, no secrets) | 0600 |
+| Optional config | `~/.config/dibayar-git-backup/env` (`DIBAYAR_BACKUP_*`, no secrets; really `%E/...`, the systemd user manager's `XDG_CONFIG_HOME`, which the installer resolves the same way) | 0600 |
 | systemd units | `~/.config/systemd/user/dibayar-git-backup.{service,timer}` | 0644 |
 
 All of it lives outside the repository and nothing is committed. Fetch
@@ -161,7 +161,13 @@ working tree.
   0.5 GB plus a ~17 MB mirror, against ~41 GB free on `/`. Re-check with
   `status` (it prints free space) as the repository grows.
 - Success logs: the newest 90 are kept. **Failed-run logs are never deleted
-  automatically.**
+  automatically.** A run killed before it finished (power loss, `SIGKILL`)
+  leaves a bare `<ts>.log`. The next run renames it to `<ts>.FAILED.log`.
+- Time budget: each fetch attempt times out after
+  `DIBAYAR_BACKUP_FETCH_TIMEOUT_SECONDS` (default 600). With the default
+  3 attempts and back-off, the worst case is 33 min. The script refuses
+  settings whose worst case exceeds 60 min, so systemd's
+  `TimeoutStartSec=90min` never kills a run mid-retry.
 
 ### Runbook
 

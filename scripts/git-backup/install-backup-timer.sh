@@ -6,8 +6,10 @@
 #
 # Installs:
 #   ~/.local/lib/dibayar-git-backup/dibayar-git-backup.sh   (copy of the repo script)
-#   ~/.config/systemd/user/dibayar-git-backup.{service,timer}
-#   ~/.config/dibayar-git-backup/env                         (created once, never overwritten)
+#   <config>/systemd/user/dibayar-git-backup.{service,timer}
+#   <config>/dibayar-git-backup/env                          (created once, never overwritten)
+# where <config> is the systemd user manager's $XDG_CONFIG_HOME (default
+# ~/.config), i.e. the directory the unit's %E specifier expands to.
 # then `systemctl --user daemon-reload` and enables/starts the timer
 # (skip with --no-enable to leave it PREPARED, NOT ACTIVE).
 #
@@ -21,17 +23,24 @@ enable=1
 while [ $# -gt 0 ]; do
 	case $1 in
 		--no-enable) enable=0; shift ;;
-		-h | --help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		-h | --help) sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 		*) echo "install-backup-timer: unknown option '$1'" >&2; exit 2 ;;
 	esac
 done
 
 src_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-lib_dir="$HOME/.local/lib/dibayar-git-backup"
-unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-conf_dir="${XDG_CONFIG_HOME:-$HOME/.config}/dibayar-git-backup"
-
 command -v systemctl >/dev/null || { echo "install-backup-timer: systemctl not found" >&2; exit 2; }
+
+# Resolve config paths the way systemd will (%E), not from this shell, so the
+# installed env file is the one the unit actually reads.
+manager_xdg=$(systemctl --user show-environment 2>/dev/null | sed -n 's/^XDG_CONFIG_HOME=//p')
+config_root=${manager_xdg:-$HOME/.config}
+if [ -n "${XDG_CONFIG_HOME:-}" ] && [ "$XDG_CONFIG_HOME" != "$config_root" ]; then
+	echo "install-backup-timer: note: shell XDG_CONFIG_HOME ($XDG_CONFIG_HOME) differs from the systemd user manager's; using $config_root" >&2
+fi
+lib_dir="$HOME/.local/lib/dibayar-git-backup"
+unit_dir="$config_root/systemd/user"
+conf_dir="$config_root/dibayar-git-backup"
 
 # install_managed SRC DEST MODE: copy only if DEST is absent or ours.
 install_managed() {

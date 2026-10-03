@@ -18,7 +18,10 @@
 #   DIBAYAR_BACKUP_REQUIRED_BRANCHES  default "main staging"
 #   DIBAYAR_BACKUP_MIN_FREE_MB free space required before a run, default 1024
 #   DIBAYAR_BACKUP_STALE_HOURS `status` staleness threshold, default 36
-#   DIBAYAR_BACKUP_FETCH_ATTEMPTS / _RETRY_SECONDS  default 3 / 60
+#   DIBAYAR_BACKUP_FETCH_ATTEMPTS / _RETRY_SECONDS / _TIMEOUT_SECONDS  default 3 / 60 / 600
+#     (worst-case fetch time must stay within FETCH_BUDGET_SECONDS=3600, well
+#     inside the systemd unit's TimeoutStartSec=90min, so a hung network fails
+#     cleanly with a .FAILED.log instead of being killed mid-run)
 #
 # Only Git refs/history are backed up (branches and tags). This is NOT a
 # backup of PostgreSQL/Neon data, Vercel deployments or settings, or secrets.
@@ -34,6 +37,8 @@ MIN_FREE_MB=${DIBAYAR_BACKUP_MIN_FREE_MB:-1024}
 STALE_HOURS=${DIBAYAR_BACKUP_STALE_HOURS:-36}
 FETCH_ATTEMPTS=${DIBAYAR_BACKUP_FETCH_ATTEMPTS:-3}
 RETRY_SECONDS=${DIBAYAR_BACKUP_FETCH_RETRY_SECONDS:-60}
+FETCH_TIMEOUT=${DIBAYAR_BACKUP_FETCH_TIMEOUT_SECONDS:-600}
+FETCH_BUDGET_SECONDS=3600
 KEEP_SUCCESS_LOGS=90
 
 MIRROR="$ROOT/mirror.git"
@@ -58,11 +63,18 @@ check_config() {
 	require_int DIBAYAR_BACKUP_STALE_HOURS "$STALE_HOURS"
 	require_int DIBAYAR_BACKUP_FETCH_ATTEMPTS "$FETCH_ATTEMPTS"
 	require_int DIBAYAR_BACKUP_FETCH_RETRY_SECONDS "$RETRY_SECONDS"
+	require_int DIBAYAR_BACKUP_FETCH_TIMEOUT_SECONDS "$FETCH_TIMEOUT"
 	if [ "$KEEP" -lt 30 ] && [ "${DIBAYAR_BACKUP_ALLOW_LOW_KEEP:-0}" != 1 ]; then
 		die "DIBAYAR_BACKUP_KEEP=$KEEP is below the 30-snapshot policy minimum"
 	fi
 	[ "$KEEP" -ge 1 ] || die "DIBAYAR_BACKUP_KEEP must be at least 1"
 	[ "$FETCH_ATTEMPTS" -ge 1 ] || die "DIBAYAR_BACKUP_FETCH_ATTEMPTS must be at least 1"
+	[ "$FETCH_TIMEOUT" -ge 1 ] || die "DIBAYAR_BACKUP_FETCH_TIMEOUT_SECONDS must be at least 1"
+	# Attempts time out, then sleep RETRY_SECONDS * attempt between them.
+	local worst=$(( FETCH_ATTEMPTS * FETCH_TIMEOUT + RETRY_SECONDS * (FETCH_ATTEMPTS - 1) * FETCH_ATTEMPTS / 2 ))
+	if [ "$worst" -gt "$FETCH_BUDGET_SECONDS" ]; then
+		die "worst-case fetch time ${worst}s exceeds the ${FETCH_BUDGET_SECONDS}s budget (systemd TimeoutStartSec would kill the run); lower DIBAYAR_BACKUP_FETCH_ATTEMPTS/_TIMEOUT_SECONDS/_RETRY_SECONDS"
+	fi
 	[ -n "$REQUIRED_BRANCHES" ] || die "DIBAYAR_BACKUP_REQUIRED_BRANCHES is empty"
 }
 
@@ -171,7 +183,7 @@ fetch_mirror() {
 		log "fetching $(redact_url "$REMOTE_URL") (attempt $attempt/$FETCH_ATTEMPTS)"
 		# --prune keeps the mirror an exact copy of the remote; older states
 		# survive in the immutable snapshots, never in the mirror.
-		if timeout 900 git -C "$MIRROR" fetch --quiet --prune --prune-tags origin; then
+		if timeout "$FETCH_TIMEOUT" git -C "$MIRROR" fetch --quiet --prune --prune-tags origin; then
 			break
 		fi
 		[ "$attempt" -lt "$FETCH_ATTEMPTS" ] || die "fetch failed after $FETCH_ATTEMPTS attempts"
@@ -212,6 +224,21 @@ cmd_run() {
 	mkdir -p "$ROOT" "$SNAPDIR" "$LOGDIR"
 	chmod 700 "$ROOT" "$SNAPDIR" "$LOGDIR"
 
+	# One run at a time. The worker inherits this lock via fd 9.
+	exec 9>"$ROOT/.lock"
+	flock -n 9 || die "another backup run holds $ROOT/.lock"
+
+	# A run killed before classifying its log (SIGKILL, timeout, power loss)
+	# leaves a bare <ts>.log; it was a failure, so keep it as one.
+	local stray
+	for stray in "$LOGDIR"/*.log; do
+		[ -e "$stray" ] || continue
+		case $stray in *.ok.log | *.FAILED.log) continue ;; esac
+		printf '%s run was interrupted before completion; classified as FAILED by a later run\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$stray"
+		mv -f "$stray" "${stray%.log}.FAILED.log"
+		log "classified interrupted run log $(basename "$stray") as FAILED" >&2
+	done
+
 	local name logfile rc
 	name=${DIBAYAR_BACKUP_TIMESTAMP:-$(date -u +%Y%m%dT%H%M%SZ)}
 	[[ $name =~ $SNAP_RE ]] || die "invalid snapshot timestamp '$name'"
@@ -235,9 +262,8 @@ cmd_run() {
 cmd_run_worker() {
 	local name=$DIBAYAR_BACKUP_TIMESTAMP tmp
 
-	# One run at a time.
-	exec 9>"$ROOT/.lock"
-	flock -n 9 || die "another backup run holds $ROOT/.lock"
+	# Only ever started by cmd_run, which holds the lock (inherited fd 9).
+	[ -e /proc/self/fd/9 ] || die "internal __run must be started by 'run'"
 
 	tmp="$SNAPDIR/.incomplete-$name"
 	on_exit() {

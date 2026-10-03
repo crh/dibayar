@@ -266,3 +266,60 @@ test("verify detects a corrupted or truncated bundle", { skip: !linux }, () => {
     cleanup(ctx);
   }
 });
+
+test("refuses fetch retry settings whose worst case exceeds the systemd budget", { skip: !linux }, () => {
+  const ctx = setup();
+  try {
+    // 3 x 1200s timeouts + 60s + 120s sleeps = 3780s > 3600s budget.
+    const r = run(ctx, "20260101T030000Z", {
+      DIBAYAR_BACKUP_FETCH_ATTEMPTS: "3",
+      DIBAYAR_BACKUP_FETCH_TIMEOUT_SECONDS: "1200",
+      DIBAYAR_BACKUP_FETCH_RETRY_SECONDS: "60",
+    });
+    assert.notEqual(r.status, 0);
+    assert.match(r.stdout + r.stderr, /worst-case fetch time 3780s exceeds the 3600s budget/);
+    // The defaults fit: 3 x 600s + 60s + 120s = 1980s.
+    assert.equal(run(ctx, "20260101T040000Z", { DIBAYAR_BACKUP_FETCH_ATTEMPTS: "3" }).status, 0);
+  } finally {
+    cleanup(ctx);
+  }
+});
+
+test("systemd unit timeout exceeds the script's fetch budget and reads %E config", () => {
+  const unit = readFileSync(join(here, "git-backup", "systemd", "dibayar-git-backup.service"), "utf8");
+  const minutes = Number(unit.match(/^TimeoutStartSec=(\d+)min$/m)?.[1]);
+  const budget = Number(readFileSync(script, "utf8").match(/^FETCH_BUDGET_SECONDS=(\d+)$/m)?.[1]);
+  assert.ok(budget > 0 && minutes > 0);
+  assert.ok(minutes * 60 >= budget + 1800, `TimeoutStartSec ${minutes}min must leave >=30 min beyond the ${budget}s fetch budget`);
+  // Same config root the installer resolves from the user manager (XDG_CONFIG_HOME).
+  assert.match(unit, /^EnvironmentFile=-%E\/dibayar-git-backup\/env$/m);
+  const installerSrc = readFileSync(join(here, "git-backup", "install-backup-timer.sh"), "utf8");
+  assert.match(installerSrc, /systemctl --user show-environment/);
+  assert.match(installerSrc, /conf_dir="\$config_root\/dibayar-git-backup"/);
+});
+
+test("a killed run's unclassified log is kept as a FAILED log by the next run", { skip: !linux }, () => {
+  const ctx = setup();
+  try {
+    assert.equal(run(ctx, "20260101T030000Z").status, 0);
+    const logs = join(ctx.backupRoot, "logs");
+    writeFileSync(join(logs, "20260101T120000Z.log"), "started, then SIGKILL\n");
+    assert.equal(run(ctx, "20260102T030000Z").status, 0);
+    const names = readdirSync(logs).sort();
+    assert.deepEqual(names, ["20260101T030000Z.ok.log", "20260101T120000Z.FAILED.log", "20260102T030000Z.ok.log"]);
+    assert.match(readFileSync(join(logs, "20260101T120000Z.FAILED.log"), "utf8"), /SIGKILL\n.*interrupted before completion/s);
+  } finally {
+    cleanup(ctx);
+  }
+});
+
+test("the internal worker refuses to run without the wrapper's lock", { skip: !linux }, () => {
+  const ctx = setup();
+  try {
+    const r = backup(ctx, ["__run"], { DIBAYAR_BACKUP_TIMESTAMP: "20260101T030000Z" });
+    assert.notEqual(r.status, 0);
+    assert.match(r.stderr, /must be started by 'run'/);
+  } finally {
+    cleanup(ctx);
+  }
+});

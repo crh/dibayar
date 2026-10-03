@@ -7,6 +7,10 @@ Documentation=https://github.com/crh/dibayar/blob/staging/docs/GIT-SAFEGUARDS-AN
 Type=oneshot
 UMask=0077
 Nice=10
-TimeoutStartSec=45min
-EnvironmentFile=-%h/.config/dibayar-git-backup/env
+# Fetch worst case is capped at 60 min by the script (FETCH_BUDGET_SECONDS);
+# bundle/verify of this repo takes seconds, so 90 min leaves ample headroom.
+TimeoutStartSec=90min
+# %E = the user manager's $XDG_CONFIG_HOME (default ~/.config), the same root
+# install-backup-timer.sh resolves from `systemctl --user show-environment`.
+EnvironmentFile=-%E/dibayar-git-backup/env
 ExecStart=%h/.local/lib/dibayar-git-backup/dibayar-git-backup.sh run
