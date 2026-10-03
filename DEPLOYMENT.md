@@ -151,7 +151,12 @@ backstop regardless of which model is adopted.
   branch (including another disposable Gate-5 smoke test) will fail this way
   until Chris prunes.**
 - **Branch hygiene:** GitHub "Automatically delete head branches"
-  (`delete_branch_on_merge`) enabled 2026-09-30. Vercel dashboard Ignored
+  (`delete_branch_on_merge`) was enabled 2026-09-30 and **disabled by Chris
+  before 2026-10-03** (verified `false` 2026-10-03) so a `staging -> main`
+  release PR can never delete `staging` on merge; merged short-lived branches
+  are cleaned up manually (`docs/DEVELOPMENT-WORKFLOW.md` "Cleanup"). Local
+  pre-push guard and daily Git backups: `docs/GIT-SAFEGUARDS-AND-BACKUPS.md`.
+  Vercel dashboard Ignored
   Build Step verified empty (`commandForIgnoringBuildStep: null`) 2026-09-29,
   so `vercel.json` is authoritative.
 

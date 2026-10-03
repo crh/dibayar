@@ -1,0 +1,139 @@
+#!/bin/sh
+# dibayar-protected-branch-guard v1
+#
+# Local pre-push guard for the long-lived branches `main` (Production) and
+# `staging` (integration). Rejects every push whose REMOTE destination is
+# exactly refs/heads/main or refs/heads/staging, on any remote: fast-forward,
+# --force / --force-with-lease, creation/recreation, and deletion.
+# All other refs (feature/*, fix/*, chore/*, staging-test, feature/main-x, ...)
+# are allowed.
+#
+# Policy: docs/DEVELOPMENT-WORKFLOW.md. Install and limitations:
+# docs/GIT-SAFEGUARDS-AND-BACKUPS.md (scripts/git-safeguards/install-hooks.sh).
+#
+# This is a per-clone convenience guard, NOT server-side protection: it can be
+# bypassed with --no-verify, another clone, or the GitHub UI/API, and GitHub
+# PR merges never run it.
+#
+# Git calls this as: pre-push <remote-name> <remote-url>, with one line per ref
+# on stdin: <local-ref> SP <local-sha> SP <remote-ref> SP <remote-sha> LF
+#
+# If an earlier custom pre-push hook was chained in by the installer, it lives
+# next to this file as pre-push.local and runs only after these checks pass.
+
+remote_name=${1:-<unknown-remote>}
+remote_url=${2:-}
+
+# Read all of stdin first so it can be replayed to a chained hook.
+if ! input=$(cat); then
+	echo "pre-push guard: could not read the ref list from git; refusing push." >&2
+	exit 1
+fi
+
+is_hex_sha() {
+	case $1 in
+		'' | *[!0-9a-f]*) return 1 ;;
+	esac
+	# SHA-1 (40) or SHA-256 (64) object names.
+	[ ${#1} -eq 40 ] || [ ${#1} -eq 64 ]
+}
+
+is_zero_sha() {
+	case $1 in
+		*[!0]*) return 1 ;;
+	esac
+	return 0
+}
+
+# Exact, IFS-independent match on the remote destination ref.
+is_protected() {
+	case $1 in
+		refs/heads/main | refs/heads/staging) return 0 ;;
+	esac
+	return 1
+}
+
+status=0
+blocked=0
+newline='
+'
+old_ifs=$IFS
+IFS=$newline
+set -f
+for line in $input; do
+	IFS=' '
+	# shellcheck disable=SC2086
+	set -- $line
+	IFS=$newline
+	if [ $# -ne 4 ]; then
+		echo "pre-push guard: malformed ref line from git ('$line'); refusing push." >&2
+		status=1
+		continue
+	fi
+	local_ref=$1 local_sha=$2 remote_ref=$3 remote_sha=$4
+
+	if ! is_hex_sha "$local_sha" || ! is_hex_sha "$remote_sha"; then
+		echo "pre-push guard: malformed object name in ref line ('$line'); refusing push." >&2
+		status=1
+		continue
+	fi
+	case $remote_ref in
+		refs/*) ;;
+		*)
+			echo "pre-push guard: unexpected remote ref '$remote_ref'; refusing push." >&2
+			status=1
+			continue
+			;;
+	esac
+
+	if is_protected "$remote_ref"; then
+		if [ "$local_ref" = "(delete)" ] || is_zero_sha "$local_sha"; then
+			action="DELETE"
+		elif is_zero_sha "$remote_sha"; then
+			action="CREATE/RECREATE"
+		else
+			action="UPDATE (fast-forward or force)"
+		fi
+		echo "pre-push guard: BLOCKED $action of protected branch '${remote_ref#refs/heads/}' on remote '$remote_name'." >&2
+		status=1
+		blocked=1
+	fi
+done
+set +f
+IFS=$old_ifs
+
+if [ $blocked -eq 1 ]; then
+	cat >&2 <<'EOF'
+
+  `main` and `staging` are never pushed to, force-pushed, created, or deleted
+  from a local clone. Push a feature/fix/chore branch instead and open a PR:
+
+    git switch -c chore/my-change origin/staging
+    git push -u origin chore/my-change
+    gh pr create --base staging
+
+  `staging -> main` release PRs need Chris's explicit approval.
+  See docs/DEVELOPMENT-WORKFLOW.md and docs/GIT-SAFEGUARDS-AND-BACKUPS.md.
+EOF
+fi
+
+if [ $status -ne 0 ]; then
+	exit $status
+fi
+
+# Chain a pre-existing custom hook preserved by the installer, if any.
+chained="$(dirname "$0")/pre-push.local"
+if [ -f "$chained" ]; then
+	if [ ! -x "$chained" ]; then
+		echo "pre-push guard: $chained exists but is not executable; refusing push." >&2
+		exit 1
+	fi
+	if [ -n "$input" ]; then
+		printf '%s\n' "$input" | "$chained" "$remote_name" "$remote_url"
+	else
+		"$chained" "$remote_name" "$remote_url" </dev/null
+	fi
+	exit $?
+fi
+
+exit 0
