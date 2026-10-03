@@ -30,6 +30,7 @@
     "test:diagnostics-selftest": "node --test e2e/support/diagnostics-selftest.test.mjs",
     "test:lint-wrapper": "node --test scripts/lint.test.mjs",
     "test:vercel-ignore-build": "node --test scripts/vercel-ignore-build.test.mjs",
+    "test:git-safeguards": "node --test scripts/git-safeguards.test.mjs scripts/git-backup.test.mjs",
     "postinstall": "prisma generate"
   },
   "dependencies": {

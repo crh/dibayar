@@ -108,6 +108,11 @@ hotfix/*    urgent Production fix
   the standard prefixes for new work.
 - Branch protection is not available on the repository's current GitHub plan,
   so `main`/`staging` discipline is procedural. Do not push directly to either.
+  Every local clone should install the version-controlled pre-push guard
+  (`scripts/git-safeguards/install-hooks.sh`), which blocks local pushes,
+  force-pushes, creation, and deletion of `main`/`staging`. It is a per-clone,
+  bypassable guard, not server-side protection; see
+  `docs/GIT-SAFEGUARDS-AND-BACKUPS.md`, which also covers the daily Git backups.
 - There is no `release/*` branch. Add release branches only if the project ever
   needs parallel release trains or long stabilization cycles.
 
@@ -238,9 +243,22 @@ client's trusted surface. Any change in the Google console needs Chris.
 
 ## Cleanup
 
-- Delete merged `feature/*`, `fix/*`, `chore/*`, `hotfix/*`, and `preview/*`
-  branches on merge (enable GitHub "Automatically delete head branches" so this
-  is not manual).
+- GitHub "Automatically delete head branches" stays **disabled** (Chris
+  decision, 2026-10-03): with it on, merging a `staging -> main` release PR
+  deletes `staging`. Do not re-enable it. Short-lived branches are therefore
+  cleaned up manually:
+  - After a PR from a `feature/*`, `fix/*`, `chore/*`, `hotfix/*`, or
+    `preview/*` branch merges, its author deletes that head branch (the PR
+    page's "Delete branch" button or `git push origin --delete <branch>`).
+  - On a `staging -> main` release PR, never click "Delete branch". The
+    pre-push guard also refuses `git push --delete` of `main`/`staging`, but
+    it does not cover the GitHub UI or API.
+  - At each release PR (or weekly), list merged branches still on `origin`
+    and delete the ones that are yours; for anyone else's, identify them and
+    stop (see [Authorization](#authorization)):
+    `git fetch --prune origin && git branch -r --merged origin/staging | grep -vE 'origin/(main|staging|HEAD)'`
+    (a squash-merged branch will not show as merged; check its PR with
+    `gh pr list --state merged --head <branch>`).
 - When a `preview/*` branch is merged, closed, or abandoned, its Neon branch and
   Vercel deployments must be removed promptly, not "eventually".
 - Monitor Neon branch capacity before opening a preview and whenever a
