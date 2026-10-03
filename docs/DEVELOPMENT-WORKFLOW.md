@@ -18,6 +18,13 @@ invariants and pointers only.
 
 ## Rollout status
 
+**2026-09-30: the pre-staging transition has ended** — all six conditions below
+are verified (`STATE.md`, `docs/receipts/DIBAYAR-HOBBY-STAGING-ACTIVATION-2026-09-29.md`).
+On the Vercel Hobby plan, `staging` is the Preview deployment of the `staging`
+branch with branch-scoped Preview env vars, not a Custom Environment (mechanics:
+`DEPLOYMENT.md`, "Staging (Hobby preview phase)"). The [Normal flow](#normal-flow)
+now applies; the text below is kept as history.
+
 This document defines the **approved target workflow**. Until the `staging`
 branch, its Vercel deployment, its Neon branch, and its OAuth callback exist
 (implementation is tracked in `STATE.md`, not here), do not assume they exist:
@@ -133,15 +140,13 @@ feature|fix|chore/*  --PR-->  staging  --validate-->  PR  -->  main
 - run CI (lint, typecheck, unit, E2E, UX audit as configured in `.github/`);
 - **not** create a Vercel deployment (build) — **live-verified true** as of
   2026-09-27/28: `vercel.json`'s `ignoreCommand` cancels the build in ~4–7s;
-- **not** create a Neon branch — **this is the target, not the current
-  behavior.** Live-verified 2026-09-27 and again 2026-09-28 (two independent
-  ordinary branches): the Vercel↔Neon integration still provisions a Neon
-  preview branch for an ordinary branch even though its Vercel build is
-  correctly skipped. See `DEPLOYMENT.md` "Ordinary-branch Neon suppression
-  gap" and `docs/receipts/DIBAYAR-STAGING-ACTIVATION-R2-SELECTIVE-NEON-2026-09-28.md`
-  for the audit and the selective-branching model adopted around this gap.
-  Do not claim this bullet is satisfied until a live smoke test shows no new
-  Neon branch;
+- **not** create a Neon branch — **live-verified true 2026-09-30** once Gate 5
+  (`git.deploymentEnabled`, PR #18) reached `main`/`staging`: a push of ordinary
+  `chore/staging-activation-docs-2026-09-30` created no Vercel deployment and no
+  Neon branch. Before Gate 5 (2026-09-27/28) the Vercel↔Neon integration did
+  provision a Neon branch for ordinary branches; history in `DEPLOYMENT.md`
+  "Ordinary-branch Neon suppression gap" and
+  `docs/receipts/DIBAYAR-HOBBY-STAGING-ACTIVATION-2026-09-29.md`;
 - **not** require a Google OAuth redirect registration.
 
 Mechanism (details in `DEPLOYMENT.md` "Environment mechanics"): the intentional
@@ -150,10 +155,8 @@ deployable branches are exactly `main`, `staging`, and `preview/**`.
 creating an automatic deployment for anything else; `ignoreCommand` is only
 secondary defense in depth (it runs after a deployment exists, and does not by
 itself stop the Neon integration from provisioning a branch). Neon preview
-provisioning should therefore only happen after Vercel actually creates an
-allowed deployment. This is repo config only until a disposable ordinary branch
-is live-verified to create no Vercel deployment and no Neon branch; do not treat
-the suppression as verified before then.
+provisioning therefore only happens after Vercel actually creates an allowed
+deployment (live-verified 2026-09-30, see above).
 
 Verify behavior locally against the disposable test database
 (`docs/testing/E2E.md`), not against a hosted environment. Every hosted

@@ -19,9 +19,9 @@ staging is provisioned, follow the transitional rollout rules in
 | Branch | Vercel | Neon | Google OAuth callback | Access | Implemented |
 |---|---|---|---|---|---|
 | `main` | Production (auto-deploy on merge) | Production branch (`main`, `DATABASE_URL`) | Production domain | see "Current verified state" | Yes |
-| `staging` | one stable deployment on a stable domain | one stable branch, never pruned | stable staging domain | Vercel SSO | **Partly** — `staging` git branch exists (created 2026-09-27 from the PR #16 merge commit, `4c2f868`) and its push-triggered CI is live-verified; no Vercel staging environment/domain, no Neon staging branch, and no staging OAuth callback exist yet — all Chris-only, see the action packet in `docs/receipts/DIBAYAR-STAGING-ACTIVATION-2026-09-27.md` |
+| `staging` | one stable deployment on a stable domain | one stable branch, never pruned | stable staging domain | Vercel SSO | **Yes (2026-09-30)** — Vercel Preview deployments of Git branch `staging` (Hobby "multiple preview phases"; no Custom Environment), stable alias `https://dibayar-git-staging-kenji-iwakura.vercel.app`; persistent Neon `staging` (`br-late-grass-aoea90yk`) bound via Preview (staging) branch-scoped vars; staging OAuth callback registered and live-verified. See "Staging (Hobby preview phase)" below and `docs/receipts/DIBAYAR-HOBBY-STAGING-ACTIVATION-2026-09-29.md` |
 | `preview/*` | temporary, per-branch | temporary, one per branch (integration-created) | none by default | Vercel SSO | Partly — today *every* pushed branch deploys and gets a Neon branch |
-| other branches | none (CI only) | none | none | n/a | **Repo config in place (2026-09-28), Gate 5 PENDING live remote verification.** Primary gate: `vercel.json` `git.deploymentEnabled` (`"**": false`, then `main`/`staging`/`preview/**` `true`) stops Vercel creating an automatic deployment at all. Secondary: `ignoreCommand` -> `scripts/vercel-ignore-build.sh` cancels the build if a non-allowlisted ref still reaches it. `ignoreCommand` alone was **live-disproved** as a Neon suppressor, twice (`chore/workflow-ci-only-smoke` 2026-09-27 and PR #17's `chore/staging-activation-2026-09-27` 2026-09-28: build `Canceled` in ~4–7s, yet the Vercel-Neon integration still provisioned a Neon branch — see "Ordinary-branch Neon suppression gap" below). Not proven until a disposable ordinary branch shows no Vercel deployment **and** no Neon branch. |
+| other branches | none (CI only) | none | none | n/a | **Yes — Gate 5 live-verified 2026-09-30** after PR #18 merged: push of ordinary `chore/staging-activation-docs-2026-09-30` created no Vercel deployment and no Neon branch. Primary gate: `vercel.json` `git.deploymentEnabled` (`"**": false`, then `main`/`staging`/`preview/**` `true`) stops Vercel creating an automatic deployment at all. Secondary: `ignoreCommand` -> `scripts/vercel-ignore-build.sh` cancels the build if a non-allowlisted ref still reaches it. `ignoreCommand` alone was **live-disproved** as a Neon suppressor, twice (`chore/workflow-ci-only-smoke` 2026-09-27 and PR #17's `chore/staging-activation-2026-09-27` 2026-09-28: build `Canceled` in ~4–7s, yet the Vercel-Neon integration still provisioned a Neon branch — see "Ordinary-branch Neon suppression gap" below). Not proven until a disposable ordinary branch shows no Vercel deployment **and** no Neon branch. |
 
 Mechanics to apply when implementing the not-yet-implemented rows. Every one is
 a Vercel/Neon/Google settings change and therefore needs Chris
@@ -50,11 +50,11 @@ current Vercel/Neon docs before acting:
   and the two don't silently disagree (same class of risk as the former
   dashboard Build Command override under "Migration strategy" below).
   `scripts/vercel-ignore-build.test.mjs` asserts the exact rule set and that
-  both layers agree. **Gate 5 stays pending live remote verification** until a
-  ordinary branch is pushed and shows no Vercel deployment and no Neon preview
+  both layers agree. **Gate 5 live-verified 2026-09-30**: an ordinary `chore/*`
+  push after PR #18 merged showed no Vercel deployment and no Neon preview
   branch.
 
-### Ordinary-branch Neon suppression gap (found 2026-09-27, re-confirmed and scoped 2026-09-28, unresolved)
+### Ordinary-branch Neon suppression gap (found 2026-09-27, re-confirmed 2026-09-28, closed by Gate 5 2026-09-30)
 
 **Proposed fix (Gate 5):** the `git.deploymentEnabled` primary gate described
 in the "CI-only ordinary branches" bullet above targets this gap by stopping
@@ -118,17 +118,15 @@ branch for ordinary branches; explicit, manually-provisioned Neon branches
 only for justified `preview/*` isolation) rather than continuing to rely on
 periodic pruning as the primary mechanism. Pruning remains necessary as a
 backstop regardless of which model is adopted.
-- **Staging:** either a Vercel custom environment or the ordinary Preview
-  deployment of the long-lived `staging` git branch. Whichever is chosen it
-  must have a stable domain, a Neon branch that is never pruned, its own
-  `AUTH_SECRET`, and (if Google sign-in is needed) its own registered callback.
-  `scripts/vercel-build.sh` treats `VERCEL_ENV=preview` as integration-managed
-  and requires `DATABASE_URL_POSTGRES_URL_NON_POOLING`; a staging deployment
-  running as Preview inherits that behavior, a custom environment may not.
+- **Staging:** implemented 2026-09-29/30 as the ordinary Preview deployment
+  of the long-lived `staging` git branch (Vercel plan is Hobby; no Custom
+  Environment, no second project) — see "Staging (Hobby preview phase)" below.
   `src/auth.ts` sets `trustHost: true` and reads no `AUTH_URL`/`NEXTAUTH_URL`,
   so no base-URL env var is needed beyond the callback registration itself.
 - **Neon capacity:** the project `neon-dijual` is on plan `free_v3` with
-  `branches_limit: 10`. **Observed 2026-09-29 (read-only): 2/10** — `main`
+  `branches_limit: 10`. **Observed 2026-09-30: 2/10** — `main` and the
+  persistent `staging`; `preview/chore/staging-activation-2026-09-27` is gone.
+  **Observed 2026-09-29 (read-only): 2/10** — `main`
   and `preview/chore/staging-activation-2026-09-27`; the 8 earlier cleanup
   candidates below are gone. PR #17 is now merged, so its preview branch is a
   cleanup candidate (Chris-only). Historical 2026-09-28 observation follows.
@@ -152,11 +150,39 @@ backstop regardless of which model is adopted.
   the next redeploy succeed. **At 10/10 right now, any further push to a new
   branch (including another disposable Gate-5 smoke test) will fail this way
   until Chris prunes.**
-- **Branch hygiene:** GitHub "Automatically delete head branches" is currently
-  off; this session attempted to enable it directly via the GitHub API and
-  the attempt was blocked by this session's own tooling — see the action
-  packet in `docs/receipts/DIBAYAR-STAGING-ACTIVATION-2026-09-27.md` for the
-  exact manual steps for Chris.
+- **Branch hygiene:** GitHub "Automatically delete head branches"
+  (`delete_branch_on_merge`) enabled 2026-09-30. Vercel dashboard Ignored
+  Build Step verified empty (`commandForIgnoringBuildStep: null`) 2026-09-29,
+  so `vercel.json` is authoritative.
+
+### Staging (Hobby preview phase)
+
+Verified 2026-09-29/30 (`docs/receipts/DIBAYAR-HOBBY-STAGING-ACTIVATION-2026-09-29.md`).
+
+- **Vercel:** `staging` is a Preview branch, not a Custom Environment.
+  Stable URL: the branch alias `https://dibayar-git-staging-kenji-iwakura.vercel.app`
+  (Deployment Protection SSO on). No custom domain.
+- **Neon:** persistent branch `staging`, id `br-late-grass-aoea90yk`, endpoint
+  `ep-gentle-morning-aofsje23`. Created **schema-only** from `main` so no
+  Production data was copied; migration history baselined with
+  `prisma migrate resolve --applied` for all 12 migrations. Never pruned.
+  Holds synthetic or consented test data only.
+- **Env vars (names/scopes only):** Preview, Git branch `staging`, sensitive:
+  `DATABASE_URL_POSTGRES_URL` (pooled), `DATABASE_URL_POSTGRES_URL_NON_POOLING`
+  (direct), `AUTH_SECRET` (staging-only). `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET`
+  are inherited from generic Preview. Production values untouched.
+- **Precedence proven live:** the branch-scoped vars override the Neon
+  integration's project-wide Config vars at runtime — staging app requests
+  moved the `Session` table scan counter on Neon `staging` one-for-one — and
+  the integration created no extra Neon branch for `staging` deployments.
+- **Migrations:** `scripts/vercel-build.sh` runs `prisma migrate deploy` with
+  `DATABASE_URL_POSTGRES_URL_NON_POOLING`, i.e. against Neon `staging`. A new
+  migration merged to `staging` is applied there before it reaches Production.
+- **OAuth:** `https://dibayar-git-staging-kenji-iwakura.vercel.app/api/auth/callback/google`
+  registered on the generic-Preview OAuth client; live sign-in verified 2026-09-30.
+- **Rotating staging DB credentials:** re-run `vercel env add <VAR> preview staging --sensitive`
+  (after `vercel env rm <VAR> preview staging`) with values from
+  `neonctl cs staging [--pooled]`; never print them. Chris-only if it changes shared settings.
 
 ## Current verified state (2026-09-06, V6.1 production-hardening audit)
 
@@ -323,7 +349,16 @@ Staging and isolated `preview/*` deployments are confidential, access-restricted
 (Vercel SSO), and may be used for technical verification and M4 validation prep
 only when they contain no real customer or financial data, do not process
 payments, and are not announced or shared with users. An openly accessible or
-unrestricted staging/preview requires Chris's approval. Ordinary
+unrestricted staging/preview requires Chris's approval.
+
+**Moderated M4 creator sessions on `staging` are allowed** under the same
+restrictions. A moderator signs in and drives the protected staging deployment
+while a creator watches, by screen-share or in person. Only synthetic/demo data
+is shown (`npm run m4:demo-data`, see `docs/validation/M4-READINESS.md`). No
+creator receives a URL, login, Vercel access, or any infrastructure credential,
+and nothing is recorded without the participant's explicit consent. This does
+not count as "shared with users"; a creator using staging themselves does, and
+needs Chris's approval. Ordinary
 `feature/*`/`fix/*`/`chore/*` branches do not get a hosted deployment at all
 (`docs/DEVELOPMENT-WORKFLOW.md`).
 
@@ -335,7 +370,7 @@ The first production deployment, production-domain assignment, public launch, an
 
 Rollback expectations (revert PR or promote the previous Vercel deployment; forward-only migrations; smoke check afterward) are in `docs/DEVELOPMENT-WORKFLOW.md`. The concrete Vercel/Neon rollback procedure and identifiers are **not yet verified** here. Do not claim a deployment or rollback until the resulting Vercel status and URL have been checked directly; when the procedure is first exercised and verified, record it in this section.
 
-**Deployment filtering (`vercel.json` `git.deploymentEnabled` + `ignoreCommand`), `git.deploymentEnabled` added 2026-09-28, not yet live-verified.** If the allowlist incorrectly blocks a deployment that must go through (e.g. an unforeseen branch-naming case):
+**Deployment filtering (`vercel.json` `git.deploymentEnabled` + `ignoreCommand`), `git.deploymentEnabled` added 2026-09-28, live-verified 2026-09-30.** If the allowlist incorrectly blocks a deployment that must go through (e.g. an unforeseen branch-naming case):
 
 - Fastest for a one-off deploy: a branch that should deploy must match `main`, `staging`, or `preview/**`; rename/re-push it as `preview/<name>` rather than editing config. Both layers (`git.deploymentEnabled` and `scripts/vercel-ignore-build.sh`) must be edited together if the allowlist itself needs to change; `scripts/vercel-ignore-build.test.mjs` fails if they disagree.
 - Dashboard: the **Ignored Build Step** field can be set to always build (e.g. blank, or `exit 1`), but it does **not** override `git.deploymentEnabled` — that only controls whether Vercel creates the deployment in the first place. Verify empirically which one Vercel honors before relying on either during an incident. Changing project settings is Chris's per `docs/DEVELOPMENT-WORKFLOW.md` "Authorization".
