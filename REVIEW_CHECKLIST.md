@@ -28,12 +28,20 @@
 - [ ] Mobile check at 390px width (primary), no horizontal overflow
 - [ ] Bahasa Indonesia copy natural (no literal-translation English structure)
 - [ ] Nothing working was removed/regressed (smoke the main path)
+- [ ] User-facing action added/changed → `docs/testing/journey-coverage.json` updated, and a Playwright journey drives the *visible* control (click/tap/keyboard), not only `goto`/`fill()` on a picker/API; `npm run coverage:journeys` green
 
 ## Gate E — Commit
 - [ ] Small commit(s), message format: `feat|fix|chore(scope): what + why`
 - [ ] STATE.md + relevant docs updated in same or adjacent commit
 - [ ] DAILY_LOG entry for this run exists and ends with a rubric self-score
 - [ ] STATE.md day_count equals the count of Asia/Jakarta calendar days since phase_started with activity
+
+## Gate F — Production release (`staging -> main` PR only)
+<!-- CI-green is not release readiness. These are listed in the release PR body. -->
+- [ ] Full `@critical` + `@a11y` CI green on the release head; latest scheduled `e2e-cross-browser` result linked
+- [ ] Current `docs/testing/JOURNEY-COVERAGE.md` "Outstanding P0/P1 actions" pasted into the PR; every open **P0** (`blocked`, `manual_pending`, `not_covered`, `automated_partial`) is either fixed or explicitly accepted by Chris
+- [ ] `docs/testing/MANUAL-UAT.md` MAN-REL-01 run on staging, plus every P0 manual check, logged with device/browser/date/result
+- [ ] Known-defect expected-failure tests (`test.fail`) listed by finding ID — they are open bugs, not coverage
 
 ## Stop rules
 - Any Gate A–C failure after 2 fix attempts → do not commit; log blocker in STATE.md.

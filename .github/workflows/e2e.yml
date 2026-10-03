@@ -26,6 +26,13 @@ jobs:
       # so it must run explicitly or a regression in the inverted exit-code
       # behavior/branch allowlist could merge with green CI (PR #16 Codex P2).
       - run: npm run test:vercel-ignore-build
+      # User-action inventory (docs/testing/journey-coverage.json): rejects
+      # duplicate IDs, invalid statuses/priorities, test references whose
+      # file or title no longer exists, and a stale generated report. Pure
+      # Node, no build/browser/DB, so it adds seconds. It does not enforce a
+      # coverage percentage -- no threshold is a gate until Chris approves one.
+      - run: npm run test:journey-coverage
+      - run: npm run coverage:journeys
       # Every E2E/UX-audit job below builds with `next build --webpack`
       # (see docs/testing/E2E.md) for a reproducible browser-test target, so
       # nothing else in this workflow exercises the default Turbopack build

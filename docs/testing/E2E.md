@@ -109,6 +109,7 @@ reseed.
 | `npm run test:e2e:headed` | Headed chromium run (assumes a build already exists -- run `npm run e2e:build` first if not) |
 | `npm run test:e2e:ui` | Playwright UI mode |
 | `npm run test:diagnostics-selftest` | Negative-control proof that `browserDiagnostics` (below) still fails a test on a real pageerror/5xx; no build or database needed |
+| `npm run coverage:journeys` / `coverage:journeys:report` | Validate the user-action inventory (`docs/testing/journey-coverage.json`) / regenerate `docs/testing/JOURNEY-COVERAGE.md`; no browser or DB needed |
 
 `E2E_PORT` (default 3300) and `E2E_SKIP_WEBSERVER=1` (reuse an already-running
 server, e.g. for `test:e2e:headed`/`:ui` iteration) are available as env
@@ -228,10 +229,34 @@ judged against an assertion rather than against a picture.
 - The Escape-key dialog-close test uses a short empirical `waitForTimeout`
   rather than a semantic wait -- see the comment at
   `e2e/deals/add-deal-dialog.spec.ts` for what was tried and why.
-- The due-date persistence journey is skipped only in `chromium-mobile`
-  because Chromium's emulated native date picker does not accept a stable
-  programmatic `fill()`; the same server-backed persistence path is exercised
-  on desktop, while mobile still covers invoice rendering and actions.
+- The due-date persistence journey ("due date edits and clears persist after
+  reload") is skipped only in `chromium-mobile` because Chromium's emulated
+  native date picker does not accept a stable programmatic `fill()`. It sets
+  the hidden input with `fill()`, so it proves server persistence, **not**
+  that a person can use the field. The visible entry point is covered by
+  `e2e/invoices/due-date-entry.spec.ts`. That file observes the native picker
+  through Chromium's `:open` pseudo-class and carries two **expected-failure**
+  (`test.fail()`) tests for open defects FIND-02 (click/tap on the visible
+  empty field does not open the picker) and FIND-03 (desktop keyboard entry
+  saves year 0002 and breaks the invoice page). A product fix makes them
+  report "Expected to fail, but passed"; remove the annotation in that fix
+  PR. Choosing a date inside a native picker is not automatable and stays
+  manual (`docs/testing/MANUAL-UAT.md` MAN-DUE-01).
+
+## User-action inventory and coverage report
+
+`docs/testing/journey-coverage.json` inventories every user-facing action,
+with its priority, its status (`automated_real_interaction`,
+`automated_partial`, `manual_verified`, `manual_pending`, `not_covered`,
+`blocked`, `not_applicable`), the exact tests that cover it, and what kind of
+proof each test gives. The classification rules are in the file itself.
+`npm run coverage:journeys` (run in CI's `lint-typecheck-test` job) rejects
+duplicate IDs, unknown statuses, test references whose file or title no
+longer exists, and a stale report. `docs/testing/JOURNEY-COVERAGE.md` is
+generated from the inventory, and `docs/testing/JOURNEY-GRAPHS.md` holds the
+state graphs. No coverage percentage is a gate; adding one needs Chris's
+approval. When you rename or add a journey test, update the inventory in
+the same PR.
 - No sharding configured yet (`workers: 1` everywhere) -- deliberate until the
   suite has a longer track record; `playwright.e2e.config.ts` is a single
   place to add `shard` support later.
