@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "inventoryDate": "2026-10-04",
-  "baseline": "origin/staging b51fba1 (PR #26 merged) + branch chore/journey-coverage-2026-10-03",
+  "baseline": "origin/staging a11b8a4 (PR #25 merged) + branch chore/zero-routine-regression-phase1-2026-10-04 (Batch 1)",
   "classificationRules": [
     "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
     "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
@@ -270,7 +270,7 @@
           "note": "Component test with mocked fetch/window.open"
         }
       ],
-      "followUp": "Batch 1"
+      "followUp": "Batch 2: needs the overdue-invoice fixture. The current seed has no invoice in the follow-up queue (the SENT invoice is due 2099-12-31, the other is PAID), so a browser test cannot reach Kirim pengingat without changing fixture topology (assessed 2026-10-04)"
     },
     {
       "id": "HOME-04",
@@ -444,9 +444,21 @@
         "chromium"
       ],
       "priority": "P1",
-      "status": "not_covered",
-      "evidence": "Only the top bar's + Deal and 'Deal siap ditagih' links are clicked (NAV-03, NAV-05)",
-      "followUp": "Batch 1"
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/smoke/desktop-nav.spec.ts",
+          "title": "side nav moves between Beranda, Deal, Invoice, and Pengaturan at desktop width",
+          "kind": "real",
+          "note": ">=1024px SideNav; route, section content and aria-current per click"
+        },
+        {
+          "file": "e2e/smoke/desktop-nav.spec.ts",
+          "title": "top-bar nav moves between Beranda, Deal, Invoice, and Pengaturan at 800px",
+          "kind": "real",
+          "note": "640-1023px TopBar inline nav, via a viewport override inside the chromium project"
+        }
+      ]
     },
     {
       "id": "NAV-03",
@@ -734,16 +746,21 @@
         "chromium"
       ],
       "priority": "P0",
-      "status": "automated_partial",
+      "status": "automated_real_interaction",
       "tests": [
+        {
+          "file": "e2e/deals/desktop-create-entry.spec.ts",
+          "title": "clicking the top-bar + Deal from Beranda creates a deal whose stored values show on its detail page after reload",
+          "kind": "real",
+          "note": "Starts on Beranda, clicks the top-bar + Deal, fills every visible text field, saves, reloads, opens the card menu -> Lihat detail, and checks fee, scope, payment terms, contact name, WhatsApp, stage and history. Negative controls (2026-10-04): a non-clickable + Deal and a + Deal linking to plain /deal each fail it"
+        },
         {
           "file": "e2e/deals/deal-crud.spec.ts",
           "title": "create a deal via the dialog, happy path",
           "kind": "partial",
-          "note": "Opens the dialog with page.goto(/deal?tambah=1); entry click proven separately by NAV-03 but never in the same journey"
+          "note": "Opens the dialog with page.goto(/deal?tambah=1): the URL contract, not the entry point"
         }
-      ],
-      "followUp": "Batch 1: start the existing happy path from the top bar click instead of the URL"
+      ]
     },
     {
       "id": "DEAL-CREATE-02",
@@ -927,9 +944,21 @@
         "chromium-mobile"
       ],
       "priority": "P1",
-      "status": "not_covered",
-      "evidence": "t27 card-menu check only asserts that adjacent items exist",
-      "followUp": "Batch 1"
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/stage-back.spec.ts",
+          "title": "Kembali ke Nego on deal detail moves the deal back, records history, and survives reload",
+          "kind": "real",
+          "note": "Detail reached through the card menu; asserts stage, the next back/forward buttons, the 'Deal → Nego' history entry after reload, and the board filters"
+        },
+        {
+          "file": "e2e/deals/stage-back.spec.ts",
+          "title": "Kembali ke Deal from a board card's menu moves the card back, records history, and survives reload",
+          "kind": "real",
+          "note": "Card menu path; asserts the card leaves Konten and appears under Deal, after reload too, and the 'Konten → Deal' history entry"
+        }
+      ]
     },
     {
       "id": "DEAL-STAGE-03",
@@ -1018,18 +1047,20 @@
       "persisted": "n/a",
       "alternates": "Board cards have no link of their own; the menu is the only card-level path",
       "scope": [
+        "chromium",
         "chromium-mobile"
       ],
       "priority": "P1",
       "status": "automated_real_interaction",
       "tests": [
         {
-          "file": "e2e/deals/mobile-create-entry.spec.ts",
-          "title": "tapping the floating + Deal button from Beranda creates a deal that persists with the typed values",
-          "kind": "real"
+          "file": "e2e/deals/stage-back.spec.ts",
+          "title": "Kembali ke Nego on deal detail moves the deal back, records history, and survives reload",
+          "kind": "real",
+          "note": "Board card menu -> Lihat detail in both projects; asserts URL, brand, stage, fee and scope of the seeded deal"
         }
       ],
-      "followUp": "Desktop click path is not covered; fold into Batch 1 DEAL-CREATE-01 rewrite"
+      "evidence": "The create-deal journeys also open the new deal this way and check every stored value: e2e/deals/desktop-create-entry.spec.ts (chromium) and e2e/deals/mobile-create-entry.spec.ts (chromium-mobile). They are not listed as references because each is skipped in the other project, which the run-results check rejects for a real reference"
     },
     {
       "id": "DEAL-DETAIL-02",
@@ -1704,7 +1735,7 @@
       "persona": "owner",
       "preconditions": "",
       "interaction": "Click Unduh PDF",
-      "expected": "PDF download with matching content",
+      "expected": "PDF download with matching content, including bank details last saved in Settings (moved from SET-03)",
       "persisted": "n/a",
       "alternates": "Incomplete issuer settings",
       "scope": [
@@ -1722,7 +1753,7 @@
         }
       ],
       "manualCheck": "MAN-PDF-01",
-      "followUp": "Batch 2: click the link and capture the download event"
+      "followUp": "Batch 2: click the link and capture the download event; check the text (e.g. pdftotext, as the ux-audit job does), including bank details edited in Settings"
     },
     {
       "id": "INV-OWN-01",
@@ -1860,8 +1891,8 @@
       "action": "Copy the share link",
       "persona": "owner",
       "preconditions": "Active share",
-      "interaction": "Click Salin tautan",
-      "expected": "'Tautan disalin.' and clipboard holds the link; on failure, manual-copy fallback",
+      "interaction": "Click Salin (the link field copy button, accessible name \"Salin tautan invoice\")",
+      "expected": "The button reads \"Tersalin\" and the clipboard holds the full public link; on failure, an alert and a manual-copy field with the link",
       "persisted": "n/a",
       "alternates": "Clipboard denied",
       "scope": [
@@ -1869,8 +1900,20 @@
         "manual: phones"
       ],
       "priority": "P1",
-      "status": "automated_partial",
+      "status": "automated_real_interaction",
       "tests": [
+        {
+          "file": "e2e/invoices/share-copy.spec.ts",
+          "title": "Salin copies the exact public invoice link to the clipboard and confirms it",
+          "kind": "real",
+          "note": "Clipboard permissions granted to the test context for the app origin only; reads the system clipboard back and requires origin + /i/<seeded token>, plus the 'Tersalin' feedback"
+        },
+        {
+          "file": "e2e/invoices/share-copy.spec.ts",
+          "title": "when the browser refuses the copy, Salin shows the manual-copy fallback with the full link",
+          "kind": "partial",
+          "note": "Clipboard-denied alternate: navigator.clipboard.writeText is stubbed to reject; the click and fallback UI are real"
+        },
         {
           "file": "src/components/invoices/share-link-field.test.tsx",
           "title": "",
@@ -1878,8 +1921,7 @@
           "note": "Component test with mocked clipboard"
         }
       ],
-      "manualCheck": "MAN-SHARE-01",
-      "followUp": "Batch 1 (grant clipboard permissions in Chromium and read it back)"
+      "manualCheck": "MAN-SHARE-01"
     },
     {
       "id": "PUB-01",
@@ -2120,11 +2162,11 @@
       "id": "SET-03",
       "domain": "settings",
       "route": "/pengaturan",
-      "action": "Update bank details; they appear on invoice/PDF",
+      "action": "Update bank details; they persist and appear on the recipient invoice page",
       "persona": "owner",
       "preconditions": "",
-      "interaction": "Edit bank name/account/holder, save, reload, open public invoice",
-      "expected": "Persisted and shown to the recipient",
+      "interaction": "Edit bank name/account/holder, save, reload, open the invoice share link as the recipient",
+      "expected": "Persisted after reload and navigation; shown in the recipient page's payment block (/i/<token>)",
       "persisted": "UserSettings bank fields",
       "alternates": "Required-field errors",
       "scope": [
@@ -2132,8 +2174,22 @@
         "chromium-mobile"
       ],
       "priority": "P1",
-      "status": "not_covered",
-      "followUp": "Batch 1"
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/settings/bank-details.spec.ts",
+          "title": "edited bank details persist after reload and appear on the recipient's invoice page",
+          "kind": "real",
+          "note": "Edits the three bank fields with synthetic values, saves, reloads, navigates away and back, then opens the invoice's share link in a separate session-less context with the project's device emulation and checks the 'Pembayaran ke' block. The PDF outcome is tracked under INV-PDF-01"
+        },
+        {
+          "file": "e2e/settings/bank-details.spec.ts",
+          "title": "clearing a required bank field shows a field error and saves nothing",
+          "kind": "real",
+          "note": "Required-field alternate: no PATCH is sent; reload shows the seeded values"
+        }
+      ],
+      "evidence": "Narrowed 2026-10-04 (PR #27 review): the PDF half of the original \"invoice/PDF\" wording is not exercised here and moved to INV-PDF-01, which stays partial"
     },
     {
       "id": "SET-04",
@@ -2189,8 +2245,14 @@
         "chromium-mobile"
       ],
       "priority": "P1",
-      "status": "automated_partial",
+      "status": "automated_real_interaction",
       "tests": [
+        {
+          "file": "e2e/settings/language.spec.ts",
+          "title": "choosing English in Settings persists across reload and pages, and Indonesia switches it back",
+          "kind": "real",
+          "note": "Clicks English, reloads, navigates via the English nav to invoice detail ('Due date'), clears the due date with 'Clear' ('Due: Not set', also after reload), switches back with Indonesia and reloads. Reseeds before and after"
+        },
         {
           "file": "tests/ux-audit/t27.verification.spec.ts",
           "title": "executes the 123-capture matrix and non-visual checks",
@@ -2198,8 +2260,7 @@
           "note": "Switches language via page.evaluate fetch to /api/me/language, never the buttons"
         }
       ],
-      "evidence": "The Production due-date report was in English ('Not set'); no test drives the language buttons",
-      "followUp": "Batch 1"
+      "evidence": "The Production due-date report was in English ('Not set'). The rate-limited PATCH (429) alternate is not exercised in a browser"
     },
     {
       "id": "SET-07",

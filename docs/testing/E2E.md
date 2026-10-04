@@ -94,6 +94,15 @@ deal at stage X" go stale. Read-only/filter-only specs
 (`deals/filter-navigation.spec.ts`, `deals/add-deal-dialog.spec.ts`) need no
 reseed.
 
+Specs that change per-user state every other test depends on
+(`settings/language.spec.ts` changes `User.language`,
+`settings/bank-details.spec.ts` changes `UserSettings`) reseed in an
+`afterEach` as well, so a failure halfway can't leave the next test in
+English or with other bank details. `invoices/share-copy.spec.ts` grants
+`clipboard-read`/`clipboard-write` only to its own browser context and only
+for the app origin, and compares the clipboard as a boolean so a failure never
+prints the share token.
+
 ## Commands
 
 | Command | What it does |
