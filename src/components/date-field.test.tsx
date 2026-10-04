@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { DateField } from "./date-field";
 
 const baseProps = {
@@ -138,6 +139,150 @@ describe("DateField", () => {
 
     await act(async () => resolvers[1]({ ok: true }));
     expect(onCommit).toHaveBeenCalledTimes(2);
+  });
+
+  // A parent like InvoiceDetailClient: `value` changes only when a save is
+  // confirmed. Each onCommit call waits for the test to settle it.
+  describe("failed saves (PR #26 review)", () => {
+    function setup(initial: string) {
+      const settles: Array<(ok: boolean) => void> = [];
+      const onCommit = vi.fn((next: string | null) => new Promise<{ ok: boolean }>((resolve) => {
+        settles.push((ok) => {
+          if (ok) setPersisted(next ?? "");
+          resolve({ ok });
+        });
+      }));
+      let setPersisted: (next: string) => void = () => {};
+      function Parent() {
+        const [persisted, set] = useState(initial);
+        setPersisted = set;
+        return <DateField {...baseProps} value={persisted} onCommit={onCommit} />;
+      }
+      render(<Parent />);
+      const settle = async (index: number, ok: boolean) => {
+        await waitFor(() => expect(settles.length).toBeGreaterThan(index));
+        await act(async () => settles[index](ok));
+      };
+      return { onCommit, settle };
+    }
+
+    const display = () => input().nextElementSibling?.textContent;
+
+    it("a failed picker selection shows the persisted date again with the error, and a retry saves", async () => {
+      const { onCommit, settle } = setup("2026-07-24");
+
+      fireEvent.change(input(), { target: { value: "2026-08-15" } });
+      await settle(0, false);
+
+      expect(screen.getByRole("alert").textContent).toBe(baseProps.errorLabel);
+      expect(display()).toBe("24 Jul 2026");
+      expect(input().value).toBe("2026-07-24");
+      expect(screen.queryByText("Tersimpan")).toBeNull();
+
+      fireEvent.change(input(), { target: { value: "2026-08-15" } });
+      expect(onCommit).toHaveBeenCalledTimes(2);
+      expect(onCommit).toHaveBeenLastCalledWith("2026-08-15");
+      await settle(1, true);
+
+      expect(display()).toBe("15 Agu 2026");
+      expect(screen.getByText("Tersimpan")).toBeDefined();
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("a failed Kosongkan brings the old date back (not an empty field), keeps Kosongkan, and a retry clears", async () => {
+      const { onCommit, settle } = setup("2026-07-24");
+
+      fireEvent.click(screen.getByRole("button", { name: "Kosongkan" }));
+      expect(display()).toBe("Belum ditentukan");
+      await settle(0, false);
+
+      expect(screen.getByRole("alert")).toBeDefined();
+      expect(display()).toBe("24 Jul 2026");
+
+      fireEvent.click(screen.getByRole("button", { name: "Kosongkan" }));
+      expect(onCommit).toHaveBeenLastCalledWith(null);
+      await settle(1, true);
+
+      expect(display()).toBe("Belum ditentukan");
+      expect(screen.queryByRole("button", { name: "Kosongkan" })).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("a failed native (picker) clear also restores the old date", async () => {
+      const { settle } = setup("2026-07-24");
+
+      fireEvent.change(input(), { target: { value: "" } });
+      await settle(0, false);
+
+      expect(display()).toBe("24 Jul 2026");
+      expect(screen.getByRole("alert")).toBeDefined();
+    });
+
+    it("a failed typed date (Enter) reverts to the persisted date and a retry on Enter saves", async () => {
+      const { onCommit, settle } = setup("");
+
+      typeSegment("2", "2030-01-15");
+      fireEvent.keyDown(input(), { key: "Enter" });
+      await settle(0, false);
+
+      expect(display()).toBe("Belum ditentukan");
+      expect(input().value).toBe("");
+      expect(screen.getByRole("alert")).toBeDefined();
+
+      typeSegment("2", "2030-01-15");
+      fireEvent.keyDown(input(), { key: "Enter" });
+      expect(onCommit).toHaveBeenLastCalledWith("2030-01-15");
+      await settle(1, true);
+      expect(display()).toBe("15 Jan 2030");
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("newest intent wins: earlier save succeeds, queued newest fails -> shows the earlier confirmed date", async () => {
+      const { onCommit, settle } = setup("2026-07-24");
+
+      fireEvent.change(input(), { target: { value: "2026-08-01" } });
+      fireEvent.change(input(), { target: { value: "2026-08-02" } });
+      fireEvent.change(input(), { target: { value: "2026-08-03" } });
+      await settle(0, true);
+      // While the newest intent is saving, it stays on screen.
+      expect(display()).toBe("3 Agu 2026");
+      expect(screen.getByText("Menyimpan…")).toBeDefined();
+      await settle(1, false);
+
+      expect(onCommit.mock.calls.map(([v]) => v)).toEqual(["2026-08-01", "2026-08-03"]);
+      expect(display()).toBe("1 Agu 2026");
+      expect(screen.getByRole("alert")).toBeDefined();
+      expect(screen.queryByText("Tersimpan")).toBeNull();
+    });
+
+    it("newest intent wins: earlier save fails, queued newest succeeds -> saved, no error", async () => {
+      const { settle } = setup("2026-07-24");
+
+      fireEvent.change(input(), { target: { value: "2026-08-01" } });
+      fireEvent.change(input(), { target: { value: "2026-08-03" } });
+      await settle(0, false);
+      await settle(1, true);
+
+      expect(display()).toBe("3 Agu 2026");
+      expect(screen.getByText("Tersimpan")).toBeDefined();
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("never overwrites a keyboard draft begun while the failing request was in flight", async () => {
+      const { onCommit, settle } = setup("2026-07-24");
+
+      fireEvent.change(input(), { target: { value: "2026-08-15" } });
+      typeSegment("3", "2031-03-03");
+      await settle(0, false);
+
+      expect(screen.getByRole("alert")).toBeDefined();
+      expect(input().value).toBe("2031-03-03");
+      expect(onCommit).toHaveBeenCalledTimes(1);
+
+      // Escape still drops that draft back to the persisted value.
+      fireEvent.keyDown(input(), { key: "Escape" });
+      expect(display()).toBe("24 Jul 2026");
+    });
   });
 
   describe("keyboard entry (FIND-03)", () => {

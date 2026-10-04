@@ -29,7 +29,9 @@ function isSegmentEditKey(key: string): boolean {
 // commit only on an intentional completion -- Enter or leaving the field --
 // and only when the draft is a complete date inside [min, max]. Escape drops
 // an uncommitted keyboard draft. Commits are serialized: one request in
-// flight at a time, and only the newest pending intent is sent after it.
+// flight at a time, and only the newest pending intent is sent after it. If
+// that newest intent fails, the field shows the last confirmed value again
+// beside the error, so an unsaved date never looks saved.
 export function DateField({
   id,
   label,
@@ -75,16 +77,23 @@ export function DateField({
   const [isDirty, setIsDirty] = useState(false);
   const [hasInvalidInput, setHasInvalidInput] = useState(false);
   // Adopt a newly persisted value (a save resolving, or a parent refresh)
-  // unless the person is mid-way through typing a different one -- set during
+  // unless the person is mid-way through typing a different one, or a commit
+  // chain is still saving: the draft then already shows the newest intent,
+  // and an earlier request in the chain landing must not swap it for an older
+  // date. The chain's own outcome settles the draft (see commit). Set during
   // render rather than in an effect, so the input never flashes stale.
   const [syncedValue, setSyncedValue] = useState(value);
   if (value !== syncedValue) {
     setSyncedValue(value);
-    if (!isDirty) setDraft(value);
+    if (!isDirty && status !== "saving") setDraft(value);
   }
 
   const inputRef = useRef<HTMLInputElement>(null);
   const typingRef = useRef(false);
+  // Mirrors of `isDirty` and `value` for the async commit loop, which
+  // outlives the render that started it.
+  const isDirtyRef = useRef(false);
+  const valueRef = useRef(value);
   const inFlightRef = useRef(false);
   const queuedRef = useRef<{ next: string | null } | null>(null);
   // The value most recently sent or queued while a request is in flight, so a
@@ -97,6 +106,15 @@ export function DateField({
       if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
+
+  function setDirty(next: boolean) {
+    isDirtyRef.current = next;
+    setIsDirty(next);
+  }
 
   async function commit(next: string | null) {
     if (inFlightRef.current) {
@@ -114,8 +132,12 @@ export function DateField({
     setStatus("saving");
     let pending: string | null = next;
     let ok = false;
+    // The newest value a request in this chain actually persisted. The parent
+    // adopts it too, but its new `value` prop may not have rendered yet.
+    let confirmed: { value: string | null } | null = null;
     for (;;) {
       ok = (await onCommit(pending)).ok;
+      if (ok) confirmed = { value: pending };
       const queued = queuedRef.current;
       queuedRef.current = null;
       if (!queued) break;
@@ -126,7 +148,16 @@ export function DateField({
       setStatus("saved");
       savedTimeoutRef.current = setTimeout(() => setStatus("idle"), SAVED_DISPLAY_MS);
     } else {
+      // The newest intent was not saved. Never leave it on screen as if it
+      // were: show the last confirmed value again (a failed clear brings the
+      // old date back) beside the error, and let the next pick, Enter/blur,
+      // or clear retry it. A keyboard draft begun while the request was in
+      // flight is newer than the failed intent, so it is left alone.
       setStatus("error");
+      if (!isDirtyRef.current) {
+        setDraft(confirmed ? (confirmed.value ?? "") : valueRef.current);
+        setHasInvalidInput(false);
+      }
     }
   }
 
@@ -143,7 +174,7 @@ export function DateField({
         setHasInvalidInput(true);
         return;
       }
-      setIsDirty(false);
+      setDirty(false);
       setHasInvalidInput(false);
       void commit(null);
       return;
@@ -153,7 +184,7 @@ export function DateField({
       setHasInvalidInput(true);
       return;
     }
-    setIsDirty(false);
+    setDirty(false);
     setHasInvalidInput(false);
     void commit(current);
   }
@@ -161,18 +192,18 @@ export function DateField({
   function handleChange(next: string) {
     setDraft(next);
     if (typingRef.current) {
-      setIsDirty(true);
+      setDirty(true);
       setHasInvalidInput(false);
       return;
     }
     // Not preceded by a segment-edit key: a picker choice or the native
     // clear. Commit at once if it's a usable value.
     if (next === "" || (checkDueDateInput(next).kind === "valid" && next >= min && next <= max)) {
-      setIsDirty(false);
+      setDirty(false);
       setHasInvalidInput(false);
       void commit(next || null);
     } else {
-      setIsDirty(true);
+      setDirty(true);
       setHasInvalidInput(true);
     }
   }
@@ -186,7 +217,7 @@ export function DateField({
     } else if (event.key === "Escape" && isDirty) {
       typingRef.current = false;
       setDraft(value);
-      setIsDirty(false);
+      setDirty(false);
       setHasInvalidInput(false);
     }
   }
@@ -262,7 +293,7 @@ export function DateField({
             type="button"
             disabled={disabled}
             onClick={() => {
-              setIsDirty(false);
+              setDirty(false);
               setHasInvalidInput(false);
               setDraft("");
               void commit(null);

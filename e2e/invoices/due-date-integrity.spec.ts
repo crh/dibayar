@@ -19,19 +19,22 @@
 //
 // Picker-open observability: Chromium supports the `:open` pseudo-class on
 // <input type="date">, true only while the native picker is showing -- a
-// real browser state, not app state. Engines without `:open` skip that
+// real browser state, not app state. Chromium must support it (a missing
+// `:open` fails there); other engines without `:open` skip that
 // assertion (feature-detected, not assumed). Choosing a date *inside* the
 // native picker cannot be driven from Playwright; that stays manual UAT.
 import type { Locator, Page, Request } from "@playwright/test";
 import { expect, test } from "../support/test";
 import { loadFixtureManifest } from "../support/manifest";
 import { reseedFixtures, seedLegacyInvalidDueDate } from "../support/reseed";
+import { E2E_FIXTURE_PREFIX } from "../support/fixture-ids";
 
 const FIELD_LABEL = "Tanggal jatuh tempo";
 const EMPTY_LABEL = "Belum ditentukan";
 const INVALID_STORED_LABEL = "Tanggal tidak valid";
 // The seeded SENT invoice's due date (FIXTURE_FUTURE_DATE).
 const SEEDED_DISPLAY = "31 Des 2099";
+const SAVE_ERROR = "Tanggal jatuh tempo belum bisa diperbarui. Coba lagi.";
 
 function isInvoicePatchRequest(invoiceId: string) {
   return (request: Request) =>
@@ -126,7 +129,7 @@ test.describe("invoice due-date integrity (FIND-02, FIND-03)", { tag: "@critical
   test.beforeEach(reseedFixtures);
 
   for (const state of ["empty", "filled"] as const) {
-    test(`clicking or tapping the visible ${state} due-date text opens the native date picker`, async ({ page, isMobile }) => {
+    test(`clicking or tapping the visible ${state} due-date text opens the native date picker`, async ({ page, browserName, isMobile }) => {
       const manifest = loadFixtureManifest();
       const invoiceId = manifest.invoices.sent;
       await page.goto(`/invoice/${invoiceId}`);
@@ -136,7 +139,11 @@ test.describe("invoice due-date integrity (FIND-02, FIND-03)", { tag: "@critical
       }
 
       const input = page.getByLabel(FIELD_LABEL);
-      test.skip(!(await supportsOpenPseudoClass(input)), ":open is unsupported here, so the native picker state is not observable; covered by manual UAT");
+      // Chromium is known to support :open, so there it must never skip: a
+      // missing :open fails loudly below instead. Other engines are
+      // feature-detected.
+      const openSupported = await supportsOpenPseudoClass(input);
+      test.skip(browserName !== "chromium" && !openSupported, ":open is unsupported here, so the native picker state is not observable; covered by manual UAT");
       await expect.poll(() => input.evaluate((element) => element.matches(":open"))).toBe(false);
 
       await activateVisibleText(page, visibleDisplay(page, state === "empty" ? EMPTY_LABEL : SEEDED_DISPLAY), isMobile);
@@ -301,6 +308,97 @@ test.describe("invoice due-date integrity (FIND-02, FIND-03)", { tag: "@critical
       await expect(page.getByText(expected).first(), `${path} did not render the legacy invoice`).toBeVisible();
       await expect(page.getByText("Gagal memuat.")).toHaveCount(0);
     }
+  });
+
+  // PR #26 review: a failed save must never leave the attempted date (or an
+  // empty field, after a failed clear) on screen as if it were saved. The
+  // field shows the stored date again beside the error, and a retry works.
+  // The failure is injected in the browser with page.route as a 409 so only
+  // the next due-date PATCH fails; the client treats any non-OK response or
+  // network error the same way. The real database is checked through
+  // page.request, which page.route does not intercept.
+  test.describe("failed saves", () => {
+    test.use({ expectedErrorResponses: [{ method: "PATCH", pathname: `/api/invoices/${E2E_FIXTURE_PREFIX}-invoice-sent` }] });
+
+    async function failNextDueDatePatch(page: Page, invoiceId: string) {
+      let armed = true;
+      await page.route(`**/api/invoices/${invoiceId}`, async (route) => {
+        if (armed && route.request().method() === "PATCH") {
+          armed = false;
+          await route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "simulated failure" }) });
+          return;
+        }
+        await route.fallback();
+      });
+    }
+
+    async function storedDueDate(page: Page, invoiceId: string) {
+      return (await (await page.request.get(`/api/invoices/${invoiceId}`)).json()).invoice.dueDate as string | null;
+    }
+
+    test("a failed Kosongkan shows the stored date again with an error, and a retry clears it", async ({ page }) => {
+      const manifest = loadFixtureManifest();
+      const invoiceId = manifest.invoices.sent;
+      expect(invoiceId).toBe(`${E2E_FIXTURE_PREFIX}-invoice-sent`);
+      await page.goto(`/invoice/${invoiceId}`);
+      const input = page.getByLabel(FIELD_LABEL);
+      await failNextDueDatePatch(page, invoiceId);
+
+      const failed = page.waitForResponse((response) => isInvoicePatchRequest(invoiceId)(response.request()));
+      await page.getByRole("button", { name: "Kosongkan" }).click();
+      expect((await failed).status()).toBe(409);
+
+      await expect(page.getByText(SAVE_ERROR)).toBeVisible();
+      await expect(visibleDisplay(page, SEEDED_DISPLAY)).toBeVisible();
+      await expect(visibleDisplay(page, EMPTY_LABEL)).toHaveCount(0);
+      await expect(input).toHaveValue("2099-12-31");
+      await expect(page.getByText("Tersimpan", { exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Kosongkan" })).toBeVisible();
+      expect(await storedDueDate(page, invoiceId)).toBe("2099-12-31T00:00:00.000Z");
+
+      await clearThroughUi(page, invoiceId);
+      await expect(visibleDisplay(page, EMPTY_LABEL)).toBeVisible();
+      await expect(page.getByText(SAVE_ERROR)).toHaveCount(0);
+      expect(await storedDueDate(page, invoiceId)).toBeNull();
+      await page.reload();
+      await expect(visibleDisplay(page, EMPTY_LABEL)).toBeVisible();
+    });
+
+    test("a failed typed date (Enter) shows the stored date again with an error, and retyping saves it", async ({ page }, testInfo) => {
+      test.skip(testInfo.project.name !== "chromium", "desktop Chromium keyboard path");
+      const manifest = loadFixtureManifest();
+      const invoiceId = manifest.invoices.sent;
+      await page.goto(`/invoice/${invoiceId}`);
+      const input = page.getByLabel(FIELD_LABEL);
+      await failNextDueDatePatch(page, invoiceId);
+      const sent = recordDueDatePatches(page, invoiceId);
+
+      await focusFieldForTyping(page, visibleDisplay(page, SEEDED_DISPLAY));
+      await page.keyboard.type("01152030", { delay: 30 });
+      await expect(input).toHaveValue("2030-01-15");
+      const failed = page.waitForResponse((response) => isInvoicePatchRequest(invoiceId)(response.request()));
+      await page.keyboard.press("Enter");
+      expect((await failed).status()).toBe(409);
+
+      await expect(page.getByText(SAVE_ERROR)).toBeVisible();
+      await expect(visibleDisplay(page, SEEDED_DISPLAY)).toBeVisible();
+      await expect(input).toHaveValue("2099-12-31");
+      expect(await storedDueDate(page, invoiceId)).toBe("2099-12-31T00:00:00.000Z");
+
+      await focusFieldForTyping(page, visibleDisplay(page, SEEDED_DISPLAY));
+      await page.keyboard.type("01152030", { delay: 30 });
+      const saved = page.waitForResponse((response) => isInvoicePatchRequest(invoiceId)(response.request()));
+      await page.keyboard.press("Enter");
+      expect((await saved).ok()).toBe(true);
+      await expect(visibleDisplay(page, "15 Jan 2030")).toBeVisible();
+      await expect(page.getByText(SAVE_ERROR)).toHaveCount(0);
+      await leaveFieldWithTab(page);
+      await page.waitForLoadState("networkidle");
+      expect(sent).toEqual(["2030-01-15", "2030-01-15"]);
+
+      await page.reload();
+      await expect(input).toHaveValue("2030-01-15");
+    });
   });
 
   // The server contract, against the real database (unit tests cover the
