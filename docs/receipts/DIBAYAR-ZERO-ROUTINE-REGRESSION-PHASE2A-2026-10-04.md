@@ -117,7 +117,16 @@ The new specs and `invoice-journeys.spec.ts` ran on `firefox` and `webkit`. The 
 
 ## 10. PR and CI
 
-PR_CI_PLACEHOLDER
+- **PR:** https://github.com/crh/dibayar/pull/28 (`chore/zero-routine-regression-phase2a-2026-10-04` → `staging`), open, **not merged**.
+- **CI run `37205285661`** on head `6f839b6c2425b6839affcbd308a4e0b40030a87e`: **success**.
+  - `lint-typecheck-test`: success.
+  - `e2e-critical`: success, 133 passed, 23 skipped; `coverage:journeys --results` = 87 real claims passed, 5 not exercised by the @critical run (4 ux-audit, A11Y-02), the same split as local.
+  - `e2e-a11y`: success, 12 passed, 1 skipped.
+  - `ux-audit`: success, specs 69/69; **`@visual` 9/9 passed under CI's renderer**, overall PASS, 0 findings. That confirms the local failures were host drift.
+  - `e2e-cross-browser`: skipped by design (scheduled lane).
+- This receipt's own follow-up commit is docs-only; its CI run is recorded in the PR conversation, not here.
+- **Review threads:** none at the time of writing (0 threads, 0 reviews).
+- **No Preview or hosted DB:** the head SHA has no commit statuses and 0 GitHub deployments (by SHA and by branch), so Vercel did not deploy this ordinary `chore/*` branch. No Neon branch was created by this work; Neon itself was not inspected (no access, Chris-only).
 
 ## 11. Residual risks and limits
 
@@ -129,6 +138,6 @@ PR_CI_PLACEHOLDER
 
 ## 12. Final state
 
-- Branch `chore/zero-routine-regression-phase2a-2026-10-04`, head: see §10. The PR into `staging` is review-ready and **not merged**; merging needs Chris.
+- Branch `chore/zero-routine-regression-phase2a-2026-10-04`; last CI-verified code head `6f839b6` (§10), followed only by this docs commit. The PR into `staging` is review-ready and **not merged**; merging needs Chris.
 - No Preview, Neon branch, hosted DB, `main`, Production, OAuth or repository-setting change.
 - Local disposable DB: fixtures cleaned up by global teardown after the last run.
