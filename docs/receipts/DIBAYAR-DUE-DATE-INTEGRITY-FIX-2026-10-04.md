@@ -3,7 +3,7 @@
 **Date:** 2026-10-04 (Asia/Jakarta) · **Worker:** Claude Code (Klaus)
 **Branch:** `fix/due-date-input-integrity-2026-10-04` · **Base:** `origin/staging` @ `27d3ab11fdba53ff23404a39d77c1681761093a5`
 **Fix commit:** `0bb7314d72d4f704ad2776054745e672dd3fdeb0` (later commits on this branch are docs-only)
-**PR:** _filled in after opening_ · **CI:** _filled in after the run_
+**PR:** https://github.com/crh/dibayar/pull/26 (→ `staging`, open) · **CI:** run [`37166145132`](https://github.com/crh/dibayar/actions/runs/37166145132) on `227d8cb`: `lint-typecheck-test` ✅ · `e2e-critical` ✅ · `e2e-a11y` ✅ · `ux-audit` ✅ · `e2e-cross-browser` skipped (by design: schedule/dispatch only). No GitHub deployment and no Vercel commit status were created for the branch (checked via `gh api`). Neon was not inspected (out of authorization scope).
 **Status:** PR into `staging`, **not merged**. Nothing deployed. No Production or hosted-staging database touched.
 
 ## 1. Recon (verified, not assumed)
