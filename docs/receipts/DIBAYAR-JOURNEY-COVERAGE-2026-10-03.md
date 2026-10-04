@@ -117,3 +117,49 @@ No product source changed in the committed diff. No Production or hosted-staging
 - Implementation commit: `ded4ba2` (this receipt's delivery section is a follow-up docs commit).
 - CI run `37120793919` on `ded4ba2`: `lint-typecheck-test` success (vitest 780/780, journey-coverage self-test 9/9, `coverage:journeys` OK), `e2e-critical` success (91 passed incl. 3 expected failures, 13 skipped — identical to local), `e2e-a11y` success, `ux-audit` success, `e2e-cross-browser` skipped (schedule/dispatch only, by design).
 - Gate 5 check (read-only): 0 GitHub deployments and no Vercel commit status for the branch. Neon branch list was not checked in this session.
+
+## Review follow-up (2026-10-04, Codex P2 on `scripts/journey-coverage.mjs:91`)
+
+**Finding:** the validator matched a referenced title anywhere in the file's text and trusted the declared `kind`. A commented-out test, a renamed test still named in a comment (e.g. the NAV-03 title repeated in a comment in `add-deal-dialog.spec.ts`), or a `test.skip()` / `test.fail()` test would all keep counting as real coverage.
+
+**Before (proved):** the old validator (`git show 80173c8:scripts/journey-coverage.mjs`), run against the new synthetic fixtures, *accepted* all six of these as real coverage: a commented-out test, a renamed test, an unconditional `test.skip()`, `test.fail()`, `test.fixme()`, and `test.describe.skip`.
+
+**After:** references are resolved structurally, never by text search:
+
+1. **Registry** (`scripts/journey-coverage-list-reporter.mjs` + `playwright test --list`, both configs): a titled reference must be a test Playwright registers, matched on its exact title or full `describe › test` title. An ambiguous title is an error. Declaration-level modifiers (`test.skip("t", fn)`, `test.fail("t", fn)`, `test.fixme`, `test.describe.skip`) come from Playwright itself.
+2. **AST** (`scripts/journey-coverage-discovery.mjs`, TypeScript compiler API): finds each listed test's call. It evaluates `test.skip/fail/fixme(cond)` in the test body and in enclosing describe/file scopes, per project, over `testInfo.project.name`, `browserName`, `isMobile`, literals, `!`, `===`, `!==`, `&&`, `||` (including the describe-level callback form). Anything else, such as a modifier under `if` or an `await` condition, is "unknown" and never counts.
+3. **Rules:**
+   - An `automated_real_interaction` action needs, in each claimed Playwright project (scope mapped to `e2e:<project>` or the ux-audit project), a `real` test that is runnable there. Each `real` reference must also be runnable in at least one claimed project.
+   - An unknown scope project is an error.
+   - An `expected_failure` reference must still be `test.fail()`-annotated, so a fixed defect forces an inventory update.
+   - A titled `partial` reference that never runs as a pass is an error.
+   - Unit/component files can only be untitled `partial` evidence.
+4. **Run results:** `coverage:journeys -- --results <playwright-json> [--require-results]`.
+   - A referenced real test that ran but was skipped, failed, or expected to fail is an error. A flaky pass counts, with a warning.
+   - Claims that run did not exercise are listed. With `--require-results` they are errors.
+   - CI's `e2e-critical` job now runs this against its @critical results.
+5. `playwright.e2e.config.ts` gets `testMatch: /\.spec\.ts$/`. The default matched `e2e/support/diagnostics-selftest.test.mjs`, so every E2E run and `--list` also executed that node:test file and its nested Playwright run (still run separately by `test:diagnostics-selftest`). The registry is identical: 268 tests, same count per project. `--list` went from ~31 s to ~4 s.
+
+**Negative controls** (`npm run test:journey-coverage`, 24 tests, was 9):
+- They run the real registry + AST over `scripts/journey-coverage-fixtures/coverage.spec.ts`, a synthetic, browserless Playwright project with two projects. Its cases: a commented-out test, a renamed test, `test.skip()`, `test.fail()`, declared skip/fail/fixme, `describe.skip`, a describe-level `isMobile` skip, project-name and `isMobile` skips, and an opaque condition.
+- They also run a **real** Playwright run of those fixtures through `verifyAgainstResults`.
+- The NAV-03 comment case is a regression test against the real `add-deal-dialog.spec.ts`.
+
+**Inventory changes:** A11Y-01 referenced a template-literal fragment (`${name} has no …`) that is not a registered test. It now names the four registered scans. Its `route` claimed `/i/[token]`, but only `/`, `/deal`, `/invoice` and `/pengaturan` are scanned, so `route` is corrected and the gap noted in `followUp`. No other reference changed: every other `real` claim already resolved to a test that runs in its claimed projects. The metrics are unchanged: real interaction 44/94 = 46.8%, P0 86.7%, 25 outstanding P0/P1.
+
+**Validation (local, disposable `127.0.0.1:55432` only, on this follow-up tree):**
+
+| Gate | Result |
+|---|---|
+| lint / typecheck / build | 0 / 0 / 0 |
+| `npm test` | 780/780 (no app code changed) |
+| `npm run test:journey-coverage` | 24/24 (was 9) |
+| `npm run coverage:journeys` | OK; 95 actions, 94 applicable, real 46.8%, P0 real 86.7%, 25 outstanding P0/P1 |
+| `npm run test:diagnostics-selftest` | 1/1 (still runs on its own after the `testMatch` change) |
+| `npm run test:e2e` (full non-visual, chromium + chromium-mobile) | 103 passed, 0 failed, 13 skipped. Playwright counts the 3 `test.fail()` due-date runs as passed, and the validator does not count them as coverage |
+| ux-audit config (fixtures seeded as `npm run ux:audit` does) | 69/69 |
+| `coverage:journeys -- --results <e2e> --results <ux-audit> --require-results` | **75/75 real (action × project) claims passed in an actual run, 0 not exercised** |
+
+On the first local ux-audit attempt I ran the config without seeding the UX fixtures, and 30 of 69 failed. Results mode correctly reported the 4 affected real claims (NAV-06, DEAL-STAGE-04, DEAL-STAGE-05, INV-WA-03) as errors. Re-run with the fixture seed, all 69 passed.
+
+**Due-date reconciliation with PR #26: not done yet (gated).** PR #26 is open and not merged, and merging it needs Chris. Until it lands, `due-date-entry.spec.ts` keeps its two `test.fail()` tests (INV-DUE-02 and INV-DUE-04 stay `blocked`). The follow-on plan after PR #26 merges is in the 2026-10-04 integration receipt.

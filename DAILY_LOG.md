@@ -780,3 +780,11 @@ Starting state verified fresh: `main` = `origin/main` = `a60dfdf`, no open PRs, 
 - Gates: lint 0/0 (274 files), typecheck 0, vitest 780/780, journey-coverage self-test 9/9, `coverage:journeys` OK, `test:e2e:critical` 88 pass + 3 expected-failure + 13 by-design skips; new specs in Firefox/WebKit 4 pass + 6 by-design skips. `@a11y`/ux-audit not re-run (no product/UI change).
 - Env note: local `dibayar_test` had no tables; applied 12 migrations (`migrate deploy`) to the disposable DB only. Earlier "DB down" was a zsh `/dev/tcp` false negative.
 - Rubric self-score: Evidence honesty 2/2 (every number from a run in this session; expected failures and skips reported separately); shipped completeness 1/2 (bounded pilot only; FIND-02/03 fixes and Batches 1–3 remain); scope discipline 2/2 (no product code, deployment, hosted DB or secrets touched).
+
+## 2026-10-04 — PR #25 review follow-up (journey-coverage validator, Codex P2)
+
+- The validator matched titles by text search and trusted `kind`, so a commented-out, renamed, `test.skip()`, `test.fail()` or fixme test still counted. The old validator accepted all six synthetic cases. Now references resolve through Playwright's registry (`--list` plus a custom reporter) and each test's AST, with skip/fail/fixme conditions evaluated per project; anything it can't evaluate never counts. Run results (`--results`, `--require-results`) confirm the claims, and CI's e2e-critical job now checks its results.
+- `playwright.e2e.config.ts` `testMatch: /\.spec\.ts$/`: every run and `--list` no longer imports the node:test diagnostics self-test. Registry is unchanged (268), and `--list` drops from 31 s to 4 s.
+- A11Y-01 pointed at a non-test title fragment and claimed an unscanned `/i/` page. Fixed. All other claims hold: metrics unchanged (46.8% real, P0 86.7%).
+- Gates: lint/typecheck/build 0; unit 780/780; journey self-test 24/24; full e2e 103/0/13; ux-audit 69/69; `--require-results` 75/75 claims verified. Due-date reconciliation waits for PR #26's merge (Chris).
+
