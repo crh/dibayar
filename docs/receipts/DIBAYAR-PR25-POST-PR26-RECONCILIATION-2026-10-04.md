@@ -114,7 +114,19 @@ Port hygiene: 3300 was free before the runs, and the staging comparison used `E2
 
 ## 6. CI and PR status
 
-Pending at commit time. It is recorded in the follow-up commit and on the PR.
+Head `5fd0870` (merge + test/inventory + docs): CI run [`37185867967`](https://github.com/crh/dibayar/actions/runs/37185867967): **success**.
+
+| Job | Result |
+|---|---|
+| lint-typecheck-test | ✓ vitest 893/893, self-tests 48/48 and 24/24, `coverage:journeys` OK (48.9%, P0 90.0%, 23 outstanding) |
+| e2e-critical | ✓ 104 passed, 18 skipped. Results check: 73 real claims passed, 5 non-@critical not exercised. Diagnostics self-test 1/1. |
+| e2e-a11y | ✓ 12 passed, 1 skipped |
+| ux-audit | ✓ 69/69. **`@visual` 9/9 pass in CI's renderer**, `overallStatus: PASS`, 0 findings. This confirms the local visual failures in §5 are environmental. |
+| e2e-cross-browser | skipped by design (schedule/dispatch only) |
+
+After the push, PR #25 is **MERGEABLE / CLEAN**. The branch has no GitHub deployments and its head has no Vercel commit status (`gh api`), so no Preview was provisioned. The one review thread is resolved. This receipt update is a docs-only commit, and its own CI run is listed on the PR.
+
+**Recommendation: READY_FOR_CHRIS_REVIEW.** Stopped before merge. Merging PR #25 into `staging` needs Chris's explicit authorization. The items in §7 stay open after any merge.
 
 ## 7. Outstanding (not done here, kept visible)
 
