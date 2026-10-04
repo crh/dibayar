@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "inventoryDate": "2026-10-03",
-  "baseline": "origin/staging 27d3ab1 + branch chore/journey-coverage-2026-10-03",
+  "inventoryDate": "2026-10-04",
+  "baseline": "origin/staging b51fba1 (PR #26 merged) + branch chore/journey-coverage-2026-10-03",
   "classificationRules": [
     "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
     "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
@@ -1282,19 +1282,24 @@
         "manual: real phones"
       ],
       "priority": "P0",
-      "status": "blocked",
-      "reason": "KNOWN DEFECT (Production report 2026-10-03): opacity-0 native date input over the display text; Chromium opens the picker only from the invisible calendar-icon edge, so clicking the text does nothing visible. Reproduced in E2E via the :open pseudo-class.",
+      "status": "automated_real_interaction",
       "tests": [
         {
-          "file": "e2e/invoices/due-date-entry.spec.ts",
-          "title": "clicking or tapping the visible empty due-date field opens the date picker",
-          "kind": "expected_failure",
-          "note": "test.fail() until the product fix lands; then it becomes the regression test"
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "clicking or tapping the visible empty due-date text opens the native date picker",
+          "kind": "real",
+          "note": "Clicks (chromium) or taps (chromium-mobile, 390px) the visible text's own on-screen position and asserts the native :open state; on Chromium a missing :open fails instead of skipping. Firefox/WebKit run it feature-detected (runtime skip), so they are not claimed here."
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "clicking or tapping the visible filled due-date text opens the native date picker",
+          "kind": "real",
+          "note": "Same entry point with a saved date shown"
         }
       ],
       "manualCheck": "MAN-DUE-01",
       "finding": "FIND-02",
-      "followUp": "Separate product-fix PR (e.g. showPicker() on click, or a visible input); remove test.fail() in that PR"
+      "evidence": "FIND-02 fixed by PR #26 (merge b51fba1): DateField calls showPicker() on click. Emulated mobile is not a real phone; MAN-DUE-01 stays pending."
     },
     {
       "id": "INV-DUE-03",
@@ -1330,26 +1335,35 @@
       "action": "Desktop keyboard date entry after clicking the visible field",
       "persona": "owner (desktop keyboard)",
       "preconditions": "Invoice with no due date",
-      "interaction": "Click visible field, type dd mm yyyy",
-      "expected": "Display shows the typed date; only the complete date is saved; persists; Kosongkan clears",
+      "interaction": "Click visible field (Escape if the picker opened), type the date segments, press Enter or leave the field",
+      "expected": "No save while typing; exactly one save of the complete date on Enter/leave; display shows the date; persists after reload; Kosongkan clears. Out-of-range years are refused with a hint and nothing is saved.",
       "persisted": "Invoice.dueDate",
       "alternates": "",
       "scope": [
         "chromium"
       ],
       "priority": "P1",
-      "status": "blocked",
+      "status": "automated_real_interaction",
       "tests": [
         {
-          "file": "e2e/invoices/due-date-entry.spec.ts",
-          "title": "keyboard date entry after clicking the visible field saves, survives reload, and clears",
-          "kind": "expected_failure",
-          "note": "test.fail() until the FIND-03 fix lands"
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "keyboard year entry never sends a partial or out-of-range date, saves on Enter, survives reload, and clears",
+          "kind": "real",
+          "note": "Asserts zero PATCHes after every digit (passing through 0002-01-15), exactly one PATCH 2030-01-15 on Enter, none on leaving, reload, clear + reload"
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "a typed year outside the supported range is refused on leaving the field and nothing is saved",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "typing over an existing date never clears it mid-edit, and Escape restores it",
+          "kind": "real"
         }
       ],
       "finding": "FIND-03",
-      "reason": "KNOWN DEFECT FIND-03 (found by this pilot 2026-10-03): typing the first year digit emits a valid year-0002 date, the DateField commits it, PATCH /api/invoices/:id accepts it, and the owner's invoice page then throws into the error boundary on every load.",
-      "followUp": "Product-fix PR: reject implausible due dates server-side (and in the client), do not commit partial keyboard input, and make the invoice page render (not throw) for an out-of-range stored date; then remove test.fail()"
+      "evidence": "FIND-03 fixed by PR #26 (merge b51fba1). Desktop Chromium only: segment order differs per engine/locale (real Indonesian-locale Chrome is covered by MAN-DUE-01)."
     },
     {
       "id": "INV-DUE-05",
@@ -1385,11 +1399,13 @@
       "persona": "owner",
       "preconditions": "PATCH fails",
       "interaction": "Change the date",
-      "expected": "Error alert, value not shown as saved",
+      "expected": "Error alert; the field reverts to the last saved date (not the attempted one); retry saves",
       "persisted": "Unchanged",
       "alternates": "",
       "scope": [
-        "unit"
+        "unit",
+        "chromium",
+        "chromium-mobile"
       ],
       "priority": "P1",
       "status": "automated_partial",
@@ -1399,6 +1415,18 @@
           "title": "",
           "kind": "partial",
           "note": "Component test with fireEvent.change and a mocked commit"
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "a failed Kosongkan shows the stored date again with an error, and a retry clears it",
+          "kind": "partial",
+          "note": "Real clicks and reload, but the failure itself is injected with page.route (a stub), so by rule it is partial"
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "a failed typed date (Enter) shows the stored date again with an error, and retyping saves it",
+          "kind": "partial",
+          "note": "Desktop chromium; failure injected with page.route"
         }
       ]
     },
@@ -2321,7 +2349,7 @@
       "id": "FIND-02",
       "severity": "high",
       "summary": "Clicking/tapping the visible empty due-date field does not open the date picker (opacity-0 native input; Chromium opens only from the invisible icon edge). Production report 2026-10-03.",
-      "status": "open: reproduced by e2e/invoices/due-date-entry.spec.ts (expected failure); product fix belongs in a separate PR",
+      "status": "fixed: PR #26 (merge b51fba1, into staging 2026-10-04; not yet on main/Production). Regression: e2e/invoices/due-date-integrity.spec.ts picker tests (INV-DUE-02). Real Android/iOS verification (MAN-DUE-01) still pending.",
       "actions": [
         "INV-DUE-02",
         "INV-DUE-03"
@@ -2331,7 +2359,7 @@
       "id": "FIND-03",
       "severity": "high",
       "summary": "Desktop keyboard entry of a due date saves a year-0002 date as soon as the first year digit is typed (Chromium emits 0002-mm-dd, the DateField commits every change, and PATCH /api/invoices/:id returns 200). The owner's invoice detail page then throws 'Expected an ISO yyyy-mm-dd date, received: 2-mm-dd' into the route error boundary ('Gagal memuat.') on every load, so the field that could fix it is unreachable. The list, Beranda, deal detail, public page and public PDF still render.",
-      "status": "open: reproduced 2026-10-03 by e2e/invoices/due-date-entry.spec.ts (expected failure) and a diagnostic run; product fix belongs in a separate PR. Data repair for any affected Production rows would need Chris.",
+      "status": "fixed: PR #26 (merge b51fba1, into staging 2026-10-04; not yet on main/Production). Regression: e2e/invoices/due-date-integrity.spec.ts keyboard, legacy-row and API tests (INV-DUE-04). The read-only Production count of out-of-range Invoice.dueDate / Deal.deadline has not been run (needs Chris); legacy rows elsewhere (list, Beranda, public page, PDF) still render the raw date.",
       "actions": [
         "INV-DUE-04"
       ]
