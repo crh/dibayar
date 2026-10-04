@@ -55,25 +55,34 @@ checked by `tests/ux-audit/states/needs-chasing.spec.ts`.
 ```mermaid
 stateDiagram-v2
     [*] --> Empty: invoice created, deal had no deadline
-    [*] --> Set: invoice created, deal deadline copied
-    Empty --> PickerOpen: click/tap visible field (INV-DUE-02, BLOCKED FIND-02)
-    Empty --> Garbage: desktop keyboard entry saves year 0002 first (INV-DUE-04, BLOCKED FIND-03)
-    Garbage --> PageBroken: invoice page throws on every load (FIND-03)
+    [*] --> Set: invoice created, deal deadline (2000-2099) copied
+    [*] --> LegacyInvalid: row stored before PR #26 with an out-of-range date
+    Empty --> PickerOpen: click/tap visible field (INV-DUE-02)
+    Set --> PickerOpen: click/tap visible field (INV-DUE-02)
     PickerOpen --> Set: choose date in native picker (INV-DUE-03, MANUAL)
     PickerOpen --> Empty: dismiss picker (INV-DUE-03, MANUAL)
-    Set --> Set: change date (INV-DUE-03, MANUAL)
+    Empty --> Draft: desktop keyboard typing, nothing sent (INV-DUE-04)
+    Set --> Draft: desktop keyboard typing, nothing sent (INV-DUE-04)
+    Draft --> Set: Enter / leave with a complete 2000-2099 date, one PATCH (INV-DUE-04)
+    Draft --> Draft: incomplete or out-of-range on leave, hint, no PATCH (INV-DUE-04)
+    Draft --> Set: Escape restores the saved date (INV-DUE-04)
     Set --> Empty: Kosongkan (INV-DUE-01)
-    Set --> SaveError: PATCH fails (INV-DUE-06, partial)
+    Set --> SaveError: PATCH fails, field reverts to the saved date (INV-DUE-06, partial)
+    LegacyInvalid --> Empty: Kosongkan
+    LegacyInvalid --> Set: type a new date
 ```
 
 | Edge | Action | Status |
 |---|---|---|
 | Set → Empty → reload | INV-DUE-01 | real, desktop + mobile |
-| Empty → picker opens (click/tap on visible text) | INV-DUE-02 | **BLOCKED**: known defect, expected-failure test in Chromium desktop + mobile emulation |
+| Empty/Set → picker opens (click/tap on visible text) | INV-DUE-02 | real, Chromium desktop + 390px mobile emulation (`due-date-integrity.spec.ts`); Firefox/WebKit pass but are feature-detected, so not claimed; real phones **MANUAL** MAN-DUE-01 |
 | picker → date chosen → saved → reload | INV-DUE-03 | **MANUAL** MAN-DUE-01; server persistence partial via `fill()` (desktop only) |
-| Empty → keyboard typed → saved → reload → cleared | INV-DUE-04 | **BLOCKED**: known defect FIND-03 (first year digit saves year 0002, then the invoice page throws on every load); expected-failure test, desktop Chromium |
-| save failure | INV-DUE-06 | partial (component test) |
+| Empty → keyboard typed → Enter → reload → cleared | INV-DUE-04 | real, desktop Chromium: zero PATCHes while typing (through `0002-01-15`), one on Enter, out-of-range refused, Escape restores |
+| save failure → revert + retry | INV-DUE-06 | partial: component test plus browser journeys whose failure is injected with `page.route` |
+| legacy out-of-range row → page usable, correctable | (FIND-03 regression) | real, `due-date-integrity.spec.ts`; not a separate inventory action |
 | consistent display across header/list/queue/WhatsApp | INV-DUE-05 | partial (unit) |
+
+FIND-02 and FIND-03 were fixed by PR #26 (merge `b51fba1`, staging only).
 
 Boundary cases still open: a due date of today (Jakarta) versus yesterday
 around midnight UTC+7, a year boundary, and the English "Not set" label on

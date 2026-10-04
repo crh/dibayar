@@ -235,14 +235,17 @@ judged against an assertion rather than against a picture.
   native date picker does not accept a stable programmatic `fill()`. It sets
   the hidden input with `fill()`, so it proves server persistence, **not**
   that a person can use the field. The visible entry point is covered by
-  `e2e/invoices/due-date-entry.spec.ts`. That file observes the native picker
-  through Chromium's `:open` pseudo-class and carries two **expected-failure**
-  (`test.fail()`) tests for open defects FIND-02 (click/tap on the visible
-  empty field does not open the picker) and FIND-03 (desktop keyboard entry
-  saves year 0002 and breaks the invoice page). A product fix makes them
-  report "Expected to fail, but passed"; remove the annotation in that fix
-  PR. Choosing a date inside a native picker is not automatable and stays
-  manual (`docs/testing/MANUAL-UAT.md` MAN-DUE-01).
+  `e2e/invoices/due-date-integrity.spec.ts` (PR #26, merge `b51fba1`), which
+  observes the native picker through the `:open` pseudo-class: click/tap on
+  the visible empty or filled text opens the picker (FIND-02, fixed), and
+  desktop keyboard entry sends no PATCH while typing, exactly one on Enter,
+  and survives reload and clear (FIND-03, fixed). On Chromium a missing
+  `:open` fails the picker test; Firefox/WebKit are feature-detected.
+  `e2e/invoices/due-date-entry.spec.ts` keeps only the clear-and-reload
+  journey (INV-DUE-01); its two former `test.fail()` expected-failure tests
+  were removed once PR #26 landed. No `test.fail()` remains in `e2e/`.
+  Choosing a date inside a native picker is not automatable and stays manual
+  (`docs/testing/MANUAL-UAT.md` MAN-DUE-01).
 
 ## User-action inventory and coverage report
 

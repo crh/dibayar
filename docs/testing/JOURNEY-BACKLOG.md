@@ -8,14 +8,15 @@ Action IDs here are cross-checked by `npm run coverage:journeys`.
 
 ## 0. Product fixes (separate PRs, not test infrastructure)
 
-These are defects the pilot found or confirmed. Fix them in their own scoped
-`fix/*` PRs, and remove the matching `test.fail()` line in the same PR.
+These are defects the pilot found or confirmed. Each fix lands in its own
+scoped `fix/*` PR, which also turns the matching expected-failure test into
+a positive one.
 
-| Order | Finding | Actions | Why first |
+| Order | Finding | Actions | Status |
 |---|---|---|---|
-| 1 | FIND-03 (high) — keyboard entry saves year 0002 and permanently breaks the owner's invoice page | INV-DUE-04 | Corrupts data, and the only repair UI is on the page it breaks. Server-side range validation on `dueDate` is the minimum. The invoice page should also render rather than throw for an out-of-range stored date. **Chris:** a read-only Production check for `dueDate < 1900-01-01` is worth doing; any data repair is Chris-only. |
-| 2 | FIND-02 (high) — click/tap on the visible empty due-date field does nothing | INV-DUE-02, INV-DUE-03 | The Production report. One option is `showPicker()` on click. It was verified locally to flip the expected-failure test, but only as a negative-control exercise, not as a reviewed fix. Run MAN-DUE-01 on real devices after the fix. |
-| 3 | FIND-01 (medium) — "Tandai terlambat" shows "Terkirim" | INV-STATUS-05 | Needs a product decision from Chris before any code or test. |
+| 1 | FIND-03 (high): keyboard entry saved year 0002 and permanently broke the owner's invoice page | INV-DUE-04 | **Fixed** by PR #26 (merge `b51fba1`, staging). Regression: `e2e/invoices/due-date-integrity.spec.ts`. **Still open for Chris:** the read-only Production count of out-of-range `Invoice.dueDate` / `Deal.deadline` (PR #26 receipt §9). Any data repair is Chris-only. Legacy out-of-range dates still render raw on the list, Beranda, public page, and PDF. Deal `deadline` validation is still `z.coerce.date()`. |
+| 2 | FIND-02 (high): click/tap on the visible due-date field did nothing | INV-DUE-02, INV-DUE-03 | **Fixed** by PR #26 (`showPicker()` on click). Proven in Chromium desktop and 390px emulation. **Still open:** MAN-DUE-01 on a real Android Chrome phone and a real iPhone Safari. |
+| 3 | FIND-01 (medium): "Tandai terlambat" shows "Terkirim" | INV-STATUS-05 | Open. Needs a product decision from Chris before any code or test. |
 
 ## Batch 1 — P0/P1 gaps with existing fixtures (next PR)
 
@@ -98,7 +99,8 @@ repeated here; these are the program-level steps around them.
    are logged per release in `MANUAL-UAT.md`; never counted as automated.
 6. **Trustworthy release gate.** Once 1–2 are green for a few weeks: a
    pre-release checklist that requires the full-run results check, zero
-   `expected_failure` entries on P0 actions, and the manual-only items from 5
+   `expected_failure` entries on P0 actions (there are none as of
+   2026-10-04), and the manual-only items from 5
    signed off. A CI coverage threshold is a separate Chris decision.
 7. **Keep the inventory honest.** Every PR that adds or changes a user-facing
    action updates `journey-coverage.json` (`REVIEW_CHECKLIST.md`); a fixed

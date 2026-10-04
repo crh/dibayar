@@ -804,3 +804,12 @@ Starting state verified fresh: `main` = `origin/main` = `a60dfdf`, no open PRs, 
 - A11Y-01 pointed at a non-test title fragment and claimed an unscanned `/i/` page. Fixed. All other claims hold: metrics unchanged (46.8% real, P0 86.7%).
 - Gates: lint/typecheck/build 0; unit 780/780; journey self-test 24/24; full e2e 103/0/13; ux-audit 69/69; `--require-results` 75/75 claims verified. Due-date reconciliation waits for PR #26's merge (Chris).
 
+
+## 2026-10-04 — PR #25 reconciled after PR #26 merge (b51fba1)
+
+- Recon: PR #26 merged (`b51fba1`, in `origin/staging`); PR #25 head `607c05e` unchanged locally and remotely, CONFLICTING. Merged `origin/staging` into the branch (no rebase, no force). Conflicts only in STATE.md and DAILY_LOG.md (append-only; both sides kept, log in commit-time order); E2E.md auto-merged and checked.
+- `due-date-entry.spec.ts`: removed the two obsolete `test.fail()` tests (FIND-02 picker, FIND-03 keyboard), kept INV-DUE-01. PR #26's `due-date-integrity.spec.ts` covers both more strongly. No `test.fail()`/`fixme` left in `e2e/` or `tests/ux-audit/`.
+- Inventory: INV-DUE-02 real (chromium, chromium-mobile), INV-DUE-04 real (chromium), INV-DUE-06 stays partial (browser failed-save tests inject the failure with `page.route`), FIND-02/03 fixed by `b51fba1`, INV-DUE-03/MAN-DUE-01 manual. Generated: real 46/94 (48.9%, was 44), P0 27/30, manual 1/94, 23 outstanding P0/P1.
+- Validator negative controls on the real inventory (claim Firefox/WebKit, claim mobile keyboard, re-add `test.fail()`, rename, `describe.skip`): all rejected; restored.
+- Gates: lint 0/0, typecheck 0, unit 893/893, build 0, journey self-test 24/24, diagnostics self-test 1/1; critical E2E 104/0/18 (`--results` 73 passed, 5 non-@critical not exercised); full non-visual 116/0/18; ux-audit specs 69/69; `--require-results` 78/78 claims; a11y 12/0/1; Firefox+WebKit due-date 12/0/12. `@visual` 9/9 fail locally and fail identically on staging `b51fba1` on this machine (7 byte-identical, 2 differ by 9 and 19 px in the port-bearing share URL); app code identical to staging; no baseline touched.
+- Rubric self-score: Evidence honesty 2/2 (every number from a run here; visual failure reproduced on staging, not hidden); shipped completeness 1/2 (PR ready for review; real-device UAT and the Production audit remain); scope discipline 2/2 (no product code, no merge, no deploy, no hosted DB, no baselines).

@@ -36,9 +36,11 @@ inventory entry points at a check that is not defined here.
 
 ### MAN-DUE-01 — Due date: open picker, choose, save, reload (P0)
 
-Inventory: INV-DUE-02, INV-DUE-03. Known defect FIND-02 is expected to fail on
-desktop Chrome until the product fix ships. Record the result anyway; it
-confirms the fix later.
+Inventory: INV-DUE-02, INV-DUE-03. FIND-02 (picker not opening) and FIND-03
+(keyboard entry saving year 0002) were fixed by PR #26 (merge `b51fba1`, on
+`staging`). Automation proves the picker opens only in Chromium (desktop and
+390px emulation). This check is the real-device proof, and it is still
+**pending** on Android Chrome and iPhone Safari. Emulation does not count.
 
 1. Sign in on staging. Open a synthetic invoice with no due date (or press
    **Kosongkan** / **Clear** on one), reload.
@@ -51,6 +53,11 @@ confirms the fix later.
 6. Tap the field again, choose a different date, reload. Expected: the new date.
 7. Press **Kosongkan** / **Clear**, reload. Expected: back to the empty label.
 8. Repeat steps 2–5 once in the other interface language (Pengaturan → Bahasa antarmuka).
+9. In the picker, try to reach a year before 2000 or after 2099. Expected: the
+   picker doesn't offer it, or a hint appears and nothing is saved (reload
+   shows the previous value).
+10. iPhone only: spin the wheel picker quickly through several dates, then tap
+    Done and reload. Expected: the final date is shown, not an earlier one.
 
 ### MAN-DEAL-01 — Deal deadline picker in the add-deal dialog (P1)
 

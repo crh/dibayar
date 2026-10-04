@@ -42,6 +42,7 @@
 - [ ] Current `docs/testing/JOURNEY-COVERAGE.md` "Outstanding P0/P1 actions" pasted into the PR; every open **P0** (`blocked`, `manual_pending`, `not_covered`, `automated_partial`) is either fixed or explicitly accepted by Chris
 - [ ] `docs/testing/MANUAL-UAT.md` MAN-REL-01 run on staging, plus every P0 manual check, logged with device/browser/date/result
 - [ ] Known-defect expected-failure tests (`test.fail`) listed by finding ID — they are open bugs, not coverage
+- [ ] Findings fixed on `staging` but still awaiting real-device UAT or a Production data check (e.g. FIND-02/FIND-03: MAN-DUE-01, out-of-range due-date count) listed with their status, not reported as closed
 
 ## Stop rules
 - Any Gate A–C failure after 2 fix attempts → do not commit; log blocker in STATE.md.
