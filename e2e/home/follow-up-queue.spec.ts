@@ -134,6 +134,13 @@ test.describe("Beranda follow-up queue", { tag: "@critical" }, () => {
     // after a reload, invoice detail shows that same active link...
     await followUpRowLink(page, brand).click();
     await expect(page).toHaveURL(new RegExp(`/invoice/${invoiceId}$`));
+    // Let the page finish loading before reloading: the URL changes first,
+    // and a reload then cancels the client navigation's chunk/RSC loads and
+    // the page's own contact/share fetches (Firefox and WebKit report those
+    // as failed requests). Kirim pengingat is enabled only once the contact
+    // and share fetches have settled.
+    await expect(page.getByRole("heading", { name: `Rp${NBSP}8.000.000` })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Kirim pengingat" })).toBeEnabled();
     await page.reload();
     const shownLink = await page.getByTestId("share-link-track").locator("span[title]").getAttribute("title");
     // Compared as booleans so a mismatch never prints the token.
