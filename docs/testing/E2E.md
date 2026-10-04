@@ -79,6 +79,19 @@ are fully deterministic (prefix `e2e-t0-...`); read them via
 hardcoding, so a future schema/fixture change only needs updating in one
 place.
 
+**Follow-up overlay (opt-in).** `npm run e2e:fixtures -- follow-up-states`
+(or `applyFollowUpStates()` from `e2e/support/reseed.ts`, which reseeds
+first) adds, on top of a fresh seed only, five invoices whose due dates are
+relative to today's Asia/Jakarta date -- stored `OVERDUE` due 5 days ago,
+`SENT` due yesterday, today, in 7 days and in 8 days (the
+`selectAttentionInvoices` boundaries) -- each on its own `INVOICE` deal, plus
+a `NEGO` deal whose WhatsApp number (`12345678`) is accepted by the API but
+not usable. They are not in the base seed on purpose: the base seed's Beranda
+follow-up queue is empty and the deal board has seven cards, which the
+`@visual` baselines capture. IDs and brands are in the manifest under
+`followUp` (the rows exist only after the overlay). Specs that apply it
+reseed again in `afterEach`, because the read-only specs never reseed.
+
 `e2e/global-setup.ts` seeds once per `playwright test` invocation;
 `e2e/global-teardown.ts` cleans up after (set `E2E_KEEP_FIXTURES=1` to skip
 teardown for manual debugging).
@@ -93,6 +106,14 @@ to run inherits the first project's mutations and its assertions about "the
 deal at stage X" go stale. Read-only/filter-only specs
 (`deals/filter-navigation.spec.ts`, `deals/add-deal-dialog.spec.ts`) need no
 reseed.
+
+Specs that open WhatsApp (`e2e/home/follow-up-queue.spec.ts`,
+`e2e/invoices/overdue-invoice.spec.ts`, `e2e/deals/contact-repair.spec.ts`)
+call `keepWhatsAppLocal(context)` (`e2e/support/follow-up.ts`): `wa.me` and
+`api.whatsapp.com` are answered by a local stub, so the popup URL is the exact
+link the app built and nothing reaches WhatsApp. (The older
+`invoice-journeys.spec.ts` WhatsApp test still lets its popup load the real
+`wa.me` redirect; it sends nothing, but it is not hermetic.)
 
 Specs that change per-user state every other test depends on
 (`settings/language.spec.ts` changes `User.language`,
@@ -109,6 +130,7 @@ prints the share token.
 |---|---|
 | `npm run e2e:fixtures -- seed\|verify\|cleanup` | Manual fixture control for local debugging |
 | `npm run e2e:fixtures -- legacy-due-date` | Overwrites the seeded SENT invoice's due date with year 0002 (the FIND-03 value) on the guarded disposable DB only; the next `seed` restores it. Used by `e2e/invoices/due-date-integrity.spec.ts` via `seedLegacyInvalidDueDate()` |
+| `npm run e2e:fixtures -- follow-up-states` | Adds the follow-up overlay (overdue / due-soon invoices, invalid-contact deal) on top of a fresh `seed`; refuses to stack on anything else. The next `seed` removes it |
 | `npm run e2e:build` | Reproducible webpack production build, needed before any `test:e2e*` run |
 | `npm run test:e2e` | Semantic journey suite, chromium + chromium-mobile; visual snapshots are separate |
 | `npm run test:e2e:critical` | `@critical`-tagged tests only, chromium + chromium-mobile -- the PR gate |
@@ -241,7 +263,11 @@ judged against an assertion rather than against a picture.
   `e2e/deals/add-deal-dialog.spec.ts` for what was tried and why.
 - The due-date persistence journey ("due date edits and clears persist after
   reload") is skipped only in `chromium-mobile` because Chromium's emulated
-  native date picker does not accept a stable programmatic `fill()`. It sets
+  native date picker does not accept a stable programmatic `fill()`. It
+  waits for hydration (the WhatsApp button turning enabled) before `fill()`:
+  a `fill()` before hydration is undone by React and sends no PATCH, which
+  was its intermittent failure (reproduced on demand with CDP CPU throttling,
+  2026-10-04). It sets
   the hidden input with `fill()`, so it proves server persistence, **not**
   that a person can use the field. The visible entry point is covered by
   `e2e/invoices/due-date-integrity.spec.ts` (PR #26, merge `b51fba1`), which

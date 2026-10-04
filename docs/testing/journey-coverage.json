@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "inventoryDate": "2026-10-04",
-  "baseline": "origin/staging a11b8a4 (PR #25 merged) + branch chore/zero-routine-regression-phase1-2026-10-04 (Batch 1)",
+  "baseline": "origin/staging e83cf1a (PR #27 merged) + branch chore/zero-routine-regression-phase2a-2026-10-04 (Batch 2A)",
   "classificationRules": [
     "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
     "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
@@ -227,23 +227,31 @@
       "action": "Follow-up queue lists overdue / due-soon invoices with reasons",
       "persona": "owner",
       "preconditions": "Overdue and due-soon invoices exist",
-      "interaction": "View Beranda",
-      "expected": "Rows with correct reason text, ordered",
+      "interaction": "Reach Beranda via the nav; read the Perlu dikejar rows; open a row; back; reload",
+      "expected": "Overdue rows first (most recently overdue first), then due-soon (nearest first); reason text 'Telat N hari' / 'Jatuh tempo hari ini' / 'Jatuh tempo N hari lagi' against the Jakarta calendar date; due in 8+ days, PAID and far-future invoices not listed",
       "persisted": "n/a",
       "alternates": "Empty queue; load error",
       "scope": [
-        "chromium"
+        "chromium",
+        "chromium-mobile"
       ],
       "priority": "P1",
-      "status": "automated_partial",
+      "status": "automated_real_interaction",
       "tests": [
+        {
+          "file": "e2e/home/follow-up-queue.spec.ts",
+          "title": "lists overdue and due-soon invoices with their reasons in order, and keeps them after reload",
+          "kind": "real",
+          "note": "Follow-up overlay: due -5 (stored OVERDUE), -1, 0, +7 and +8 Jakarta days; checks order, reasons, amounts, row -> detail agreement, browser back and reload"
+        },
         {
           "file": "tests/ux-audit/states/needs-chasing.spec.ts",
           "title": "actionable: overdue and due-soon invoices both appear with the correct reason",
           "kind": "partial",
           "note": "Rendering assertion only (ux-audit job)"
         }
-      ]
+      ],
+      "evidence": "Added 2026-10-04 (Zero Routine Phase 2A, follow-up overlay)"
     },
     {
       "id": "HOME-03",
@@ -253,8 +261,8 @@
       "persona": "owner",
       "preconditions": "Overdue invoice with valid contact",
       "interaction": "Click Kirim pengingat on the row",
-      "expected": "WhatsApp opens with the chase template; blocked popup shows fallback link",
-      "persisted": "Share link created if absent",
+      "expected": "WhatsApp opens (wa.me, the deal's number) with the overdue reminder text built in follow-up-queue.tsx (buildWhatsAppReminderMessage -- not the Settings chase template) and a working public link; blocked popup shows a fallback link",
+      "persisted": "InvoiceShare: POST /api/invoices/:id/share always issues a new token (FIND-05); the link in the message is the active link after reload and opens for a session-less recipient",
       "alternates": "Blocked popup; share creation failure",
       "scope": [
         "chromium",
@@ -264,13 +272,33 @@
       "status": "automated_partial",
       "tests": [
         {
+          "file": "e2e/home/follow-up-queue.spec.ts",
+          "title": "Kirim pengingat on an overdue row opens WhatsApp with the overdue reminder and a working invoice link",
+          "kind": "partial",
+          "note": "Real interaction (visible Kirim pengingat, real popup; wa.me answered by a local stub so nothing is sent; exact number and message, then reload + session-less recipient). Listed as partial only because FIND-04 is open: switch to real when the expected-failure test below loses test.fail()"
+        },
+        {
+          "file": "e2e/home/follow-up-queue.spec.ts",
+          "title": "a blocked reminder popup on a queue row shows a Buka WhatsApp fallback link",
+          "kind": "partial",
+          "note": "window.open stubbed to return null; cannot tell blocked from opened until FIND-04 is fixed"
+        },
+        {
+          "file": "e2e/home/follow-up-queue.spec.ts",
+          "title": "after the reminder popup opens, the row shows no blocked-popup fallback",
+          "kind": "expected_failure",
+          "note": "FIND-04"
+        },
+        {
           "file": "src/components/home/follow-up-queue.test.tsx",
           "title": "",
           "kind": "partial",
           "note": "Component test with mocked fetch/window.open"
         }
       ],
-      "followUp": "Batch 2: needs the overdue-invoice fixture. The current seed has no invoice in the follow-up queue (the SENT invoice is due 2099-12-31, the other is PAID), so a browser test cannot reach Kirim pengingat without changing fixture topology (assessed 2026-10-04)"
+      "finding": "FIND-04",
+      "evidence": "Added 2026-10-04 (Zero Routine Phase 2A, follow-up overlay)",
+      "followUp": "Fix FIND-04 in a separate fix/* PR and drop test.fail() from the expected-failure test; the real test above then carries the claim. FIND-05 (link rotation) needs a product decision"
     },
     {
       "id": "HOME-04",
@@ -1088,8 +1116,8 @@
       "action": "Repair an invalid WhatsApp number on the deal",
       "persona": "owner",
       "preconditions": "Deal with invalid number",
-      "interaction": "Open repair, type number, save, reload",
-      "expected": "Saved, WhatsApp link becomes usable",
+      "interaction": "Board card menu -> Lihat detail; click Buka WhatsApp; type the number in Perbaiki nomor WhatsApp; Simpan nomor; reload; Buka WhatsApp",
+      "expected": "Invalid number: no chat opens, the repair field appears focused; after save: number shown formatted (+62 ...), form gone; after reload Buka WhatsApp opens wa.me/<saved normalized number>",
       "persisted": "Deal.contactWa",
       "alternates": "Still-invalid input",
       "scope": [
@@ -1097,8 +1125,16 @@
         "chromium-mobile"
       ],
       "priority": "P1",
-      "status": "not_covered",
-      "followUp": "Batch 2 (needs an invalid-contact deal in the E2E fixture)"
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/contact-repair.spec.ts",
+          "title": "an invalid number opens the repair form; the repaired number is saved, survives reload, and is used by Buka WhatsApp",
+          "kind": "real",
+          "note": "Follow-up overlay deal with contactWa 12345678; wa.me stubbed locally"
+        }
+      ],
+      "evidence": "Added 2026-10-04 (Zero Routine Phase 2A, follow-up overlay)"
     },
     {
       "id": "DEAL-DETAIL-04",
@@ -1292,7 +1328,7 @@
           "file": "e2e/invoices/invoice-journeys.spec.ts",
           "title": "due date edits and clears persist after reload",
           "kind": "partial",
-          "note": "Desktop only; skipped on chromium-mobile"
+          "note": "Desktop only; skipped on chromium-mobile; waits for hydration before fill() (2026-10-04 flake fix)"
         }
       ]
     },
@@ -1354,7 +1390,7 @@
           "file": "e2e/invoices/invoice-journeys.spec.ts",
           "title": "due date edits and clears persist after reload",
           "kind": "partial",
-          "note": "fill() on the hidden input proves server persistence only; skipped on chromium-mobile"
+          "note": "fill() on the hidden input proves server persistence only; skipped on chromium-mobile; waits for hydration before fill() (2026-10-04 flake fix)"
         }
       ],
       "reason": "Selecting inside a native picker is not drivable/observable from Playwright"
@@ -1597,18 +1633,26 @@
       "route": "/invoice/[id]",
       "action": "Mark an OVERDUE invoice as paid / send overdue reminder",
       "persona": "owner",
-      "preconditions": "Invoice whose due date is in the past",
-      "interaction": "Click Kirim pengingat; click Tandai lunas, reload",
-      "expected": "Chase template used; paid persists",
+      "preconditions": "Invoice stored as OVERDUE whose due date is in the past (Jakarta)",
+      "interaction": "Open from the invoice list; click Kirim pengingat; click Tandai lunas; reload; check list and Beranda",
+      "expected": "Chip Terlambat and only Tandai lunas as status action; reminder uses the Settings chase template; after Tandai lunas: Lunas chip, Batalkan status lunas, gone from the queue, in the list's Lunas group",
       "persisted": "Invoice.status = PAID",
-      "alternates": "",
+      "alternates": "A SENT invoice that is merely past due shows Terlambat but its actions follow SENT (Tandai jatuh tempo / Tandai lunas); the list still groups it under Terkirim (FIND-06)",
       "scope": [
         "chromium",
         "chromium-mobile"
       ],
       "priority": "P1",
-      "status": "not_covered",
-      "followUp": "Batch 1 (needs an overdue invoice in the E2E fixture)"
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/overdue-invoice.spec.ts",
+          "title": "an overdue invoice sends the chase reminder, then Tandai lunas persists across detail, list and Beranda",
+          "kind": "real",
+          "note": "Follow-up overlay invoice stored OVERDUE, due 5 Jakarta days ago; wa.me stubbed locally"
+        }
+      ],
+      "evidence": "Added 2026-10-04 (Zero Routine Phase 2A, follow-up overlay)"
     },
     {
       "id": "INV-STATUS-07",
@@ -1668,15 +1712,23 @@
         "chromium-mobile"
       ],
       "priority": "P1",
-      "status": "automated_real_interaction",
+      "status": "automated_partial",
       "tests": [
         {
           "file": "e2e/invoices/invoice-journeys.spec.ts",
           "title": "a blocked WhatsApp popup falls back to a clickable manual link",
-          "kind": "real",
-          "note": "window.open stubbed to return null (the real blocker signal); real browser blockers checked by MAN-WA-01"
+          "kind": "partial",
+          "note": "window.open stubbed to return null. Reclassified 2026-10-04: stubs are partial by the rules above, and FIND-04 shows the fallback appears whether or not the popup was blocked, so this cannot prove blocked-popup detection"
+        },
+        {
+          "file": "e2e/invoices/overdue-invoice.spec.ts",
+          "title": "after the reminder popup opens, invoice detail shows no blocked-popup fallback",
+          "kind": "expected_failure",
+          "note": "FIND-04"
         }
-      ]
+      ],
+      "finding": "FIND-04",
+      "followUp": "Fix FIND-04 (separate fix/* PR), then a real test: popup opened -> no fallback; real blockers stay MAN-WA-01"
     },
     {
       "id": "INV-WA-03",
@@ -2423,6 +2475,35 @@
       "status": "fixed: PR #26 (merge b51fba1, into staging 2026-10-04; not yet on main/Production). Regression: e2e/invoices/due-date-integrity.spec.ts keyboard, legacy-row and API tests (INV-DUE-04). The read-only Production count of out-of-range Invoice.dueDate / Deal.deadline has not been run (needs Chris); legacy rows elsewhere (list, Beranda, public page, PDF) still render the raw date.",
       "actions": [
         "INV-DUE-04"
+      ]
+    },
+    {
+      "id": "FIND-04",
+      "severity": "medium",
+      "summary": "Blocked-popup detection never works: invoice detail (sendWhatsApp) and the Beranda queue (openReminder) call window.open(href, '_blank', 'noopener,noreferrer') and treat a null return as 'blocked', but the HTML spec makes window.open() return null whenever noopener is set. So after WhatsApp opens normally, a 'Buka WhatsApp' fallback link still appears (a second click opens a second chat), and a really blocked popup is indistinguishable.",
+      "status": "open: fix in a separate fix/* PR (e.g. detect blocking without noopener's null return). Expected-failure tests: e2e/home/follow-up-queue.spec.ts and e2e/invoices/overdue-invoice.spec.ts",
+      "actions": [
+        "HOME-03",
+        "INV-WA-02"
+      ]
+    },
+    {
+      "id": "FIND-05",
+      "severity": "medium",
+      "summary": "Beranda 'Kirim pengingat' always rotates the invoice's share token (POST /api/invoices/:id/share -> createOrRegenerateShare), while invoice detail reuses the active link. A link the brand already received returns 404 after a reminder from Beranda (verified 2026-10-04 with a session-less context).",
+      "status": "open: needs a product decision (reuse the active link like invoice detail, or keep rotating and say so). No test asserts either behaviour.",
+      "actions": [
+        "HOME-03"
+      ]
+    },
+    {
+      "id": "FIND-06",
+      "severity": "low",
+      "summary": "The invoice list groups and labels by stored status, while Beranda and invoice detail derive OVERDUE from the Jakarta due date. A SENT invoice due yesterday shows 'Telat 1 hari' on Beranda and 'Terlambat' on detail, but sits under Terkirim with a TERKIRIM chip in the list.",
+      "status": "open: needs a product decision; related to FIND-01 (stored vs derived OVERDUE). No test asserts the list's grouping of this state.",
+      "actions": [
+        "INV-STATUS-06",
+        "INV-LIST-01"
       ]
     }
   ]
