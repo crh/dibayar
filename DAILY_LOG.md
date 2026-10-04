@@ -781,3 +781,9 @@ Starting state verified fresh: `main` = `origin/main` = `a60dfdf`, no open PRs, 
 - Not done/pending Chris: merge; read-only Production count query (receipt §9, not run); real Android/iOS UAT (receipt §10); FIND-01; deal `deadline` validation follow-up.
 - Rubric self-score: Evidence honesty 2/2 (baseline repro, negative controls, same-machine visual comparison; port-hardcode failure and environmental visual failures reported, not hidden); shipped completeness 1/2 (code + tests complete, real-device UAT and Production audit pending); security discipline 2/2 (owner scoping unchanged and tested, no Production/hosted DB access, no secrets); Focus 2/2 (no status-derivation/FIND-01/coverage-infra changes); deploy health 2/2 (no deploy; PR only); report quality 2/2. Total 11/12.
 
+## 2026-10-04 — PR #26 review follow-up (two Codex P2 threads)
+
+- Demo seed (`scripts/m4-demo-data.ts`) passed a `Date` to the strict due-date schema. Fixed at the caller (`buildM4DemoInvoiceInput`/`jakartaDateOnlyOffset`, yyyy-mm-dd, Jakarta day preserved); public schema unchanged. Tested through the real `createInvoice` at both sides of Jakarta midnight. Script not run (staging-only guard; no hosted DB touched).
+- DateField failed save: the visible value now reverts to the last confirmed value with the error kept and retry working. Newest intent stays visible while saving. A mid-flight keyboard draft is preserved. +7 unit, +2 browser journeys (`page.route` 409). Negative controls: 5/7 unit and 3/3 browser fail on the old component.
+- Gates: lint/typecheck/build 0; unit 893/893; critical E2E 99/0/17; Firefox+WebKit due-date 10/0/12; picker 8/8 on 4 projects; a11y 12/0/1. Receipt §13.
+

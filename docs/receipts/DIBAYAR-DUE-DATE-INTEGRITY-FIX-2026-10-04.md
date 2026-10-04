@@ -169,3 +169,39 @@ Emulation is not device proof. Run on staging after merge, on a real **Android C
 4. Any data repair, if §9 finds rows (separate plan).
 5. FIND-01 semantics (still open, untouched).
 6. Later `staging → main` release (Production).
+
+## 13. Review follow-up (2026-10-04, two Codex P2 threads on PR #26)
+
+Head before: `9334109`. Both findings reproduced (by test) before fixing.
+
+**A. `src/lib/invoice-validation.ts:18` — demo seed passed a `Date` to the strict schema.**
+- *Before:* `scripts/m4-demo-data.ts` called `createInvoice(..., { dueDate: jakartaDateOffset(...) })` (a `Date`). `createInvoice` takes `unknown` and parses with `invoiceCreateSchema`, so typecheck could not catch it; every `m4:demo-data ... seed` would throw a Zod error at the first invoiced demo deal. It was the only such caller: the API route sends JSON strings, and both fixture scripts write through Prisma directly.
+- *Fix at the caller, public contract unchanged:* `src/lib/m4-demo-dataset.ts` adds `jakartaDateOnlyOffset()`, which returns the same Jakarta calendar day as `yyyy-mm-dd`, read back from the UTC-midnight `Date`. It also adds `buildM4DemoInvoiceInput()`, the exact payload the script sends. The strict schema was not relaxed. Deal `deadline` still takes a `Date` through `z.coerce.date()`, which is the existing, separately tracked follow-up.
+- *Tests:* `src/lib/m4-demo-dataset.test.ts` covers the Jakarta boundary (16:59:59Z → same day; 17:00Z → next day; month rollover). It sends every demo invoice payload through the real `createInvoice` (with an in-memory adapter) at both sides of Jakarta midnight, asserting it is accepted and stored as UTC midnight of exactly the intended day. A regression test confirms the old `Date` payload is rejected and nothing is written.
+- *Not run:* the script itself, because its guard (`checkM4DemoTarget`) refuses anything except the Neon staging endpoint. That refusal is correct, and per this task no hosted DB was touched.
+
+**B. `src/components/date-field.tsx:128` — a failed save left the attempted date on screen.**
+- *Before:* after a failed picker choice, Enter/blur, or clear, the field kept showing the unsaved date. After a failed clear it showed an empty field. The database still held the old value, and only the error line hinted otherwise.
+- *Chosen UX:* the visible value reverts to the last **confirmed** value, the error stays visible (`role="alert"`, unchanged copy "…belum bisa diperbarui. Coba lagi."), and the next pick, Enter/blur, or Kosongkan retries normally. "Confirmed" means the newest request in the commit chain that succeeded, or else the persisted prop. That covers the case where an earlier save in the chain landed and a newer one then failed.
+- *Concurrency:* commits stay serialized, with newest-intent-wins. While the chain is saving, the newest intent stays on screen: a parent prop update from an earlier request landing no longer swaps it back to an older date. This was a related display glitch found while writing the tests. A keyboard draft started while the failing request was in flight is newer than the failed intent, so it is never overwritten. Escape still drops it.
+- *Picker test tightened (no product change):* on Chromium, the visible-field picker test no longer skips when `:open` is missing. It fails loudly instead. Firefox/WebKit stay feature-detected (both support `:open` and pass).
+- *Unit tests* (`src/components/date-field.test.tsx`, "failed saves (PR #26 review)", 7 tests, using a parent harness whose `value` changes only on a confirmed save): failed picker → revert + alert + retry saves; failed Kosongkan → old date back, Kosongkan kept, retry clears; failed native clear → revert; failed Enter → revert + retry; earlier ok / newest fails → earlier confirmed date shown (and the newest intent is shown while saving); earlier fails / newest ok → saved, no alert; mid-flight keyboard draft preserved, Escape restores.
+- *Real-browser tests* (`e2e/invoices/due-date-integrity.spec.ts`, "failed saves"): `page.route` fails only the next due-date PATCH with a 409, using the existing narrow `expectedErrorResponses` opt-in rather than a new diagnostics bypass. The stored value is checked through `page.request`, which `page.route` does not intercept.
+  - **Failed Kosongkan:** the stored date reappears with the error, then a retry clears it and the empty state survives a reload. Runs on chromium and chromium-mobile.
+  - **Failed typed date:** after Enter fails, the stored date reappears; retyping and Enter saves it and it survives a reload. Exactly `["2030-01-15","2030-01-15"]` is sent (nothing partial). Desktop chromium only.
+- *Negative controls:* with the pre-fix `date-field.tsx` restored, 5 of the 7 new unit tests fail. The other 2 ("earlier fails / newest ok" and "mid-flight draft preserved") test behavior that was already correct. All 3 new browser journeys fail on a rebuilt pre-fix app. The fix was restored (byte-identical, `cmp`) and rebuilt.
+
+**Validation on the follow-up tree** (local, disposable `127.0.0.1:55432/dibayar_test` only):
+
+| Gate | Result |
+|---|---|
+| `npm run lint` / `npm run typecheck` / `npm run build` | 0 / 0 / 0 |
+| `npm test` | 893/893 (was 882; +11) |
+| `npm run test:e2e:critical` (chromium + chromium-mobile) | 99 passed, 0 failed, 17 skipped (was 96/16; +2 chromium, +1 mobile journey; the extra skip is the desktop-only keyboard variant on mobile) |
+| Firefox + WebKit, `due-date-integrity.spec.ts` | 10 passed, 0 failed, 12 skipped (Chromium-only keyboard/API tests) |
+| Picker tests after the skip tightening, 4 projects | 8/8 passed |
+| `npm run test:e2e:a11y` (chromium) | 12 passed, 1 skipped |
+| `@visual` | not re-run: no layout change, and local renderer baselines differ (§7) |
+
+One local run of the picker tests failed with `ERR_CONNECTION_REFUSED`. I had started it while the a11y run still owned port 3300 (`reuseExistingServer`). A clean rerun gave 8/8, and that is the one reported above.
+
