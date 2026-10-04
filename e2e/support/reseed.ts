@@ -10,7 +10,7 @@
 // no reseed -- they never mutate fixture rows.
 import { execFileSync } from "node:child_process";
 
-function runFixtureAction(action: "seed" | "legacy-due-date"): void {
+function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states"): void {
   const env = { ...process.env, E2E_FIXTURE_CONFIRM: "non-production" };
   execFileSync("npx", ["tsx", "--env-file-if-exists=.env.local", "scripts/e2e-fixtures.ts", action], {
     stdio: "inherit",
@@ -27,4 +27,15 @@ export function reseedFixtures(): void {
 // also undoes it for the next test.
 export function seedLegacyInvalidDueDate(): void {
   runFixtureAction("legacy-due-date");
+}
+
+// Reseeds, then adds the follow-up overlay (scripts/e2e-fixtures.ts
+// applyFollowUpStates): overdue, due-today, due-in-7/8-days invoices and a
+// deal with an invalid WhatsApp number. The base seed stays exactly as
+// before, so specs that apply this must reseed again in afterEach -- the
+// read-only specs (filter-navigation, add-deal-dialog) and the @visual
+// baselines assume the seven-deal, empty-queue base state.
+export function applyFollowUpStates(): void {
+  runFixtureAction("seed");
+  runFixtureAction("follow-up-states");
 }

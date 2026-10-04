@@ -25,6 +25,35 @@ export type FixtureManifest = {
   brands: Record<string, string>;
   invoices: { sent: string; paid: string };
   shareTokens: { active: string; expired: string; invalid: string };
+  // IDs for the opt-in follow-up overlay (applyFollowUpStates() in
+  // e2e/support/reseed.ts). Always listed here, but the rows only exist in
+  // the database after the overlay is applied on top of a fresh seed.
+  followUp: {
+    deals: {
+      overdueStored: string;
+      overdueSent: string;
+      dueToday: string;
+      dueWindowEdge: string;
+      dueOutsideWindow: string;
+      invalidContact: string;
+    };
+    invoices: {
+      overdueStored: string;
+      overdueSent: string;
+      dueToday: string;
+      dueWindowEdge: string;
+      dueOutsideWindow: string;
+    };
+    dueOffsetDays: {
+      overdueStored: number;
+      overdueSent: number;
+      dueToday: number;
+      dueWindowEdge: number;
+      dueOutsideWindow: number;
+    };
+    invalidContactWa: string;
+    brands: Record<string, string>;
+  };
 };
 
 const manifestPath = path.resolve(".hermes-runtime/e2e-fixtures/fixtures.json");

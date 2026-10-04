@@ -23,11 +23,12 @@ import {
   E2E_OWNER_SIGNOUT_SESSION_TOKEN,
 } from "../e2e/support/fixture-ids";
 import { FIXTURE_FUTURE_DATE, FIXTURE_PAST_DATE } from "../src/lib/e2e-fixture-dates";
+import { getJakartaCalendarDate } from "../src/lib/invoice-date-status";
 import { encryptShareToken } from "../src/lib/share-token-crypto";
 
 const action = process.argv[2];
-if (!["seed", "verify", "cleanup", "legacy-due-date"].includes(action ?? "")) {
-  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date");
+if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states"].includes(action ?? "")) {
+  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states");
 }
 
 const connectionString = process.env.DATABASE_URL;
@@ -106,6 +107,57 @@ const shareTokens = {
   expired: `${prefix}-public-expired-token-do-not-share`,
   invalid: `${prefix}-public-invalid-token-do-not-share`,
 };
+
+// Opt-in overlay for the follow-up / overdue / contact-repair journeys
+// (applyFollowUpStates below). These rows are deliberately NOT part of the
+// base seed: the base seed has an empty Beranda follow-up queue and seven
+// deals, and the checked-in @visual baselines (Beranda, deal board, invoice
+// list) capture exactly that. Only specs that need these states apply the
+// overlay, after reseedFixtures(); the next `seed` removes them again (they
+// hang off the fixture owner, so cleanupRows() cascades them away).
+//
+// Due dates are relative to the Asia/Jakarta calendar date at the moment the
+// overlay is applied -- unlike FIXTURE_FUTURE_DATE/FIXTURE_PAST_DATE, they
+// are never captured in a screenshot, and the follow-up queue's reasons
+// ("Telat N hari", "Jatuh tempo hari ini", ...) only exist relative to today.
+// Each offset sits on a boundary of selectAttentionInvoices()
+// (src/lib/invoice-date-status.ts, DUE_SOON_WINDOW_DAYS = 7).
+const followUp = {
+  deals: {
+    overdueStored: `${prefix}-deal-overdue-stored`,
+    overdueSent: `${prefix}-deal-overdue-sent`,
+    dueToday: `${prefix}-deal-due-today`,
+    dueWindowEdge: `${prefix}-deal-due-window-edge`,
+    dueOutsideWindow: `${prefix}-deal-due-outside-window`,
+    invalidContact: `${prefix}-deal-invalid-contact`,
+  },
+  invoices: {
+    // Stored OVERDUE: invoice detail offers only "Tandai lunas"
+    // (NEXT_ACTIONS.OVERDUE in invoice-detail-client.tsx).
+    overdueStored: `${prefix}-invoice-overdue-stored`,
+    // Stored SENT, due yesterday: displayed as overdue purely by derivation
+    // (deriveInvoiceDisplayStatus), while its actions still follow SENT.
+    overdueSent: `${prefix}-invoice-overdue-sent`,
+    dueToday: `${prefix}-invoice-due-today`,
+    dueWindowEdge: `${prefix}-invoice-due-window-edge`,
+    dueOutsideWindow: `${prefix}-invoice-due-outside-window`,
+  },
+  // Whole Jakarta-calendar days from "today" to each invoice's due date.
+  dueOffsetDays: { overdueStored: -5, overdueSent: -1, dueToday: 0, dueWindowEdge: 7, dueOutsideWindow: 8 },
+  // 8 digits that keep no 62/0/8 prefix: accepted by dealInputSchema (min 6)
+  // and stored as typed, but normalizeWhatsAppNumber() rejects it (< 9
+  // digits) -- the same state a person reaches by typing a short number.
+  invalidContactWa: "12345678",
+} as const;
+
+const followUpBrands = {
+  [followUp.deals.overdueStored]: "E2E Brand Telat Tersimpan",
+  [followUp.deals.overdueSent]: "E2E Brand Telat Terkirim",
+  [followUp.deals.dueToday]: "E2E Brand Jatuh Tempo Hari Ini",
+  [followUp.deals.dueWindowEdge]: "E2E Brand Jatuh Tempo Tujuh Hari",
+  [followUp.deals.dueOutsideWindow]: "E2E Brand Jatuh Tempo Delapan Hari",
+  [followUp.deals.invalidContact]: "E2E Brand Kontak Tidak Valid",
+} as const;
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
@@ -220,6 +272,8 @@ async function seed() {
     brands,
     invoices: invoiceIds,
     shareTokens,
+    // Only present in the database after `follow-up-states`; see followUp.
+    followUp: { ...followUp, brands: followUpBrands },
   };
   await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
@@ -294,11 +348,64 @@ async function legacyDueDate() {
   console.log(JSON.stringify({ action: "legacy-due-date", host: normalizedHost, prefix, updated: result.count }));
 }
 
+// UTC midnight of the Jakarta calendar date `offsetDays` from today -- the
+// same date-only encoding the due-date field writes (Invoice.dueDate).
+function jakartaDueDate(today: string, offsetDays: number): Date {
+  const [year, month, day] = today.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + offsetDays));
+}
+
+// Adds the follow-up overlay (see followUp above) on top of a fresh seed.
+// Refuses to run unless the base seed is present and the overlay is not, so
+// it can't silently stack on a half-applied state.
+async function applyFollowUpStates() {
+  const ownerDeals = await prisma.deal.findMany({ where: { userId: ids.owner }, select: { id: true } });
+  const baseDealIds = new Set<string>(Object.values(dealIds));
+  if (ownerDeals.length !== baseDealIds.size || ownerDeals.some((deal) => !baseDealIds.has(deal.id))) {
+    throw new Error(`E2E follow-up overlay needs a fresh seed first (found ${ownerDeals.length} owner deals)`);
+  }
+
+  const today = getJakartaCalendarDate(new Date());
+  const now = new Date();
+  const d = followUp.deals;
+  const dealRows = [
+    { id: d.overdueStored, userId: ids.owner, brand: followUpBrands[d.overdueStored], contactWa: "628110000008", scope: "E2E fixture: invoice stored as overdue", feeIdr: 8_000_000, status: DealStatus.INVOICE },
+    { id: d.overdueSent, userId: ids.owner, brand: followUpBrands[d.overdueSent], contactWa: "628110000009", scope: "E2E fixture: sent invoice due yesterday", feeIdr: 9_000_000, status: DealStatus.INVOICE },
+    { id: d.dueToday, userId: ids.owner, brand: followUpBrands[d.dueToday], contactWa: "628110000010", scope: "E2E fixture: invoice due today", feeIdr: 1_100_000, status: DealStatus.INVOICE },
+    { id: d.dueWindowEdge, userId: ids.owner, brand: followUpBrands[d.dueWindowEdge], contactWa: "628110000011", scope: "E2E fixture: invoice due in seven days", feeIdr: 1_200_000, status: DealStatus.INVOICE },
+    { id: d.dueOutsideWindow, userId: ids.owner, brand: followUpBrands[d.dueOutsideWindow], contactWa: "628110000012", scope: "E2E fixture: invoice due in eight days", feeIdr: 1_300_000, status: DealStatus.INVOICE },
+    { id: d.invalidContact, userId: ids.owner, brand: followUpBrands[d.invalidContact], contactWa: followUp.invalidContactWa, scope: "E2E fixture: WhatsApp number needs repair", feeIdr: 1_400_000, status: DealStatus.NEGO },
+  ];
+  await prisma.deal.createMany({ data: dealRows });
+  await prisma.dealStageTransition.createMany({
+    data: dealRows.map((deal) => ({ id: `${deal.id}-initial-transition`, dealId: deal.id, fromStatus: null, toStatus: deal.status, createdAt: now })),
+  });
+
+  const i = followUp.invoices;
+  const offsets = followUp.dueOffsetDays;
+  // No InvoiceShare rows: the reminder journeys start from "no link yet",
+  // so the link in the message is the one the reminder itself created.
+  await prisma.invoice.createMany({
+    data: [
+      { id: i.overdueStored, userId: ids.owner, dealId: d.overdueStored, number: "E2E/OVERDUE/003", subtotalIdr: 8_000_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.OVERDUE, dueDate: jakartaDueDate(today, offsets.overdueStored) },
+      { id: i.overdueSent, userId: ids.owner, dealId: d.overdueSent, number: "E2E/OVERDUE/004", subtotalIdr: 9_000_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.SENT, dueDate: jakartaDueDate(today, offsets.overdueSent) },
+      { id: i.dueToday, userId: ids.owner, dealId: d.dueToday, number: "E2E/DUE/005", subtotalIdr: 1_100_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.SENT, dueDate: jakartaDueDate(today, offsets.dueToday) },
+      { id: i.dueWindowEdge, userId: ids.owner, dealId: d.dueWindowEdge, number: "E2E/DUE/006", subtotalIdr: 1_200_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.SENT, dueDate: jakartaDueDate(today, offsets.dueWindowEdge) },
+      { id: i.dueOutsideWindow, userId: ids.owner, dealId: d.dueOutsideWindow, number: "E2E/DUE/007", subtotalIdr: 1_300_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.SENT, dueDate: jakartaDueDate(today, offsets.dueOutsideWindow) },
+    ],
+  });
+
+  const applied = await prisma.invoice.count({ where: { userId: ids.owner, id: { in: Object.values(i) } } });
+  if (applied !== Object.keys(i).length) throw new Error(`E2E follow-up overlay read-back expected ${Object.keys(i).length} invoices, found ${applied}`);
+  console.log(JSON.stringify({ action: "follow-up-states", host: normalizedHost, prefix, jakartaToday: today, deals: dealRows.length, invoices: applied }));
+}
+
 async function main() {
   try {
     if (action === "seed") await seed();
     else if (action === "verify") await verify();
     else if (action === "legacy-due-date") await legacyDueDate();
+    else if (action === "follow-up-states") await applyFollowUpStates();
     else await cleanup();
   } finally {
     await prisma.$disconnect();
