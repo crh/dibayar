@@ -1735,7 +1735,7 @@
       "persona": "owner",
       "preconditions": "",
       "interaction": "Click Unduh PDF",
-      "expected": "PDF download with matching content",
+      "expected": "PDF download with matching content, including bank details last saved in Settings (moved from SET-03)",
       "persisted": "n/a",
       "alternates": "Incomplete issuer settings",
       "scope": [
@@ -1753,7 +1753,7 @@
         }
       ],
       "manualCheck": "MAN-PDF-01",
-      "followUp": "Batch 2: click the link and capture the download event"
+      "followUp": "Batch 2: click the link and capture the download event; check the text (e.g. pdftotext, as the ux-audit job does), including bank details edited in Settings"
     },
     {
       "id": "INV-OWN-01",
@@ -2162,11 +2162,11 @@
       "id": "SET-03",
       "domain": "settings",
       "route": "/pengaturan",
-      "action": "Update bank details; they appear on invoice/PDF",
+      "action": "Update bank details; they persist and appear on the recipient invoice page",
       "persona": "owner",
       "preconditions": "",
-      "interaction": "Edit bank name/account/holder, save, reload, open public invoice",
-      "expected": "Persisted and shown to the recipient",
+      "interaction": "Edit bank name/account/holder, save, reload, open the invoice share link as the recipient",
+      "expected": "Persisted after reload and navigation; shown in the recipient page's payment block (/i/<token>)",
       "persisted": "UserSettings bank fields",
       "alternates": "Required-field errors",
       "scope": [
@@ -2180,7 +2180,7 @@
           "file": "e2e/settings/bank-details.spec.ts",
           "title": "edited bank details persist after reload and appear on the recipient's invoice page",
           "kind": "real",
-          "note": "Edits the three bank fields with synthetic values, saves, reloads, navigates away and back, then opens the invoice's share link in a separate session-less context and checks the 'Pembayaran ke' block. The PDF is not checked (INV-PDF-01 / PUB-05)"
+          "note": "Edits the three bank fields with synthetic values, saves, reloads, navigates away and back, then opens the invoice's share link in a separate session-less context with the project's device emulation and checks the 'Pembayaran ke' block. The PDF outcome is tracked under INV-PDF-01"
         },
         {
           "file": "e2e/settings/bank-details.spec.ts",
@@ -2188,7 +2188,8 @@
           "kind": "real",
           "note": "Required-field alternate: no PATCH is sent; reload shows the seeded values"
         }
-      ]
+      ],
+      "evidence": "Narrowed 2026-10-04 (PR #27 review): the PDF half of the original \"invoice/PDF\" wording is not exercised here and moved to INV-PDF-01, which stays partial"
     },
     {
       "id": "SET-04",

@@ -39,7 +39,7 @@ An entry in this inventory is not proof that the action works. Only `automated_r
 | HOME-03 | P1 | `automated_partial` | Send reminder from a follow-up queue row | Batch 2: needs the overdue-invoice fixture. The current seed has no invoice in the follow-up queue (the SENT invoice is due 2099-12-31, the other is PAID), so a browser test cannot reach Kirim pengingat without changing fixture topology (assessed 2026-10-04) |
 | INV-DUE-05 | P1 | `automated_partial` | Due date shown consistently in header, list, queue and WhatsApp message | Batch 2 |
 | INV-DUE-06 | P1 | `automated_partial` | Due-date save failure shows an error |  |
-| INV-PDF-01 | P1 | `automated_partial` | Download the invoice PDF (owner) | Batch 2: click the link and capture the download event |
+| INV-PDF-01 | P1 | `automated_partial` | Download the invoice PDF (owner) | Batch 2: click the link and capture the download event; check the text (e.g. pdftotext, as the ux-audit job does), including bank details edited in Settings |
 | INV-STATUS-05 | P1 | `blocked` | Mark a DUE invoice as overdue | Chris decision, then Batch 1 |
 | INV-STATUS-06 | P1 | `not_covered` | Mark an OVERDUE invoice as paid / send overdue reminder | Batch 1 (needs an overdue invoice in the E2E fixture) |
 | PUB-05 | P1 | `automated_partial` | Recipient downloads the PDF | Batch 2 |
@@ -182,7 +182,7 @@ Test kinds: **R** = real interaction, **P** = partial (URL entry, `fill()` on a 
 |---|---|---|---|---|---|
 | SET-01 | P0 | `automated_real_interaction` | Update issuer name and save; persists | chromium, chromium-mobile | R: `settings/settings.spec.ts` |
 | SET-02 | P1 | `automated_real_interaction` | Invalid issuer email is rejected | chromium, chromium-mobile | R: `settings/settings.spec.ts` |
-| SET-03 | P1 | `automated_real_interaction` | Update bank details; they appear on invoice/PDF | chromium, chromium-mobile | R: `settings/bank-details.spec.ts` |
+| SET-03 | P1 | `automated_real_interaction` | Update bank details; they persist and appear on the recipient invoice page | chromium, chromium-mobile | R: `settings/bank-details.spec.ts` |
 | SET-04 | P1 | `not_covered` | Edit WhatsApp templates; the next message uses them | chromium, chromium-mobile | — |
 | SET-05 | P2 | `not_covered` | Reset a template to default | chromium | — |
 | SET-06 | P1 | `automated_real_interaction` | Switch interface language (Indonesia/English); persists across pages | chromium, chromium-mobile | R: `settings/language.spec.ts`<br>P: `tests/ux-audit/t27.verification.spec.ts` |

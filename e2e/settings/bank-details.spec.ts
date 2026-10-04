@@ -6,9 +6,10 @@
 // the journey edits the three bank fields in Settings, proves they survived
 // a reload and a round trip through the nav, takes the share link from the
 // owner's invoice page, and opens it the way a recipient does: in a
-// separate browser context with no session. The PDF carries the same model
-// (buildInvoiceDocumentModel) but its compressed text is not checked here;
-// a PDF download journey is Batch 2 (INV-PDF-01 / PUB-05).
+// separate browser context with no session but the same device emulation.
+// The PDF carries the same model (buildInvoiceDocumentModel) but its
+// compressed text is not checked here; that outcome is tracked under
+// INV-PDF-01 (Batch 2, which can use pdftotext as the ux-audit job does).
 //
 // All values are synthetic. Both tests change the fixture owner's
 // UserSettings, so they reseed before and after.
@@ -24,7 +25,7 @@ test.describe("payment details in settings", { tag: "@critical" }, () => {
   test.beforeEach(reseedFixtures);
   test.afterEach(reseedFixtures);
 
-  test("edited bank details persist after reload and appear on the recipient's invoice page", async ({ page, browser, baseURL }) => {
+  test("edited bank details persist after reload and appear on the recipient's invoice page", async ({ page, browser, baseURL, viewport, isMobile, hasTouch, userAgent, locale, timezoneId }) => {
     const manifest = loadFixtureManifest();
     const invoiceBrand = manifest.brands[manifest.deals.invoiceSent];
 
@@ -59,9 +60,17 @@ test.describe("payment details in settings", { tag: "@critical" }, () => {
     const shareLink = await page.getByTestId("share-link-track").locator("span[title]").getAttribute("title");
     expect(shareLink).toMatch(/\/i\/[^/]+$/);
 
-    const recipient = await browser.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
+    // browser.newContext() would fall back to desktop defaults; pass this
+    // project's device options so the recipient on a phone gets the 390px
+    // touch emulation the owner had.
+    const recipient = await browser.newContext({
+      baseURL, viewport, isMobile, hasTouch, userAgent, locale, timezoneId,
+      storageState: { cookies: [], origins: [] },
+    });
     try {
       const recipientPage = await recipient.newPage();
+      expect(recipientPage.viewportSize()).toEqual(viewport);
+      expect(await recipientPage.evaluate(() => navigator.maxTouchPoints > 0)).toBe(hasTouch);
       await recipientPage.goto(shareLink!);
       const paymentBlock = recipientPage.locator("div", { has: recipientPage.getByRole("heading", { name: "Pembayaran ke" }) }).last();
       await expect(paymentBlock).toContainText(`Bank: ${UPDATED.bankName}`);
@@ -69,6 +78,8 @@ test.describe("payment details in settings", { tag: "@critical" }, () => {
       await expect(paymentBlock).toContainText(`Atas nama: ${UPDATED.holder}`);
       await expect(paymentBlock).not.toContainText(SEEDED.bankName);
       await expect(paymentBlock.getByRole("alert")).toHaveCount(0);
+      // No sideways scrolling on the recipient's page at this project's width.
+      expect(await recipientPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     } finally {
       await recipient.close();
     }
