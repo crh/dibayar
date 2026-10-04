@@ -1,0 +1,2368 @@
+{
+  "schemaVersion": 1,
+  "inventoryDate": "2026-10-04",
+  "baseline": "origin/staging b51fba1 (PR #26 merged) + branch chore/journey-coverage-2026-10-03",
+  "classificationRules": [
+    "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
+    "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
+    "automated_partial: the test uses page.goto to skip the in-app entry point, fill() on a picker control, page.request/API calls, page.evaluate fetch, stubs/mocks, component tests with fireEvent, or asserts only rendering (screenshots, axe scans, text presence).",
+    "A test that is test.skip()-ed or test.fixme()-ed in a project does not count for that project; a test.fail()-annotated (expected-failure) test never counts as coverage. `npm run coverage:journeys` enforces this: every titled reference must be a test Playwright itself registers (`playwright test --list`), and each claimed project needs a real test that its AST shows is not skipped, fixme'd or expected to fail there; a condition it cannot evaluate does not count. With `--results <playwright-json>` it also checks the claims against an actual run (CI does this for the @critical run).",
+    "tests/ux-audit specs run in the CI ux-audit job, which is report-gated (scripts/ux-audit.ts), not a per-test exit-code gate; they are credited but called out as such."
+  ],
+  "actions": [
+    {
+      "id": "AUTH-01",
+      "domain": "auth",
+      "route": "/deal (any protected route)",
+      "action": "Unauthenticated visit to a protected route redirects to sign-in",
+      "persona": "visitor (no session)",
+      "preconditions": "No session cookie",
+      "interaction": "Navigate to /deal",
+      "expected": "Lands on /api/auth/signin",
+      "persisted": "n/a",
+      "alternates": "Expired/deleted session behaves the same (AUTH-07)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/auth/session.spec.ts",
+          "title": "unauthenticated visitor hitting a protected route is redirected to sign-in",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "AUTH-02",
+      "domain": "auth",
+      "route": "/masuk",
+      "action": "Landing page 'sign in with Google' CTA starts sign-in",
+      "persona": "visitor",
+      "preconditions": "No session",
+      "interaction": "Open /masuk, click the Google sign-in CTA",
+      "expected": "Auth.js sign-in page with Google provider, callbackUrl=/dashboard",
+      "persisted": "n/a",
+      "alternates": "English landing via dibayar-language cookie",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "tests/ux-audit/baseline.landing.spec.ts",
+          "title": "",
+          "kind": "partial",
+          "note": "Renders and screenshots the landing page; never clicks the CTA"
+        }
+      ],
+      "followUp": "Batch 2: click CTA and assert the sign-in page (no real Google round trip)"
+    },
+    {
+      "id": "AUTH-03",
+      "domain": "auth",
+      "route": "/api/auth/signin -> Google -> /",
+      "action": "Real Google OAuth round trip",
+      "persona": "creator with Google account",
+      "preconditions": "Hosted environment with OAuth redirect configured",
+      "interaction": "Sign in with Google on staging",
+      "expected": "Returns authenticated to Beranda; User/Account rows exist in that environment's DB",
+      "persisted": "Session cookie",
+      "alternates": "Consent cancelled; account without prior User row",
+      "scope": [
+        "manual: staging"
+      ],
+      "priority": "P0",
+      "status": "manual_verified",
+      "manualCheck": "MAN-AUTH-01",
+      "evidence": "2026-09-30 staging smoke PASS (Google OAuth round trip) recorded in STATE.md latest_validation and docs/receipts/DIBAYAR-HOBBY-STAGING-ACTIVATION-2026-09-29.md; re-run before each release"
+    },
+    {
+      "id": "AUTH-04",
+      "domain": "auth",
+      "route": "/",
+      "action": "Authenticated entry to Beranda",
+      "persona": "owner",
+      "preconditions": "Valid session",
+      "interaction": "Navigate to /",
+      "expected": "Beranda headings render with seeded data",
+      "persisted": "n/a",
+      "alternates": "Data load error (HOME-09)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/auth/session.spec.ts",
+          "title": "authenticated Beranda loads with real seeded data",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "AUTH-05",
+      "domain": "auth",
+      "route": "account menu -> /api/auth/signout",
+      "action": "Sign out via account menu",
+      "persona": "owner",
+      "preconditions": "Valid session",
+      "interaction": "Open account menu, choose Keluar, confirm on Auth.js page",
+      "expected": "Next protected visit redirects to sign-in",
+      "persisted": "Session row deleted",
+      "alternates": "Cancel on the Auth.js confirm page",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/auth/session.spec.ts",
+          "title": "sign out via the account menu ends the session and returns to sign-in on the next protected visit",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "AUTH-06",
+      "domain": "auth",
+      "route": "/pengaturan",
+      "action": "Sign out from Settings with in-app confirm",
+      "persona": "owner",
+      "preconditions": "Valid session",
+      "interaction": "Pengaturan -> Keluar -> confirm (and cancel)",
+      "expected": "Confirm leads to sign-out; cancel keeps the session",
+      "persisted": "Session row deleted on confirm",
+      "alternates": "Cancel",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 3"
+    },
+    {
+      "id": "AUTH-07",
+      "domain": "auth",
+      "route": "any protected route",
+      "action": "Session expiry mid-use",
+      "persona": "owner",
+      "preconditions": "Session row deleted/expired while a page is open",
+      "interaction": "Reload or navigate",
+      "expected": "Redirect to sign-in, no data shown, no 5xx",
+      "persisted": "n/a",
+      "alternates": "Client-side mutation after expiry should fail visibly",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 3 (delete the dedicated sign-out session row, then act)"
+    },
+    {
+      "id": "AUTH-08",
+      "domain": "auth",
+      "route": "/dashboard",
+      "action": "Legacy /dashboard URL redirects to Beranda",
+      "persona": "owner",
+      "preconditions": "Valid session",
+      "interaction": "Follow 'Kembali ke dashboard' on invoice detail (links to /dashboard)",
+      "expected": "Lands on / (Beranda)",
+      "persisted": "n/a",
+      "alternates": "Unauthenticated -> sign-in",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 3, together with NAV-09"
+    },
+    {
+      "id": "HOME-01",
+      "domain": "home",
+      "route": "/",
+      "action": "Net invoiced this month card shows the correct IDR total",
+      "persona": "owner",
+      "preconditions": "Invoices issued this month",
+      "interaction": "View Beranda",
+      "expected": "Correct Rp total for the current Jakarta month",
+      "persisted": "n/a",
+      "alternates": "Month rollover; no invoices; load error",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "e2e/auth/session.spec.ts",
+          "title": "authenticated Beranda loads with real seeded data",
+          "kind": "partial",
+          "note": "Asserts the heading only, not the amount"
+        },
+        {
+          "file": "src/lib/income-summary.test.ts",
+          "title": "",
+          "kind": "partial",
+          "note": "Pure calculation unit tests"
+        }
+      ],
+      "followUp": "Batch 2: assert the rendered amount against fixture invoices"
+    },
+    {
+      "id": "HOME-02",
+      "domain": "home",
+      "route": "/",
+      "action": "Follow-up queue lists overdue / due-soon invoices with reasons",
+      "persona": "owner",
+      "preconditions": "Overdue and due-soon invoices exist",
+      "interaction": "View Beranda",
+      "expected": "Rows with correct reason text, ordered",
+      "persisted": "n/a",
+      "alternates": "Empty queue; load error",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "tests/ux-audit/states/needs-chasing.spec.ts",
+          "title": "actionable: overdue and due-soon invoices both appear with the correct reason",
+          "kind": "partial",
+          "note": "Rendering assertion only (ux-audit job)"
+        }
+      ]
+    },
+    {
+      "id": "HOME-03",
+      "domain": "home",
+      "route": "/",
+      "action": "Send reminder from a follow-up queue row",
+      "persona": "owner",
+      "preconditions": "Overdue invoice with valid contact",
+      "interaction": "Click Kirim pengingat on the row",
+      "expected": "WhatsApp opens with the chase template; blocked popup shows fallback link",
+      "persisted": "Share link created if absent",
+      "alternates": "Blocked popup; share creation failure",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "src/components/home/follow-up-queue.test.tsx",
+          "title": "",
+          "kind": "partial",
+          "note": "Component test with mocked fetch/window.open"
+        }
+      ],
+      "followUp": "Batch 1"
+    },
+    {
+      "id": "HOME-04",
+      "domain": "home",
+      "route": "/",
+      "action": "Repair invalid number in a queue row, save and send",
+      "persona": "owner",
+      "preconditions": "Overdue invoice whose deal has an invalid WhatsApp number",
+      "interaction": "Type number, click Simpan & kirim",
+      "expected": "Number saved on the deal, WhatsApp opens",
+      "persisted": "Deal.contactWa",
+      "alternates": "Still-invalid number; save error",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "src/components/home/follow-up-queue.test.tsx",
+          "title": "",
+          "kind": "partial",
+          "note": "Component test with mocked fetch"
+        }
+      ]
+    },
+    {
+      "id": "HOME-05",
+      "domain": "home",
+      "route": "/ -> /invoice/[id]",
+      "action": "Open an invoice from the follow-up queue",
+      "persona": "owner",
+      "preconditions": "Queue has rows",
+      "interaction": "Click the row link",
+      "expected": "Invoice detail for that invoice",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 3"
+    },
+    {
+      "id": "HOME-06",
+      "domain": "home",
+      "route": "/ -> /deal/[id]",
+      "action": "Open a deal from 'deal terdekat'",
+      "persona": "owner",
+      "preconditions": "Deals with deadlines",
+      "interaction": "Click the deal row",
+      "expected": "Deal detail",
+      "persisted": "n/a",
+      "alternates": "Empty list",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 3"
+    },
+    {
+      "id": "HOME-07",
+      "domain": "home",
+      "route": "/",
+      "action": "'Lihat semua' links to Deal board / Invoice list",
+      "persona": "owner",
+      "preconditions": "Sections have content",
+      "interaction": "Click Lihat semua",
+      "expected": "Navigates to /deal or /invoice",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 3"
+    },
+    {
+      "id": "HOME-08",
+      "domain": "home",
+      "route": "/",
+      "action": "New-user empty state with + Deal call to action",
+      "persona": "new owner (no data)",
+      "preconditions": "No deals or invoices",
+      "interaction": "View Beranda, click + Deal",
+      "expected": "Onboarding empty state; CTA opens deal board",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "tests/ux-audit/states/needs-chasing.spec.ts",
+          "title": "legitimate zero: fresh-user with no data at all shows the onboarding empty state, not a broken widget",
+          "kind": "partial",
+          "note": "Rendering only; CTA not clicked"
+        }
+      ]
+    },
+    {
+      "id": "HOME-09",
+      "domain": "home",
+      "route": "/",
+      "action": "Section load error and retry",
+      "persona": "owner",
+      "preconditions": "Deals/invoices query fails",
+      "interaction": "Click Coba lagi",
+      "expected": "Error card, retry reloads",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "unit"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "src/components/home/monthly-income.test.tsx",
+          "title": "",
+          "kind": "partial",
+          "note": "Component tests only; failure injection in E2E not built"
+        }
+      ]
+    },
+    {
+      "id": "NAV-01",
+      "domain": "global",
+      "route": "bottom nav (<640px)",
+      "action": "Bottom navigation between the four sections",
+      "persona": "owner (phone)",
+      "preconditions": "Authenticated, 390px",
+      "interaction": "Tap Deal, Invoice, Pengaturan, Beranda",
+      "expected": "Each route loads with its heading",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/smoke/mobile-nav.spec.ts",
+          "title": "bottom nav moves between Beranda, Deal, Invoice, and Pengaturan",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "NAV-02",
+      "domain": "global",
+      "route": "top bar / side nav (>=640px)",
+      "action": "Desktop primary navigation links",
+      "persona": "owner (desktop)",
+      "preconditions": "Authenticated, desktop",
+      "interaction": "Click Beranda/Deal/Invoice/Pengaturan in the top bar or side nav",
+      "expected": "Each route loads; current item marked",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P1",
+      "status": "not_covered",
+      "evidence": "Only the top bar's + Deal and 'Deal siap ditagih' links are clicked (NAV-03, NAV-05)",
+      "followUp": "Batch 1"
+    },
+    {
+      "id": "NAV-03",
+      "domain": "global",
+      "route": "top bar + Deal (>=640px)",
+      "action": "Top bar + Deal opens the add-deal dialog",
+      "persona": "owner (desktop)",
+      "preconditions": "Authenticated, desktop",
+      "interaction": "Click + Deal (twice, without reload)",
+      "expected": "Dialog opens each time",
+      "persisted": "n/a",
+      "alternates": "Active stage filter is reset",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/add-deal-dialog.spec.ts",
+          "title": "TopBar + Deal actually opens the dialog",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/deals/add-deal-dialog.spec.ts",
+          "title": "TopBar + Deal reopens the dialog on a second click without a full reload",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "NAV-04",
+      "domain": "global",
+      "route": "floating + button (<640px)",
+      "action": "Floating + Deal button opens the add-deal dialog",
+      "persona": "owner (phone)",
+      "preconditions": "Authenticated, 390px, any screen",
+      "interaction": "Tap the floating + button",
+      "expected": "Add-deal dialog opens",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/mobile-create-entry.spec.ts",
+          "title": "tapping the floating + Deal button from Beranda creates a deal that persists with the typed values",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Added 2026-10-03 (pilot); before this no test tapped the FAB"
+    },
+    {
+      "id": "NAV-05",
+      "domain": "global",
+      "route": "top bar 'Deal siap ditagih' (>=1024px)",
+      "action": "Top bar shortcut to INVOICE-stage deals",
+      "persona": "owner (desktop)",
+      "preconditions": "Authenticated, >=1024px",
+      "interaction": "Click Deal siap ditagih",
+      "expected": "/deal?tahap=INVOICE with Invoice chip selected",
+      "persisted": "n/a",
+      "alternates": "From another filter",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/filter-navigation.spec.ts",
+          "title": "sequence B: /deal -> chip Dibayar -> TopBar New Invoice filters to Invoice",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "NAV-06",
+      "domain": "global",
+      "route": "account menu",
+      "action": "Open and dismiss the account menu (click, Escape)",
+      "persona": "owner",
+      "preconditions": "Authenticated",
+      "interaction": "Click the menu button; press Escape",
+      "expected": "Menu opens without covering the income figure; Escape closes it",
+      "persisted": "n/a",
+      "alternates": "Outside click; focus trap",
+      "scope": [
+        "chromium (ux-audit, 4 widths x 2 languages)"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "tests/ux-audit/t27.verification.spec.ts",
+          "title": "executes the 123-capture matrix and non-visual checks",
+          "kind": "real",
+          "note": "ux-audit job; report-gated"
+        }
+      ]
+    },
+    {
+      "id": "NAV-07",
+      "domain": "global",
+      "route": "account menu -> /pengaturan",
+      "action": "Account menu 'Pengaturan' item",
+      "persona": "owner",
+      "preconditions": "Authenticated",
+      "interaction": "Open menu, choose Pengaturan",
+      "expected": "Settings page",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 3"
+    },
+    {
+      "id": "NAV-08",
+      "domain": "global",
+      "route": "(app) error boundary",
+      "action": "Route error boundary with retry",
+      "persona": "owner",
+      "preconditions": "Server component throws",
+      "interaction": "Click Coba lagi",
+      "expected": "Error card, retry re-renders",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Needs a safe failure-injection seam; not planned until one exists"
+    },
+    {
+      "id": "NAV-09",
+      "domain": "global",
+      "route": "/invoice/[id]",
+      "action": "Invoice detail back link",
+      "persona": "owner",
+      "preconditions": "On invoice detail",
+      "interaction": "Click 'Kembali ke dashboard'",
+      "expected": "Lands on Beranda (via /dashboard redirect)",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 3"
+    },
+    {
+      "id": "NAV-10",
+      "domain": "global",
+      "route": "/deal/[id]",
+      "action": "Deal detail back link",
+      "persona": "owner",
+      "preconditions": "On deal detail",
+      "interaction": "Click 'Kembali ke papan deal'",
+      "expected": "Deal board",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 3"
+    },
+    {
+      "id": "DEAL-LIST-01",
+      "domain": "deals",
+      "route": "/deal",
+      "action": "Deal board default view",
+      "persona": "owner",
+      "preconditions": "Deals in every stage",
+      "interaction": "Open /deal",
+      "expected": "Semua selected, all stages shown",
+      "persisted": "n/a",
+      "alternates": "Empty stage message",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/filter-navigation.spec.ts",
+          "title": "initial default: /deal shows Semua selected, no stage filter",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-FILTER-01",
+      "domain": "deals",
+      "route": "/deal",
+      "action": "Filter by stage chip; URL, Back and Forward stay consistent",
+      "persona": "owner",
+      "preconditions": "On /deal",
+      "interaction": "Click chips; browser Back/Forward",
+      "expected": "URL, chip pressed state and board content agree; no RSC navigation",
+      "persisted": "URL",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/filter-navigation.spec.ts",
+          "title": "chip navigation: Semua -> Invoice -> Dibayar -> Semua, invariant holds after every click",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/deals/filter-navigation.spec.ts",
+          "title": "browser Back steps to the previous chip state",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/deals/filter-navigation.spec.ts",
+          "title": "browser Back then Forward returns to the later chip state",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/deals/filter-navigation.spec.ts",
+          "title": "stage chip click causes zero /deal network requests (no unwanted RSC navigation)",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-FILTER-02",
+      "domain": "deals",
+      "route": "/deal?tahap=...",
+      "action": "Deep link and invalid stage parameter",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "Open /deal?tahap=INVOICE, reload; open an invalid value",
+      "expected": "Invoice chip selected after reload; invalid falls back to Semua",
+      "persisted": "URL",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/filter-navigation.spec.ts",
+          "title": "deep link /deal?tahap=INVOICE selects Invoice and survives reload",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/deals/filter-navigation.spec.ts",
+          "title": "invalid ?tahap value falls back to Semua without crashing",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-01",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "Create a deal on desktop: entry point -> form -> saved -> reload",
+      "persona": "owner (desktop)",
+      "preconditions": "Authenticated",
+      "interaction": "Click top bar + Deal, fill required fields, Simpan deal",
+      "expected": "Toast 'Deal disimpan', card on board, survives reload",
+      "persisted": "Deal row + initial stage transition",
+      "alternates": "DEAL-CREATE-03/04/05/06",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P0",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-crud.spec.ts",
+          "title": "create a deal via the dialog, happy path",
+          "kind": "partial",
+          "note": "Opens the dialog with page.goto(/deal?tambah=1); entry click proven separately by NAV-03 but never in the same journey"
+        }
+      ],
+      "followUp": "Batch 1: start the existing happy path from the top bar click instead of the URL"
+    },
+    {
+      "id": "DEAL-CREATE-02",
+      "domain": "deals",
+      "route": "/ -> FAB -> dialog",
+      "action": "Create a deal on a phone: FAB -> typed form -> saved -> reload -> detail",
+      "persona": "owner (phone)",
+      "preconditions": "Authenticated, 390px",
+      "interaction": "Tap FAB, tap each field and type, tap Simpan deal, reload, open the card menu -> Lihat detail",
+      "expected": "Toast, card persists, detail shows typed fee/scope at stage Masuk",
+      "persisted": "Deal row",
+      "alternates": "",
+      "scope": [
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/mobile-create-entry.spec.ts",
+          "title": "tapping the floating + Deal button from Beranda creates a deal that persists with the typed values",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Added 2026-10-03 (pilot)"
+    },
+    {
+      "id": "DEAL-CREATE-03",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "Close the add-deal dialog without saving",
+      "persona": "owner",
+      "preconditions": "Dialog open with typed values",
+      "interaction": "Click Tutup",
+      "expected": "Dialog closes, nothing created",
+      "persisted": "No row",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-crud.spec.ts",
+          "title": "opening the dialog and closing it without saving creates nothing",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Asserts on the open page only; no reload. Acceptable because no request is sent."
+    },
+    {
+      "id": "DEAL-CREATE-04",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "Close the add-deal dialog with Escape",
+      "persona": "owner (keyboard)",
+      "preconditions": "Dialog open",
+      "interaction": "Press Escape, then reload",
+      "expected": "Dialog closes and does not reopen",
+      "persisted": "URL param stripped",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/add-deal-dialog.spec.ts",
+          "title": "dialog can be closed with Escape, and does not reopen on reload once stripped",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-05",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "Server-rejected deal shows an error and saves nothing",
+      "persona": "owner",
+      "preconditions": "Dialog open",
+      "interaction": "Enter a 5-digit WhatsApp number, Simpan deal",
+      "expected": "400, inline alert, values kept, nothing persisted after reload",
+      "persisted": "No row",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-crud.spec.ts",
+          "title": "a server-rejected deal (WhatsApp number too short) shows an error and saves nothing",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-06",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "Required-field validation before submit",
+      "persona": "owner",
+      "preconditions": "Dialog open, required fields empty",
+      "interaction": "Click Simpan deal",
+      "expected": "Browser/inline validation, no request",
+      "persisted": "No row",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "not_covered",
+      "followUp": "Batch 2"
+    },
+    {
+      "id": "DEAL-CREATE-07",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "Optional fields: contact name, deadline (native date input), payment terms",
+      "persona": "owner",
+      "preconditions": "Dialog open",
+      "interaction": "Fill optional fields including picking a deadline",
+      "expected": "Values saved and shown on detail; deadline becomes the default invoice due date",
+      "persisted": "Deal fields",
+      "alternates": "Deadline picker on a real phone (MAN-DEAL-01)",
+      "scope": [
+        "chromium",
+        "chromium-mobile",
+        "manual: real phone"
+      ],
+      "priority": "P1",
+      "status": "manual_pending",
+      "manualCheck": "MAN-DEAL-01",
+      "followUp": "Batch 2: automate the text fields; deadline picker stays manual like INV-DUE-03"
+    },
+    {
+      "id": "DEAL-STAGE-01",
+      "domain": "deals",
+      "route": "/deal",
+      "action": "Move a deal to the next stage from its card menu",
+      "persona": "owner",
+      "preconditions": "Deal at Masuk",
+      "interaction": "Open card menu, choose Lanjut ke Nego, reload",
+      "expected": "Card under Nego, persists after reload",
+      "persisted": "Deal.status",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-crud.spec.ts",
+          "title": "moving a deal to the next stage via its card menu updates the board",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-STAGE-02",
+      "domain": "deals",
+      "route": "/deal/[id]",
+      "action": "Move a deal to the previous stage (Kembali ke ...)",
+      "persona": "owner",
+      "preconditions": "Deal past Masuk",
+      "interaction": "Click Kembali ke <stage> on detail or card menu, reload",
+      "expected": "Stage moves back, history records it",
+      "persisted": "Deal.status + transition",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "not_covered",
+      "evidence": "t27 card-menu check only asserts that adjacent items exist",
+      "followUp": "Batch 1"
+    },
+    {
+      "id": "DEAL-STAGE-03",
+      "domain": "deals",
+      "route": "/deal/[id]",
+      "action": "Move stage from deal detail; history entry persists",
+      "persona": "owner",
+      "preconditions": "Deal at Masuk",
+      "interaction": "Click Lanjut ke Nego, reload",
+      "expected": "'Masuk -> Nego' in history after reload",
+      "persisted": "DealStageTransition",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-crud.spec.ts",
+          "title": "moving a deal's stage records a stage-history entry that persists after reload",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-STAGE-04",
+      "domain": "deals",
+      "route": "/deal (desktop)",
+      "action": "Drag a deal card to another stage column",
+      "persona": "owner (desktop)",
+      "preconditions": "Desktop board",
+      "interaction": "Drag and drop card",
+      "expected": "PATCH succeeds, card in new column after reload",
+      "persisted": "Deal.status",
+      "alternates": "Touch drag on phones is not supported (menu instead)",
+      "scope": [
+        "chromium 1440 (ux-audit)"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "tests/ux-audit/t27.verification.spec.ts",
+          "title": "executes the 123-capture matrix and non-visual checks",
+          "kind": "real",
+          "note": "F5 drag evidence; ux-audit job, report-gated"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-STAGE-05",
+      "domain": "deals",
+      "route": "/deal",
+      "action": "Keyboard-only stage move via card menu",
+      "persona": "owner (keyboard)",
+      "preconditions": "Desktop board",
+      "interaction": "Tab to card action, Enter, choose item",
+      "expected": "Stage moves",
+      "persisted": "Deal.status",
+      "alternates": "",
+      "scope": [
+        "chromium (ux-audit)"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "tests/ux-audit/t27.verification.spec.ts",
+          "title": "executes the 123-capture matrix and non-visual checks",
+          "kind": "real",
+          "note": "ux-audit job, report-gated"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-DETAIL-01",
+      "domain": "deals",
+      "route": "/deal -> /deal/[id]",
+      "action": "Open deal detail from a board card (card menu -> Lihat detail)",
+      "persona": "owner",
+      "preconditions": "Deal exists",
+      "interaction": "Tap the card's actions button, then Lihat detail",
+      "expected": "Detail with brand, fee, scope, stage",
+      "persisted": "n/a",
+      "alternates": "Board cards have no link of their own; the menu is the only card-level path",
+      "scope": [
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/mobile-create-entry.spec.ts",
+          "title": "tapping the floating + Deal button from Beranda creates a deal that persists with the typed values",
+          "kind": "real"
+        }
+      ],
+      "followUp": "Desktop click path is not covered; fold into Batch 1 DEAL-CREATE-01 rewrite"
+    },
+    {
+      "id": "DEAL-DETAIL-02",
+      "domain": "deals",
+      "route": "/deal/[id]",
+      "action": "Edit and save contact name",
+      "persona": "owner",
+      "preconditions": "On detail",
+      "interaction": "Type name, Simpan, reload",
+      "expected": "Saved message, persists",
+      "persisted": "Deal.contactName",
+      "alternates": "Save error",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 2"
+    },
+    {
+      "id": "DEAL-DETAIL-03",
+      "domain": "deals",
+      "route": "/deal/[id]",
+      "action": "Repair an invalid WhatsApp number on the deal",
+      "persona": "owner",
+      "preconditions": "Deal with invalid number",
+      "interaction": "Open repair, type number, save, reload",
+      "expected": "Saved, WhatsApp link becomes usable",
+      "persisted": "Deal.contactWa",
+      "alternates": "Still-invalid input",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "not_covered",
+      "followUp": "Batch 2 (needs an invalid-contact deal in the E2E fixture)"
+    },
+    {
+      "id": "DEAL-DETAIL-04",
+      "domain": "deals",
+      "route": "/deal/[id]",
+      "action": "Open WhatsApp chat with the brand contact",
+      "persona": "owner",
+      "preconditions": "Valid number",
+      "interaction": "Click the WhatsApp action",
+      "expected": "wa.me popup for the contact",
+      "persisted": "n/a",
+      "alternates": "Blocked popup",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 3"
+    },
+    {
+      "id": "DEAL-DETAIL-05",
+      "domain": "deals",
+      "route": "/deal/[id] -> /invoice/[id]",
+      "action": "Create an invoice from deal detail and follow its link",
+      "persona": "owner",
+      "preconditions": "INVOICE-stage deal without invoice",
+      "interaction": "Click Buat invoice, then Lihat invoice ... ->",
+      "expected": "Invoice created as DRAFT and opened",
+      "persisted": "Invoice row",
+      "alternates": "Create error",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/status-lifecycle.spec.ts",
+          "title": "an invoice created from the deal page moves DRAFT -> SENT -> DUE -> PAID -> SENT, persisting after every reload",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Added 2026-10-03 (pilot)"
+    },
+    {
+      "id": "DEAL-INV-01",
+      "domain": "deals",
+      "route": "/deal?tahap=INVOICE",
+      "action": "Create an invoice from the card menu",
+      "persona": "owner",
+      "preconditions": "INVOICE-stage deal without invoice",
+      "interaction": "Card menu -> Buat invoice, then reload and open /invoice",
+      "expected": "Toast, invoice listed",
+      "persisted": "Invoice row",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "create an invoice from a pending INVOICE-stage deal",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-INV-02",
+      "domain": "deals",
+      "route": "/deal, /deal/[id]",
+      "action": "Create-invoice action is not offered when ineligible",
+      "persona": "owner",
+      "preconditions": "Deal not at INVOICE, or already invoiced",
+      "interaction": "Open card menu / detail",
+      "expected": "No Buat invoice; existing invoice link instead",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "unit"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "src/components/deals/deal-card.test.tsx",
+          "title": "",
+          "kind": "partial",
+          "note": "Component tests"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-DELETE-01",
+      "domain": "deals",
+      "route": "DELETE /api/deals/[id]",
+      "action": "Delete a deal",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "",
+      "expected": "",
+      "persisted": "",
+      "alternates": "",
+      "scope": [],
+      "priority": "P2",
+      "status": "not_applicable",
+      "reason": "The API route exists but no UI control calls it (verified: no DELETE fetch to /api/deals in src). Not a user-facing action; re-inventory if a delete control ships."
+    },
+    {
+      "id": "DEAL-LAYOUT-01",
+      "domain": "deals",
+      "route": "/deal, /deal/[id] at 390px",
+      "action": "Long brand names keep card actions reachable and pages free of horizontal scroll",
+      "persona": "owner (phone)",
+      "preconditions": "Long unbreakable brand",
+      "interaction": "Create deal, tap card menu; open detail",
+      "expected": "Menu in viewport and usable; no page overflow",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-crud.spec.ts",
+          "title": "a long unbreakable brand name does not push the deal card's actions menu off-screen at 390px",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/deals/deal-crud.spec.ts",
+          "title": "a long unbreakable brand name does not cause horizontal page overflow on the deal detail page at 390px",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "INV-LIST-01",
+      "domain": "invoices",
+      "route": "/invoice -> /invoice/[id]",
+      "action": "Open an invoice from the list",
+      "persona": "owner",
+      "preconditions": "Invoices exist",
+      "interaction": "Click the invoice row",
+      "expected": "Detail with matching total",
+      "persisted": "n/a",
+      "alternates": "Empty list",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "invoice list navigates to invoice detail with matching totals",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "INV-DUE-01",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Clear the due date and see the empty state after reload",
+      "persona": "owner",
+      "preconditions": "Invoice with a due date",
+      "interaction": "Click Kosongkan, reload",
+      "expected": "Empty label ('Belum ditentukan' / 'Not set'), input empty, Kosongkan hidden",
+      "persisted": "Invoice.dueDate = null",
+      "alternates": "Save error (INV-DUE-06)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/due-date-entry.spec.ts",
+          "title": "an invoice whose due date was cleared shows the empty state after reload",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "due date edits and clears persist after reload",
+          "kind": "partial",
+          "note": "Desktop only; skipped on chromium-mobile"
+        }
+      ]
+    },
+    {
+      "id": "INV-DUE-02",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Click/tap the visible empty due-date field opens the date picker",
+      "persona": "owner",
+      "preconditions": "Invoice with no due date",
+      "interaction": "Click (desktop) / tap (phone) on the visible 'Belum ditentukan' / 'Not set' text",
+      "expected": "Native date picker opens",
+      "persisted": "n/a",
+      "alternates": "Keyboard path (INV-DUE-04)",
+      "scope": [
+        "chromium",
+        "chromium-mobile",
+        "manual: real phones"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "clicking or tapping the visible empty due-date text opens the native date picker",
+          "kind": "real",
+          "note": "Clicks (chromium) or taps (chromium-mobile, 390px) the visible text's own on-screen position and asserts the native :open state; on Chromium a missing :open fails instead of skipping. Firefox/WebKit run it feature-detected (runtime skip), so they are not claimed here."
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "clicking or tapping the visible filled due-date text opens the native date picker",
+          "kind": "real",
+          "note": "Same entry point with a saved date shown"
+        }
+      ],
+      "manualCheck": "MAN-DUE-01",
+      "finding": "FIND-02",
+      "evidence": "FIND-02 fixed by PR #26 (merge b51fba1): DateField calls showPicker() on click. Emulated mobile is not a real phone; MAN-DUE-01 stays pending."
+    },
+    {
+      "id": "INV-DUE-03",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Pick a date in the native picker -> saved -> reload",
+      "persona": "owner",
+      "preconditions": "Picker open",
+      "interaction": "Choose a date in the OS/browser picker",
+      "expected": "Display shows the date, 'Tersimpan', persists after reload",
+      "persisted": "Invoice.dueDate",
+      "alternates": "Picker dismissed without choosing; change an existing date",
+      "scope": [
+        "manual: Android Chrome, iOS Safari, desktop Chrome/Safari/Firefox"
+      ],
+      "priority": "P0",
+      "status": "manual_pending",
+      "manualCheck": "MAN-DUE-01",
+      "tests": [
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "due date edits and clears persist after reload",
+          "kind": "partial",
+          "note": "fill() on the hidden input proves server persistence only; skipped on chromium-mobile"
+        }
+      ],
+      "reason": "Selecting inside a native picker is not drivable/observable from Playwright"
+    },
+    {
+      "id": "INV-DUE-04",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Desktop keyboard date entry after clicking the visible field",
+      "persona": "owner (desktop keyboard)",
+      "preconditions": "Invoice with no due date",
+      "interaction": "Click visible field (Escape if the picker opened), type the date segments, press Enter or leave the field",
+      "expected": "No save while typing; exactly one save of the complete date on Enter/leave; display shows the date; persists after reload; Kosongkan clears. Out-of-range years are refused with a hint and nothing is saved.",
+      "persisted": "Invoice.dueDate",
+      "alternates": "",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "keyboard year entry never sends a partial or out-of-range date, saves on Enter, survives reload, and clears",
+          "kind": "real",
+          "note": "Asserts zero PATCHes after every digit (passing through 0002-01-15), exactly one PATCH 2030-01-15 on Enter, none on leaving, reload, clear + reload"
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "a typed year outside the supported range is refused on leaving the field and nothing is saved",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "typing over an existing date never clears it mid-edit, and Escape restores it",
+          "kind": "real"
+        }
+      ],
+      "finding": "FIND-03",
+      "evidence": "FIND-03 fixed by PR #26 (merge b51fba1). Desktop Chromium only: segment order differs per engine/locale (real Indonesian-locale Chrome is covered by MAN-DUE-01)."
+    },
+    {
+      "id": "INV-DUE-05",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Due date shown consistently in header, list, queue and WhatsApp message",
+      "persona": "owner",
+      "preconditions": "Due date set",
+      "interaction": "View after change",
+      "expected": "Same date everywhere (Jakarta calendar date)",
+      "persisted": "n/a",
+      "alternates": "Timezone edge near midnight",
+      "scope": [
+        "unit"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "src/lib/invoice-date-status.test.ts",
+          "title": "",
+          "kind": "partial",
+          "note": "Pure date logic"
+        }
+      ],
+      "followUp": "Batch 2"
+    },
+    {
+      "id": "INV-DUE-06",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Due-date save failure shows an error",
+      "persona": "owner",
+      "preconditions": "PATCH fails",
+      "interaction": "Change the date",
+      "expected": "Error alert; the field reverts to the last saved date (not the attempted one); retry saves",
+      "persisted": "Unchanged",
+      "alternates": "",
+      "scope": [
+        "unit",
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "src/components/date-field.test.tsx",
+          "title": "",
+          "kind": "partial",
+          "note": "Component test with fireEvent.change and a mocked commit"
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "a failed Kosongkan shows the stored date again with an error, and a retry clears it",
+          "kind": "partial",
+          "note": "Real clicks and reload, but the failure itself is injected with page.route (a stub), so by rule it is partial"
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "a failed typed date (Enter) shows the stored date again with an error, and retyping saves it",
+          "kind": "partial",
+          "note": "Desktop chromium; failure injected with page.route"
+        }
+      ]
+    },
+    {
+      "id": "INV-STATUS-01",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Mark a DRAFT invoice as sent",
+      "persona": "owner",
+      "preconditions": "DRAFT invoice",
+      "interaction": "Click Tandai sudah dikirim, reload",
+      "expected": "Chip Terkirim; actions Tandai jatuh tempo / Tandai lunas; persists",
+      "persisted": "Invoice.status = SENT",
+      "alternates": "Update error (INV-STATUS-07)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/status-lifecycle.spec.ts",
+          "title": "an invoice created from the deal page moves DRAFT -> SENT -> DUE -> PAID -> SENT, persisting after every reload",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Added 2026-10-03 (pilot)"
+    },
+    {
+      "id": "INV-STATUS-02",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Mark a SENT invoice as due",
+      "persona": "owner",
+      "preconditions": "SENT invoice",
+      "interaction": "Click Tandai jatuh tempo, reload",
+      "expected": "Chip Jatuh tempo; persists",
+      "persisted": "Invoice.status = DUE",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/status-lifecycle.spec.ts",
+          "title": "an invoice created from the deal page moves DRAFT -> SENT -> DUE -> PAID -> SENT, persisting after every reload",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Added 2026-10-03 (pilot)"
+    },
+    {
+      "id": "INV-STATUS-03",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Mark an invoice as paid (from SENT or DUE)",
+      "persona": "owner",
+      "preconditions": "SENT or DUE invoice",
+      "interaction": "Click Tandai lunas, reload",
+      "expected": "Paid note and chip; persists",
+      "persisted": "Invoice.status = PAID",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/status-lifecycle.spec.ts",
+          "title": "an invoice created from the deal page moves DRAFT -> SENT -> DUE -> PAID -> SENT, persisting after every reload",
+          "kind": "real",
+          "note": "DUE -> PAID with reload"
+        },
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "mark an invoice paid, then undo",
+          "kind": "partial",
+          "note": "SENT -> PAID, immediate state only, no reload"
+        }
+      ]
+    },
+    {
+      "id": "INV-STATUS-04",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Undo paid status",
+      "persona": "owner",
+      "preconditions": "PAID invoice",
+      "interaction": "Click Batalkan status lunas, reload",
+      "expected": "Back to Terkirim; persists",
+      "persisted": "Invoice.status = SENT",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/status-lifecycle.spec.ts",
+          "title": "an invoice created from the deal page moves DRAFT -> SENT -> DUE -> PAID -> SENT, persisting after every reload",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "INV-STATUS-05",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Mark a DUE invoice as overdue",
+      "persona": "owner",
+      "preconditions": "DUE invoice",
+      "interaction": "Click Tandai terlambat",
+      "expected": "UNDECIDED -- see FIND-01",
+      "persisted": "Invoice.status = OVERDUE",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "blocked",
+      "reason": "Product question FIND-01: with no past due date the chip immediately shows Terkirim again. Testing either behaviour would lock in an undecided answer.",
+      "finding": "FIND-01",
+      "followUp": "Chris decision, then Batch 1"
+    },
+    {
+      "id": "INV-STATUS-06",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Mark an OVERDUE invoice as paid / send overdue reminder",
+      "persona": "owner",
+      "preconditions": "Invoice whose due date is in the past",
+      "interaction": "Click Kirim pengingat; click Tandai lunas, reload",
+      "expected": "Chase template used; paid persists",
+      "persisted": "Invoice.status = PAID",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "not_covered",
+      "followUp": "Batch 1 (needs an overdue invoice in the E2E fixture)"
+    },
+    {
+      "id": "INV-STATUS-07",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Status update failure shows an error",
+      "persona": "owner",
+      "preconditions": "PATCH fails",
+      "interaction": "Click a status action",
+      "expected": "Alert, status unchanged",
+      "persisted": "Unchanged",
+      "alternates": "",
+      "scope": [],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 3 (route-level failure injection via page.route is acceptable here)"
+    },
+    {
+      "id": "INV-WA-01",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Send invoice via WhatsApp",
+      "persona": "owner",
+      "preconditions": "Valid contact, settings templates",
+      "interaction": "Click Kirim lewat WhatsApp",
+      "expected": "Popup to WhatsApp with the saved template, number, amount, invoice link",
+      "persisted": "Share link created if absent",
+      "alternates": "INV-WA-02, INV-WA-03",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "WhatsApp action opens a saved-template message with the invoice link",
+          "kind": "real"
+        }
+      ],
+      "manualCheck": "MAN-WA-01"
+    },
+    {
+      "id": "INV-WA-02",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Blocked WhatsApp popup falls back to a manual link",
+      "persona": "owner",
+      "preconditions": "Popup blocked",
+      "interaction": "Click Kirim lewat WhatsApp",
+      "expected": "'Buka WhatsApp' link with wa.me href",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "a blocked WhatsApp popup falls back to a clickable manual link",
+          "kind": "real",
+          "note": "window.open stubbed to return null (the real blocker signal); real browser blockers checked by MAN-WA-01"
+        }
+      ]
+    },
+    {
+      "id": "INV-WA-03",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Repair invalid contact on the invoice, save and send",
+      "persona": "owner",
+      "preconditions": "Invalid contact on the deal",
+      "interaction": "Click WhatsApp, type number, Simpan & kirim",
+      "expected": "Number saved on deal, WhatsApp opens",
+      "persisted": "Deal.contactWa",
+      "alternates": "Still invalid",
+      "scope": [
+        "chromium 390 (ux-audit, id+en)"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "tests/ux-audit/t27.verification.spec.ts",
+          "title": "executes the 123-capture matrix and non-visual checks",
+          "kind": "real",
+          "note": "F15 flow; ux-audit job, report-gated"
+        }
+      ]
+    },
+    {
+      "id": "INV-WA-04",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Contact load error and retry",
+      "persona": "owner",
+      "preconditions": "Contact GET fails",
+      "interaction": "Click Coba lagi",
+      "expected": "Alert, retry reloads contact",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "unit"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "src/app/(app)/invoice/[id]/invoice-detail-client.test.tsx",
+          "title": "",
+          "kind": "partial"
+        }
+      ]
+    },
+    {
+      "id": "INV-PDF-01",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Download the invoice PDF (owner)",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "Click Unduh PDF",
+      "expected": "PDF download with matching content",
+      "persisted": "n/a",
+      "alternates": "Incomplete issuer settings",
+      "scope": [
+        "chromium",
+        "manual: phones"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "tests/ux-audit/fixtures.baseline.spec.ts",
+          "title": "downloads owner and public PDFs for the same invoice and confirms they match",
+          "kind": "partial",
+          "note": "Fetches via request API; the button is never clicked"
+        }
+      ],
+      "manualCheck": "MAN-PDF-01",
+      "followUp": "Batch 2: click the link and capture the download event"
+    },
+    {
+      "id": "INV-OWN-01",
+      "domain": "invoices",
+      "route": "/deal/[id], /invoice/[id], APIs",
+      "action": "Another owner cannot view, read or change this owner's deal/invoice",
+      "persona": "second owner",
+      "preconditions": "Two owners",
+      "interaction": "Navigate/act as second owner",
+      "expected": "Not-found UI / 404; no data leak; lists scoped",
+      "persisted": "Unchanged",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/security/ownership-denial.spec.ts",
+          "title": "a second authenticated user cannot view, read via API, or move the primary owner's deal",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/security/ownership-denial.spec.ts",
+          "title": "a second authenticated user cannot view, read via API, or edit the primary owner's invoice",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/security/ownership-denial.spec.ts",
+          "title": "the second user's own board and invoice list never render the primary owner's data",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "SHARE-01",
+      "domain": "sharing",
+      "route": "/invoice/[id]",
+      "action": "Create a share link; it is recovered after reload",
+      "persona": "owner",
+      "preconditions": "No active share",
+      "interaction": "Click Buat tautan berbagi, reload",
+      "expected": "Link shown, same link after reload",
+      "persisted": "InvoiceShare",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "share link can be created, recovered after reload, regenerated, and revoked",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "SHARE-02",
+      "domain": "sharing",
+      "route": "/invoice/[id]",
+      "action": "Regenerate a share link (with confirm)",
+      "persona": "owner",
+      "preconditions": "Active share",
+      "interaction": "Buat ulang tautan -> Ya, buat tautan baru",
+      "expected": "New link",
+      "persisted": "Old token revoked",
+      "alternates": "Cancel (SHARE-04)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "share link can be created, recovered after reload, regenerated, and revoked",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "SHARE-03",
+      "domain": "sharing",
+      "route": "/invoice/[id]",
+      "action": "Revoke a share link (with confirm)",
+      "persona": "owner",
+      "preconditions": "Active share",
+      "interaction": "Cabut tautan -> Ya, cabut tautan, reload",
+      "expected": "No-link state persists",
+      "persisted": "Share revoked",
+      "alternates": "Cancel (SHARE-04)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "share link can be created, recovered after reload, regenerated, and revoked",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "SHARE-04",
+      "domain": "sharing",
+      "route": "/invoice/[id]",
+      "action": "Cancel the regenerate/revoke confirmation",
+      "persona": "owner",
+      "preconditions": "Confirm visible",
+      "interaction": "Click Batal",
+      "expected": "Link unchanged",
+      "persisted": "Unchanged",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 2"
+    },
+    {
+      "id": "SHARE-05",
+      "domain": "sharing",
+      "route": "/invoice/[id]",
+      "action": "Copy the share link",
+      "persona": "owner",
+      "preconditions": "Active share",
+      "interaction": "Click Salin tautan",
+      "expected": "'Tautan disalin.' and clipboard holds the link; on failure, manual-copy fallback",
+      "persisted": "n/a",
+      "alternates": "Clipboard denied",
+      "scope": [
+        "chromium",
+        "manual: phones"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "src/components/invoices/share-link-field.test.tsx",
+          "title": "",
+          "kind": "partial",
+          "note": "Component test with mocked clipboard"
+        }
+      ],
+      "manualCheck": "MAN-SHARE-01",
+      "followUp": "Batch 1 (grant clipboard permissions in Chromium and read it back)"
+    },
+    {
+      "id": "PUB-01",
+      "domain": "public",
+      "route": "/i/[token]",
+      "action": "Recipient opens a valid share link",
+      "persona": "recipient (no session)",
+      "preconditions": "Active share",
+      "interaction": "Open the link",
+      "expected": "Invoice identity, totals, tax, payment details, due date; no owner controls",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/public/invoice.spec.ts",
+          "title": "valid share link renders recipient-safe invoice content and PDF action",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "PUB-02",
+      "domain": "public",
+      "route": "/i/[token]",
+      "action": "Invalid token shows generic not-found",
+      "persona": "recipient",
+      "preconditions": "",
+      "interaction": "Open an unknown token",
+      "expected": "Generic 404 state, no data",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/public/invoice.spec.ts",
+          "title": "invalid share link uses the generic not-found state",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "PUB-03",
+      "domain": "public",
+      "route": "/i/[token]",
+      "action": "Expired token shows an honest expired state",
+      "persona": "recipient",
+      "preconditions": "Expired share",
+      "interaction": "Open the link",
+      "expected": "Expired state, no invoice data",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/public/invoice.spec.ts",
+          "title": "expired share link shows an honest expired state without invoice data",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "PUB-04",
+      "domain": "public",
+      "route": "/i/[token]",
+      "action": "Revoked token stops working after reload",
+      "persona": "recipient + owner",
+      "preconditions": "Recipient page open",
+      "interaction": "Owner revokes in UI; recipient reloads",
+      "expected": "Generic not-found",
+      "persisted": "Share revoked",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/public/invoice.spec.ts",
+          "title": "revoked token becomes unusable to the recipient after reload",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "PUB-05",
+      "domain": "public",
+      "route": "/i/[token]",
+      "action": "Recipient downloads the PDF",
+      "persona": "recipient",
+      "preconditions": "Active share",
+      "interaction": "Click the PDF action",
+      "expected": "PDF download; invalid token discloses nothing",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile",
+        "manual: phones"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "e2e/public/invoice.spec.ts",
+          "title": "valid public PDF is downloadable without authentication",
+          "kind": "partial",
+          "note": "page.request.get, not a click"
+        },
+        {
+          "file": "e2e/public/invoice.spec.ts",
+          "title": "invalid public PDF does not disclose invoice content",
+          "kind": "partial"
+        }
+      ],
+      "manualCheck": "MAN-PDF-01",
+      "followUp": "Batch 2"
+    },
+    {
+      "id": "PUB-06",
+      "domain": "public",
+      "route": "/i/[token] PDF vs owner PDF",
+      "action": "Recipient PDF matches owner PDF",
+      "persona": "recipient",
+      "preconditions": "",
+      "interaction": "Download both",
+      "expected": "Same content",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium (ux-audit)"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "tests/ux-audit/fixtures.baseline.spec.ts",
+          "title": "downloads owner and public PDFs for the same invoice and confirms they match",
+          "kind": "partial",
+          "note": "API-level parity; appropriate for this property"
+        }
+      ]
+    },
+    {
+      "id": "PUB-07",
+      "domain": "public",
+      "route": "/i/[token] at 390px",
+      "action": "Long issuer name does not overflow the public page",
+      "persona": "recipient (phone)",
+      "preconditions": "Long issuer name",
+      "interaction": "Open link at 390px",
+      "expected": "No horizontal scroll",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/public/invoice.spec.ts",
+          "title": "a long unbreakable issuer name does not cause horizontal overflow on the public invoice page",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "SET-01",
+      "domain": "settings",
+      "route": "/pengaturan",
+      "action": "Update issuer name and save; persists",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "Type name, Simpan pengaturan, reload",
+      "expected": "Tersimpan; value after reload",
+      "persisted": "UserSettings",
+      "alternates": "Save error",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/settings/settings.spec.ts",
+          "title": "update issuer and bank details, happy path",
+          "kind": "real",
+          "note": "Despite the title, only the issuer name is changed (see SET-03)"
+        }
+      ]
+    },
+    {
+      "id": "SET-02",
+      "domain": "settings",
+      "route": "/pengaturan",
+      "action": "Invalid issuer email is rejected",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "Enter bad email, save",
+      "expected": "Field error, not saved",
+      "persisted": "Unchanged",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/settings/settings.spec.ts",
+          "title": "invalid issuer email is rejected with a field-level error, nothing saved",
+          "kind": "real",
+          "note": "No reload check"
+        }
+      ]
+    },
+    {
+      "id": "SET-03",
+      "domain": "settings",
+      "route": "/pengaturan",
+      "action": "Update bank details; they appear on invoice/PDF",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "Edit bank name/account/holder, save, reload, open public invoice",
+      "expected": "Persisted and shown to the recipient",
+      "persisted": "UserSettings bank fields",
+      "alternates": "Required-field errors",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "not_covered",
+      "followUp": "Batch 1"
+    },
+    {
+      "id": "SET-04",
+      "domain": "settings",
+      "route": "/pengaturan",
+      "action": "Edit WhatsApp templates; the next message uses them",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "Edit send/chase template, save, send from invoice",
+      "expected": "Message uses the edited template",
+      "persisted": "UserSettings templates",
+      "alternates": "Reset to default (SET-05)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "not_covered",
+      "evidence": "INV-WA-01 only proves the seeded template is used",
+      "followUp": "Batch 2"
+    },
+    {
+      "id": "SET-05",
+      "domain": "settings",
+      "route": "/pengaturan",
+      "action": "Reset a template to default",
+      "persona": "owner",
+      "preconditions": "Edited template",
+      "interaction": "Click reset, save",
+      "expected": "Default restored",
+      "persisted": "UserSettings",
+      "alternates": "",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 3"
+    },
+    {
+      "id": "SET-06",
+      "domain": "settings",
+      "route": "/pengaturan",
+      "action": "Switch interface language (Indonesia/English); persists across pages",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "Click English, reload, open invoice detail; switch back",
+      "expected": "UI in English everywhere (e.g. due-date 'Not set'); persists",
+      "persisted": "User.language",
+      "alternates": "Rate-limited language PATCH",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "tests/ux-audit/t27.verification.spec.ts",
+          "title": "executes the 123-capture matrix and non-visual checks",
+          "kind": "partial",
+          "note": "Switches language via page.evaluate fetch to /api/me/language, never the buttons"
+        }
+      ],
+      "evidence": "The Production due-date report was in English ('Not set'); no test drives the language buttons",
+      "followUp": "Batch 1"
+    },
+    {
+      "id": "SET-07",
+      "domain": "settings",
+      "route": "/pengaturan, /invoice/[id]",
+      "action": "Incomplete issuer settings warn on invoice detail",
+      "persona": "owner",
+      "preconditions": "Missing issuer fields",
+      "interaction": "Open invoice detail",
+      "expected": "Dependency notice",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 3"
+    },
+    {
+      "id": "SET-08",
+      "domain": "settings",
+      "route": "/pengaturan",
+      "action": "Settings save failure shows an error",
+      "persona": "owner",
+      "preconditions": "PATCH fails",
+      "interaction": "Save",
+      "expected": "Error, form values kept",
+      "persisted": "Unchanged",
+      "alternates": "",
+      "scope": [],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 3"
+    },
+    {
+      "id": "A11Y-01",
+      "domain": "accessibility",
+      "route": "/, /deal, /invoice, /pengaturan",
+      "action": "No serious/critical automatically detectable violations",
+      "persona": "assistive-technology user",
+      "preconditions": "",
+      "interaction": "Page load + axe scan",
+      "expected": "Zero serious/critical",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Beranda has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial",
+          "note": "Static scan, not an interaction; invoice detail and the public /i/ page are not scanned"
+        },
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Deal board has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Invoice list has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Pengaturan has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        }
+      ],
+      "followUp": "Batch 2: add invoice detail and the public /i/ page to the scan list"
+    },
+    {
+      "id": "A11Y-02",
+      "domain": "accessibility",
+      "route": "/deal (dialog)",
+      "action": "Add-deal dialog focus trap and naming",
+      "persona": "keyboard user",
+      "preconditions": "Dialog open",
+      "interaction": "Tab / Shift+Tab through the dialog",
+      "expected": "Focus stays inside; correct role and name",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Add Deal dialog: correct role, accessible name, and a working focus trap",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "A11Y-03",
+      "domain": "accessibility",
+      "route": "/invoice/[id]",
+      "action": "Screen-reader use of the due-date field and status actions",
+      "persona": "screen-reader user",
+      "preconditions": "",
+      "interaction": "VoiceOver/TalkBack: reach the due-date field, open picker, hear the saved state",
+      "expected": "Label announced, picker reachable, 'Tersimpan' announced",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "manual: VoiceOver iOS, TalkBack Android"
+      ],
+      "priority": "P2",
+      "status": "manual_pending",
+      "manualCheck": "MAN-A11Y-01"
+    },
+    {
+      "id": "A11Y-04",
+      "domain": "accessibility",
+      "route": "all",
+      "action": "Reduced-motion preference respected",
+      "persona": "motion-sensitive user",
+      "preconditions": "prefers-reduced-motion: reduce",
+      "interaction": "Open menus/dialogs, mark paid",
+      "expected": "No large animations",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P2",
+      "status": "not_covered",
+      "followUp": "Batch 3"
+    }
+  ],
+  "findings": [
+    {
+      "id": "FIND-01",
+      "severity": "medium",
+      "summary": "'Tandai terlambat' on a DUE invoice with no past due date stores OVERDUE, but the chip immediately re-derives to Terkirim (deriveInvoiceDisplayStatus). The person asked for 'Terlambat' and sees 'Terkirim'.",
+      "status": "open: needs a product decision (keep manual overdue, hide the action without a past due date, or show stored OVERDUE)",
+      "actions": [
+        "INV-STATUS-05"
+      ]
+    },
+    {
+      "id": "FIND-02",
+      "severity": "high",
+      "summary": "Clicking/tapping the visible empty due-date field does not open the date picker (opacity-0 native input; Chromium opens only from the invisible icon edge). Production report 2026-10-03.",
+      "status": "fixed: PR #26 (merge b51fba1, into staging 2026-10-04; not yet on main/Production). Regression: e2e/invoices/due-date-integrity.spec.ts picker tests (INV-DUE-02). Real Android/iOS verification (MAN-DUE-01) still pending.",
+      "actions": [
+        "INV-DUE-02",
+        "INV-DUE-03"
+      ]
+    },
+    {
+      "id": "FIND-03",
+      "severity": "high",
+      "summary": "Desktop keyboard entry of a due date saves a year-0002 date as soon as the first year digit is typed (Chromium emits 0002-mm-dd, the DateField commits every change, and PATCH /api/invoices/:id returns 200). The owner's invoice detail page then throws 'Expected an ISO yyyy-mm-dd date, received: 2-mm-dd' into the route error boundary ('Gagal memuat.') on every load, so the field that could fix it is unreachable. The list, Beranda, deal detail, public page and public PDF still render.",
+      "status": "fixed: PR #26 (merge b51fba1, into staging 2026-10-04; not yet on main/Production). Regression: e2e/invoices/due-date-integrity.spec.ts keyboard, legacy-row and API tests (INV-DUE-04). The read-only Production count of out-of-range Invoice.dueDate / Deal.deadline has not been run (needs Chris); legacy rows elsewhere (list, Beranda, public page, PDF) still render the raw date.",
+      "actions": [
+        "INV-DUE-04"
+      ]
+    }
+  ]
+}

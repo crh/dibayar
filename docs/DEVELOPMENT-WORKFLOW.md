@@ -132,7 +132,9 @@ feature|fix|chore/*  --PR-->  staging  --validate-->  PR  -->  main
 3. Validate on the staging environment (manual smoke, M4 sessions, migrations
    applied to the staging database).
 4. `staging -> main` is the **Production release PR**. It needs Chris's
-   explicit authorization (see [Authorization](#authorization)).
+   explicit authorization (see [Authorization](#authorization)). Its body
+   carries `REVIEW_CHECKLIST.md` Gate F (coverage gaps, manual UAT, known
+   defects); green CI alone is not release readiness.
 5. Merge feature/fix/chore PRs into `staging` with squash or merge commit.
    Merge `staging -> main` and `main -> staging` sync PRs with a **merge
    commit only** (never squash or rebase), so the two long-lived branches keep
