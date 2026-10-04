@@ -85,8 +85,10 @@ stateDiagram-v2
 FIND-02 and FIND-03 were fixed by PR #26 (merge `b51fba1`, staging only).
 
 Boundary cases still open: a due date of today (Jakarta) versus yesterday
-around midnight UTC+7, a year boundary, and the English "Not set" label on
-the same path (covered by MAN-DUE-01 step 8; automated as part of SET-06 in Batch 1).
+around midnight UTC+7, and a year boundary. The English "Due date" label and
+"Not set" empty state after **Clear** and a reload are automated as part of
+SET-06 (`e2e/settings/language.spec.ts`, Batch 1); choosing a date in the
+native picker stays MAN-DUE-01.
 
 ## 3. Share link (owner) and recipient view
 
@@ -103,6 +105,7 @@ stateDiagram-v2
 | Recipient opens `/i/<token>` when the share is… | Expected | Action | Status |
 |---|---|---|---|
 | active | invoice, no owner controls | PUB-01 | real |
+| active, after the owner edits bank details | the new **Pembayaran ke** values | SET-03 | real (link from the owner's page, session-less context) |
 | unknown token | generic not-found | PUB-02 | real |
 | expired | honest expired state, no data | PUB-03 | real (seeded expiry) |
 | revoked while open | not-found after reload | PUB-04 | real (owner revokes via UI) |
@@ -117,7 +120,8 @@ moves are offered (card menu, deal detail, desktop drag).
 |---|---|---|---|
 | next stage, card menu | Lanjut ke … | DEAL-STAGE-01 | real + reload |
 | next stage, detail page + history | Lanjut ke … | DEAL-STAGE-03 | real + reload |
-| previous stage | Kembali ke … | DEAL-STAGE-02 | **UNTESTED** |
+| previous stage, detail page + history | Kembali ke … | DEAL-STAGE-02 | real + reload |
+| previous stage, card menu | Kembali ke … | DEAL-STAGE-02 | real + reload |
 | drag between columns (desktop) | drag and drop | DEAL-STAGE-04 | real (ux-audit) |
 | keyboard move | Tab, Enter, menu | DEAL-STAGE-05 | real (ux-audit) |
 | INVOICE → invoice | Buat invoice | DEAL-INV-01, DEAL-DETAIL-05 | real |
@@ -137,7 +141,7 @@ moves are offered (card menu, deal detail, desktop drag).
   Indonesian, deterministic fixture. Each new journey must state which of
   the two projects it runs in and why the other is skipped.
 - **Pairwise, not exhaustive**: language is varied on one journey per
-  surface (SET-06 in Batch 1), not on every journey. Firefox/WebKit come
+  surface (SET-06, `e2e/settings/language.spec.ts`), not on every journey. Firefox/WebKit come
   from the scheduled `e2e-cross-browser` tier.
 - **Targeted multi-condition cases** where the risk is real: money (IDR
   formatting, PPh), dates and time zone (Jakarta calendar date vs UTC,

@@ -104,8 +104,11 @@ Inventory: INV-PDF-01, PUB-05.
 
 Inventory: SHARE-05.
 
-1. On a phone, open an invoice with an active share link, press **Salin tautan**.
-   Expected: **Tautan disalin.**, and pasting into notes gives the full `/i/` link.
+1. On a phone, open an invoice with an active share link, press **Salin** (the
+   copy button in the link field; screen readers announce "Salin tautan invoice").
+   Expected: the button briefly reads **Tersalin**, and pasting into notes gives
+   the full `/i/` link. Desktop Chromium is automated
+   (`e2e/invoices/share-copy.spec.ts`); phones are not.
 2. If the copy is refused, expected: the manual-copy fallback is shown and the
    link can be long-pressed to copy.
 

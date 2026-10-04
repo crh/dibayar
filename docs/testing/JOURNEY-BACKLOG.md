@@ -18,22 +18,31 @@ a positive one.
 | 2 | FIND-02 (high): click/tap on the visible due-date field did nothing | INV-DUE-02, INV-DUE-03 | **Fixed** by PR #26 (`showPicker()` on click). Proven in Chromium desktop and 390px emulation. **Still open:** MAN-DUE-01 on a real Android Chrome phone and a real iPhone Safari. |
 | 3 | FIND-01 (medium): "Tandai terlambat" shows "Terkirim" | INV-STATUS-05 | Open. Needs a product decision from Chris before any code or test. |
 
-## Batch 1 — P0/P1 gaps with existing fixtures (next PR)
+## Batch 1 — P0/P1 gaps with existing fixtures (done, Zero Routine Phase 1)
 
-- DEAL-CREATE-01: start the desktop create-deal happy path from the top-bar
-  **+ Deal** click, and open the detail through the card menu (covers the
-  DEAL-DETAIL-01 desktop path).
-- DEAL-STAGE-02: "Kembali ke …" from deal detail and from the card menu,
-  with reload and a history entry.
-- NAV-02: desktop side-nav/top-bar links to all four sections.
-- SET-06: switch language with the **English** button, reload, check that
-  invoice detail shows "Due date" / "Not set", then switch back. Reseed
-  after, because language is per-user. This is the pairwise language case
-  for the whole suite (see JOURNEY-GRAPHS.md §6).
-- SET-03: change bank details, reload, and confirm the recipient page
-  (`/i/<token>`) shows them.
-- SHARE-05: **Salin tautan** with Chromium clipboard permissions granted;
-  read the clipboard back.
+Delivered on `chore/zero-routine-regression-phase1-2026-10-04` with no
+fixture or application change (receipt:
+`docs/receipts/DIBAYAR-ZERO-ROUTINE-REGRESSION-PHASE1-2026-10-04.md`).
+
+- DEAL-CREATE-01 (P0): `e2e/deals/desktop-create-entry.spec.ts` — Beranda →
+  top-bar **+ Deal** → all visible text fields → save → reload → card menu →
+  **Lihat detail** → stored values. Also the DEAL-DETAIL-01 desktop path.
+- DEAL-STAGE-02: `e2e/deals/stage-back.spec.ts` — **Kembali ke …** on deal
+  detail and in the card menu, with history entry and reload.
+- NAV-02: `e2e/smoke/desktop-nav.spec.ts` — SideNav (≥1024px) and the
+  top-bar nav (800px).
+- SET-06: `e2e/settings/language.spec.ts` — **English**, reload, invoice
+  detail "Due date" / **Clear** → "Due: Not set" after reload, back to
+  **Indonesia**. Reseeds before and after. The pairwise language case for
+  the whole suite (JOURNEY-GRAPHS.md §6).
+- SET-03: `e2e/settings/bank-details.spec.ts` — bank fields → save → reload
+  → the recipient page (`/i/<token>`, session-less context); plus the
+  required-field error. The PDF is left to INV-PDF-01 / PUB-05.
+- SHARE-05: `e2e/invoices/share-copy.spec.ts` — **Salin** with clipboard
+  permissions for the app origin only; the clipboard must hold the exact
+  public link. Phones stay MAN-SHARE-01.
+- HOME-03 was assessed and **deferred to Batch 2**: the current seed puts no
+  invoice in the follow-up queue (its SENT invoice is due 2099-12-31).
 
 ## Batch 2 — needs small fixture additions (`scripts/e2e-fixtures.ts`)
 
@@ -45,7 +54,7 @@ baselines stay valid; check `@visual` after the fixture change.
 - INV-STATUS-06: overdue invoice → **Kirim pengingat** uses the chase
   template; **Tandai lunas** persists.
 - HOME-03: **Kirim pengingat** from the Beranda follow-up queue (real popup
-  plus blocked fallback).
+  plus blocked fallback). Confirmed blocked on this fixture during Batch 1.
 - DEAL-DETAIL-03: repair the invalid number on deal detail, then reload.
 - INV-PDF-01 / PUB-05: click **Unduh PDF** and the recipient PDF action, and
   assert the `download` event (not `page.request`).
