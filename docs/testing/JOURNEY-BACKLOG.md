@@ -65,6 +65,46 @@ INV-STATUS-07 (`page.route` failure injection is acceptable here: the
 interaction is real, and only the server response is stubbed), A11Y-04.
 NAV-08 waits for a safe failure-injection seam.
 
+## Next phase — Zero Routine Manual Regression Testing
+
+Goal: no routine release needs a human to re-click a P0/P1 flow. Start only
+after PR #25 is integrated and its metrics are trustworthy (the validator now
+resolves references through Playwright's registry and checks the @critical
+run's results). Batches 1–3 above are the action-level work and are not
+repeated here; these are the program-level steps around them.
+
+1. **Close the P0/P1 real-interaction gap.** Work Batches 1 and 2 until every
+   P0/P1 action is `automated_real_interaction` or a recorded, justified
+   `manual_*`/`blocked` entry. Track the outstanding list in
+   `JOURNEY-COVERAGE.md`; no percentage target until Chris sets one.
+2. **Verify every real claim, not only @critical ones.** Add a scheduled (or
+   pre-release) full `test:e2e` run that feeds
+   `coverage:journeys -- --results <results.json> --require-results`, so a
+   non-@critical real claim that stops passing is caught. Firefox/WebKit
+   results join once those projects are in a claim's scope.
+3. **State-transition coverage.** For each graph in `JOURNEY-GRAPHS.md`
+   (deal stages, invoice status, share-link lifecycle, due-date edits),
+   automate every edge marked UNTESTED: forward, back, reload, and
+   browser-history on each. Failure-injection edges use `page.route` as in
+   Batch 3 (the interaction stays real).
+4. **Critical journeys end to end.** Two or three long journeys (deal →
+   invoice → share → recipient → paid; settings change visible on the
+   recipient page) that cross pages and reloads, in `chromium` and
+   `chromium-mobile`.
+5. **Device automation strategy.** Decide (Chris) between a hosted
+   real-device service and a scripted emulator lane for the parts emulation
+   can't prove: native date picker choice (MAN-DUE-01), WhatsApp hand-off
+   (MAN-WA-01), PDF open/save (MAN-PDF-01). Until then these stay manual and
+   are logged per release in `MANUAL-UAT.md`; never counted as automated.
+6. **Trustworthy release gate.** Once 1–2 are green for a few weeks: a
+   pre-release checklist that requires the full-run results check, zero
+   `expected_failure` entries on P0 actions, and the manual-only items from 5
+   signed off. A CI coverage threshold is a separate Chris decision.
+7. **Keep the inventory honest.** Every PR that adds or changes a user-facing
+   action updates `journey-coverage.json` (`REVIEW_CHECKLIST.md`); a fixed
+   defect's `test.fail()` removal now forces the inventory update
+   automatically.
+
 ## Manual (before the next `staging -> main` release)
 
 MAN-REL-01, MAN-DUE-01 (all four device targets), MAN-AUTH-01 (including

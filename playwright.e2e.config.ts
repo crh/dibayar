@@ -40,6 +40,12 @@ const authenticatedStorageState = {
 
 export default defineConfig({
   testDir: "./e2e",
+  // Only Playwright specs. The default testMatch also matches *.test.mjs,
+  // which made every run and every --list import
+  // e2e/support/diagnostics-selftest.test.mjs -- a node:test file that
+  // spawns its own nested Playwright run (CI runs it separately via
+  // `npm run test:diagnostics-selftest`).
+  testMatch: /\.spec\.ts$/,
   outputDir: "test-results/e2e",
   globalSetup: "./e2e/global-setup.ts",
   globalTeardown: "./e2e/global-teardown.ts",

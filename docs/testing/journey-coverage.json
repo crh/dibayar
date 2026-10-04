@@ -6,7 +6,7 @@
     "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
     "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
     "automated_partial: the test uses page.goto to skip the in-app entry point, fill() on a picker control, page.request/API calls, page.evaluate fetch, stubs/mocks, component tests with fireEvent, or asserts only rendering (screenshots, axe scans, text presence).",
-    "A test that is test.skip()-ed in a project does not count for that project; a test.fail()-annotated (expected-failure) test never counts as coverage.",
+    "A test that is test.skip()-ed or test.fixme()-ed in a project does not count for that project; a test.fail()-annotated (expected-failure) test never counts as coverage. `npm run coverage:journeys` enforces this: every titled reference must be a test Playwright itself registers (`playwright test --list`), and each claimed project needs a real test that its AST shows is not skipped, fixme'd or expected to fail there; a condition it cannot evaluate does not count. With `--results <playwright-json>` it also checks the claims against an actual run (CI does this for the @critical run).",
     "tests/ux-audit specs run in the CI ux-audit job, which is report-gated (scripts/ux-audit.ts), not a per-test exit-code gate; they are credited but called out as such."
   ],
   "actions": [
@@ -2208,7 +2208,7 @@
     {
       "id": "A11Y-01",
       "domain": "accessibility",
-      "route": "/, /deal, /invoice, /pengaturan, /i/[token]",
+      "route": "/, /deal, /invoice, /pengaturan",
       "action": "No serious/critical automatically detectable violations",
       "persona": "assistive-technology user",
       "preconditions": "",
@@ -2224,12 +2224,27 @@
       "tests": [
         {
           "file": "e2e/smoke/accessibility.spec.ts",
-          "title": "has no automatically-detectable serious/critical a11y violations",
+          "title": "Beranda has no automatically-detectable serious/critical a11y violations",
           "kind": "partial",
-          "note": "Static scan, not an interaction; invoice detail is not scanned"
+          "note": "Static scan, not an interaction; invoice detail and the public /i/ page are not scanned"
+        },
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Deal board has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Invoice list has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Pengaturan has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
         }
       ],
-      "followUp": "Batch 2: add invoice detail to the scan list"
+      "followUp": "Batch 2: add invoice detail and the public /i/ page to the scan list"
     },
     {
       "id": "A11Y-02",

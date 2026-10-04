@@ -109,7 +109,7 @@ reseed.
 | `npm run test:e2e:headed` | Headed chromium run (assumes a build already exists -- run `npm run e2e:build` first if not) |
 | `npm run test:e2e:ui` | Playwright UI mode |
 | `npm run test:diagnostics-selftest` | Negative-control proof that `browserDiagnostics` (below) still fails a test on a real pageerror/5xx; no build or database needed |
-| `npm run coverage:journeys` / `coverage:journeys:report` | Validate the user-action inventory (`docs/testing/journey-coverage.json`) / regenerate `docs/testing/JOURNEY-COVERAGE.md`; no browser or DB needed |
+| `npm run coverage:journeys` / `coverage:journeys:report` | Validate the user-action inventory (`docs/testing/journey-coverage.json`) against Playwright's registry / regenerate `docs/testing/JOURNEY-COVERAGE.md`; no browser or DB needed. Add `-- --results <results.json>` to check real claims against an actual run |
 
 `E2E_PORT` (default 3300) and `E2E_SKIP_WEBSERVER=1` (reuse an already-running
 server, e.g. for `test:e2e:headed`/`:ui` iteration) are available as env
@@ -251,8 +251,24 @@ with its priority, its status (`automated_real_interaction`,
 `blocked`, `not_applicable`), the exact tests that cover it, and what kind of
 proof each test gives. The classification rules are in the file itself.
 `npm run coverage:journeys` (run in CI's `lint-typecheck-test` job) rejects
-duplicate IDs, unknown statuses, test references whose file or title no
-longer exists, and a stale report. `docs/testing/JOURNEY-COVERAGE.md` is
+duplicate IDs, unknown statuses, and a stale report, and resolves every test
+reference structurally, never by text search
+(`scripts/journey-coverage-discovery.mjs`): a titled reference must be a test
+Playwright itself registers (`playwright test --list`, so a title in a
+comment or a renamed/deleted test fails), and an `automated_real_interaction`
+claim needs, in each claimed project, a `real` test that the test's AST shows
+is not `test.skip()`-ed, `test.fixme()`-ed or `test.fail()`-annotated there.
+Project conditions (`testInfo.project.name`, `browserName`, `isMobile`) are
+evaluated per project; a condition it cannot evaluate never counts. An
+`expected_failure` reference must still point at a `test.fail()` test, so a
+fixed defect forces an inventory update. CI's `e2e-critical` job then runs
+`npm run coverage:journeys -- --results test-results/e2e/results.json`: a
+referenced real test that ran there but was skipped, failed, or expected to
+fail is an error (non-@critical claims are listed as not exercised; add
+`--require-results` with a full-suite results file to make those errors
+too). `npm run test:journey-coverage` proves each of these rejections with
+negative controls against `scripts/journey-coverage-fixtures/` (a synthetic,
+browserless Playwright project). `docs/testing/JOURNEY-COVERAGE.md` is
 generated from the inventory, and `docs/testing/JOURNEY-GRAPHS.md` holds the
 state graphs. No coverage percentage is a gate; adding one needs Chris's
 approval. When you rename or add a journey test, update the inventory in

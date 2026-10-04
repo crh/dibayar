@@ -4,7 +4,7 @@
 
 Inventory date: 2026-10-03 · Baseline: origin/staging 27d3ab1 + branch chore/journey-coverage-2026-10-03
 
-An entry in this inventory is not proof that the action works. Only `automated_real_interaction` (a browser test drives the visible control and checks the outcome) and `manual_verified` (recorded human check) count as verified. CI-green is not release readiness: see the outstanding P0/P1 list below and `docs/testing/MANUAL-UAT.md`.
+An entry in this inventory is not proof that the action works. Only `automated_real_interaction` (a browser test drives the visible control and checks the outcome) and `manual_verified` (recorded human check) count as verified. Every titled test reference is resolved through Playwright's own registry, and a real claim needs a test that is not skipped, fixme'd or expected to fail in each claimed project (see the classification rules below). CI-green is not release readiness: see the outstanding P0/P1 list below and `docs/testing/MANUAL-UAT.md`.
 
 ## Summary
 
@@ -31,7 +31,7 @@ An entry in this inventory is not proof that the action works. Only `automated_r
 | DEAL-CREATE-01 | P0 | `automated_partial` | Create a deal on desktop: entry point -> form -> saved -> reload | Batch 1: start the existing happy path from the top bar click instead of the URL |
 | INV-DUE-02 | P0 | `blocked` | Click/tap the visible empty due-date field opens the date picker | Separate product-fix PR (e.g. showPicker() on click, or a visible input); remove test.fail() in that PR |
 | INV-DUE-03 | P0 | `manual_pending` | Pick a date in the native picker -> saved -> reload | Selecting inside a native picker is not drivable/observable from Playwright |
-| A11Y-01 | P1 | `automated_partial` | No serious/critical automatically detectable violations | Batch 2: add invoice detail to the scan list |
+| A11Y-01 | P1 | `automated_partial` | No serious/critical automatically detectable violations | Batch 2: add invoice detail and the public /i/ page to the scan list |
 | AUTH-02 | P1 | `automated_partial` | Landing page 'sign in with Google' CTA starts sign-in | Batch 2: click CTA and assert the sign-in page (no real Google round trip) |
 | DEAL-CREATE-06 | P1 | `not_covered` | Required-field validation before submit | Batch 2 |
 | DEAL-CREATE-07 | P1 | `manual_pending` | Optional fields: contact name, deadline (native date input), payment terms | Batch 2: automate the text fields; deadline picker stays manual like INV-DUE-03 |
@@ -211,5 +211,5 @@ Test kinds: **R** = real interaction, **P** = partial (URL entry, `fill()` on a 
 - automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.
 - Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).
 - automated_partial: the test uses page.goto to skip the in-app entry point, fill() on a picker control, page.request/API calls, page.evaluate fetch, stubs/mocks, component tests with fireEvent, or asserts only rendering (screenshots, axe scans, text presence).
-- A test that is test.skip()-ed in a project does not count for that project; a test.fail()-annotated (expected-failure) test never counts as coverage.
+- A test that is test.skip()-ed or test.fixme()-ed in a project does not count for that project; a test.fail()-annotated (expected-failure) test never counts as coverage. `npm run coverage:journeys` enforces this: every titled reference must be a test Playwright itself registers (`playwright test --list`), and each claimed project needs a real test that its AST shows is not skipped, fixme'd or expected to fail there; a condition it cannot evaluate does not count. With `--results <playwright-json>` it also checks the claims against an actual run (CI does this for the @critical run).
 - tests/ux-audit specs run in the CI ux-audit job, which is report-gated (scripts/ux-audit.ts), not a per-test exit-code gate; they are credited but called out as such.

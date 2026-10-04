@@ -27,10 +27,12 @@ jobs:
       # behavior/branch allowlist could merge with green CI (PR #16 Codex P2).
       - run: npm run test:vercel-ignore-build
       # User-action inventory (docs/testing/journey-coverage.json): rejects
-      # duplicate IDs, invalid statuses/priorities, test references whose
-      # file or title no longer exists, and a stale generated report. Pure
-      # Node, no build/browser/DB, so it adds seconds. It does not enforce a
-      # coverage percentage -- no threshold is a gate until Chris approves one.
+      # duplicate IDs, invalid statuses/priorities, a stale generated report,
+      # and test references that are not tests Playwright registers
+      # (`playwright test --list`) or that are skipped / fixme'd / expected
+      # to fail in a claimed project. No build/browser/DB, so it adds
+      # seconds. It does not enforce a coverage percentage -- no threshold is
+      # a gate until Chris approves one.
       - run: npm run test:journey-coverage
       - run: npm run coverage:journeys
       # Every E2E/UX-audit job below builds with `next build --webpack`
@@ -81,6 +83,11 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npx prisma migrate deploy
       - run: npm run test:e2e:critical
+      # The inventory's "real" claims against this actual run: a referenced
+      # real test that ran here but was skipped, failed, or expected to fail
+      # is an error; claims whose tests are not @critical are listed as not
+      # exercised by this run.
+      - run: npm run coverage:journeys -- --results test-results/e2e/results.json
       # Negative control for the browserDiagnostics fixture itself (see
       # docs/testing/E2E.md) -- needs only the Chromium install above, no
       # database or build, so it runs here rather than its own job.

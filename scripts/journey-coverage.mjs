@@ -5,12 +5,23 @@
 //   node scripts/journey-coverage.mjs check   # validate + report is current
 //   node scripts/journey-coverage.mjs report  # validate + rewrite the report
 //
-// Metrics come only from the inventory and the referenced test files; nothing
-// is estimated. Validation is deterministic and needs no browser, build or
-// database, so it is cheap enough to run on every PR.
+//   node scripts/journey-coverage.mjs check --results test-results/e2e/results.json
+//       # ... and confirm "real" claims against an actual Playwright run
+//   node scripts/journey-coverage.mjs check --results <file> --require-results
+//       # ... and fail when any real claim was not exercised by that run
+//
+// Metrics come only from the inventory and the referenced tests; nothing is
+// estimated. A test reference is resolved through Playwright's own registry
+// (`playwright test --list`) plus the test's TypeScript AST, never by text
+// search (see journey-coverage-discovery.mjs): a title in a comment, a
+// renamed or deleted test, or a test that is skipped / test.fail()-ed /
+// fixme'd in a claimed project does not count. The static check needs no
+// browser, build or database, so it runs on every PR; run results add what
+// only a real run can show.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildRegistry, readPlaywrightResults } from "./journey-coverage-discovery.mjs";
 
 export const STATUSES = [
   "automated_real_interaction",
@@ -38,9 +49,36 @@ export const PATHS = {
   backlog: "docs/testing/JOURNEY-BACKLOG.md",
 };
 
-// readFile is injectable so the self-test can validate synthetic inventories
-// without touching the real repository files.
-export function validateInventory(inventory, { readFile, fileExists }) {
+// Playwright configs whose tests the inventory may reference. Project ids
+// are `${key}:${projectName}` (the ux-audit config has one unnamed project).
+export const PLAYWRIGHT_CONFIGS = [
+  { key: "e2e", file: "playwright.e2e.config.ts", testDir: "e2e" },
+  { key: "ux-audit", file: "playwright.config.ts", testDir: "tests/ux-audit" },
+];
+
+// Maps an action's free-text scope entries to the Playwright projects they
+// claim: a bare project name ("chromium", "chromium-mobile") is an e2e
+// project; "chromium ... (ux-audit ...)" is the ux-audit project. "unit"
+// and "manual: ..." entries claim no Playwright project.
+export function scopeProjectIds(scope) {
+  const ids = [];
+  for (const entry of Array.isArray(scope) ? scope : []) {
+    if (typeof entry !== "string") continue;
+    if (/\(ux-audit\b/.test(entry)) ids.push("ux-audit:");
+    else if (/^[a-z0-9-]+$/.test(entry) && entry !== "unit") ids.push(`e2e:${entry}`);
+  }
+  return [...new Set(ids)];
+}
+
+
+function projectLabel(projectId) {
+  return projectId.endsWith(":") ? projectId.slice(0, -1) : projectId.split(":")[1];
+}
+
+// readFile/fileExists/registry are injectable so the self-test can validate
+// synthetic inventories without touching the real repository files.
+// `registry` is buildRegistry()'s lookup (or a fake with the same shape).
+export function validateInventory(inventory, { readFile, fileExists, registry }) {
   const errors = [];
   const actions = Array.isArray(inventory?.actions) ? inventory.actions : null;
   if (!actions) return ["inventory.actions must be an array"];
@@ -48,7 +86,6 @@ export function validateInventory(inventory, { readFile, fileExists }) {
   const manualDoc = fileExists(PATHS.manual) ? readFile(PATHS.manual) : "";
   const manualIds = new Set(manualDoc.match(MANUAL_REF_PATTERN) ?? []);
   const seen = new Set();
-  const fileCache = new Map();
 
   for (const [index, action] of actions.entries()) {
     const where = action?.id ? `${action.id}` : `actions[${index}]`;
@@ -75,6 +112,12 @@ export function validateInventory(inventory, { readFile, fileExists }) {
       errors.push(`${where}: tests must be an array`);
       continue;
     }
+    const scopeProjects = scopeProjectIds(action.scope);
+    for (const projectId of scopeProjects) {
+      if (!registry.projectIds.includes(projectId)) errors.push(`${where}: scope names unknown Playwright project ${projectLabel(projectId)}`);
+    }
+    // ref -> registry hits, for the status rules below.
+    const resolved = [];
     for (const [testIndex, ref] of tests.entries()) {
       const refWhere = `${where}.tests[${testIndex}]`;
       if (!TEST_KINDS.includes(ref?.kind)) errors.push(`${refWhere}: kind must be one of ${TEST_KINDS.join(", ")}`);
@@ -86,11 +129,56 @@ export function validateInventory(inventory, { readFile, fileExists }) {
         errors.push(`${refWhere}: file not found: ${ref.file}`);
         continue;
       }
-      if (ref.title) {
-        if (!fileCache.has(ref.file)) fileCache.set(ref.file, readFile(ref.file));
-        if (!fileCache.get(ref.file).includes(ref.title)) errors.push(`${refWhere}: title not found in ${ref.file}: "${ref.title}"`);
-      } else if (ref.kind === "real") {
-        errors.push(`${refWhere}: a "real" test reference must name the test title`);
+      if (!registry.testDirs.some((dir) => ref.file.startsWith(`${dir}/`))) {
+        // Unit/component tests are evidence of logic, never of a real
+        // interaction, and their titles are not resolved here.
+        if (ref.kind !== "partial") errors.push(`${refWhere}: only a Playwright spec can be a "${ref.kind}" reference`);
+        if (ref.title) errors.push(`${refWhere}: a title can only be verified for a Playwright spec; reference ${ref.file} without one`);
+        continue;
+      }
+      if (!ref.title) {
+        if (ref.kind !== "partial") errors.push(`${refWhere}: a "${ref.kind}" test reference must name the test title`);
+        else if (!registry.files.has(ref.file)) errors.push(`${refWhere}: Playwright registers no tests in ${ref.file}`);
+        continue;
+      }
+      const hits = registry.find(ref.file, ref.title);
+      if (hits.length === 0) {
+        errors.push(`${refWhere}: "${ref.title}" is not a test Playwright registers in ${ref.file} (a comment, renamed, or deleted test does not count)`);
+        continue;
+      }
+      if (new Set(hits.map((hit) => hit.fullTitle)).size > 1) {
+        errors.push(`${refWhere}: "${ref.title}" matches several tests in ${ref.file}; use the full title (describe › test)`);
+        continue;
+      }
+      resolved.push({ ref, refWhere, hits });
+      const inScope = scopeProjects.length > 0 ? hits.filter((hit) => scopeProjects.includes(hit.projectId)) : hits;
+      if (ref.kind === "expected_failure" && !inScope.some((hit) => hit.classification === "expected_failure")) {
+        errors.push(`${refWhere}: marked expected_failure but the test is not test.fail()-annotated in ${scopeProjects.length > 0 ? "any claimed project" : "any project"} -- the defect may be fixed; update the inventory`);
+      }
+      if (ref.kind === "partial" && hits.every((hit) => ["skipped", "fixme", "expected_failure"].includes(hit.classification))) {
+        errors.push(`${refWhere}: never runs as a passing test (${describeHits(hits)}); use kind "expected_failure" or drop it`);
+      }
+    }
+
+    // A real claim needs, for every claimed Playwright project, at least one
+    // "real" reference that runs there as a pass -- not skipped, fixme'd,
+    // expected to fail, or under a condition that can't be evaluated.
+    const realRefs = resolved.filter(({ ref }) => ref.kind === "real");
+    if (action.status === "automated_real_interaction" && realRefs.length > 0) {
+      if (scopeProjects.length === 0) errors.push(`${where}: automated_real_interaction needs a Playwright project in scope`);
+      for (const projectId of scopeProjects) {
+        if (!realRefs.some(({ hits }) => hits.some((hit) => hit.projectId === projectId && hit.classification === "runnable"))) {
+          const reasons = realRefs.map(({ ref, hits }) => {
+            const hit = hits.find((candidate) => candidate.projectId === projectId);
+            return `"${ref.title}": ${hit ? hit.classification : "not registered"}`;
+          });
+          errors.push(`${where}: no "real" test runs as a pass in ${projectLabel(projectId)} (${reasons.join("; ")})`);
+        }
+      }
+      for (const { refWhere, hits } of realRefs) {
+        if (!hits.some((hit) => scopeProjects.includes(hit.projectId) && hit.classification === "runnable")) {
+          errors.push(`${refWhere}: a "real" reference must run as a pass in at least one claimed project (${describeHits(hits)})`);
+        }
       }
     }
 
@@ -148,6 +236,55 @@ export function validateInventory(inventory, { readFile, fileExists }) {
   return errors;
 }
 
+function describeHits(hits) {
+  return hits.map((hit) => `${projectLabel(hit.projectId)}=${hit.classification}`).join(", ");
+}
+
+// Confirms "real" claims against rows from readPlaywrightResults(). For each
+// automated_real_interaction action and claimed project, a claim is
+// "verified" when one of its real tests ran there and passed (a flaky pass
+// counts, with a warning), an error when a real test ran there and was
+// skipped, failed, or expected to fail, and "unverified" when the run did
+// not include it (e.g. a non-@critical test in the PR-gate run).
+const OUTCOME_TEXT = {
+  skipped: "ran but was skipped",
+  expected_failure: "ran as an expected failure (test.fail)",
+  failed: "ran and failed",
+};
+
+export function verifyAgainstResults(inventory, rows) {
+  const errors = [];
+  const warnings = [];
+  const verified = [];
+  const unverified = [];
+  const rowsFor = (file, title, projectId) =>
+    rows.filter((row) => row.file === file && row.projectId === projectId && (row.title === title || row.fullTitle === title));
+  for (const action of inventory.actions) {
+    if (action.status !== "automated_real_interaction") continue;
+    const realRefs = (action.tests ?? []).filter((ref) => ref.kind === "real" && ref.title);
+    for (const projectId of scopeProjectIds(action.scope)) {
+      const label = `${action.id} [${projectLabel(projectId)}]`;
+      let passed = false;
+      let ran = false;
+      for (const ref of realRefs) {
+        for (const row of rowsFor(ref.file, ref.title, projectId)) {
+          ran = true;
+          if (row.outcome === "passed" || row.outcome === "flaky") {
+            passed = true;
+            if (row.outcome === "flaky") warnings.push(`${label}: "${ref.title}" passed only on retry (flaky)`);
+          } else {
+            errors.push(`${label}: real test "${ref.title}" ${OUTCOME_TEXT[row.outcome] ?? row.outcome}`);
+          }
+        }
+      }
+      if (passed) verified.push(label);
+      else if (!ran) unverified.push(label);
+      else errors.push(`${label}: no real test passed in this run`);
+    }
+  }
+  return { errors: [...new Set(errors)], warnings, verified, unverified };
+}
+
 export function computeMetrics(inventory) {
   const actions = inventory.actions;
   const byStatus = Object.fromEntries(STATUSES.map((status) => [status, 0]));
@@ -198,7 +335,7 @@ export function renderReport(inventory) {
   lines.push("");
   lines.push(`Inventory date: ${inventory.inventoryDate} · Baseline: ${inventory.baseline}`);
   lines.push("");
-  lines.push("An entry in this inventory is not proof that the action works. Only `automated_real_interaction` (a browser test drives the visible control and checks the outcome) and `manual_verified` (recorded human check) count as verified. CI-green is not release readiness: see the outstanding P0/P1 list below and `docs/testing/MANUAL-UAT.md`.");
+  lines.push("An entry in this inventory is not proof that the action works. Only `automated_real_interaction` (a browser test drives the visible control and checks the outcome) and `manual_verified` (recorded human check) count as verified. Every titled test reference is resolved through Playwright's own registry, and a real claim needs a test that is not skipped, fixme'd or expected to fail in each claimed project (see the classification rules below). CI-green is not release readiness: see the outstanding P0/P1 list below and `docs/testing/MANUAL-UAT.md`.");
   lines.push("");
   lines.push("## Summary");
   lines.push("");
@@ -252,15 +389,31 @@ export function renderReport(inventory) {
   return lines.join("\n");
 }
 
+export function parseArgs(argv) {
+  const [mode = "check", ...rest] = argv;
+  const options = { mode, results: [], requireResults: false };
+  for (let index = 0; index < rest.length; index += 1) {
+    if (rest[index] === "--results" && rest[index + 1]) options.results.push(rest[(index += 1)]);
+    else if (rest[index] === "--require-results") options.requireResults = true;
+    else throw new Error(`unknown argument "${rest[index]}"`);
+  }
+  if (!["check", "report"].includes(mode)) throw new Error(`mode must be check or report (got "${mode}")`);
+  if (options.requireResults && options.results.length === 0) throw new Error("--require-results needs --results <file>");
+  return options;
+}
+
 function main() {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const resolve = (file) => path.join(root, file);
-  const io = { readFile: (file) => readFileSync(resolve(file), "utf8"), fileExists: (file) => existsSync(resolve(file)) };
-  const mode = process.argv[2] ?? "check";
-  if (!["check", "report"].includes(mode)) {
-    console.error(`usage: journey-coverage.mjs check|report (got "${mode}")`);
+  let options;
+  try {
+    options = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    console.error(`usage: journey-coverage.mjs check|report [--results <playwright-json>]... [--require-results]: ${error.message}`);
     process.exit(2);
   }
+  const registry = buildRegistry(root, PLAYWRIGHT_CONFIGS);
+  const io = { readFile: (file) => readFileSync(resolve(file), "utf8"), fileExists: (file) => existsSync(resolve(file)), registry };
   const inventory = JSON.parse(io.readFile(PATHS.inventory));
   const errors = validateInventory(inventory, io);
   if (errors.length > 0) {
@@ -269,7 +422,7 @@ function main() {
     process.exit(1);
   }
   const report = renderReport(inventory);
-  if (mode === "report") {
+  if (options.mode === "report") {
     writeFileSync(resolve(PATHS.report), report);
     console.log(`journey-coverage: wrote ${PATHS.report}`);
   } else if (!io.fileExists(PATHS.report) || io.readFile(PATHS.report) !== report) {
@@ -280,6 +433,22 @@ function main() {
   console.log(
     `journey-coverage: OK -- ${metrics.total} actions (${metrics.denominator} applicable); real-interaction ${metrics.realPct}; P0 real ${metrics.p0RealPct}; manual verified ${metrics.manualVerifiedPct}; ${metrics.outstanding.length} outstanding P0/P1`,
   );
+
+  if (options.results.length === 0) return;
+  const configKeyForTestDir = (testDir) =>
+    PLAYWRIGHT_CONFIGS.find((config) => path.resolve(root, config.testDir) === path.resolve(testDir))?.key ?? null;
+  const rows = options.results.flatMap((file) => readPlaywrightResults(root, JSON.parse(readFileSync(path.resolve(file), "utf8")), configKeyForTestDir));
+  const outcome = verifyAgainstResults(inventory, rows);
+  for (const warning of outcome.warnings) console.warn(`journey-coverage: warning: ${warning}`);
+  console.log(
+    `journey-coverage: run results -- ${outcome.verified.length} real claim(s) passed in the run, ${outcome.unverified.length} not exercised by it${outcome.unverified.length ? ` (${outcome.unverified.join(", ")})` : ""}`,
+  );
+  const failures = [...outcome.errors, ...(options.requireResults ? outcome.unverified.map((label) => `${label}: not exercised by the given run results`) : [])];
+  if (failures.length > 0) {
+    console.error(`journey-coverage: ${failures.length} run-result error(s):`);
+    for (const failure of failures) console.error(`  - ${failure}`);
+    process.exit(1);
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
