@@ -26,8 +26,8 @@ import { FIXTURE_FUTURE_DATE, FIXTURE_PAST_DATE } from "../src/lib/e2e-fixture-d
 import { encryptShareToken } from "../src/lib/share-token-crypto";
 
 const action = process.argv[2];
-if (!["seed", "verify", "cleanup"].includes(action ?? "")) {
-  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup");
+if (!["seed", "verify", "cleanup", "legacy-due-date"].includes(action ?? "")) {
+  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date");
 }
 
 const connectionString = process.env.DATABASE_URL;
@@ -280,10 +280,25 @@ async function cleanup() {
   console.log(JSON.stringify({ action: "cleanup", host: normalizedHost, prefix, remainingUsers: remaining }));
 }
 
+// Writes the exact malformed value FIND-03 let through the API (year 0002)
+// straight onto the seeded SENT invoice, bypassing the app, so the suite can
+// prove a pre-existing bad row neither crashes nor gets silently rewritten.
+// Only ever touches this fixture owner's row on the guarded disposable
+// target above; the next `seed` restores the normal value.
+async function legacyDueDate() {
+  const result = await prisma.invoice.updateMany({
+    where: { id: invoiceIds.sent, userId: ids.owner },
+    data: { dueDate: new Date("0002-01-15T00:00:00.000Z") },
+  });
+  if (result.count !== 1) throw new Error(`E2E legacy due-date write expected 1 row, updated ${result.count}`);
+  console.log(JSON.stringify({ action: "legacy-due-date", host: normalizedHost, prefix, updated: result.count }));
+}
+
 async function main() {
   try {
     if (action === "seed") await seed();
     else if (action === "verify") await verify();
+    else if (action === "legacy-due-date") await legacyDueDate();
     else await cleanup();
   } finally {
     await prisma.$disconnect();

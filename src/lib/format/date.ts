@@ -7,6 +7,14 @@ const ISO_TIMESTAMP_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})?$/;
 const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
+// Date.UTC() maps years 0-99 to 1900-1999, so a year-0002 value would format
+// as 1902; setUTCFullYear() takes the year literally.
+function utcCalendarDate(year: number, month: number, day: number): Date {
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  return date;
+}
+
 function isLeapYear(year: number): boolean {
   return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 }
@@ -44,7 +52,7 @@ function parseDateString(value: string): ParsedDateString {
     throw new Error(`Invalid calendar date, received: ${value}`);
   }
   if (!timestampMatch) {
-    return { year, month, day, instant: new Date(Date.UTC(year, month - 1, day)) };
+    return { year, month, day, instant: utcCalendarDate(year, month, day) };
   }
   const [, , , , hourText, minuteText, secondText, offset] = timestampMatch;
   if (Number(hourText) > 23 || Number(minuteText) > 59 || Number(secondText) > 59) {
@@ -61,6 +69,18 @@ function parseDateString(value: string): ParsedDateString {
     throw new Error(`Invalid date input: ${value}`);
   }
   return { year, month, day, instant };
+}
+
+// True only for a strict yyyy-mm-dd string naming a real calendar day (no
+// timestamp, no trailing junk, no 2026-02-30). Never throws.
+export function isValidDateOnlyString(value: string): boolean {
+  if (!DATE_ONLY_PATTERN.test(value)) return false;
+  try {
+    parseDateString(value);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function toDate(value: DateInput): Date {
@@ -80,10 +100,10 @@ function toDate(value: DateInput): Date {
 function toUtcDate(value: DateInput): Date {
   if (value instanceof Date) {
     const date = toDate(value);
-    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    return utcCalendarDate(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
   }
   const { year, month, day } = parseDateString(value);
-  return new Date(Date.UTC(year, month - 1, day));
+  return utcCalendarDate(year, month, day);
 }
 
 const SHORT_DATE_FORMATTER = new Intl.DateTimeFormat(NUMBER_DATE_LOCALE, {
@@ -133,10 +153,12 @@ function calendarParts(value: DateInput, timeZone: string): { year: number; mont
 // Calendar YYYY-MM-DD for an instant, read in an explicit timezone (e.g. the
 // Asia/Jakarta "today", or the UTC calendar date of a UTC-midnight-stored
 // date-only value). No default: callers must be explicit about which
-// timezone's calendar they mean.
+// timezone's calendar they mean. The year is zero-padded to four digits so a
+// year below 1000 still round-trips through the strict yyyy-mm-dd parser
+// (an unpadded "2-01-15" used to throw on render, FIND-03).
 export function getCalendarDate(value: DateInput, timeZone: string): string {
   const { year, month, day } = calendarParts(value, timeZone);
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 // Year/month extraction for an instant, read in an explicit timezone.

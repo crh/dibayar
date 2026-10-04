@@ -5,8 +5,10 @@ import {
   getOwnedInvoiceContact,
   listInvoices,
   listInvoicesWithDealBrand,
+  updateInvoiceDueDate,
   updateInvoiceStatus,
   type InvoiceContactDb,
+  type InvoiceDueDateDb,
   type InvoiceCreateDb,
   type InvoiceListDb,
   type InvoiceReadDb,
@@ -204,6 +206,26 @@ describe("createInvoice", () => {
     expect(invoiceCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({ dueDate: null }),
     });
+  });
+
+  it("does not inherit an out-of-range legacy deal deadline", async () => {
+    const { db, invoiceCreate } = makeDb({
+      deal: { ...ownedDeal, deadline: new Date("0002-01-15T00:00:00.000Z") },
+    });
+
+    await createInvoice(db, "user-1", { dealId: "deal-1" });
+
+    expect(invoiceCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ dueDate: null }),
+    });
+  });
+
+  it("rejects an out-of-range explicit due date before touching the database", async () => {
+    const { db, invoiceCreate } = makeDb({});
+
+    await expect(createInvoice(db, "user-1", { dealId: "deal-1", dueDate: "0002-01-15" })).rejects.toThrow();
+    expect(db.deal.findFirst).not.toHaveBeenCalled();
+    expect(invoiceCreate).not.toHaveBeenCalled();
   });
 
   it("propagates a database failure instead of swallowing it", async () => {
@@ -437,6 +459,54 @@ describe("updateInvoiceStatus", () => {
     const result = await updateInvoiceStatus(db, "invoice-1", "user-1", "DUE");
 
     expect(result).toEqual({ kind: "invalid-transition" });
+    expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateInvoiceDueDate", () => {
+  const owned = { id: "invoice-1", userId: "user-1" } as InvoiceRecord;
+
+  function makeDueDateDb(found: InvoiceRecord | null) {
+    const findFirst = vi.fn(async () => found);
+    const update = vi.fn(async (args: { data: { dueDate: Date | null } }) => ({ ...owned, dueDate: args.data.dueDate }) as InvoiceRecord);
+    return { db: { invoice: { findFirst, update } } as unknown as InvoiceDueDateDb, findFirst, update };
+  }
+
+  it("updates an owned invoice, scoped by id and owner together", async () => {
+    const { db, findFirst, update } = makeDueDateDb(owned);
+    const dueDate = new Date("2030-01-15T00:00:00.000Z");
+
+    const result = await updateInvoiceDueDate(db, "invoice-1", "user-1", dueDate);
+
+    expect(result.kind).toBe("updated");
+    expect(findFirst).toHaveBeenCalledWith({ where: { id: "invoice-1", userId: "user-1" } });
+    expect(update).toHaveBeenCalledWith({ where: { id: "invoice-1", userId: "user-1" }, data: { dueDate } });
+  });
+
+  it("clears with null", async () => {
+    const { db, update } = makeDueDateDb(owned);
+
+    await updateInvoiceDueDate(db, "invoice-1", "user-1", null);
+
+    expect(update).toHaveBeenCalledWith({ where: { id: "invoice-1", userId: "user-1" }, data: { dueDate: null } });
+  });
+
+  it("returns not-found without writing for another owner's invoice", async () => {
+    const { db, update } = makeDueDateDb(null);
+
+    expect(await updateInvoiceDueDate(db, "invoice-1", "user-2", new Date("2030-01-15T00:00:00.000Z"))).toEqual({ kind: "not-found" });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["year 0002", new Date("0002-01-15T00:00:00.000Z")],
+    ["2100-01-01", new Date("2100-01-01T00:00:00.000Z")],
+    ["an invalid Date", new Date(Number.NaN)],
+  ])("refuses %s without reading or writing (defense in depth behind the schema)", async (_case, dueDate) => {
+    const { db, findFirst, update } = makeDueDateDb(owned);
+
+    expect(await updateInvoiceDueDate(db, "invoice-1", "user-1", dueDate)).toEqual({ kind: "invalid-due-date" });
+    expect(findFirst).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
   });
 });

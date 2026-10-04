@@ -190,14 +190,70 @@ describe("GET /api/invoices/[id]", () => {
     expect((await response.json()).invoice.dueDate).toBeNull();
   });
 
-  it("mengembalikan 400 saat dueDate tidak valid", async () => {
+  // FIND-03: z.coerce.date() used to accept every one of these (year 0002
+  // included) and persist it. Each must now be a 400 that never reaches the
+  // database, so the stored date stays exactly as it was.
+  it.each([
+    ["malformed text", "not-a-date"],
+    ["year 0002, a native input's intermediate value", "0002-01-15"],
+    ["one day before the supported range", "1999-12-31"],
+    ["one day after the supported range", "2100-01-01"],
+    ["a 5-digit year", "20301-01-15"],
+    ["a non-existent calendar day", "2026-02-30"],
+    ["a non-leap-year Feb 29", "2027-02-29"],
+    ["month 13", "2026-13-01"],
+    ["unpadded parts", "2026-1-5"],
+    ["a full timestamp", "2030-01-15T00:00:00.000Z"],
+    ["surrounding whitespace", " 2030-01-15"],
+    ["an empty string", ""],
+    ["an epoch number", 1_900_000_000_000],
+    ["a boolean", true],
+  ])("mengembalikan 400 untuk dueDate %s", async (_case, dueDate) => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
 
-    const response = await PATCH(patchRequest("invoice-1", { dueDate: "not-a-date" }), makeContext("invoice-1"));
+    const response = await PATCH(patchRequest("invoice-1", { dueDate }), makeContext("invoice-1"));
 
     expect(response.status).toBe(400);
     const body = await response.json();
-    expect(body.error).toBe("Tanggal jatuh tempo tidak valid.");
+    expect(body.error).toBe("Tanggal jatuh tempo tidak valid. Pilih tanggal antara 1 Jan 2000 dan 31 Des 2099.");
+    expect(mockedUpdateInvoiceDueDate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["the first supported day", "2000-01-01"],
+    ["a leap day", "2028-02-29"],
+    ["the last supported day", "2099-12-31"],
+  ])("menerima dueDate %s sebagai tengah malam UTC", async (_case, dueDate) => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedUpdateInvoiceDueDate.mockResolvedValue({ kind: "updated", invoice: { ...invoice, dueDate: new Date(`${dueDate}T00:00:00.000Z`) } });
+
+    const response = await PATCH(patchRequest("invoice-1", { dueDate }), makeContext("invoice-1"));
+
+    expect(response.status).toBe(200);
+    expect(mockedUpdateInvoiceDueDate).toHaveBeenCalledWith(
+      expect.anything(),
+      "invoice-1",
+      "user-1",
+      new Date(`${dueDate}T00:00:00.000Z`),
+    );
+  });
+
+  it("mengembalikan 400 saat lapisan data menolak tanggal di luar rentang", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedUpdateInvoiceDueDate.mockResolvedValue({ kind: "invalid-due-date" });
+
+    const response = await PATCH(patchRequest("invoice-1", { dueDate: "2026-08-01" }), makeContext("invoice-1"));
+
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toBe("Tanggal jatuh tempo tidak valid. Pilih tanggal antara 1 Jan 2000 dan 31 Des 2099.");
+  });
+
+  it("menolak perubahan tanggal jatuh tempo tanpa sesi login", async () => {
+    mockedAuth.mockResolvedValue(null as never);
+
+    const response = await PATCH(patchRequest("invoice-1", { dueDate: "2026-08-01" }), makeContext("invoice-1"));
+
+    expect(response.status).toBe(401);
     expect(mockedUpdateInvoiceDueDate).not.toHaveBeenCalled();
   });
 

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { InvoiceRecord } from "@/lib/invoices";
-import { deriveInvoiceDisplayStatus, getDueDateCalendarDate } from "@/lib/invoice-date-status";
+import { deriveInvoiceDisplayStatus } from "@/lib/invoice-date-status";
+import { DUE_DATE_MAX, DUE_DATE_MIN, storedDueDateToInputValue } from "@/lib/due-date";
 import { buildInvoiceWhatsApp, normalizeWhatsAppNumber } from "@/lib/whatsapp";
 import { useLanguage } from "@/components/language-switcher";
 import { MoneyDisplay, StatusChip, Button, fieldClassName } from "@/components/design-system";
@@ -450,6 +451,12 @@ export default function InvoiceDetailClient({
 
   const referenceNow = now ?? new Date();
   const normalizedDueDate = normalizeDueDate(invoice.dueDate);
+  // A stored due date outside the supported contract (e.g. a legacy year-0002
+  // row from before the API enforced it) renders as an explicit, correctable
+  // problem in the field rather than crashing the page or posing as a date.
+  const storedDueDateValue = invoice.dueDate ? storedDueDateToInputValue(invoice.dueDate) : null;
+  const hasInvalidStoredDueDate = invoice.dueDate !== null && storedDueDateValue === null;
+  const dueDateRange = { min: formatDateCentral(DUE_DATE_MIN), max: formatDateCentral(DUE_DATE_MAX) };
   const displayStatus = deriveInvoiceDisplayStatus({ status: invoice.status, dueDate: normalizedDueDate }, referenceNow);
   const isOverdue = displayStatus === "OVERDUE";
   const shareState = useShareState(invoice.id);
@@ -600,7 +607,9 @@ export default function InvoiceDetailClient({
         brand: brand ?? "",
         invoiceNumber: invoice.number,
         totalIdr: invoice.subtotalIdr,
-        dueDate: invoice.dueDate,
+        // An unusable legacy date is left out of the message rather than
+        // sent to the brand as "15 Jan 2".
+        dueDate: hasInvalidStoredDueDate ? null : invoice.dueDate,
       });
       if (result.kind === "ok") {
         const win = window.open(result.href, "_blank", "noopener,noreferrer");
@@ -632,8 +641,6 @@ export default function InvoiceDetailClient({
     contactStatus === "loaded" &&
     shareState.share.kind !== "loading" &&
     !isShareLinkStale;
-
-  const dueDateValue = invoice.dueDate ? getDueDateCalendarDate(normalizeDueDate(invoice.dueDate)!) : "";
 
   return (
     <main className="mx-auto flex w-full max-w-[720px] flex-col gap-6 px-5 py-8 sm:px-8 lg:max-w-[1120px]">
@@ -667,7 +674,7 @@ export default function InvoiceDetailClient({
               </p>
             </div>
           ) : (
-            <p className="mt-3 text-[14px] text-muted">{t("invoice.dueLabel", { date: formatDate(normalizedDueDate, t("invoice.notSet")) })}</p>
+            <p className="mt-3 text-[14px] text-muted">{t("invoice.dueLabel", { date: hasInvalidStoredDueDate ? t("invoice.dueDateInvalidStored") : formatDate(normalizedDueDate, t("invoice.notSet")) })}</p>
           )}
         </header>
 
@@ -829,13 +836,19 @@ export default function InvoiceDetailClient({
             <DateField
               id="invoice-due-date"
               label={t("invoice.dueDateFieldLabel")}
-              value={dueDateValue}
+              value={storedDueDateValue ?? ""}
               lang={language === "id" ? "id-ID" : "en-US"}
+              min={DUE_DATE_MIN}
+              max={DUE_DATE_MAX}
               emptyLabel={t("invoice.notSet")}
               clearLabel={t("invoice.dueDateClear")}
               savingLabel={t("invoice.saving")}
               savedLabel={t("invoice.dueDateSaved")}
               errorLabel={t("invoice.dueDateUpdateError")}
+              invalidInputLabel={t("invoice.dueDateInvalidInput", dueDateRange)}
+              invalidStored={hasInvalidStoredDueDate}
+              invalidStoredLabel={t("invoice.dueDateInvalidStored")}
+              invalidStoredHint={t("invoice.dueDateInvalidStoredHint", dueDateRange)}
               onCommit={saveDueDate}
             />
           </div>

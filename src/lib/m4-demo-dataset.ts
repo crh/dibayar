@@ -150,3 +150,21 @@ export function jakartaDateOffset(now: Date, offsetDays: number): Date {
   const [year, month, day] = getJakartaCalendarDate(now).split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day + offsetDays));
 }
+
+// The same Jakarta calendar day as a yyyy-mm-dd string: the only form the
+// invoice due-date contract accepts (src/lib/due-date.ts). Read back from the
+// UTC-midnight Date, so it names exactly the day jakartaDateOffset stores.
+export function jakartaDateOnlyOffset(now: Date, offsetDays: number): string {
+  return jakartaDateOffset(now, offsetDays).toISOString().slice(0, 10);
+}
+
+// The createInvoice payload scripts/m4-demo-data.ts sends for a demo deal. It
+// goes through the same strict invoiceCreateSchema as the public API, so the
+// due date is a yyyy-mm-dd string, never a Date.
+export function buildM4DemoInvoiceInput(dealId: string, invoice: NonNullable<M4DemoDeal["invoice"]>, now: Date) {
+  return {
+    dealId,
+    withholdingTaxType: invoice.withholdingTaxType,
+    dueDate: jakartaDateOnlyOffset(now, invoice.dueOffsetDays),
+  };
+}

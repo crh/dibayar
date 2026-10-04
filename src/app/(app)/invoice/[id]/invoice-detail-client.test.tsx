@@ -931,6 +931,87 @@ describe("InvoiceDetailClient", () => {
       );
     });
 
+    // FIND-03: a year-0002 row saved before the API enforced the due-date
+    // contract used to throw on render ("Gagal memuat." on every load).
+    describe("an unusable stored due date (legacy year-0002 row)", () => {
+      const legacyDueDate = new Date("0002-01-15T00:00:00.000Z");
+
+      it("renders the invoice, says the date is invalid in the header and field, and never shows it as a real date", async () => {
+        vi.stubGlobal("fetch", makeFetchMock());
+        render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: legacyDueDate }} />);
+        await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+        expect(screen.getByText("Jatuh tempo: Tanggal tidak valid")).toBeDefined();
+        expect(screen.getAllByText("Tanggal tidak valid").length).toBeGreaterThan(0);
+        expect(
+          screen.getByText("Tanggal jatuh tempo yang tersimpan tidak valid. Pilih tanggal baru antara 1 Jan 2000 dan 31 Des 2099, atau kosongkan."),
+        ).toBeDefined();
+        expect(screen.getByLabelText("Tanggal jatuh tempo").getAttribute("aria-invalid")).toBe("true");
+        expect(document.body.textContent).not.toMatch(/15 Jan (2|1902)\b/);
+      });
+
+      it("also survives the JSON-string form a fetch round-trip produces", async () => {
+        vi.stubGlobal("fetch", makeFetchMock());
+        render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: "0002-01-15T00:00:00.000Z" as unknown as Date }} />);
+        await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+        expect(screen.getByText("Jatuh tempo: Tanggal tidak valid")).toBeDefined();
+      });
+
+      it("localizes the invalid-date state in English", async () => {
+        window.localStorage.setItem("dibayar-language", "en");
+        vi.stubGlobal("fetch", makeFetchMock());
+        render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: legacyDueDate }} />);
+        await screen.findByRole("button", { name: "Create sharing link" });
+
+        expect(screen.getAllByText("Invalid date").length).toBeGreaterThan(0);
+        expect(screen.getByText("The saved due date is invalid. Choose a new date between 1 Jan 2000 and 31 Des 2099, or clear it.")).toBeDefined();
+      });
+
+      it("lets the owner clear it through Kosongkan, without repairing it automatically", async () => {
+        const user = userEvent.setup();
+        const calls: Array<{ url: string; init?: RequestInit }> = [];
+        vi.stubGlobal(
+          "fetch",
+          vi.fn(async (url: string, init?: RequestInit) => {
+            calls.push({ url, init });
+            const method = init?.method ?? "GET";
+            if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: {} });
+            if (url.endsWith("/share") && method === "GET") return jsonResponse({ status: 200, body: { active: false } });
+            if (method === "PATCH") return jsonResponse({ status: 200, body: { invoice: { ...draftInvoice, dueDate: null } } });
+            return jsonResponse({ status: 200, body: {} });
+          }),
+        );
+        render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: legacyDueDate }} />);
+        await screen.findByRole("button", { name: "Buat tautan berbagi" });
+        expect(calls.some((call) => call.init?.method === "PATCH")).toBe(false);
+
+        await user.click(screen.getByRole("button", { name: "Kosongkan" }));
+
+        await waitFor(() => expect(screen.getByText("Jatuh tempo: Belum ditentukan")).toBeDefined());
+        const patchCall = calls.find((call) => call.init?.method === "PATCH");
+        expect(JSON.parse(patchCall!.init!.body as string)).toEqual({ dueDate: null });
+      });
+
+      it("leaves the unusable date out of the WhatsApp message instead of sending it to the brand", async () => {
+        const user = userEvent.setup();
+        const open = vi.spyOn(window, "open").mockImplementation(() => null);
+        vi.stubGlobal("fetch", makeFetchMock({
+          contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
+          shareGet: { status: 200, body: { active: false } },
+          sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
+        }));
+        render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "SENT", dueDate: legacyDueDate }} />);
+
+        const whatsAppButtons = await screen.findAllByRole("button", { name: /Kirim (lewat WhatsApp|pengingat)/ });
+        await user.click(whatsAppButtons[0]);
+
+        await waitFor(() => expect(open).toHaveBeenCalled());
+        const message = decodeURIComponent((open.mock.calls[0]?.[0] as string).split("?text=")[1] ?? "");
+        expect(message).not.toMatch(/15 Jan|jatuh tempo/i);
+      });
+    });
+
     it("no longer shows the browser-dependent format hint or the old Save/Clear button pair anywhere (T-20 deletion)", async () => {
       vi.stubGlobal("fetch", makeFetchMock());
       render(<InvoiceDetailClient initialInvoice={draftInvoice} />);

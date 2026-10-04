@@ -10,12 +10,15 @@ import {
   type InvoiceStatusDb,
 } from "@/lib/invoices";
 import { invoiceDueDateUpdateSchema, invoiceStatusUpdateSchema } from "@/lib/invoice-validation";
+import { DUE_DATE_MAX, DUE_DATE_MIN } from "@/lib/due-date";
+import { formatDate } from "@/lib/format/date";
 import { prisma } from "@/lib/prisma";
 import { isSameOriginRequest } from "@/lib/request-origin";
 
 const readDb = prisma as unknown as InvoiceReadDb;
 const statusDb = prisma as unknown as InvoiceStatusDb;
 const dueDateDb = prisma as unknown as InvoiceDueDateDb;
+const INVALID_DUE_DATE_MESSAGE = `Tanggal jatuh tempo tidak valid. Pilih tanggal antara ${formatDate(DUE_DATE_MIN)} dan ${formatDate(DUE_DATE_MAX)}.`;
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
@@ -58,6 +61,9 @@ export async function PATCH(request: Request, context: RouteContext) {
       if (result.kind === "not-found") {
         return NextResponse.json({ error: "Invoice tidak ditemukan." }, { status: 404 });
       }
+      if (result.kind === "invalid-due-date") {
+        return NextResponse.json({ error: INVALID_DUE_DATE_MESSAGE }, { status: 400 });
+      }
       return NextResponse.json({ invoice: result.invoice });
     }
 
@@ -75,7 +81,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   } catch (error) {
     if (error instanceof ZodError || error instanceof SyntaxError) {
       const isDueDateAttempt = typeof body === "object" && body !== null && "dueDate" in body;
-      const message = isDueDateAttempt ? "Tanggal jatuh tempo tidak valid." : "Status invoice tidak valid.";
+      const message = isDueDateAttempt ? INVALID_DUE_DATE_MESSAGE : "Status invoice tidak valid.";
       return NextResponse.json({ error: message }, { status: 400 });
     }
     return NextResponse.json({ error: "Status invoice belum bisa diperbarui. Coba lagi." }, { status: 500 });

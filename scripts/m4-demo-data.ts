@@ -31,7 +31,13 @@ import {
   type InvoiceRecord,
   type InvoiceStatusDb,
 } from "../src/lib/invoices";
-import { M4_DEMO_DEALS, M4_DEMO_SETTINGS, checkM4DemoTarget, jakartaDateOffset } from "../src/lib/m4-demo-dataset";
+import {
+  M4_DEMO_DEALS,
+  M4_DEMO_SETTINGS,
+  buildM4DemoInvoiceInput,
+  checkM4DemoTarget,
+  jakartaDateOffset,
+} from "../src/lib/m4-demo-dataset";
 import { saveUserSettings, type UserSettingsDb } from "../src/lib/user-settings";
 
 const action = process.argv[2];
@@ -76,11 +82,11 @@ async function seed(userId: string) {
       await updateDeal(prisma as unknown as DealDb, deal.id, userId, { status: stage });
     }
     if (!demo.invoice) continue;
-    const invoice = await createInvoice(prisma as unknown as InvoiceCreateDb, userId, {
-      dealId: deal.id,
-      withholdingTaxType: demo.invoice.withholdingTaxType,
-      dueDate: jakartaDateOffset(now, demo.invoice.dueOffsetDays),
-    });
+    const invoice = await createInvoice(
+      prisma as unknown as InvoiceCreateDb,
+      userId,
+      buildM4DemoInvoiceInput(deal.id, demo.invoice, now),
+    );
     if (!invoice) throw new Error(`Invoice creation failed for demo deal ${demo.key}`);
     for (const status of demo.invoice.statusPath.slice(1)) {
       const result = await updateInvoiceStatus(prisma as unknown as InvoiceStatusDb, invoice.id, userId, status);

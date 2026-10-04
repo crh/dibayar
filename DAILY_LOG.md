@@ -770,3 +770,20 @@ Starting state verified fresh: `main` = `origin/main` = `a60dfdf`, no open PRs, 
 - Gates: lint 0, typecheck 0, vitest 780/780, `test:git-safeguards` 60/60, `test:vercel-ignore-build` 48/48, `test:lint-wrapper` 3/3. Build not run (no app/build input changed). `shellcheck` not installed (gap). CI workflows unchanged.
 - Docs: Cleanup policy reconciled with auto-delete off (`docs/DEVELOPMENT-WORKFLOW.md`, `DEPLOYMENT.md`); runbook `docs/GIT-SAFEGUARDS-AND-BACKUPS.md`. Receipt: `docs/receipts/DIBAYAR-GIT-SAFEGUARDS-AND-BACKUP-2026-10-03.md`.
 - Rubric self-score: Evidence honesty 2/2 (every claim from live command output; both bugs found are reported, not hidden); shipped completeness 1/2 (ALPHA fully done, but clones outside ALPHA unverified and first timer-driven run not yet observed); security discipline 2/2 (no settings/credential change, no protected push, no secrets printed); Focus 2/2 (no app/CI/deploy changes); deploy health 2/2 (justified no-deploy: infra scripts only, PR not merged); report quality 2/2. Total 11/12.
+
+## 2026-10-04 — Due-date integrity + visible-field picker fix (FIND-03, FIND-02)
+
+- Recon: PR #25 open (not merged) → standalone `fix/due-date-input-integrity-2026-10-04` from `staging` @ `27d3ab1` in a new worktree; main checkout's untracked receipts left untouched. No prior fix branch.
+- Reproduced on baseline: FIND-02 (`:open` false after click/tap, desktop + 390px); FIND-03 (`PATCH {"dueDate":"0002-01-15"}` → 200 → "Gagal memuat." on every reload); plus a new same-cause defect: typing over a saved date sent `{"dueDate":null}` and silently cleared it.
+- Root causes: commit-on-every-change DateField; `z.coerce.date()`; unpadded year in `getCalendarDate` (render throw); `Date.UTC` 0–99 → 19xx in the formatter; Chromium opens the picker only from the hidden icon edge.
+- Fix: `src/lib/due-date.ts` contract (2000-01-01..2099-12-31, strict), strict create/update schemas + adapter guard, draft/commit split in DateField (Enter/leave, Esc, serialized queue, input stays enabled), `showPicker()` on click, legacy-row invalid state (no repair), formatter fixes, id/en copy.
+- Gates: lint 0, typecheck 0, unit 882/882, build 0; critical E2E 96 passed / 0 failed / 16 by-design skips; Firefox+WebKit 22/0/10; a11y 12/0/1; visual fails vs CI baselines identically on staging locally — invoice detail pixel-identical to staging on the same machine. Negative controls (4 mutations): 11/13 applicable E2E + 39 unit tests failed; reverted, clean.
+- Not done/pending Chris: merge; read-only Production count query (receipt §9, not run); real Android/iOS UAT (receipt §10); FIND-01; deal `deadline` validation follow-up.
+- Rubric self-score: Evidence honesty 2/2 (baseline repro, negative controls, same-machine visual comparison; port-hardcode failure and environmental visual failures reported, not hidden); shipped completeness 1/2 (code + tests complete, real-device UAT and Production audit pending); security discipline 2/2 (owner scoping unchanged and tested, no Production/hosted DB access, no secrets); Focus 2/2 (no status-derivation/FIND-01/coverage-infra changes); deploy health 2/2 (no deploy; PR only); report quality 2/2. Total 11/12.
+
+## 2026-10-04 — PR #26 review follow-up (two Codex P2 threads)
+
+- Demo seed (`scripts/m4-demo-data.ts`) passed a `Date` to the strict due-date schema. Fixed at the caller (`buildM4DemoInvoiceInput`/`jakartaDateOnlyOffset`, yyyy-mm-dd, Jakarta day preserved); public schema unchanged. Tested through the real `createInvoice` at both sides of Jakarta midnight. Script not run (staging-only guard; no hosted DB touched).
+- DateField failed save: the visible value now reverts to the last confirmed value with the error kept and retry working. Newest intent stays visible while saving. A mid-flight keyboard draft is preserved. +7 unit, +2 browser journeys (`page.route` 409). Negative controls: 5/7 unit and 3/3 browser fail on the old component.
+- Gates: lint/typecheck/build 0; unit 893/893; critical E2E 99/0/17; Firefox+WebKit due-date 10/0/12; picker 8/8 on 4 projects; a11y 12/0/1. Receipt §13.
+
