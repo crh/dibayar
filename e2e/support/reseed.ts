@@ -10,10 +10,21 @@
 // no reseed -- they never mutate fixture rows.
 import { execFileSync } from "node:child_process";
 
-export function reseedFixtures(): void {
+function runFixtureAction(action: "seed" | "legacy-due-date"): void {
   const env = { ...process.env, E2E_FIXTURE_CONFIRM: "non-production" };
-  execFileSync("npx", ["tsx", "--env-file-if-exists=.env.local", "scripts/e2e-fixtures.ts", "seed"], {
+  execFileSync("npx", ["tsx", "--env-file-if-exists=.env.local", "scripts/e2e-fixtures.ts", action], {
     stdio: "inherit",
     env,
   });
+}
+
+export function reseedFixtures(): void {
+  runFixtureAction("seed");
+}
+
+// Overwrites the seeded SENT invoice's due date with year 0002 (the value
+// FIND-03 used to let through). Only meaningful after reseedFixtures(), which
+// also undoes it for the next test.
+export function seedLegacyInvalidDueDate(): void {
+  runFixtureAction("legacy-due-date");
 }

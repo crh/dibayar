@@ -1,5 +1,6 @@
 import { nextInvoiceNumber } from "./invoice-number";
 import { invoiceCreateSchema } from "./invoice-validation";
+import { isSupportedStoredDueDate } from "./due-date";
 import { createInvoiceSequenceDb, type InvoiceSequenceQueryClient } from "./invoice-sequence";
 
 export type InvoiceStatus = "DRAFT" | "SENT" | "DUE" | "OVERDUE" | "PAID";
@@ -172,7 +173,8 @@ export type InvoiceDueDateDb = {
 
 export type UpdateInvoiceDueDateResult =
   | { kind: "updated"; invoice: InvoiceRecord }
-  | { kind: "not-found" };
+  | { kind: "not-found" }
+  | { kind: "invalid-due-date" };
 
 export async function updateInvoiceDueDate(
   db: InvoiceDueDateDb,
@@ -180,6 +182,10 @@ export async function updateInvoiceDueDate(
   userId: string,
   dueDate: Date | null,
 ): Promise<UpdateInvoiceDueDateResult> {
+  // Defense in depth behind invoiceDueDateUpdateSchema: nothing reaches the
+  // database outside the supported due-date range, whatever the caller.
+  if (dueDate && !isSupportedStoredDueDate(dueDate)) return { kind: "invalid-due-date" };
+
   const invoice = await db.invoice.findFirst({ where: { id, userId } });
   if (!invoice) return { kind: "not-found" };
 
@@ -206,7 +212,10 @@ export async function createInvoice(db: InvoiceCreateDb, userId: string, input: 
         subtotalIdr: deal.feeIdr,
         withholdingTaxType: validated.withholdingTaxType,
         status: "DRAFT",
-        dueDate: validated.dueDate ?? deal.deadline ?? null,
+        // A deal deadline is only inherited when it satisfies the due-date
+        // contract, so an out-of-range legacy deadline never spreads into a
+        // new invoice.
+        dueDate: validated.dueDate ?? (deal.deadline && isSupportedStoredDueDate(deal.deadline) ? deal.deadline : null),
       },
     });
   });
