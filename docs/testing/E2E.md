@@ -108,12 +108,24 @@ deal at stage X" go stale. Read-only/filter-only specs
 reseed.
 
 Specs that open WhatsApp (`e2e/home/follow-up-queue.spec.ts`,
-`e2e/invoices/overdue-invoice.spec.ts`, `e2e/deals/contact-repair.spec.ts`)
+`e2e/invoices/overdue-invoice.spec.ts`, `e2e/invoices/invoice-journeys.spec.ts`,
+`e2e/deals/contact-repair.spec.ts`, `e2e/whatsapp/popup-blocker.spec.ts`)
 call `keepWhatsAppLocal(context)` (`e2e/support/follow-up.ts`): `wa.me` and
 `api.whatsapp.com` are answered by a local stub, so the popup URL is the exact
-link the app built and nothing reaches WhatsApp. (The older
-`invoice-journeys.spec.ts` WhatsApp test still lets its popup load the real
-`wa.me` redirect; it sends nothing, but it is not hermetic.)
+link the app built and nothing reaches WhatsApp. It also returns the requests
+WhatsApp would have received (URL and Referer), and `trackOpenedPages(context)`
+lists every tab the context opens, so a test can prove "exactly one tab, one
+request, no Referer".
+
+Blocked popups (FIND-04, fixed): invoice detail and the Beranda queue open
+WhatsApp through `openWhatsAppPopup()` (`src/lib/whatsapp-popup.ts`), so a
+`null` from `window.open()` is now a real block. Two ways to get one:
+`e2e/whatsapp/popup-blocker.spec.ts` launches Chromium with its own
+`--block-new-web-contents` switch (the browser refuses every new window;
+nothing in the page is stubbed; Chromium only, and it also blocks the
+fallback link's own tab), and the older tests stub `window.open = () => null`
+(partial by the inventory's rules, but they run in every engine and follow
+the fallback link).
 
 Specs that change per-user state every other test depends on
 (`settings/language.spec.ts` changes `User.language`,

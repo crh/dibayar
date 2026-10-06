@@ -17,7 +17,7 @@ a positive one.
 | 1 | FIND-03 (high): keyboard entry saved year 0002 and permanently broke the owner's invoice page | INV-DUE-04 | **Fixed** by PR #26 (merge `b51fba1`, staging). Regression: `e2e/invoices/due-date-integrity.spec.ts`. **Still open for Chris:** the read-only Production count of out-of-range `Invoice.dueDate` / `Deal.deadline` (PR #26 receipt §9). Any data repair is Chris-only. Legacy out-of-range dates still render raw on the list, Beranda, public page, and PDF. Deal `deadline` validation is still `z.coerce.date()`. |
 | 2 | FIND-02 (high): click/tap on the visible due-date field did nothing | INV-DUE-02, INV-DUE-03 | **Fixed** by PR #26 (`showPicker()` on click). Proven in Chromium desktop and 390px emulation. **Still open:** MAN-DUE-01 on a real Android Chrome phone and a real iPhone Safari. |
 | 3 | FIND-01 (medium): "Tandai terlambat" shows "Terkirim" | INV-STATUS-05 | Open. Needs a product decision from Chris before any code or test. |
-| 4 | FIND-04 (medium): blocked-popup detection never works -- `window.open(..., "noopener,noreferrer")` returns null by spec, so the **Buka WhatsApp** fallback shows even after WhatsApp opened (invoice detail and Beranda queue) | HOME-03, INV-WA-02 | Open, found in Phase 2A. Pinned by two `test.fail()` tests (`e2e/home/follow-up-queue.spec.ts`, `e2e/invoices/overdue-invoice.spec.ts`). A `fix/*` PR removes them and lets HOME-03 claim real. |
+| 4 | FIND-04 (medium): blocked-popup detection never works -- `window.open(..., "noopener,noreferrer")` returns null by spec, so the **Buka WhatsApp** fallback shows even after WhatsApp opened (invoice detail and Beranda queue) | HOME-03, INV-WA-02 | **Fixed** by `fix/whatsapp-popup-fallback-2026-10-05` (PR into `staging`, open, not merged). Both surfaces open a blank tab on the click, cut its opener and navigate it with no Referer (`src/lib/whatsapp-popup.ts`). The two `test.fail()` tests are now positive regressions, and `e2e/whatsapp/popup-blocker.spec.ts` proves the fallback under a real Chromium blocker. HOME-03 and INV-WA-02 are real. **Still open:** MAN-WA-01 on real phones. |
 | 5 | FIND-05 (medium): Beranda **Kirim pengingat** rotates the share token, so a link the brand already has returns 404 | HOME-03 | Open, found in Phase 2A. Needs a product decision (reuse the active link like invoice detail?). No test asserts either behaviour. |
 | 6 | FIND-06 (low): the invoice list shows stored status; Beranda/detail derive OVERDUE from the due date | INV-STATUS-06, INV-LIST-01 | Open, found in Phase 2A. Decide together with FIND-01. |
 
@@ -64,8 +64,10 @@ baseline are unchanged. Due dates are relative to the Jakarta calendar day.
 - DEAL-DETAIL-03 (real, both projects): `e2e/deals/contact-repair.spec.ts`.
 - HOME-03: the hand-off is driven for real in both projects, but the action
   stays **partial** while FIND-04 is pinned by an expected-failure test.
+  (Real since the FIND-04 fix, `fix/whatsapp-popup-fallback-2026-10-05`.)
 - INV-WA-02 reclassified to partial (stubbed `window.open`, and FIND-04 means
-  it cannot tell blocked from opened).
+  it cannot tell blocked from opened). (Real again since the FIND-04 fix: a
+  real Chromium blocker test plus "popup opened -> no fallback".)
 - Flake fix: the `fill()`-based due-date test in `invoice-journeys.spec.ts`
   now waits for hydration (reproduced with CPU throttling; see receipt).
 
