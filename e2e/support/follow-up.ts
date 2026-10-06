@@ -53,9 +53,25 @@ export function followUpRowLink(page: Page, brand: string): Locator {
 // must never leave this machine: answer them with a local stub, so the
 // popup's URL is still the exact link the app built but nothing reaches
 // WhatsApp or a third party. Routed on the context so it covers popups.
-export async function keepWhatsAppLocal(context: BrowserContext): Promise<void> {
+// Returns every request WhatsApp would have received, with its Referer
+// (null when none was sent), so a test can check how many were made.
+export type WhatsAppRequest = { url: string; referer: string | null };
+
+export async function keepWhatsAppLocal(context: BrowserContext): Promise<WhatsAppRequest[]> {
   const stub = { status: 200, contentType: "text/html", body: "<!doctype html><title>WhatsApp stub</title><p>E2E stub: no message was sent.</p>" };
-  await context.route(/^https:\/\/(wa\.me|api\.whatsapp\.com)\//, (route) => route.fulfill(stub));
+  const requests: WhatsAppRequest[] = [];
+  await context.route(/^https:\/\/(wa\.me|api\.whatsapp\.com)\//, (route) => {
+    requests.push({ url: route.request().url(), referer: route.request().headers()["referer"] ?? null });
+    return route.fulfill(stub);
+  });
+  return requests;
+}
+
+// Every page the context opens from here on (popups and new tabs), in order.
+export function trackOpenedPages(context: BrowserContext): Page[] {
+  const opened: Page[] = [];
+  context.on("page", (newPage) => opened.push(newPage));
+  return opened;
 }
 
 // Parses a wa.me link into the number and the prefilled message.

@@ -1,6 +1,7 @@
 import { expect, test } from "../support/test";
 import { loadFixtureManifest } from "../support/manifest";
 import { reseedFixtures } from "../support/reseed";
+import { keepWhatsAppLocal, parseWhatsAppLink, trackOpenedPages } from "../support/follow-up";
 
 // Money is formatted with a non-breaking space after "Rp" (see
 // src/lib/format/money.ts and CLAUDE.md's IDR formatting rule) -- a plain
@@ -133,8 +134,11 @@ test.describe("invoice journeys", { tag: "@critical" }, () => {
     await expect(dueDate).toHaveValue("");
   });
 
-  test("WhatsApp action opens a saved-template message with the invoice link", async ({ page }) => {
+  test("WhatsApp action opens a saved-template message with the invoice link", async ({ page, context }) => {
     const manifest = loadFixtureManifest();
+    // wa.me is answered locally (it used to load the real wa.me redirect to
+    // api.whatsapp.com); the popup's URL is still the exact link the app built.
+    await keepWhatsAppLocal(context);
     await page.goto(`/invoice/${manifest.invoices.sent}`);
 
     const action = page.getByRole("button", { name: "Kirim lewat WhatsApp" });
@@ -144,10 +148,9 @@ test.describe("invoice journeys", { tag: "@critical" }, () => {
       action.click(),
     ]);
 
-    await expect.poll(() => popup.url()).toContain("api.whatsapp.com/send");
-    const popupUrl = new URL(popup.url());
-    expect(popupUrl.searchParams.get("phone")).toBe("628110000006");
-    const message = popupUrl.searchParams.get("text");
+    await expect.poll(() => popup.url()).toMatch(/^https:\/\/wa\.me\//);
+    const { number, text: message } = parseWhatsAppLink(popup.url());
+    expect(number).toBe("628110000006");
     expect(message).toContain("E2E Brand Invoice Terkirim");
     expect(message).toContain("E2E/SENT/001");
     expect(message).toMatch(/Rp\s6\.000\.000/);
@@ -167,25 +170,35 @@ test.describe("invoice journeys", { tag: "@critical" }, () => {
   // and cross-browser, without depending on any one engine's own
   // popup-blocking heuristics (which differ and aren't Playwright-
   // controllable anyway).
-  test("a blocked WhatsApp popup falls back to a clickable manual link", async ({ page }) => {
+  //
+  // Runs in every engine and follows the fallback link (answered locally).
+  // The real-blocker version is whatsapp/popup-blocker.spec.ts (Chromium).
+  test("a blocked WhatsApp popup falls back to a clickable manual link", async ({ page, context }) => {
     const manifest = loadFixtureManifest();
+    await keepWhatsAppLocal(context);
     await page.addInitScript(() => {
       window.open = () => null;
     });
     await page.goto(`/invoice/${manifest.invoices.sent}`);
 
     await expect(page.getByText("Buka WhatsApp")).toHaveCount(0);
-    await page.getByRole("button", { name: "Kirim lewat WhatsApp" }).click();
+    const action = page.getByRole("button", { name: "Kirim lewat WhatsApp" });
+    await expect(action).toBeEnabled();
+    const opened = trackOpenedPages(context);
+    await action.click();
 
     const fallbackLink = page.getByRole("link", { name: "Buka WhatsApp" });
     await expect(fallbackLink).toBeVisible();
+    expect(opened).toHaveLength(0);
     // buildWhatsAppShareUrl builds a wa.me link directly (see
-    // src/lib/whatsapp.ts); it only resolves to api.whatsapp.com/send on
-    // an actual navigation/redirect, which this test deliberately never
-    // triggers -- the point here is the fallback link itself exists and
-    // is correctly addressed, not the redirect target.
+    // src/lib/whatsapp.ts).
     const href = await fallbackLink.getAttribute("href");
     expect(href).toContain("https://wa.me/628110000006");
+    expect(parseWhatsAppLink(href!).text).toContain("E2E/SENT/001");
     expect(await fallbackLink.getAttribute("target")).toBe("_blank");
+    const [popup] = await Promise.all([page.waitForEvent("popup"), fallbackLink.click()]);
+    await expect.poll(() => popup.url()).toMatch(/^https:\/\/wa\.me\/628110000006\?text=/);
+    expect(opened).toEqual([popup]);
+    await popup.close();
   });
 });

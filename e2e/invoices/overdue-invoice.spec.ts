@@ -25,6 +25,7 @@ import {
   keepWhatsAppLocal,
   parseWhatsAppLink,
   shortIdDate,
+  trackOpenedPages,
 } from "../support/follow-up";
 
 const NBSP = " ";
@@ -113,26 +114,33 @@ test.describe("overdue invoice", { tag: "@critical" }, () => {
     expectSameJakartaDay(overlayDay);
   });
 
-  // FIND-04 (expected failure, never counted as coverage): sendWhatsApp()
-  // in invoice-detail-client.tsx treats a null window.open() as "blocked",
-  // but window.open(href, "_blank", "noopener,noreferrer") returns null by
-  // spec even when the chat opened, so the fallback link always appears.
-  // Same defect as the Beranda queue row (follow-up-queue.spec.ts). Remove
-  // test.fail() when fixed.
+  // FIND-04 regression (fixed in fix/whatsapp-popup-fallback-2026-10-05):
+  // sendWhatsApp() in invoice-detail-client.tsx used to call
+  // window.open(href, "_blank", "noopener,noreferrer"), which returns null by
+  // spec even when the chat opened, so the "blocked" fallback always
+  // appeared. Same fix and checks as the Beranda queue row
+  // (follow-up-queue.spec.ts).
   test("after the reminder popup opens, invoice detail shows no blocked-popup fallback", async ({ page, context }) => {
-    test.fail(true, "FIND-04: window.open() with noopener always returns null, so the blocked-popup fallback always shows");
     const { followUp } = loadFixtureManifest();
-    await keepWhatsAppLocal(context);
+    const whatsApp = await keepWhatsAppLocal(context);
 
     await page.goto("/");
     await followUpRowLink(page, followUp.brands[followUp.deals.overdueStored]).click();
     await expect(page).toHaveURL(new RegExp(`/invoice/${followUp.invoices.overdueStored}$`));
     const remind = page.getByRole("button", { name: "Kirim pengingat" });
     await expect(remind).toBeEnabled();
+    const opened = trackOpenedPages(context);
     const [popup] = await Promise.all([page.waitForEvent("popup"), remind.click()]);
     await expect.poll(() => popup.url()).toMatch(/^https:\/\/wa\.me\/628110000008\?text=/);
-    await popup.close();
+    expect(parseWhatsAppLink(popup.url()).text).toContain("izin mengingatkan invoice E2E/OVERDUE/003");
+    // The send finished, and since the popup opened there is no fallback.
     await expect(remind).toBeEnabled();
-    await expect(page.getByRole("link", { name: "Buka WhatsApp" })).toHaveCount(0, { timeout: 2_000 });
+    await expect(page.getByRole("link", { name: "Buka WhatsApp" })).toHaveCount(0);
+    // Exactly one tab, one request to WhatsApp, no Referer, no opener.
+    expect(opened).toEqual([popup]);
+    expect(whatsApp.map((request) => request.url)).toEqual([popup.url()]);
+    expect(whatsApp[0].referer).toBeNull();
+    expect(await popup.evaluate(() => window.opener === null)).toBe(true);
+    await popup.close();
   });
 });
