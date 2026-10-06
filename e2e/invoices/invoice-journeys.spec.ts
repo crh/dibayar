@@ -108,6 +108,16 @@ test.describe("invoice journeys", { tag: "@critical" }, () => {
     // not toast timing: wait for the PATCH that saves the due date to
     // resolve (the real "did it save" signal), then prove persistence with
     // a reload, exactly as this test already did for the value itself.
+    //
+    // Wait for hydration before fill(): the date input is server-rendered,
+    // so fill() can land before React attaches onChange; hydration then
+    // restores the controlled value (2099-12-31) and no PATCH is ever sent.
+    // That was the intermittent failure seen under CPU contention, and it
+    // reproduces every time with 20x CDP CPU throttling (2026-10-04 Phase 2A
+    // receipt). "Kirim lewat WhatsApp" is server-rendered disabled and only
+    // enabled by client effects (contact + share fetches), so once it is
+    // enabled the page has hydrated.
+    await expect(page.getByRole("button", { name: "Kirim lewat WhatsApp" })).toBeEnabled();
     const savePatch = page.waitForResponse(patchUrl);
     await dueDate.fill("2030-01-15");
     expect((await savePatch).ok()).toBe(true);

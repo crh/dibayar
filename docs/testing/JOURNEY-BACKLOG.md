@@ -17,6 +17,9 @@ a positive one.
 | 1 | FIND-03 (high): keyboard entry saved year 0002 and permanently broke the owner's invoice page | INV-DUE-04 | **Fixed** by PR #26 (merge `b51fba1`, staging). Regression: `e2e/invoices/due-date-integrity.spec.ts`. **Still open for Chris:** the read-only Production count of out-of-range `Invoice.dueDate` / `Deal.deadline` (PR #26 receipt §9). Any data repair is Chris-only. Legacy out-of-range dates still render raw on the list, Beranda, public page, and PDF. Deal `deadline` validation is still `z.coerce.date()`. |
 | 2 | FIND-02 (high): click/tap on the visible due-date field did nothing | INV-DUE-02, INV-DUE-03 | **Fixed** by PR #26 (`showPicker()` on click). Proven in Chromium desktop and 390px emulation. **Still open:** MAN-DUE-01 on a real Android Chrome phone and a real iPhone Safari. |
 | 3 | FIND-01 (medium): "Tandai terlambat" shows "Terkirim" | INV-STATUS-05 | Open. Needs a product decision from Chris before any code or test. |
+| 4 | FIND-04 (medium): blocked-popup detection never works -- `window.open(..., "noopener,noreferrer")` returns null by spec, so the **Buka WhatsApp** fallback shows even after WhatsApp opened (invoice detail and Beranda queue) | HOME-03, INV-WA-02 | Open, found in Phase 2A. Pinned by two `test.fail()` tests (`e2e/home/follow-up-queue.spec.ts`, `e2e/invoices/overdue-invoice.spec.ts`). A `fix/*` PR removes them and lets HOME-03 claim real. |
+| 5 | FIND-05 (medium): Beranda **Kirim pengingat** rotates the share token, so a link the brand already has returns 404 | HOME-03 | Open, found in Phase 2A. Needs a product decision (reuse the active link like invoice detail?). No test asserts either behaviour. |
+| 6 | FIND-06 (low): the invoice list shows stored status; Beranda/detail derive OVERDUE from the due date | INV-STATUS-06, INV-LIST-01 | Open, found in Phase 2A. Decide together with FIND-01. |
 
 ## Batch 1 — P0/P1 gaps with existing fixtures (done, Zero Routine Phase 1)
 
@@ -44,18 +47,30 @@ fixture or application change (receipt:
 - HOME-03 was assessed and **deferred to Batch 2**: the current seed puts no
   invoice in the follow-up queue (its SENT invoice is due 2099-12-31).
 
-## Batch 2 — needs small fixture additions (`scripts/e2e-fixtures.ts`)
+## Batch 2A — follow-up overlay fixtures (done, Zero Routine Phase 2A)
 
-Dependency: add one overdue invoice (past due date) and one deal with an
-invalid WhatsApp number to the deterministic seed, and to the manifest. Keep
-IDs `e2e-t0-*` and existing rows unchanged so current tests and the visual
-baselines stay valid; check `@visual` after the fixture change.
+Delivered on `chore/zero-routine-regression-phase2a-2026-10-04` (receipt:
+`docs/receipts/DIBAYAR-ZERO-ROUTINE-REGRESSION-PHASE2A-2026-10-04.md`). The
+new states are an **opt-in overlay** (`npm run e2e:fixtures --
+follow-up-states`, `applyFollowUpStates()` in `e2e/support/reseed.ts`), not
+base-seed rows, so the seven-deal / empty-queue base seed and every `@visual`
+baseline are unchanged. Due dates are relative to the Jakarta calendar day.
 
-- INV-STATUS-06: overdue invoice → **Kirim pengingat** uses the chase
-  template; **Tandai lunas** persists.
-- HOME-03: **Kirim pengingat** from the Beranda follow-up queue (real popup
-  plus blocked fallback). Confirmed blocked on this fixture during Batch 1.
-- DEAL-DETAIL-03: repair the invalid number on deal detail, then reload.
+- HOME-02 (real, both projects): `e2e/home/follow-up-queue.spec.ts` -- order,
+  reasons on the Jakarta-date boundaries, row → detail, back, reload.
+- INV-STATUS-06 (real, both projects): `e2e/invoices/overdue-invoice.spec.ts`
+  -- list → overdue detail → **Kirim pengingat** (chase template) →
+  **Tandai lunas** → reload → list and Beranda.
+- DEAL-DETAIL-03 (real, both projects): `e2e/deals/contact-repair.spec.ts`.
+- HOME-03: the hand-off is driven for real in both projects, but the action
+  stays **partial** while FIND-04 is pinned by an expected-failure test.
+- INV-WA-02 reclassified to partial (stubbed `window.open`, and FIND-04 means
+  it cannot tell blocked from opened).
+- Flake fix: the `fill()`-based due-date test in `invoice-journeys.spec.ts`
+  now waits for hydration (reproduced with CPU throttling; see receipt).
+
+## Batch 2B — remaining Batch 2 items (separate PR)
+
 - INV-PDF-01 / PUB-05: click **Unduh PDF** and the recipient PDF action, and
   assert the `download` event (not `page.request`).
 - DEAL-CREATE-06 / DEAL-CREATE-07: empty-submit validation; optional text

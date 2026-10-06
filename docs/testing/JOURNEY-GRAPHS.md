@@ -24,7 +24,7 @@ stateDiagram-v2
     SENT --> PAID: Tandai lunas (INV-STATUS-03)
     DUE --> OVERDUE: Tandai terlambat (INV-STATUS-05, BLOCKED FIND-01)
     DUE --> PAID: Tandai lunas (INV-STATUS-03)
-    OVERDUE --> PAID: Tandai lunas (INV-STATUS-06, UNTESTED)
+    OVERDUE --> PAID: Tandai lunas (INV-STATUS-06)
     PAID --> SENT: Batalkan status lunas (INV-STATUS-04)
 ```
 
@@ -36,7 +36,7 @@ stateDiagram-v2
 | SENT → PAID | Tandai lunas | INV-STATUS-03 | partial (no reload, old test) |
 | DUE → PAID | Tandai lunas | INV-STATUS-03 | real + reload |
 | DUE → OVERDUE | Tandai terlambat | INV-STATUS-05 | **BLOCKED** (FIND-01 product decision) |
-| OVERDUE → PAID | Tandai lunas | INV-STATUS-06 | **UNTESTED** (needs overdue fixture) |
+| OVERDUE → PAID | Tandai lunas | INV-STATUS-06 | real + reload, list and Beranda agree (`overdue-invoice.spec.ts`, follow-up overlay invoice stored OVERDUE) |
 | PAID → SENT | Batalkan status lunas | INV-STATUS-04 | real + reload |
 | any → failure | PATCH error | INV-STATUS-07 | **UNTESTED** |
 | SENT → OVERDUE | none (server-only) | — | not a user action |
@@ -48,7 +48,13 @@ is not. The action buttons follow the *stored* status. So after `DUE → OVERDUE
 with no past due date, the person sees chip **Terkirim** with only
 **Tandai lunas** offered (FIND-01). Date-derived display is a pure function
 with unit tests (`src/lib/invoice-date-status.test.ts`), and its rendering is
-checked by `tests/ux-audit/states/needs-chasing.spec.ts`.
+checked by `tests/ux-audit/states/needs-chasing.spec.ts`. In the browser,
+`e2e/home/follow-up-queue.spec.ts` (HOME-02) checks the derived reasons on
+the Jakarta-date boundaries (due yesterday, today, in 7 and in 8 days) on the
+follow-up overlay, and that a stored-SENT invoice due yesterday opens as
+**Terlambat** with **Kirim pengingat**. The invoice *list* does not derive:
+it groups and labels by stored status, so that same invoice sits under
+**Terkirim** there (FIND-06, open, no test asserts it either way).
 
 ## 2. Invoice due date
 
@@ -84,8 +90,10 @@ stateDiagram-v2
 
 FIND-02 and FIND-03 were fixed by PR #26 (merge `b51fba1`, staging only).
 
-Boundary cases still open: a due date of today (Jakarta) versus yesterday
-around midnight UTC+7, and a year boundary. The English "Due date" label and
+Today versus yesterday (Jakarta) is automated for the follow-up queue
+(HOME-02, the overlay computes its dates from the Jakarta calendar day and the
+test fails loudly if a run straddles Jakarta midnight). Still open: a year
+boundary. The English "Due date" label and
 "Not set" empty state after **Clear** and a reload are automated as part of
 SET-06 (`e2e/settings/language.spec.ts`, Batch 1); choosing a date in the
 native picker stays MAN-DUE-01.
@@ -100,7 +108,17 @@ stateDiagram-v2
     Active --> Absent: Cabut tautan + confirm (SHARE-03)
     Active --> Expired: lifetime elapses (PUB-03, seeded)
     Active --> Active: cancel confirm (SHARE-04, UNTESTED)
+    Absent --> Active: Beranda Kirim pengingat (HOME-03)
+    Active --> Active: Beranda Kirim pengingat issues a new token (FIND-05)
 ```
+
+Beranda's **Kirim pengingat** always calls `POST /share`
+(`createOrRegenerateShare`), so it rotates an existing link; invoice detail's
+WhatsApp action reuses the active one. A link the brand already has returns
+404 after a Beranda reminder (FIND-05, verified 2026-10-04; product decision
+pending, no test asserts either behaviour). HOME-03's test starts from
+**Absent**, the case the inventory describes, and proves the new link opens
+for a session-less recipient.
 
 | Recipient opens `/i/<token>` when the share is… | Expected | Action | Status |
 |---|---|---|---|

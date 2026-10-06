@@ -81,7 +81,7 @@ Inventory: AUTH-03.
 
 ### MAN-WA-01 — WhatsApp hand-off and real popup blocker (P1)
 
-Inventory: INV-WA-01, INV-WA-02.
+Inventory: INV-WA-01, INV-WA-02, HOME-03.
 
 1. On a synthetic invoice whose deal has your own test WhatsApp number, press
    **Kirim lewat WhatsApp**. Expected: WhatsApp (app or web) opens with the
@@ -89,6 +89,11 @@ Inventory: INV-WA-01, INV-WA-02.
    anyone other than yourself.
 2. Desktop browser with popups blocked for the site: press it again.
    Expected: a **Buka WhatsApp** link appears, and opening it works.
+
+Known until FIND-04 is fixed: a **Buka WhatsApp** link also appears after
+step 1 even though WhatsApp opened (here and on a Beranda **Kirim pengingat**
+row, HOME-03). Record it as FIND-04, not as a new defect; step 2 cannot show
+that blocking was *detected*, only that the link works.
 
 ### MAN-PDF-01 — PDF download on real devices (P1)
 
