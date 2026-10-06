@@ -60,6 +60,28 @@ function makeFetchMock(
   });
 }
 
+// The WhatsApp hand-off (src/lib/whatsapp-popup.ts) opens a blank tab on the
+// click itself, then sends that tab to wa.me through a link in the tab's own
+// document. This stands in for that tab; href() is where it was sent.
+function stubWhatsAppTab() {
+  const tab = {
+    opener: window as Window | null,
+    closed: false,
+    document: document.implementation.createHTMLDocument(""),
+    close: vi.fn(() => {
+      tab.closed = true;
+    }),
+  };
+  const open = vi.spyOn(window, "open").mockImplementation(() => tab as unknown as Window);
+  const href = () => tab.document.querySelector("a")?.getAttribute("href") ?? null;
+  return { open, tab, href };
+}
+
+async function sentWhatsAppHref(wa: ReturnType<typeof stubWhatsAppTab>) {
+  await waitFor(() => expect(wa.href()).not.toBeNull());
+  return wa.href()!;
+}
+
 // This suite exercises Dibayar's Indonesian-language behavior in depth, so it
 // seeds an explicit "id" preference by default; the Indonesian default and
 // explicit English behavior are covered by the focused tests below.
@@ -312,7 +334,7 @@ describe("InvoiceDetailClient", () => {
   describe("Aksi utama WhatsApp (header)", () => {
     it("creates a share link first, then opens the send-template message, when not overdue", async () => {
       const user = userEvent.setup();
-      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const wa = stubWhatsAppTab();
       vi.stubGlobal("fetch", makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
         shareGet: { status: 200, body: { active: false } },
@@ -323,8 +345,7 @@ describe("InvoiceDetailClient", () => {
       const whatsappButton = await screen.findByRole("button", { name: "Kirim lewat WhatsApp" });
       await user.click(whatsappButton);
 
-      await waitFor(() => expect(open).toHaveBeenCalled());
-      const href = open.mock.calls[0]?.[0] as string;
+      const href = await sentWhatsAppHref(wa);
       expect(href).toContain(encodeURIComponent("INV/2026/07/001"));
       const message = decodeURIComponent(href.split("?text=")[1] ?? "");
       expect(message).toContain("Kopi Nusantara");
@@ -332,9 +353,82 @@ describe("InvoiceDetailClient", () => {
       expect(await screen.findByTitle(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
     });
 
-    it("opens WhatsApp directly, without creating a new link, when a link is already active", async () => {
+    it("opens exactly one tab, cut off from this page, and shows no Buka WhatsApp fallback once it opened (FIND-04)", async () => {
+      const user = userEvent.setup();
+      const wa = stubWhatsAppTab();
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Kirim lewat WhatsApp" }));
+
+      expect(await sentWhatsAppHref(wa)).toMatch(/^https:\/\/wa\.me\/6281234567890\?text=/);
+      expect(wa.open).toHaveBeenCalledTimes(1);
+      expect(wa.open).toHaveBeenCalledWith("", "_blank");
+      expect(wa.tab.opener).toBeNull();
+      expect(wa.tab.document.querySelector("a")?.rel).toBe("noreferrer");
+      expect(wa.tab.close).not.toHaveBeenCalled();
+      await waitFor(() => expect(screen.getByRole("button", { name: "Kirim lewat WhatsApp" })).toHaveProperty("disabled", false));
+      expect(screen.queryByRole("link", { name: "Buka WhatsApp" })).toBeNull();
+    });
+
+    it("shows a Buka WhatsApp link to the same message when the browser blocks the tab", async () => {
       const user = userEvent.setup();
       const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Kirim lewat WhatsApp" }));
+
+      const fallback = await screen.findByRole("link", { name: "Buka WhatsApp" });
+      expect(fallback.getAttribute("href")).toMatch(/^https:\/\/wa\.me\/6281234567890\?text=/);
+      expect(decodeURIComponent(fallback.getAttribute("href")!.split("?text=")[1] ?? "")).toContain("INV/2026/07/001");
+      expect(fallback.getAttribute("rel")).toBe("noopener noreferrer");
+      expect(open).toHaveBeenCalledTimes(1);
+    });
+
+    it("closes the blank tab and shows no fallback when the share link can't be created", async () => {
+      const user = userEvent.setup();
+      const wa = stubWhatsAppTab();
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+        sharePost: { status: 500, body: {} },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Kirim lewat WhatsApp" }));
+
+      await waitFor(() => expect(wa.tab.close).toHaveBeenCalled());
+      expect(wa.href()).toBeNull();
+      expect(screen.queryByRole("link", { name: "Buka WhatsApp" })).toBeNull();
+    });
+
+    it("shows the fallback instead of a second tab when the person already closed the blank one", async () => {
+      const user = userEvent.setup();
+      const wa = stubWhatsAppTab();
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      const button = await screen.findByRole("button", { name: "Kirim lewat WhatsApp" });
+      wa.open.mockImplementation(() => {
+        wa.tab.closed = true;
+        return wa.tab as unknown as Window;
+      });
+      await user.click(button);
+
+      expect(await screen.findByRole("link", { name: "Buka WhatsApp" })).toBeDefined();
+      expect(wa.href()).toBeNull();
+      expect(wa.open).toHaveBeenCalledTimes(1);
+    });
+
+    it("opens WhatsApp directly, without creating a new link, when a link is already active", async () => {
+      const user = userEvent.setup();
+      const wa = stubWhatsAppTab();
       const fetchMock = makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
         shareGet: { status: 200, body: { active: false } },
@@ -349,14 +443,14 @@ describe("InvoiceDetailClient", () => {
       const postCallsBefore = fetchMock.mock.calls.filter((call) => call[1]?.method === "POST").length;
       await user.click(screen.getByRole("button", { name: "Kirim lewat WhatsApp" }));
 
-      await waitFor(() => expect(open).toHaveBeenCalled());
+      await sentWhatsAppHref(wa);
       const postCallsAfter = fetchMock.mock.calls.filter((call) => call[1]?.method === "POST").length;
       expect(postCallsAfter).toBe(postCallsBefore);
     });
 
     it("sends the chase-template message (not the send template) once overdue, mentioning the due date", async () => {
       const user = userEvent.setup();
-      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const wa = stubWhatsAppTab();
       vi.stubGlobal("fetch", makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
         shareGet: { status: 200, body: { active: false } },
@@ -371,8 +465,7 @@ describe("InvoiceDetailClient", () => {
       );
       await user.click(await screen.findByRole("button", { name: "Kirim pengingat" }));
 
-      await waitFor(() => expect(open).toHaveBeenCalled());
-      const href = open.mock.calls[0]?.[0] as string;
+      const href = await sentWhatsAppHref(wa);
       const message = decodeURIComponent(href.split("?text=")[1] ?? "");
       expect(message).toContain("izin mengingatkan");
       expect(message).toContain("jatuh tempo 1 Jul 2026");
@@ -380,7 +473,7 @@ describe("InvoiceDetailClient", () => {
 
     it("uses a custom chase template from Settings instead of the default when overdue", async () => {
       const user = userEvent.setup();
-      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const wa = stubWhatsAppTab();
       vi.stubGlobal("fetch", makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
         shareGet: { status: 200, body: { active: false } },
@@ -396,14 +489,13 @@ describe("InvoiceDetailClient", () => {
       );
       await user.click(await screen.findByRole("button", { name: "Kirim pengingat" }));
 
-      await waitFor(() => expect(open).toHaveBeenCalled());
-      const message = decodeURIComponent((open.mock.calls[0]?.[0] as string).split("?text=")[1] ?? "");
+      const message = decodeURIComponent((await sentWhatsAppHref(wa)).split("?text=")[1] ?? "");
       expect(message).toBe("Tolong segera lunasi INV/2026/07/001, Kopi Nusantara. Link: https://dibayar.example/i/deterministic-token".replace("https://dibayar.example", window.location.origin));
     });
 
     it("drops the due-date line entirely when the invoice has no due date, even using the default send template", async () => {
       const user = userEvent.setup();
-      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const wa = stubWhatsAppTab();
       vi.stubGlobal("fetch", makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
         shareGet: { status: 200, body: { active: false } },
@@ -413,8 +505,7 @@ describe("InvoiceDetailClient", () => {
       render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: null }} />);
       await user.click(await screen.findByRole("button", { name: "Kirim lewat WhatsApp" }));
 
-      await waitFor(() => expect(open).toHaveBeenCalled());
-      const message = decodeURIComponent((open.mock.calls[0]?.[0] as string).split("?text=")[1] ?? "");
+      const message = decodeURIComponent((await sentWhatsAppHref(wa)).split("?text=")[1] ?? "");
       expect(message).not.toContain("Jatuh tempo");
       expect(message).not.toContain("Jatuh tempo .");
     });
@@ -422,7 +513,7 @@ describe("InvoiceDetailClient", () => {
     it("sends an Indonesian-only WhatsApp message even when the creator's UI language is English", async () => {
       window.localStorage.setItem("dibayar-language", "en");
       const user = userEvent.setup();
-      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const wa = stubWhatsAppTab();
       vi.stubGlobal("fetch", makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "+62 812-3456-7890" } },
         sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
@@ -432,8 +523,7 @@ describe("InvoiceDetailClient", () => {
       const whatsappButton = await screen.findByRole("button", { name: "Send on WhatsApp" });
       await user.click(whatsappButton);
 
-      await waitFor(() => expect(open).toHaveBeenCalled());
-      const href = open.mock.calls[0]?.[0] as string;
+      const href = await sentWhatsAppHref(wa);
       const message = decodeURIComponent(href.split("?text=")[1] ?? "");
       expect(message).not.toMatch(/reminder|overdue|thank you|due date/i);
     });
@@ -461,7 +551,7 @@ describe("InvoiceDetailClient", () => {
 
     it("writes a fixed contact number back to the deal, then sends WhatsApp directly with the repaired number (F15)", async () => {
       const user = userEvent.setup();
-      const open = vi.spyOn(window, "open").mockImplementation(() => ({}) as Window);
+      const wa = stubWhatsAppTab();
       const calls: Array<{ url: string; init?: RequestInit }> = [];
       vi.stubGlobal(
         "fetch",
@@ -494,8 +584,7 @@ describe("InvoiceDetailClient", () => {
       expect(patchCall?.url).toBe("/api/deals/deal-1");
       expect(JSON.parse(patchCall!.init!.body as string)).toEqual({ contactWa: "0812-3456-7890" });
 
-      await waitFor(() => expect(open).toHaveBeenCalled());
-      const href = open.mock.calls[0]?.[0] as string;
+      const href = await sentWhatsAppHref(wa);
       expect(href).toContain("6281234567890");
       expect(screen.queryByLabelText("Perbaiki nomor WhatsApp")).toBeNull();
       await waitFor(() => expect(screen.getByRole("button", { name: "Kirim lewat WhatsApp" })).toHaveProperty("disabled", false));
@@ -503,7 +592,7 @@ describe("InvoiceDetailClient", () => {
 
     it("shows a direct Buka WhatsApp link when the repaired number's send is popup-blocked (F15)", async () => {
       const user = userEvent.setup();
-      vi.spyOn(window, "open").mockImplementation(() => null);
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
       vi.stubGlobal(
         "fetch",
         vi.fn(async (url: string, init?: RequestInit) => {
@@ -531,6 +620,8 @@ describe("InvoiceDetailClient", () => {
 
       const fallback = await screen.findByRole("link", { name: "Buka WhatsApp" });
       expect(fallback.getAttribute("href")).toContain("6281234567890");
+      // One attempt, from the Simpan & kirim tap itself.
+      expect(open).toHaveBeenCalledTimes(1);
     });
 
     it("keeps the primary WhatsApp button available when the invoice has no due date, since a plain share never fabricates one", async () => {
@@ -546,7 +637,7 @@ describe("InvoiceDetailClient", () => {
 
     it("re-enables WhatsApp after a reload/new session by recovering the existing active link from the server (no regenerate needed)", async () => {
       const user = userEvent.setup();
-      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const wa = stubWhatsAppTab();
       const fetchMock = makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
         shareGet: {
@@ -563,9 +654,8 @@ describe("InvoiceDetailClient", () => {
       await user.click(whatsappButton);
 
       // Reuses the recovered link directly -- no POST /share (no new token minted).
-      await waitFor(() => expect(open).toHaveBeenCalled());
+      const openedUrl = await sentWhatsAppHref(wa);
       expect(fetchMock.mock.calls.some((call) => call[1]?.method === "POST")).toBe(false);
-      const openedUrl = open.mock.calls[0]?.[0] as string;
       expect(openedUrl).toContain(encodeURIComponent(`${window.location.origin}/i/recovered-token`));
     });
 
@@ -784,7 +874,7 @@ describe("InvoiceDetailClient", () => {
 
     it("sends WhatsApp with the freshly regenerated link, not a stale recovered one", async () => {
       const user = userEvent.setup();
-      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const wa = stubWhatsAppTab();
       vi.stubGlobal("fetch", makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
         shareGet: { status: 200, body: { active: true, path: "/i/old-token", expiresAt: "2026-10-17T00:00:00.000Z" } },
@@ -801,8 +891,7 @@ describe("InvoiceDetailClient", () => {
 
       await user.click(screen.getByRole("button", { name: "Kirim lewat WhatsApp" }));
 
-      await waitFor(() => expect(open).toHaveBeenCalled());
-      const openedUrl = open.mock.calls[0]?.[0] as string;
+      const openedUrl = await sentWhatsAppHref(wa);
       expect(openedUrl).toContain(encodeURIComponent(`${window.location.origin}/i/new-token`));
       expect(openedUrl).not.toContain(encodeURIComponent(`${window.location.origin}/i/old-token`));
     });
@@ -995,7 +1084,7 @@ describe("InvoiceDetailClient", () => {
 
       it("leaves the unusable date out of the WhatsApp message instead of sending it to the brand", async () => {
         const user = userEvent.setup();
-        const open = vi.spyOn(window, "open").mockImplementation(() => null);
+        const wa = stubWhatsAppTab();
         vi.stubGlobal("fetch", makeFetchMock({
           contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
           shareGet: { status: 200, body: { active: false } },
@@ -1006,8 +1095,7 @@ describe("InvoiceDetailClient", () => {
         const whatsAppButtons = await screen.findAllByRole("button", { name: /Kirim (lewat WhatsApp|pengingat)/ });
         await user.click(whatsAppButtons[0]);
 
-        await waitFor(() => expect(open).toHaveBeenCalled());
-        const message = decodeURIComponent((open.mock.calls[0]?.[0] as string).split("?text=")[1] ?? "");
+        const message = decodeURIComponent((await sentWhatsAppHref(wa)).split("?text=")[1] ?? "");
         expect(message).not.toMatch(/15 Jan|jatuh tempo/i);
       });
     });

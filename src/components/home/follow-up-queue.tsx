@@ -10,6 +10,7 @@ import { MoneyDisplay } from "@/components/design-system";
 import { formatDate } from "@/lib/format/date";
 import { fetchWithTimeout } from "@/lib/http";
 import { buildWhatsAppReminderMessage, buildWhatsAppShareUrl, normalizeWhatsAppNumber } from "@/lib/whatsapp";
+import { openWhatsAppPopup, type WhatsAppPopup } from "@/lib/whatsapp-popup";
 
 type QueueInvoice = AttentionInvoice<InvoiceRecord>;
 
@@ -62,7 +63,9 @@ export function FollowUpQueue({ invoices, deals, now, loading = false, error = f
     setRowStates((current) => ({ ...current, [invoiceId]: state }));
   }
 
-  async function openReminder(invoice: QueueInvoice, number: string) {
+  // `popup` was opened by the tap itself (openWhatsAppPopup); null means the
+  // browser blocked it, so the row offers a direct link instead.
+  async function openReminder(invoice: QueueInvoice, number: string, popup: WhatsAppPopup | null) {
     setRowState(invoice.id, { kind: "sending" });
     try {
       const response = await fetchWithTimeout(`/api/invoices/${invoice.id}/share`, { method: "POST" });
@@ -78,9 +81,9 @@ export function FollowUpQueue({ invoices, deals, now, loading = false, error = f
         shareUrl,
       });
       const href = buildWhatsAppShareUrl(number, message);
-      const win = window.open(href, "_blank", "noopener,noreferrer");
-      setRowState(invoice.id, win ? IDLE : { kind: "blocked", href });
+      setRowState(invoice.id, popup?.navigate(href) ? IDLE : { kind: "blocked", href });
     } catch {
+      popup?.close();
       setRowState(invoice.id, { kind: "error" });
     }
   }
@@ -96,7 +99,7 @@ export function FollowUpQueue({ invoices, deals, now, loading = false, error = f
       setRowState(invoice.id, { kind: "repair", value: rawNumber, saving: false, error: false });
       return;
     }
-    void openReminder(invoice, normalized);
+    void openReminder(invoice, normalized, openWhatsAppPopup(t("whatsapp.opening")));
   }
 
   async function handleSaveAndSend(invoice: QueueInvoice, value: string) {
@@ -106,6 +109,10 @@ export function FollowUpQueue({ invoices, deals, now, loading = false, error = f
       return;
     }
 
+    // Opened now, while the tap still counts as a user gesture; a number that
+    // can't work even before saving never opens a tab at all.
+    const popup = normalizeWhatsAppNumber(value) ? openWhatsAppPopup(t("whatsapp.opening")) : null;
+    let handedOff = false;
     setRowState(invoice.id, { kind: "repair", value, saving: true, error: false });
     try {
       const response = await fetchWithTimeout(`/api/deals/${deal.id}`, {
@@ -123,9 +130,12 @@ export function FollowUpQueue({ invoices, deals, now, loading = false, error = f
         setRowState(invoice.id, { kind: "repair", value: savedNumber, saving: false, error: true });
         return;
       }
-      await openReminder(invoice, normalized);
+      handedOff = true;
+      await openReminder(invoice, normalized, popup);
     } catch {
       setRowState(invoice.id, { kind: "repair", value, saving: false, error: true });
+    } finally {
+      if (!handedOff) popup?.close();
     }
   }
 

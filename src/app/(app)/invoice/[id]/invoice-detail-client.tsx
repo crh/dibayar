@@ -6,6 +6,7 @@ import type { InvoiceRecord } from "@/lib/invoices";
 import { deriveInvoiceDisplayStatus } from "@/lib/invoice-date-status";
 import { DUE_DATE_MAX, DUE_DATE_MIN, storedDueDateToInputValue } from "@/lib/due-date";
 import { buildInvoiceWhatsApp, normalizeWhatsAppNumber } from "@/lib/whatsapp";
+import { openWhatsAppPopup, type WhatsAppPopup } from "@/lib/whatsapp-popup";
 import { useLanguage } from "@/components/language-switcher";
 import { MoneyDisplay, StatusChip, Button, fieldClassName } from "@/components/design-system";
 import { ShareLinkField } from "@/components/invoices/share-link-field";
@@ -509,6 +510,11 @@ export default function InvoiceDetailClient({
   // making the owner close the repair panel and press the primary button
   // again.
   async function handleSaveContactWa() {
+    // Opened by the tap itself, before the save's awaits, so it is not
+    // blocked for lacking a user gesture (see openWhatsAppPopup). A draft that
+    // can't be a WhatsApp number even before saving never opens a tab.
+    const popup = normalizeWhatsAppNumber(contactWaDraft) ? openWhatsAppPopup(t("whatsapp.opening")) : null;
+    let handedOff = false;
     setIsSavingContactWa(true);
     setContactWaMessage(null);
     try {
@@ -532,13 +538,15 @@ export default function InvoiceDetailClient({
       if (normalizeWhatsAppNumber(savedNumber)) {
         setShowContactRepair(false);
         setContactWaMessage({ kind: "success", text: t("invoice.contactRepairSaved") });
-        await sendWhatsApp(savedNumber);
+        handedOff = true;
+        await sendWhatsApp(savedNumber, popup);
       } else {
         setContactWaMessage({ kind: "error", text: t("invoice.contactRepairError") });
       }
     } catch {
       setContactWaMessage({ kind: "error", text: t("invoice.contactRepairError") });
     } finally {
+      if (!handedOff) popup?.close();
       setIsSavingContactWa(false);
     }
   }
@@ -588,12 +596,15 @@ export default function InvoiceDetailClient({
   // invoice/deal tokens. Ensures a share link exists first (creating one on
   // demand), so this is always usable as the entry point to the invoice's
   // public link -- it never duplicates the share management state in
-  // ShareSection below, it just drives the same hook. window.open's return
-  // value is the only reliable signal a popup blocker fired (F15): when
-  // blocked, a direct link takes its place instead of failing silently.
-  async function sendWhatsApp(number: string) {
+  // ShareSection below, it just drives the same hook. `popup` was opened by
+  // the click itself (openWhatsAppPopup); null means the browser blocked it
+  // (F15), and a direct link then takes its place instead of failing
+  // silently. FIND-04: the old window.open(href, ..., "noopener") returned
+  // null even when WhatsApp opened, so that link always appeared.
+  async function sendWhatsApp(number: string, popup: WhatsAppPopup | null) {
     setWhatsAppBlockedHref(null);
     setIsSharingToWhatsApp(true);
+    let handedOff = false;
     try {
       const link = shareState.share.kind === "active" && shareState.share.link
         ? shareState.share.link
@@ -612,10 +623,11 @@ export default function InvoiceDetailClient({
         dueDate: hasInvalidStoredDueDate ? null : invoice.dueDate,
       });
       if (result.kind === "ok") {
-        const win = window.open(result.href, "_blank", "noopener,noreferrer");
-        if (!win) setWhatsAppBlockedHref(result.href);
+        handedOff = popup?.navigate(result.href) ?? false;
+        if (!handedOff) setWhatsAppBlockedHref(result.href);
       }
     } finally {
+      if (!handedOff) popup?.close();
       setIsSharingToWhatsApp(false);
     }
   }
@@ -632,7 +644,7 @@ export default function InvoiceDetailClient({
       return;
     }
     setShowContactRepair(false);
-    await sendWhatsApp(contactWa ?? "");
+    await sendWhatsApp(contactWa ?? "", openWhatsAppPopup(t("whatsapp.opening")));
   }
 
   const isContactUnusable = contactStatus === "loaded" && !normalizeWhatsAppNumber(contactWa ?? "");
@@ -761,7 +773,7 @@ export default function InvoiceDetailClient({
             </div>
           ) : null}
           {/* F15 fallback: rendered whenever the most recent send attempt's
-              window.open() came back blocked, whether that attempt came
+              popup came back blocked, whether that attempt came
               from the primary button directly or from a repair save --
               independent of showContactRepair so it still surfaces after
               the repair panel above closes on a successful save. */}
