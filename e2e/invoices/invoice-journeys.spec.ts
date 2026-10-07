@@ -75,7 +75,8 @@ test.describe("invoice journeys", { tag: "@critical" }, () => {
 
     await page.getByRole("button", { name: "Buat ulang tautan" }).click();
     await page.getByRole("button", { name: "Ya, buat tautan baru" }).click();
-    await expect(linkTrack.locator("span[title]")).not.toHaveAttribute("title", firstLink!);
+    // Polled as a boolean so a failure never prints the link.
+    await expect.poll(async () => (await linkTrack.locator("span[title]").getAttribute("title")) === firstLink, { message: "the shown link changes" }).toBe(false);
 
     await page.getByRole("button", { name: "Cabut tautan" }).click();
     await page.getByRole("button", { name: "Ya, cabut tautan" }).click();

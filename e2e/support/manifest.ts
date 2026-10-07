@@ -52,6 +52,8 @@ export type FixtureManifest = {
       dueOutsideWindow: number;
     };
     invalidContactWa: string;
+    // Only a real (expired) share after applyFollowUpExpiredShare().
+    expiredShareToken: string;
     brands: Record<string, string>;
   };
 };

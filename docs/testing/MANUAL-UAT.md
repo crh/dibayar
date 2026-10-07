@@ -100,6 +100,12 @@ Inventory: INV-WA-01, INV-WA-02, HOME-03.
    left behind, and no **Buka WhatsApp** link. If a phone browser or in-app
    browser (for example Instagram's) blocks the tab, the link must appear
    instead.
+4. Link reuse (FIND-05, fixed by `fix/reminder-share-link-reuse-2026-10-07`;
+   check only on a build that includes it): open the `/i/` link from step 1 in
+   a private window, then send a **Kirim pengingat** from the Beranda row
+   twice. Expected: both messages carry that same link, and reloading the
+   private window still shows the invoice. Then **Buat ulang tautan** on the
+   invoice and reload the private window. Expected: not found.
 
 Automated since the FIND-04 fix: "popup opened -> one tab, no link" and a
 real Chromium blocker (`e2e/whatsapp/popup-blocker.spec.ts`). What still needs

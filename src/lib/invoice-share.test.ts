@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createHash } from "node:crypto";
 import {
   createOrRegenerateShare,
+  ensureShare,
   generateShareToken,
   getPublicInvoiceDocumentByToken,
   getShareState,
@@ -176,6 +177,15 @@ describe("getShareState", () => {
 
     expect(result).toEqual({ kind: "state", active: true, path: null, expiresAt: existingShare.expiresAt });
   });
+  it("still reports an expired row as active with its past expiry (management view, not usability)", async () => {
+    const token = "expired-but-still-listed-token";
+    const expiresAt = new Date("2020-01-01T00:00:00.000Z");
+    const { db } = makeDb({ share: { ...existingShare, tokenCiphertext: encryptShareToken(token), expiresAt } });
+
+    const result = await getShareState(db, "invoice-1", "user-1");
+
+    expect(result).toEqual({ kind: "state", active: true, path: `/i/${token}`, expiresAt });
+  });
 });
 
 describe("createOrRegenerateShare", () => {
@@ -260,6 +270,161 @@ describe("createOrRegenerateShare", () => {
     const call = shareUpsert.mock.calls[0][0] as unknown as { update: { tokenCiphertext: string } };
     expect(decryptShareToken(call.update.tokenCiphertext)).toBe(newToken);
     expect(decryptShareToken(call.update.tokenCiphertext)).not.toBe(oldToken);
+  });
+
+  it("rotates even when the existing share is unexpired and recoverable (explicit regenerate is destructive)", async () => {
+    const oldToken = "a-perfectly-usable-existing-token";
+    const now = new Date("2026-08-01T00:00:00.000Z");
+    const share: InvoiceShareRecord = { ...existingShare, tokenCiphertext: encryptShareToken(oldToken) };
+    const { db, shareUpsert } = makeDb({ share });
+
+    const result = await createOrRegenerateShare(db, "invoice-1", "user-1", () => "rotated-token", () => now);
+
+    expect(result).toEqual({ kind: "created", path: "/i/rotated-token", expiresAt: new Date("2026-10-30T00:00:00.000Z") });
+    const call = shareUpsert.mock.calls[0][0] as unknown as { update: { tokenHash: string } };
+    expect(call.update.tokenHash).toBe(hashShareToken("rotated-token"));
+    expect(call.update.tokenHash).not.toBe(hashShareToken(oldToken));
+  });
+});
+
+describe("ensureShare", () => {
+  const now = new Date("2026-08-01T00:00:00.000Z");
+  const newToken = "freshly-issued-token";
+  const newExpiry = new Date("2026-10-30T00:00:00.000Z");
+  const neverCalled = () => {
+    throw new Error("a reused share must not generate a token");
+  };
+
+  function expectIssued(shareUpsert: ReturnType<typeof makeDb>["shareUpsert"]) {
+    expect(shareUpsert).toHaveBeenCalledTimes(1);
+    const call = shareUpsert.mock.calls[0][0] as unknown as {
+      where: { invoiceId: string };
+      update: { tokenHash: string; tokenCiphertext: string; expiresAt: Date };
+    };
+    expect(call.where).toEqual({ invoiceId: "invoice-1" });
+    expect(call.update.tokenHash).toBe(hashShareToken(newToken));
+    expect(decryptShareToken(call.update.tokenCiphertext)).toBe(newToken);
+    expect(call.update.expiresAt).toEqual(newExpiry);
+  }
+
+  it("returns not-found for an invoice not owned by the requesting user, without reading or writing a share", async () => {
+    const usable: InvoiceShareRecord = { ...existingShare, tokenCiphertext: encryptShareToken("someone-elses-token") };
+    const { db, invoiceFindFirst, shareFindUnique, shareUpsert } = makeDb({ invoice: null, share: usable });
+
+    const result = await ensureShare(db, "invoice-1", "user-2", () => newToken, () => now);
+
+    expect(result).toEqual({ kind: "not-found" });
+    expect(invoiceFindFirst).toHaveBeenCalledWith({ where: { id: "invoice-1", userId: "user-2" } });
+    expect(shareFindUnique).not.toHaveBeenCalled();
+    expect(shareUpsert).not.toHaveBeenCalled();
+  });
+
+  it("reuses an unexpired, recoverable share: same path, same expiry, nothing written", async () => {
+    const token = "the-link-the-brand-already-has";
+    const share: InvoiceShareRecord = { ...existingShare, tokenCiphertext: encryptShareToken(token) };
+    const { db, shareUpsert } = makeDb({ share });
+
+    const result = await ensureShare(db, "invoice-1", "user-1", neverCalled, () => now);
+
+    expect(result).toEqual({ kind: "reused", path: `/i/${token}`, expiresAt: existingShare.expiresAt });
+    expect(shareUpsert).not.toHaveBeenCalled();
+  });
+
+  it("reuses a recoverable share with no expiry (legacy rows never expire)", async () => {
+    const token = "legacy-no-expiry-token";
+    const share: InvoiceShareRecord = { ...existingShare, tokenCiphertext: encryptShareToken(token), expiresAt: null };
+    const { db, shareUpsert } = makeDb({ share });
+
+    const result = await ensureShare(db, "invoice-1", "user-1", neverCalled, () => now);
+
+    expect(result).toEqual({ kind: "reused", path: `/i/${token}`, expiresAt: null });
+    expect(shareUpsert).not.toHaveBeenCalled();
+  });
+
+  it("reuses on every call: repeated reminders never rotate", async () => {
+    const token = "stable-across-reminders";
+    const share: InvoiceShareRecord = { ...existingShare, tokenCiphertext: encryptShareToken(token) };
+    const { db, shareUpsert } = makeDb({ share });
+
+    const first = await ensureShare(db, "invoice-1", "user-1", neverCalled, () => now);
+    const second = await ensureShare(db, "invoice-1", "user-1", neverCalled, () => new Date("2026-08-15T00:00:00.000Z"));
+
+    expect(second).toEqual(first);
+    expect(shareUpsert).not.toHaveBeenCalled();
+  });
+
+  it("creates a share when none exists", async () => {
+    const { db, shareUpsert } = makeDb({ share: null });
+
+    const result = await ensureShare(db, "invoice-1", "user-1", () => newToken, () => now);
+
+    expect(result).toEqual({ kind: "created", path: `/i/${newToken}`, expiresAt: newExpiry });
+    expectIssued(shareUpsert);
+  });
+
+  it("replaces an expired share instead of sending its link", async () => {
+    const expiredToken = "expired-token-must-not-be-sent";
+    const share: InvoiceShareRecord = {
+      ...existingShare,
+      tokenCiphertext: encryptShareToken(expiredToken),
+      expiresAt: new Date("2026-07-31T23:59:59.999Z"),
+    };
+    const { db, shareUpsert } = makeDb({ share });
+
+    const result = await ensureShare(db, "invoice-1", "user-1", () => newToken, () => now);
+
+    expect(result).toEqual({ kind: "created", path: `/i/${newToken}`, expiresAt: newExpiry });
+    expectIssued(shareUpsert);
+  });
+
+  it("treats a share expiring exactly now as expired, like the public lookup does", async () => {
+    const share: InvoiceShareRecord = { ...existingShare, tokenCiphertext: encryptShareToken("edge-token"), expiresAt: now };
+    const { db, shareUpsert } = makeDb({ share });
+
+    const result = await ensureShare(db, "invoice-1", "user-1", () => newToken, () => now);
+
+    expect(result.kind).toBe("created");
+    expectIssued(shareUpsert);
+  });
+
+  it("does not extend the expiry of a share it reuses, even one millisecond before it lapses", async () => {
+    const token = "about-to-expire-token";
+    const expiresAt = new Date(now.getTime() + 1);
+    const share: InvoiceShareRecord = { ...existingShare, tokenCiphertext: encryptShareToken(token), expiresAt };
+    const { db, shareUpsert } = makeDb({ share });
+
+    const result = await ensureShare(db, "invoice-1", "user-1", neverCalled, () => now);
+
+    expect(result).toEqual({ kind: "reused", path: `/i/${token}`, expiresAt });
+    expect(shareUpsert).not.toHaveBeenCalled();
+  });
+
+  it("creates a new link for an unexpired share that predates tokenCiphertext (path unrecoverable)", async () => {
+    const { db, shareUpsert } = makeDb({ share: existingShare });
+
+    const result = await ensureShare(db, "invoice-1", "user-1", () => newToken, () => now);
+
+    expect(result).toEqual({ kind: "created", path: `/i/${newToken}`, expiresAt: newExpiry });
+    expectIssued(shareUpsert);
+  });
+
+  it("creates a new link when the stored ciphertext is corrupted", async () => {
+    const { db, shareUpsert } = makeDb({ share: { ...existingShare, tokenCiphertext: "v1.not.valid.ciphertext" } });
+
+    const result = await ensureShare(db, "invoice-1", "user-1", () => newToken, () => now);
+
+    expect(result.kind).toBe("created");
+    expectIssued(shareUpsert);
+  });
+
+  it("creates a new link when AUTH_SECRET rotated since the ciphertext was written", async () => {
+    const tokenCiphertext = encryptShareToken("written-under-the-old-secret", "a-previous-secret");
+    const { db, shareUpsert } = makeDb({ share: { ...existingShare, tokenCiphertext } });
+
+    const result = await ensureShare(db, "invoice-1", "user-1", () => newToken, () => now);
+
+    expect(result.kind).toBe("created");
+    expectIssued(shareUpsert);
   });
 });
 

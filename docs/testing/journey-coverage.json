@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "inventoryDate": "2026-10-06",
-  "baseline": "origin/staging 41c3553 (PR #28 merged) + branch fix/whatsapp-popup-fallback-2026-10-05 (FIND-04 fix)",
+  "inventoryDate": "2026-10-07",
+  "baseline": "origin/staging ac53043 (PR #29 merged) + branch fix/reminder-share-link-reuse-2026-10-07 (FIND-05 fix)",
   "classificationRules": [
     "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
     "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
@@ -261,9 +261,9 @@
       "persona": "owner",
       "preconditions": "Overdue invoice with valid contact",
       "interaction": "Click Kirim pengingat on the row",
-      "expected": "WhatsApp opens in exactly one new tab (wa.me, the deal's number) with the overdue reminder text built in follow-up-queue.tsx (buildWhatsAppReminderMessage -- not the Settings chase template) and a working public link; the tab has no opener and gets no Referer; only a blocked popup shows a fallback link",
-      "persisted": "InvoiceShare: POST /api/invoices/:id/share always issues a new token (FIND-05); the link in the message is the active link after reload and opens for a session-less recipient",
-      "alternates": "Blocked popup; share creation failure",
+      "expected": "WhatsApp opens in exactly one new tab (wa.me, the deal's number) with the overdue reminder text built in follow-up-queue.tsx (buildWhatsAppReminderMessage -- not the Settings chase template) and a working public link: the invoice's existing share link when it is usable, a new one only when there is none or it has expired; the tab has no opener and gets no Referer; only a blocked popup shows a fallback link",
+      "persisted": "InvoiceShare: POST /api/invoices/:id/share/ensure (ensureShare) leaves a usable share untouched (same token, same expiry) and creates one only when none is usable; the link in the message is the active link after reload and opens for a session-less recipient, before and after further reminders",
+      "alternates": "Blocked popup; share creation failure; no share yet; expired share",
       "scope": [
         "chromium",
         "chromium-mobile"
@@ -282,6 +282,30 @@
           "title": "after the reminder popup opens, the row shows no blocked-popup fallback",
           "kind": "real",
           "note": "FIND-04 regression (was expected_failure): exactly one new tab, one wa.me request with no Referer, window.opener null in the WhatsApp page, no Buka WhatsApp link"
+        },
+        {
+          "file": "e2e/invoices/reminder-share-link.spec.ts",
+          "title": "reuses the invoice's active share link, which keeps working for the recipient",
+          "kind": "real",
+          "note": "FIND-05 regression: link made with Buat tautan berbagi on invoice detail, opened by a session-less recipient, then visible Kirim pengingat on Beranda -- same link in the message (compared as a boolean), only POST /share/ensure sent, recipient link still opens, same link on detail after reloads"
+        },
+        {
+          "file": "e2e/invoices/reminder-share-link.spec.ts",
+          "title": "sending the reminder twice sends the same link both times",
+          "kind": "real",
+          "note": "Two visible Kirim pengingat clicks: both messages carry the existing link, it still opens afterwards, invoice detail still shows it"
+        },
+        {
+          "file": "e2e/invoices/reminder-share-link.spec.ts",
+          "title": "with no share link yet, the first reminder creates one and the next reuses it",
+          "kind": "real",
+          "note": "Starts from 'Belum ada tautan berbagi'; the first reminder's link opens for a recipient and the second reminder carries the same one"
+        },
+        {
+          "file": "e2e/invoices/reminder-share-link.spec.ts",
+          "title": "an expired share link is not sent: the reminder makes a new working link",
+          "kind": "real",
+          "note": "Expired share put on the row by the follow-up-expired-share fixture action (the app cannot backdate an expiry); the click, message and recipient pages are real. The reminder carries a different, working link; the expired URL does not open (generic not-found, since the invoice's single share row was replaced)"
         },
         {
           "file": "e2e/whatsapp/popup-blocker.spec.ts",
@@ -303,8 +327,8 @@
         }
       ],
       "finding": "FIND-04",
-      "evidence": "Added 2026-10-04 (Zero Routine Phase 2A, follow-up overlay). FIND-04 fixed by fix/whatsapp-popup-fallback-2026-10-05 (2026-10-06)",
-      "followUp": "FIND-05 (link rotation) needs a product decision; the real WhatsApp app hand-off and phone popup blockers stay MAN-WA-01",
+      "evidence": "Added 2026-10-04 (Zero Routine Phase 2A, follow-up overlay). FIND-04 fixed by fix/whatsapp-popup-fallback-2026-10-05 (2026-10-06). FIND-05 fixed by fix/reminder-share-link-reuse-2026-10-07 (2026-10-07)",
+      "followUp": "The real WhatsApp app hand-off and phone popup blockers stay MAN-WA-01",
       "manualCheck": "MAN-WA-01"
     },
     {
@@ -1891,8 +1915,8 @@
       "persona": "owner",
       "preconditions": "Active share",
       "interaction": "Buat ulang tautan -> Ya, buat tautan baru",
-      "expected": "New link",
-      "persisted": "Old token revoked",
+      "expected": "New link; the old link stops opening for a recipient and the new one opens",
+      "persisted": "Old token replaced (generic not-found for the recipient); new token after reload; a later Beranda reminder carries the new link",
       "alternates": "Cancel (SHARE-04)",
       "scope": [
         "chromium",
@@ -1905,6 +1929,12 @@
           "file": "e2e/invoices/invoice-journeys.spec.ts",
           "title": "share link can be created, recovered after reload, regenerated, and revoked",
           "kind": "real"
+        },
+        {
+          "file": "e2e/invoices/reminder-share-link.spec.ts",
+          "title": "Buat ulang tautan on invoice detail still replaces the link: the old one stops working, the new one opens",
+          "kind": "real",
+          "note": "Non-regression for FIND-05's fix: explicit Regenerate still sends POST /share and rotates. Session-less recipient gets 404 on the old link and the invoice on the new one; reload keeps the new link"
         }
       ]
     },
@@ -2497,7 +2527,7 @@
       "id": "FIND-04",
       "severity": "medium",
       "summary": "Blocked-popup detection never works: invoice detail (sendWhatsApp) and the Beranda queue (openReminder) call window.open(href, '_blank', 'noopener,noreferrer') and treat a null return as 'blocked', but the HTML spec makes window.open() return null whenever noopener is set. So after WhatsApp opens normally, a 'Buka WhatsApp' fallback link still appears (a second click opens a second chat), and a really blocked popup is indistinguishable.",
-      "status": "fixed: fix/whatsapp-popup-fallback-2026-10-05 (PR into staging, open, not merged; not on main/Production). Both surfaces now open a blank tab on the click (src/lib/whatsapp-popup.ts), cut its opener and navigate it without a Referer, so null from window.open means a real block. Regression: e2e/home/follow-up-queue.spec.ts and e2e/invoices/overdue-invoice.spec.ts (popup opened -> one tab, no fallback), e2e/whatsapp/popup-blocker.spec.ts (real Chromium blocker -> fallback, no tab). Real phones and the WhatsApp app stay MAN-WA-01",
+      "status": "fixed: PR #29 (merge ac53043, into staging 2026-10-07; not yet on main/Production). Both surfaces now open a blank tab on the click (src/lib/whatsapp-popup.ts), cut its opener and navigate it without a Referer, so null from window.open means a real block. Regression: e2e/home/follow-up-queue.spec.ts and e2e/invoices/overdue-invoice.spec.ts (popup opened -> one tab, no fallback), e2e/whatsapp/popup-blocker.spec.ts (real Chromium blocker -> fallback, no tab). Real phones and the WhatsApp app stay MAN-WA-01",
       "actions": [
         "HOME-03",
         "INV-WA-02"
@@ -2506,10 +2536,11 @@
     {
       "id": "FIND-05",
       "severity": "medium",
-      "summary": "Beranda 'Kirim pengingat' always rotates the invoice's share token (POST /api/invoices/:id/share -> createOrRegenerateShare), while invoice detail reuses the active link. A link the brand already received returns 404 after a reminder from Beranda (verified 2026-10-04 with a session-less context).",
-      "status": "open: needs a product decision (reuse the active link like invoice detail, or keep rotating and say so). No test asserts either behaviour.",
+      "summary": "Beranda 'Kirim pengingat' always rotated the invoice's share token (POST /api/invoices/:id/share -> createOrRegenerateShare), while invoice detail reuses the active link. A link the brand already received returned 404 after a reminder from Beranda (verified 2026-10-04 with a session-less context).",
+      "status": "fixed: fix/reminder-share-link-reuse-2026-10-07 (PR into staging, open, not merged; not on main/Production). Chris's decision 2026-10-07: a reminder reuses a usable active link and creates one only when none is usable; only explicit Regenerate rotates. Beranda now calls POST /api/invoices/:id/share/ensure (ensureShare in src/lib/invoice-share.ts): reuse when unexpired and the path is recoverable, without extending the expiry. Regression: e2e/invoices/reminder-share-link.spec.ts (reuse, repeat, no share, expired, Regenerate still rotates) and src/lib/invoice-share.test.ts.",
       "actions": [
-        "HOME-03"
+        "HOME-03",
+        "SHARE-02"
       ]
     },
     {
@@ -2520,6 +2551,15 @@
       "actions": [
         "INV-STATUS-06",
         "INV-LIST-01"
+      ]
+    },
+    {
+      "id": "FIND-07",
+      "severity": "medium",
+      "summary": "Invoice detail treats an expired share as active: the share section reads 'Tautan aktif sampai <past date>.' and Kirim lewat WhatsApp / Kirim pengingat sends that expired link, which shows the recipient 'Tautan ini sudah tidak berlaku.' Cause: getShareState reports any existing row as active, and sendWhatsApp reuses the loaded link without checking expiry. Verified 2026-10-07 on the expired-share fixture (expiry 1 Jan 2020). Beranda is not affected since the FIND-05 fix (ensureShare replaces an expired share).",
+      "status": "open: found while fixing FIND-05, not fixed there (scope). Needs a decision: have invoice detail's send use POST /share/ensure too, and how the share section should present an expired link. No test asserts either behaviour.",
+      "actions": [
+        "INV-WA-01"
       ]
     }
   ]

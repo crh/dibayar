@@ -108,17 +108,27 @@ stateDiagram-v2
     Active --> Absent: Cabut tautan + confirm (SHARE-03)
     Active --> Expired: lifetime elapses (PUB-03, seeded)
     Active --> Active: cancel confirm (SHARE-04, UNTESTED)
-    Absent --> Active: Beranda Kirim pengingat (HOME-03)
-    Active --> Active: Beranda Kirim pengingat issues a new token (FIND-05)
+    Absent --> Active: Beranda Kirim pengingat creates a link (HOME-03)
+    Active --> Active: Beranda Kirim pengingat, same token (HOME-03)
+    Expired --> Active: Beranda Kirim pengingat issues a new token (HOME-03)
 ```
 
-Beranda's **Kirim pengingat** always calls `POST /share`
-(`createOrRegenerateShare`), so it rotates an existing link; invoice detail's
-WhatsApp action reuses the active one. A link the brand already has returns
-404 after a Beranda reminder (FIND-05, verified 2026-10-04; product decision
-pending, no test asserts either behaviour). HOME-03's test starts from
-**Absent**, the case the inventory describes, and proves the new link opens
-for a session-less recipient.
+Beranda's **Kirim pengingat** calls `POST /share/ensure` (`ensureShare`): it
+sends the invoice's existing link when that link is usable -- unexpired, and
+its path recoverable -- and writes nothing, so the expiry is not extended. It
+issues a new link only when there is none, it has expired, or its path cannot
+be recovered. Only **Buat ulang tautan** (`POST /share`,
+`createOrRegenerateShare`) rotates a usable link. This fixed FIND-05
+(reminders used to rotate, so a link the brand already had returned 404);
+`e2e/invoices/reminder-share-link.spec.ts` drives every edge above plus
+SHARE-02 with a session-less recipient.
+
+An invoice has one share row, so replacing an expired link leaves the old
+token unknown: the old URL then shows the generic not-found page, not the
+expired page.
+
+Not covered by this fix: invoice detail's own WhatsApp action reuses whatever
+link the page loaded, including an expired one (FIND-07, open).
 
 | Recipient opens `/i/<token>` when the share is… | Expected | Action | Status |
 |---|---|---|---|

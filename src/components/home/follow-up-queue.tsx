@@ -68,7 +68,7 @@ export function FollowUpQueue({ invoices, deals, now, loading = false, error = f
   async function openReminder(invoice: QueueInvoice, number: string, popup: WhatsAppPopup | null) {
     setRowState(invoice.id, { kind: "sending" });
     try {
-      const response = await fetchWithTimeout(`/api/invoices/${invoice.id}/share`, { method: "POST" });
+      const response = await fetchWithTimeout(`/api/invoices/${invoice.id}/share/ensure`, { method: "POST" });
       const payload = await response.json();
       if (!response.ok || typeof payload.path !== "string") throw new Error("share-failed");
 

@@ -32,9 +32,11 @@ import {
 
 const NBSP = "\u00a0";
 
-function isSharePost(invoiceId: string) {
+// The queue asks for the invoice's existing link (POST .../share/ensure),
+// never the rotating POST .../share (FIND-05).
+function isShareEnsurePost(invoiceId: string) {
   return (response: { request(): { method(): string }; url(): string }) =>
-    response.request().method() === "POST" && new URL(response.url()).pathname === `/api/invoices/${invoiceId}/share`;
+    response.request().method() === "POST" && new URL(response.url()).pathname === `/api/invoices/${invoiceId}/share/ensure`;
 }
 
 test.describe("Beranda follow-up queue", { tag: "@critical" }, () => {
@@ -108,7 +110,7 @@ test.describe("Beranda follow-up queue", { tag: "@critical" }, () => {
     const row = followUpRow(page, brand);
     await expect(row).toContainText("Telat 5 hari");
 
-    const sharePost = page.waitForResponse(isSharePost(invoiceId));
+    const sharePost = page.waitForResponse(isShareEnsurePost(invoiceId));
     const [popup] = await Promise.all([
       page.waitForEvent("popup"),
       row.getByRole("button", { name: "Kirim pengingat" }).click(),
@@ -216,7 +218,7 @@ test.describe("Beranda follow-up queue", { tag: "@critical" }, () => {
     const row = followUpRow(page, brand);
     await expect(row.getByRole("link", { name: "Buka WhatsApp" })).toHaveCount(0);
     const opened = trackOpenedPages(context);
-    const sharePost = page.waitForResponse(isSharePost(followUp.invoices.overdueStored));
+    const sharePost = page.waitForResponse(isShareEnsurePost(followUp.invoices.overdueStored));
     await row.getByRole("button", { name: "Kirim pengingat" }).click();
     expect((await sharePost).ok()).toBe(true);
 
