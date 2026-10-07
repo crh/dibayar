@@ -127,6 +127,15 @@ fallback link's own tab), and the older tests stub `window.open = () => null`
 (partial by the inventory's rules, but they run in every engine and follow
 the fallback link).
 
+Share links and reminders (FIND-05, fixed): the Beranda queue asks for the
+invoice's link with `POST /api/invoices/:id/share/ensure`, which reuses a
+usable link and never rotates one; only **Buat ulang tautan** (`POST .../share`)
+rotates. `e2e/invoices/reminder-share-link.spec.ts` checks this with a
+`recipient` fixture (a page in its own context with no session) and
+`trackShareMutations()`, which lists the share requests the page sent. Share
+links are compared as booleans (`expect(a === b, "...").toBe(true)`) so a
+failing assertion never prints a token; keep that pattern in new share tests.
+
 Specs that change per-user state every other test depends on
 (`settings/language.spec.ts` changes `User.language`,
 `settings/bank-details.spec.ts` changes `UserSettings`) reseed in an
@@ -143,6 +152,7 @@ prints the share token.
 | `npm run e2e:fixtures -- seed\|verify\|cleanup` | Manual fixture control for local debugging |
 | `npm run e2e:fixtures -- legacy-due-date` | Overwrites the seeded SENT invoice's due date with year 0002 (the FIND-03 value) on the guarded disposable DB only; the next `seed` restores it. Used by `e2e/invoices/due-date-integrity.spec.ts` via `seedLegacyInvalidDueDate()` |
 | `npm run e2e:fixtures -- follow-up-states` | Adds the follow-up overlay (overdue / due-soon invoices, invalid-contact deal) on top of a fresh `seed`; refuses to stack on anything else. The next `seed` removes it |
+| `npm run e2e:fixtures -- follow-up-expired-share` | On top of `follow-up-states`: gives the stored-`OVERDUE` invoice an already-expired share with a recoverable path (the app cannot backdate an expiry). Used by `e2e/invoices/reminder-share-link.spec.ts` via `applyFollowUpExpiredShare()`; refuses to replace an existing share. The next `seed` removes it |
 | `npm run e2e:build` | Reproducible webpack production build, needed before any `test:e2e*` run |
 | `npm run test:e2e` | Semantic journey suite, chromium + chromium-mobile; visual snapshots are separate |
 | `npm run test:e2e:critical` | `@critical`-tagged tests only, chromium + chromium-mobile -- the PR gate |
