@@ -840,3 +840,16 @@ Starting state verified fresh: `main` = `origin/main` = `a60dfdf`, no open PRs, 
 - Gates: lint 0, typecheck 0, unit 893/893, build 0, journey self-test pass, diagnostics 1/1; full E2E 145 expected/0 unexpected/0 flaky/23 skipped; critical 133/0/0/23; a11y 12/0/1; ux-audit specs 69/69; order/repeat (default, CLI-reversed, truly reversed via temp config) 96/0 each; Firefox+WebKit+both Chromium new specs ×2 56/56 expected. `@visual` 9/9 fail locally with identical pixel counts on the clean-staging tree (host drift); no baseline touched.
 - Receipt `docs/receipts/DIBAYAR-ZERO-ROUTINE-REGRESSION-PHASE2A-2026-10-04.md`.
 - Rubric self-score: Evidence honesty 2/2 (INV-WA-02 downgraded, HOME-03 not overclaimed, every number from a run here); shipped completeness 2/2 (all four targets addressed; HOME-03 blocker precise); scope discipline 2/2 (test/docs only, no merge/deploy/hosted DB/baselines); report quality 2/2.
+
+## 2026-10-06/07 — FIND-04 fix: WhatsApp blocked-popup detection (PR #29)
+
+- Start gate: PR #28 MERGED (`41c3553`, ancestor of `origin/staging`); no open FIND-04 PR. Worktree `../dibayar-find04-popup` on `fix/whatsapp-popup-fallback-2026-10-05`.
+- Cause: `window.open(href, "_blank", "noopener,noreferrer")` returns null by spec even when the tab opened (confirmed in Chromium, Firefox, WebKit), so invoice detail and the Beranda queue always showed **Buka WhatsApp**.
+- Fix: `src/lib/whatsapp-popup.ts`: blank tab opened synchronously in the click, `opener = null`, navigated through a `rel=noreferrer` link in its own document (no Referer; `location.replace` leaks the origin), closed on every failure path. URLs/messages unchanged; new copy `whatsapp.opening`.
+- Tests: both FIND-04 `test.fail()` tests now positive (one tab, one wa.me request, no Referer, opener null, no fallback); new `e2e/whatsapp/popup-blocker.spec.ts` with Chromium `--block-new-web-contents`; unit +15. Negative controls (always fallback / never fallback / two tabs) each failed the intended tests; reverted.
+- Generated: real 56/94 (59.6%, was 54), P1 26/38, P0 28/30, outstanding P0/P1 13 (was 15); `--require-results` 96 passed, 0 not exercised. HOME-03 and INV-WA-02 real; FIND-04 fixed (PR open).
+- Incident: host rebooted overnight, wiping the first gate logs and leaving the local test DB without a schema. After Chris restarted the DB, `prisma migrate deploy` was run against `localhost:55432/dibayar_test` only and the gates were rerun under heavy host load.
+- Gates: lint 0, typecheck 0, unit 908/908, build 0, journey self-test 24/24, diagnostics 1/1; critical 137/0/0/23; full 149/0/0/23; a11y 12/0/1; ux-audit specs 69/69, `@visual` 9/9 fail locally with the same pixel counts as clean staging (host drift; no baseline touched). Firefox+WebKit targeted ×2: 52/0/8.
+- Open: two Firefox tests in `follow-up-queue.spec.ts` failed intermittently on 10-06 and did not reproduce on 10-07; not root-caused. MAN-WA-01 on real phones still needed.
+- Receipt `docs/receipts/DIBAYAR-FIND04-WHATSAPP-POPUP-FALLBACK-FIX-2026-10-06.md`.
+- Rubric self-score: Evidence honesty 2/2 (lost run and unexplained Firefox failures reported; every number from a run here); shipped completeness 2/2 (both surfaces fixed, both findings' actions real); scope discipline 2/2 (no merge/deploy/hosted DB/baselines; FIND-05/06 untouched); report quality 2/2.
