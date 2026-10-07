@@ -141,3 +141,9 @@ See the end of this file (§13), recorded after the run on the latest head.
 ## 12. Status
 
 PR #30 (`fix/reminder-share-link-reuse-2026-10-07` → `staging`) is **open and not merged**, waiting for Chris's explicit merge authorization. `main` and Production are untouched.
+
+## 13. CI and review (recorded 2026-10-07)
+
+- CI run `37577449600` on head `a885965` (all code, tests and docs except this section): **success**. `lint-typecheck-test`, `e2e-critical`, `e2e-a11y` and `ux-audit` succeeded; `e2e-cross-browser` skipped by design. `ux-audit` includes `@visual`, so the nine local visual failures in §9 were host drift.
+- Codex review completed on `878507e` (the code and test commits) with no inline comments. No human review yet.
+- The commit that adds this section is docs-only and starts one more CI run; its result is not recorded here.
