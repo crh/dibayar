@@ -87,13 +87,23 @@ Inventory: INV-WA-01, INV-WA-02, HOME-03.
    **Kirim lewat WhatsApp**. Expected: WhatsApp (app or web) opens with the
    template text, amount, invoice number and a `/i/` link. **Do not send** to
    anyone other than yourself.
+   Expected: exactly one new tab or app hand-off, and **no Buka WhatsApp**
+   link on the invoice page afterwards (FIND-04, fixed by
+   `fix/whatsapp-popup-fallback-2026-10-05`; check only on a build that
+   includes it). Repeat from a Beranda
+   **Kirim pengingat** row (HOME-03): same result, no link on the row.
 2. Desktop browser with popups blocked for the site: press it again.
-   Expected: a **Buka WhatsApp** link appears, and opening it works.
+   Expected: no tab opens, a **Buka WhatsApp** link appears, and opening it
+   works.
+3. On a phone (Android Chrome, iPhone Safari), repeat step 1. Expected: a
+   brief "Membuka WhatsApp…" tab that turns into WhatsApp, not a blank tab
+   left behind, and no **Buka WhatsApp** link. If a phone browser or in-app
+   browser (for example Instagram's) blocks the tab, the link must appear
+   instead.
 
-Known until FIND-04 is fixed: a **Buka WhatsApp** link also appears after
-step 1 even though WhatsApp opened (here and on a Beranda **Kirim pengingat**
-row, HOME-03). Record it as FIND-04, not as a new defect; step 2 cannot show
-that blocking was *detected*, only that the link works.
+Automated since the FIND-04 fix: "popup opened -> one tab, no link" and a
+real Chromium blocker (`e2e/whatsapp/popup-blocker.spec.ts`). What still needs
+this check: the WhatsApp app itself, and real phone and in-app browsers.
 
 ### MAN-PDF-01 — PDF download on real devices (P1)
 

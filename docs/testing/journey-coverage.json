@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "inventoryDate": "2026-10-04",
-  "baseline": "origin/staging e83cf1a (PR #27 merged) + branch chore/zero-routine-regression-phase2a-2026-10-04 (Batch 2A)",
+  "inventoryDate": "2026-10-06",
+  "baseline": "origin/staging 41c3553 (PR #28 merged) + branch fix/whatsapp-popup-fallback-2026-10-05 (FIND-04 fix)",
   "classificationRules": [
     "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
     "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
@@ -261,7 +261,7 @@
       "persona": "owner",
       "preconditions": "Overdue invoice with valid contact",
       "interaction": "Click Kirim pengingat on the row",
-      "expected": "WhatsApp opens (wa.me, the deal's number) with the overdue reminder text built in follow-up-queue.tsx (buildWhatsAppReminderMessage -- not the Settings chase template) and a working public link; blocked popup shows a fallback link",
+      "expected": "WhatsApp opens in exactly one new tab (wa.me, the deal's number) with the overdue reminder text built in follow-up-queue.tsx (buildWhatsAppReminderMessage -- not the Settings chase template) and a working public link; the tab has no opener and gets no Referer; only a blocked popup shows a fallback link",
       "persisted": "InvoiceShare: POST /api/invoices/:id/share always issues a new token (FIND-05); the link in the message is the active link after reload and opens for a session-less recipient",
       "alternates": "Blocked popup; share creation failure",
       "scope": [
@@ -269,36 +269,43 @@
         "chromium-mobile"
       ],
       "priority": "P1",
-      "status": "automated_partial",
+      "status": "automated_real_interaction",
       "tests": [
         {
           "file": "e2e/home/follow-up-queue.spec.ts",
           "title": "Kirim pengingat on an overdue row opens WhatsApp with the overdue reminder and a working invoice link",
-          "kind": "partial",
-          "note": "Real interaction (visible Kirim pengingat, real popup; wa.me answered by a local stub so nothing is sent; exact number and message, then reload + session-less recipient). Listed as partial only because FIND-04 is open: switch to real when the expected-failure test below loses test.fail()"
+          "kind": "real",
+          "note": "Real interaction (visible Kirim pengingat, real popup; wa.me answered by a local stub so nothing is sent): exact number and message, no alert, no fallback link, then reload + session-less recipient opens the sent link"
+        },
+        {
+          "file": "e2e/home/follow-up-queue.spec.ts",
+          "title": "after the reminder popup opens, the row shows no blocked-popup fallback",
+          "kind": "real",
+          "note": "FIND-04 regression (was expected_failure): exactly one new tab, one wa.me request with no Referer, window.opener null in the WhatsApp page, no Buka WhatsApp link"
+        },
+        {
+          "file": "e2e/whatsapp/popup-blocker.spec.ts",
+          "title": "Beranda: Kirim pengingat on a queue row shows a Buka WhatsApp link and opens nothing",
+          "kind": "real",
+          "note": "Real popup blocker: Chromium's --block-new-web-contents switch makes window.open() return null from the browser itself (nothing in the page stubbed). No tab, no WhatsApp request, fallback link to the overdue reminder"
         },
         {
           "file": "e2e/home/follow-up-queue.spec.ts",
           "title": "a blocked reminder popup on a queue row shows a Buka WhatsApp fallback link",
           "kind": "partial",
-          "note": "window.open stubbed to return null; cannot tell blocked from opened until FIND-04 is fixed"
-        },
-        {
-          "file": "e2e/home/follow-up-queue.spec.ts",
-          "title": "after the reminder popup opens, the row shows no blocked-popup fallback",
-          "kind": "expected_failure",
-          "note": "FIND-04"
+          "note": "window.open stubbed to return null; runs in every engine and is the test that follows the fallback link (the real-blocker switch blocks that tab too)"
         },
         {
           "file": "src/components/home/follow-up-queue.test.tsx",
           "title": "",
           "kind": "partial",
-          "note": "Component test with mocked fetch/window.open"
+          "note": "Component tests with mocked fetch and a fake tab: opened, blocked, share failure closes the tab, repair-and-send"
         }
       ],
       "finding": "FIND-04",
-      "evidence": "Added 2026-10-04 (Zero Routine Phase 2A, follow-up overlay)",
-      "followUp": "Fix FIND-04 in a separate fix/* PR and drop test.fail() from the expected-failure test; the real test above then carries the claim. FIND-05 (link rotation) needs a product decision"
+      "evidence": "Added 2026-10-04 (Zero Routine Phase 2A, follow-up overlay). FIND-04 fixed by fix/whatsapp-popup-fallback-2026-10-05 (2026-10-06)",
+      "followUp": "FIND-05 (link rotation) needs a product decision; the real WhatsApp app hand-off and phone popup blockers stay MAN-WA-01",
+      "manualCheck": "MAN-WA-01"
     },
     {
       "id": "HOME-04",
@@ -1691,7 +1698,8 @@
         {
           "file": "e2e/invoices/invoice-journeys.spec.ts",
           "title": "WhatsApp action opens a saved-template message with the invoice link",
-          "kind": "real"
+          "kind": "real",
+          "note": "wa.me answered by a local stub (keepWhatsAppLocal); no request leaves the machine"
         }
       ],
       "manualCheck": "MAN-WA-01"
@@ -1704,7 +1712,7 @@
       "persona": "owner",
       "preconditions": "Popup blocked",
       "interaction": "Click Kirim lewat WhatsApp",
-      "expected": "'Buka WhatsApp' link with wa.me href",
+      "expected": "'Buka WhatsApp' link with the wa.me href only when the browser really blocked the tab; no link, and exactly one tab, after a successful open",
       "persisted": "n/a",
       "alternates": "",
       "scope": [
@@ -1712,23 +1720,31 @@
         "chromium-mobile"
       ],
       "priority": "P1",
-      "status": "automated_partial",
+      "status": "automated_real_interaction",
       "tests": [
         {
-          "file": "e2e/invoices/invoice-journeys.spec.ts",
-          "title": "a blocked WhatsApp popup falls back to a clickable manual link",
-          "kind": "partial",
-          "note": "window.open stubbed to return null. Reclassified 2026-10-04: stubs are partial by the rules above, and FIND-04 shows the fallback appears whether or not the popup was blocked, so this cannot prove blocked-popup detection"
+          "file": "e2e/whatsapp/popup-blocker.spec.ts",
+          "title": "invoice detail: Kirim lewat WhatsApp shows a Buka WhatsApp link and opens nothing",
+          "kind": "real",
+          "note": "Real popup blocker: Chromium's --block-new-web-contents switch makes window.open() return null from the browser itself (nothing in the page stubbed). Reached from Beranda -> Invoice -> the invoice; no tab, no WhatsApp request, fallback link to the saved-template message"
         },
         {
           "file": "e2e/invoices/overdue-invoice.spec.ts",
           "title": "after the reminder popup opens, invoice detail shows no blocked-popup fallback",
-          "kind": "expected_failure",
-          "note": "FIND-04"
+          "kind": "real",
+          "note": "FIND-04 regression (was expected_failure): popup opened -> exactly one tab, one wa.me request with no Referer, window.opener null, no Buka WhatsApp link"
+        },
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "a blocked WhatsApp popup falls back to a clickable manual link",
+          "kind": "partial",
+          "note": "window.open stubbed to return null; runs in every engine and follows the fallback link (answered locally)"
         }
       ],
       "finding": "FIND-04",
-      "followUp": "Fix FIND-04 (separate fix/* PR), then a real test: popup opened -> no fallback; real blockers stay MAN-WA-01"
+      "followUp": "Real phone popup blockers and in-app browsers stay MAN-WA-01",
+      "evidence": "FIND-04 fixed by fix/whatsapp-popup-fallback-2026-10-05 (2026-10-06). Chromium only for the real blocker (the switch is Chromium's); Firefox/WebKit run the stubbed-blocker test",
+      "manualCheck": "MAN-WA-01"
     },
     {
       "id": "INV-WA-03",
@@ -2481,7 +2497,7 @@
       "id": "FIND-04",
       "severity": "medium",
       "summary": "Blocked-popup detection never works: invoice detail (sendWhatsApp) and the Beranda queue (openReminder) call window.open(href, '_blank', 'noopener,noreferrer') and treat a null return as 'blocked', but the HTML spec makes window.open() return null whenever noopener is set. So after WhatsApp opens normally, a 'Buka WhatsApp' fallback link still appears (a second click opens a second chat), and a really blocked popup is indistinguishable.",
-      "status": "open: fix in a separate fix/* PR (e.g. detect blocking without noopener's null return). Expected-failure tests: e2e/home/follow-up-queue.spec.ts and e2e/invoices/overdue-invoice.spec.ts",
+      "status": "fixed: fix/whatsapp-popup-fallback-2026-10-05 (PR into staging, open, not merged; not on main/Production). Both surfaces now open a blank tab on the click (src/lib/whatsapp-popup.ts), cut its opener and navigate it without a Referer, so null from window.open means a real block. Regression: e2e/home/follow-up-queue.spec.ts and e2e/invoices/overdue-invoice.spec.ts (popup opened -> one tab, no fallback), e2e/whatsapp/popup-blocker.spec.ts (real Chromium blocker -> fallback, no tab). Real phones and the WhatsApp app stay MAN-WA-01",
       "actions": [
         "HOME-03",
         "INV-WA-02"

@@ -27,6 +27,7 @@ import {
   keepWhatsAppLocal,
   parseWhatsAppLink,
   shortIdDate,
+  trackOpenedPages,
 } from "../support/follow-up";
 
 const NBSP = "\u00a0";
@@ -125,10 +126,10 @@ test.describe("Beranda follow-up queue", { tag: "@critical" }, () => {
       `^Halo, ini pengingat invoice E2E/OVERDUE/003 sebesar Rp${NBSP}8\\.000\\.000 yang sudah melewati jatuh tempo ${dueText}\\.\\nDetail invoice: ${linkPattern}\\nTerima kasih\\.$`,
     ));
     const sentLink = text!.match(new RegExp(linkPattern))![0];
-    // No error. (The row does also show the "Buka WhatsApp" fallback here
-    // even though the popup opened -- FIND-04, pinned by the expected-failure
-    // test below rather than asserted either way in this one.)
+    // No error, and -- since the popup opened -- no blocked-popup fallback
+    // (FIND-04; the test below checks that in detail).
     await expect(row.getByRole("alert")).toHaveCount(0);
+    await expect(row.getByRole("link", { name: "Buka WhatsApp" })).toHaveCount(0);
 
     // The link in the message is the invoice's share link, and it persisted:
     // after a reload, invoice detail shows that same active link...
@@ -162,38 +163,47 @@ test.describe("Beranda follow-up queue", { tag: "@critical" }, () => {
     expectSameJakartaDay(overlayDay);
   });
 
-  // FIND-04 (expected failure, never counted as coverage): the queue opens
-  // WhatsApp with window.open(href, "_blank", "noopener,noreferrer"), and the
-  // HTML spec makes window.open() return null whenever "noopener" is set --
-  // so the "popup was blocked" check (`win ? IDLE : blocked`) is true even
-  // when the chat opened, and the fallback link always appears. Remove
-  // test.fail() when the detection is fixed; `npm run coverage:journeys`
-  // then forces the inventory update.
+  // FIND-04 regression (fixed in fix/whatsapp-popup-fallback-2026-10-05):
+  // the queue used to call window.open(href, "_blank", "noopener,noreferrer"),
+  // which returns null by spec even when the tab opened, so the "blocked"
+  // fallback always appeared and a second tap opened a second chat. It now
+  // opens a blank tab on the tap, cuts its opener and sends it to WhatsApp
+  // without a Referer (src/lib/whatsapp-popup.ts) -- all checked here.
   test("after the reminder popup opens, the row shows no blocked-popup fallback", async ({ page, context }) => {
-    test.fail(true, "FIND-04: window.open() with noopener always returns null, so the blocked-popup fallback always shows");
     const { followUp } = loadFixtureManifest();
     const row = followUpRow(page, followUp.brands[followUp.deals.overdueStored]);
-    await keepWhatsAppLocal(context);
+    const whatsApp = await keepWhatsAppLocal(context);
 
     await page.goto("/");
+    await expect(row).toContainText("Telat 5 hari");
+    const opened = trackOpenedPages(context);
     const [popup] = await Promise.all([
       page.waitForEvent("popup"),
       row.getByRole("button", { name: "Kirim pengingat" }).click(),
     ]);
     await expect.poll(() => popup.url()).toMatch(/^https:\/\/wa\.me\/628110000008\?text=/);
-    await popup.close();
+    expect(parseWhatsAppLink(popup.url()).text).toContain("E2E/OVERDUE/003");
     // The send finished (spinner gone, accessible name back)...
     await expect(row.getByRole("button", { name: "Kirim pengingat" })).toBeVisible();
-    // ...and, since the popup did open, no "it was blocked" link should show.
-    await expect(row.getByRole("link", { name: "Buka WhatsApp" })).toHaveCount(0, { timeout: 2_000 });
+    // ...and, since the popup did open, no "it was blocked" link shows.
+    await expect(row.getByRole("link", { name: "Buka WhatsApp" })).toHaveCount(0);
+    await expect(row.getByRole("alert")).toHaveCount(0);
+    // Exactly one tab, one request to WhatsApp, and no Referer sent with it.
+    expect(opened).toEqual([popup]);
+    expect(whatsApp.map((request) => request.url)).toEqual([popup.url()]);
+    expect(whatsApp[0].referer).toBeNull();
+    // WhatsApp's page has no handle back to Dibayar.
+    expect(await popup.evaluate(() => window.opener === null)).toBe(true);
+    await popup.close();
   });
 
   // Partial by the inventory's rules: window.open() is stubbed to return
   // null, the exact signal a popup blocker gives (same technique as the
   // invoice-detail fallback test in invoice-journeys.spec.ts). The click and
-  // the rendered fallback link are real. Until FIND-04 is fixed this test
-  // cannot tell a blocked popup from an opened one (the link shows either
-  // way); it still proves the link is correctly addressed and clickable.
+  // the rendered fallback link are real. Runs in every engine, and is the
+  // test that follows the fallback link: the real-blocker test
+  // (whatsapp/popup-blocker.spec.ts) can't, because Chromium's switch blocks
+  // that new tab too.
   test("a blocked reminder popup on a queue row shows a Buka WhatsApp fallback link", async ({ page, context }) => {
     const { followUp } = loadFixtureManifest();
     const brand = followUp.brands[followUp.deals.overdueStored];
@@ -205,12 +215,14 @@ test.describe("Beranda follow-up queue", { tag: "@critical" }, () => {
     await page.goto("/");
     const row = followUpRow(page, brand);
     await expect(row.getByRole("link", { name: "Buka WhatsApp" })).toHaveCount(0);
+    const opened = trackOpenedPages(context);
     const sharePost = page.waitForResponse(isSharePost(followUp.invoices.overdueStored));
     await row.getByRole("button", { name: "Kirim pengingat" }).click();
     expect((await sharePost).ok()).toBe(true);
 
     const fallback = row.getByRole("link", { name: "Buka WhatsApp" });
     await expect(fallback).toBeVisible();
+    expect(opened).toHaveLength(0);
     expect(await fallback.getAttribute("target")).toBe("_blank");
     const { number, text } = parseWhatsAppLink((await fallback.getAttribute("href"))!);
     expect(number).toBe("628110000008");
@@ -219,6 +231,7 @@ test.describe("Beranda follow-up queue", { tag: "@critical" }, () => {
     // The fallback is clickable and leads to the same link (stubbed locally).
     const [popup] = await Promise.all([page.waitForEvent("popup"), fallback.click()]);
     await expect.poll(() => popup.url()).toMatch(/^https:\/\/wa\.me\/628110000008\?text=/);
+    expect(opened).toEqual([popup]);
     await popup.close();
   });
 });
