@@ -27,8 +27,8 @@ import { getJakartaCalendarDate } from "../src/lib/invoice-date-status";
 import { encryptShareToken } from "../src/lib/share-token-crypto";
 
 const action = process.argv[2];
-if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states"].includes(action ?? "")) {
-  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states");
+if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states", "follow-up-expired-share"].includes(action ?? "")) {
+  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states|follow-up-expired-share");
 }
 
 const connectionString = process.env.DATABASE_URL;
@@ -148,6 +148,9 @@ const followUp = {
   // and stored as typed, but normalizeWhatsAppNumber() rejects it (< 9
   // digits) -- the same state a person reaches by typing a short number.
   invalidContactWa: "12345678",
+  // Token of the expired share that `follow-up-expired-share` puts on the
+  // stored-OVERDUE invoice (FIND-05: a reminder must not send it).
+  expiredShareToken: `${prefix}-follow-up-expired-token-do-not-share`,
 } as const;
 
 const followUpBrands = {
@@ -400,12 +403,36 @@ async function applyFollowUpStates() {
   console.log(JSON.stringify({ action: "follow-up-states", host: normalizedHost, prefix, jakartaToday: today, deals: dealRows.length, invoices: applied }));
 }
 
+// Gives the overlay's stored-OVERDUE invoice a share that has already
+// expired, with a recoverable path -- the state a real invoice reaches 90
+// days after its link was made. Written straight to the row because the app
+// offers no way to backdate an expiry. Needs the overlay, and refuses to
+// overwrite a share that is already there.
+async function followUpExpiredShare() {
+  const invoiceId = followUp.invoices.overdueStored;
+  const invoice = await prisma.invoice.findFirst({ where: { id: invoiceId, userId: ids.owner }, select: { id: true, share: { select: { id: true } } } });
+  if (!invoice) throw new Error("E2E expired-share overlay needs follow-up-states first");
+  if (invoice.share) throw new Error("E2E expired-share overlay refuses to replace an existing share");
+
+  await prisma.invoiceShare.create({
+    data: {
+      id: `${prefix}-share-follow-up-expired`,
+      invoiceId,
+      tokenHash: sha256(followUp.expiredShareToken),
+      tokenCiphertext: encryptShareToken(followUp.expiredShareToken),
+      expiresAt: FIXTURE_PAST_DATE,
+    },
+  });
+  console.log(JSON.stringify({ action: "follow-up-expired-share", host: normalizedHost, prefix, shares: 1 }));
+}
+
 async function main() {
   try {
     if (action === "seed") await seed();
     else if (action === "verify") await verify();
     else if (action === "legacy-due-date") await legacyDueDate();
     else if (action === "follow-up-states") await applyFollowUpStates();
+    else if (action === "follow-up-expired-share") await followUpExpiredShare();
     else await cleanup();
   } finally {
     await prisma.$disconnect();

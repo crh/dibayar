@@ -22,9 +22,11 @@ import { applyFollowUpStates, reseedFixtures } from "../support/reseed";
 import { primaryNav } from "../support/nav";
 import { followUpRow, keepWhatsAppLocal, parseWhatsAppLink, trackOpenedPages } from "../support/follow-up";
 
-function isSharePost(invoiceId: string) {
+// The queue asks for the invoice's existing link (POST .../share/ensure),
+// never the rotating POST .../share (FIND-05).
+function isShareEnsurePost(invoiceId: string) {
   return (response: { request(): { method(): string }; url(): string }) =>
-    response.request().method() === "POST" && new URL(response.url()).pathname === `/api/invoices/${invoiceId}/share`;
+    response.request().method() === "POST" && new URL(response.url()).pathname === `/api/invoices/${invoiceId}/share/ensure`;
 }
 
 // Top level: launchOptions can only be set per file (it needs its own worker).
@@ -79,7 +81,7 @@ test.describe("WhatsApp when the browser blocks new windows", { tag: "@critical"
     await expect(row).toContainText("Telat 5 hari");
     await expect(row.getByRole("link", { name: "Buka WhatsApp" })).toHaveCount(0);
     const opened = trackOpenedPages(context);
-    const sharePost = page.waitForResponse(isSharePost(followUp.invoices.overdueStored));
+    const sharePost = page.waitForResponse(isShareEnsurePost(followUp.invoices.overdueStored));
     await row.getByRole("button", { name: "Kirim pengingat" }).click();
     expect((await sharePost).ok()).toBe(true);
 

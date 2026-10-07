@@ -10,7 +10,7 @@
 // no reseed -- they never mutate fixture rows.
 import { execFileSync } from "node:child_process";
 
-function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states"): void {
+function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states" | "follow-up-expired-share"): void {
   const env = { ...process.env, E2E_FIXTURE_CONFIRM: "non-production" };
   execFileSync("npx", ["tsx", "--env-file-if-exists=.env.local", "scripts/e2e-fixtures.ts", action], {
     stdio: "inherit",
@@ -38,4 +38,12 @@ export function seedLegacyInvalidDueDate(): void {
 export function applyFollowUpStates(): void {
   runFixtureAction("seed");
   runFixtureAction("follow-up-states");
+}
+
+// The follow-up overlay, plus an already-expired share on its stored-OVERDUE
+// invoice (scripts/e2e-fixtures.ts followUpExpiredShare). Reseed afterwards,
+// like every overlay.
+export function applyFollowUpExpiredShare(): void {
+  applyFollowUpStates();
+  runFixtureAction("follow-up-expired-share");
 }
