@@ -183,9 +183,11 @@ function stubWhatsAppTab() {
   return { open, tab, href };
 }
 
+// Only the reuse endpoint (POST .../share/ensure) answers; the rotating
+// POST .../share gets a 404 here, so a reminder that used it would fail.
 function stubFetch(handlers: { sharePost?: { status: number; body: unknown }; dealPatch?: { status: number; body: unknown } }) {
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-    const reply = url.endsWith("/share") && init?.method === "POST"
+    const reply = url.endsWith("/share/ensure") && init?.method === "POST"
       ? handlers.sharePost ?? { status: 200, body: { path: "/i/reminder-token" } }
       : url.startsWith("/api/deals/") && init?.method === "PATCH"
         ? handlers.dealPatch ?? { status: 500, body: {} }
@@ -227,6 +229,25 @@ describe("FollowUpQueue — Kirim pengingat (FIND-04)", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Kirim pengingat" })).toBeDefined());
     expect(screen.queryByRole("link", { name: "Buka WhatsApp" })).toBeNull();
     expect(wa.open).toHaveBeenCalledTimes(1);
+  });
+
+  // FIND-05: a reminder asks for the invoice's existing link; it must never
+  // call the rotating POST .../share, which would break a link already sent.
+  it("asks the server to reuse the invoice's share link, once per reminder, and never calls the rotating endpoint", async () => {
+    stubWhatsAppTab();
+    const fetchMock = stubFetch({});
+    renderQueue([overdue], [makeDeal()]);
+
+    for (const expectedCalls of [1, 2]) {
+      fireEvent.click(screen.getByRole("button", { name: "Kirim pengingat" }));
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(expectedCalls));
+      await waitFor(() => expect(screen.getByRole("button", { name: "Kirim pengingat" })).toBeDefined());
+    }
+
+    expect(fetchMock.mock.calls.map(([url, init]) => `${init?.method} ${url}`)).toEqual([
+      "POST /api/invoices/invoice-overdue/share/ensure",
+      "POST /api/invoices/invoice-overdue/share/ensure",
+    ]);
   });
 
   it("shows a Buka WhatsApp link to the same reminder when the browser blocks the tab", async () => {

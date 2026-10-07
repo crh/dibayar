@@ -51,6 +51,9 @@ export type ShareStateResult =
 // predates that column (created before this recovery existed) or whose
 // ciphertext fails to decrypt, in which case the owner falls back to
 // regenerating, exactly like before this existed.
+// An expired row still reports active, with its past expiresAt: this is the
+// owner's management view of the row, not a promise that the link opens.
+// "Usable right now" is ensureShare's question, not this one's.
 export async function getShareState(
   db: InvoiceShareDb,
   invoiceId: string,
@@ -70,6 +73,30 @@ export type CreateShareResult =
   | { kind: "not-found" }
   | { kind: "created"; path: string; expiresAt: Date };
 
+// Always issues a new token; the caller has already checked ownership.
+async function issueShare(
+  db: InvoiceShareDb,
+  invoiceId: string,
+  tokenFactory: () => string,
+  now: Date,
+): Promise<{ path: string; expiresAt: Date }> {
+  const token = tokenFactory();
+  const tokenHash = hashShareToken(token);
+  const tokenCiphertext = encryptShareToken(token);
+  const expiresAt = new Date(now.getTime());
+  expiresAt.setUTCDate(expiresAt.getUTCDate() + DEFAULT_SHARE_LIFETIME_DAYS);
+  await db.invoiceShare.upsert({
+    where: { invoiceId },
+    create: { invoiceId, tokenHash, tokenCiphertext, expiresAt },
+    update: { tokenHash, tokenCiphertext, expiresAt },
+  });
+
+  return { path: `/i/${token}`, expiresAt };
+}
+
+// The explicit, destructive operation ("Buat tautan berbagi" / "Buat ulang
+// tautan"): always rotates, so a link already sent stops working. A flow
+// that only needs a working link to send must use ensureShare instead.
 export async function createOrRegenerateShare(
   db: InvoiceShareDb,
   invoiceId: string,
@@ -80,18 +107,42 @@ export async function createOrRegenerateShare(
   const invoice = await getOwnedInvoice(db, invoiceId, userId);
   if (!invoice) return { kind: "not-found" };
 
-  const token = tokenFactory();
-  const tokenHash = hashShareToken(token);
-  const tokenCiphertext = encryptShareToken(token);
-  const expiresAt = new Date(nowFactory().getTime());
-  expiresAt.setUTCDate(expiresAt.getUTCDate() + DEFAULT_SHARE_LIFETIME_DAYS);
-  await db.invoiceShare.upsert({
-    where: { invoiceId },
-    create: { invoiceId, tokenHash, tokenCiphertext, expiresAt },
-    update: { tokenHash, tokenCiphertext, expiresAt },
-  });
+  const issued = await issueShare(db, invoiceId, tokenFactory, nowFactory());
+  return { kind: "created", ...issued };
+}
 
-  return { kind: "created", path: `/i/${token}`, expiresAt };
+export type EnsureShareResult =
+  | { kind: "not-found" }
+  | { kind: "reused"; path: string; expiresAt: Date | null }
+  | { kind: "created"; path: string; expiresAt: Date };
+
+// For sending a reminder (FIND-05): hands back the link the recipient may
+// already hold instead of rotating it. A share is reused only when it is
+// usable as a public link right now -- unexpired by the same rule
+// getPublicInvoiceDocumentByToken applies (a null expiry never expires), and
+// its path recoverable from tokenCiphertext. Reuse writes nothing, so the
+// expiry is never extended. Anything else (no row, expired, a row that
+// predates tokenCiphertext or no longer decrypts) gets a new link, since the
+// old one either no longer opens or can't be put in a message.
+export async function ensureShare(
+  db: InvoiceShareDb,
+  invoiceId: string,
+  userId: string,
+  tokenFactory: () => string = generateShareToken,
+  nowFactory: () => Date = () => new Date(),
+): Promise<EnsureShareResult> {
+  const invoice = await getOwnedInvoice(db, invoiceId, userId);
+  if (!invoice) return { kind: "not-found" };
+
+  const now = nowFactory();
+  const share = await db.invoiceShare.findUnique({ where: { invoiceId } });
+  if (share && (share.expiresAt === null || share.expiresAt.getTime() > now.getTime())) {
+    const token = share.tokenCiphertext ? decryptShareToken(share.tokenCiphertext) : null;
+    if (token) return { kind: "reused", path: `/i/${token}`, expiresAt: share.expiresAt };
+  }
+
+  const issued = await issueShare(db, invoiceId, tokenFactory, now);
+  return { kind: "created", ...issued };
 }
 
 export type RevokeShareResult = { kind: "not-found" } | { kind: "revoked" };
