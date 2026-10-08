@@ -138,7 +138,10 @@ test.describe("add-deal form validation and optional fields", { tag: "@critical"
     await expect(page.getByLabel("Nama kontak", { exact: true })).toHaveValue("Sari Brand Manager");
     await expect(page.getByText("DP 50%, pelunasan 7 hari setelah tayang")).toBeVisible();
     await expect(page.getByText("Dua foto produk")).toBeVisible();
-    // Still there after reloading the detail page itself.
+    // Still there after reloading the detail page itself. Let the page finish
+    // loading first: Firefox reports requests a reload cuts short (here the
+    // favicon) as failed.
+    await page.waitForLoadState("networkidle");
     await page.reload();
     await expect(page.getByLabel("Nama kontak", { exact: true })).toHaveValue("Sari Brand Manager");
     await expect(page.getByText("DP 50%, pelunasan 7 hari setelah tayang")).toBeVisible();
