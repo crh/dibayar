@@ -19,6 +19,10 @@ type BrowserDiagnostics = {
 // real, actionable diagnostic.
 type ExpectedErrorResponse = { method: string; pathname: string };
 
+// How each engine reports a request it cancelled itself: Chromium, Firefox,
+// WebKit.
+const ABORTED_ERROR_TEXTS = new Set(["net::ERR_ABORTED", "NS_BINDING_ABORTED", "Load request cancelled"]);
+
 function errorMessage(error: Error): string {
   return error.stack ?? error.message;
 }
@@ -118,11 +122,21 @@ export const test = base.extend<{
         // "NS_BINDING_ABORTED", WebKit "Load request cancelled" (all three
         // confirmed via repeated local e2e-cross-browser Firefox+WebKit
         // runs surfacing this exact race under load).
-        if (
-          (errorText === "net::ERR_ABORTED" || errorText === "NS_BINDING_ABORTED" || errorText === "Load request cancelled")
-          && url.searchParams.has("_rsc")
-        ) return;
-        diagnostics.failedRequests.push(`${request.url()}${errorText ? ` — ${errorText}` : ""}`);
+        if (ABORTED_ERROR_TEXTS.has(errorText) && url.searchParams.has("_rsc")) return;
+        // A link whose response is a file (Content-Disposition: attachment,
+        // e.g. Unduh PDF) starts as a navigation that the browser then turns
+        // into a download, and reports the navigation request as aborted.
+        // Those are set aside here and dropped at teardown only if this page
+        // really did get a download for that exact URL (the two events are
+        // not ordered); anything else is still reported.
+        const entry = `${request.url()}${errorText ? ` — ${errorText}` : ""}`;
+        if (ABORTED_ERROR_TEXTS.has(errorText)) abortedRequests.push({ url: request.url(), entry });
+        else diagnostics.failedRequests.push(entry);
+      };
+      const abortedRequests: Array<{ url: string; entry: string }> = [];
+      const downloadedUrls = new Set<string>();
+      const onDownload = (download: { url(): string }) => {
+        downloadedUrls.add(download.url());
       };
       const onResponse = (response: { status(): number; url(): string; request(): { method(): string } }) => {
         if (response.status() >= 500) diagnostics.serverErrors.push(`${response.status()} ${response.url()}`);
@@ -148,6 +162,7 @@ export const test = base.extend<{
       page.on("console", onConsole);
       page.on("requestfailed", onRequestFailed);
       page.on("response", onResponse);
+      page.on("download", onDownload);
 
       try {
         await useFixture(diagnostics);
@@ -156,6 +171,10 @@ export const test = base.extend<{
         page.off("console", onConsole);
         page.off("requestfailed", onRequestFailed);
         page.off("response", onResponse);
+        page.off("download", onDownload);
+        for (const aborted of abortedRequests) {
+          if (!downloadedUrls.has(aborted.url)) diagnostics.failedRequests.push(aborted.entry);
+        }
 
         const hasDiagnostics = Object.values(diagnostics).some((entries) => entries.length > 0);
         if (hasDiagnostics) {
