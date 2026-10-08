@@ -24,7 +24,18 @@ export function pdfText(pdfPath: string): string {
 // file is kept only under this test's output directory.
 export async function downloadPdfByClick(page: Page, link: Locator, testInfo: TestInfo, saveAs: string): Promise<{ download: Download; path: string; text: string }> {
   await expect(link).toBeVisible();
+  // Headless Chromium has no PDF viewer, so it would "download" a PDF served
+  // inline too. A person's browser would open that one in a tab instead, so
+  // the response must also say it is an attachment.
+  const disposition: string[] = [];
+  const onResponse = (response: { url(): string; headers(): Record<string, string> }) => {
+    if (new URL(response.url()).pathname.endsWith("/pdf")) disposition.push(response.headers()["content-disposition"] ?? "");
+  };
+  page.on("response", onResponse);
   const [download] = await Promise.all([page.waitForEvent("download"), link.click()]);
+  page.off("response", onResponse);
+  expect(disposition, "the PDF link's response is served as a file to save").toHaveLength(1);
+  expect(disposition[0]).toMatch(/^attachment; filename="[^"]+\.pdf"$/);
   const path = testInfo.outputPath(saveAs);
   await download.saveAs(path);
   return { download, path, text: pdfText(path) };
