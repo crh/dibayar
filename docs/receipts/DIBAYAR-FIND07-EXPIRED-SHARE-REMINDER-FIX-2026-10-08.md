@@ -158,3 +158,9 @@ See §13, recorded after the run on the pushed head.
 ## 12. Status
 
 PR #31 (`fix/expired-share-reminder-2026-10-08` → `staging`) is **open and not merged**, waiting for Chris's explicit merge authorization. `main` and Production are untouched.
+
+## 13. CI and review (recorded 2026-10-08)
+
+- CI run `37720223508` on head `59793f4` (all code, tests and docs except this section): **success**. `lint-typecheck-test`, `e2e-critical`, `e2e-a11y` and `ux-audit` succeeded; `e2e-cross-browser` skipped by design. `ux-audit` includes `@visual`, so the nine local visual failures in §9 were host drift.
+- Codex reviewed `d034f2c` and left one P2 comment: remove the committed Prisma backup tree. That is the mistake described in §4; it was already removed from the tree by `876437f`, which Codex had not yet seen. No reply was posted on the PR. No other comments; no human review yet.
+- The commit that adds this section is docs-only and starts one more CI run; its result is not recorded here.
