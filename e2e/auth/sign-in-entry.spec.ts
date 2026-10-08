@@ -26,6 +26,11 @@ test.describe("sign-in entry from the landing page", { tag: "@critical" }, () =>
       reachedGoogle.push(new URL(route.request().url()).pathname);
       return route.abort();
     });
+    // Auth.js's built-in sign-in page loads the provider's logo from
+    // authjs.dev; answered locally so the test makes no third-party request.
+    await context.route(/^https:\/\/authjs\.dev\//, (route) =>
+      route.fulfill({ status: 200, contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>' }),
+    );
     // Auth.js's answer to "sign in with Google", captured instead of followed.
     let handOff: { status: number; location: string; posted: URLSearchParams } | null = null;
     await context.route("**/api/auth/signin/google**", async (route) => {

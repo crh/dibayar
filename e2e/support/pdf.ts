@@ -34,8 +34,14 @@ export async function downloadPdfByClick(page: Page, link: Locator, testInfo: Te
   page.on("response", onResponse);
   const [download] = await Promise.all([page.waitForEvent("download"), link.click()]);
   page.off("response", onResponse);
-  expect(disposition, "the PDF link's response is served as a file to save").toHaveLength(1);
-  expect(disposition[0]).toMatch(/^attachment; filename="[^"]+\.pdf"$/);
+  // Engines differ in how they report a navigation that became a download
+  // (WebKit: twice on one page, not at all on another), so every response
+  // seen must be an attachment, and Chromium -- where the check matters --
+  // must have reported one.
+  for (const value of disposition) expect(value).toMatch(/^attachment; filename="[^"]+\.pdf"$/);
+  if (page.context().browser()?.browserType().name() === "chromium") {
+    expect(disposition.length, "the PDF link's response was observed").toBeGreaterThan(0);
+  }
   const path = testInfo.outputPath(saveAs);
   await download.saveAs(path);
   return { download, path, text: pdfText(path) };

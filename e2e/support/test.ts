@@ -125,13 +125,13 @@ export const test = base.extend<{
         if (ABORTED_ERROR_TEXTS.has(errorText) && url.searchParams.has("_rsc")) return;
         // A link whose response is a file (Content-Disposition: attachment,
         // e.g. Unduh PDF) starts as a navigation that the browser then turns
-        // into a download, and reports the navigation request as aborted.
-        // Those are set aside here and dropped at teardown only if this page
+        // into a download, and reports the navigation request as failed.
+        // Failures are held here and dropped at teardown only if this page
         // really did get a download for that exact URL (the two events are
         // not ordered); anything else is still reported.
-        const entry = `${request.url()}${errorText ? ` — ${errorText}` : ""}`;
-        if (ABORTED_ERROR_TEXTS.has(errorText)) abortedRequests.push({ url: request.url(), entry });
-        else diagnostics.failedRequests.push(entry);
+        // The wording differs per engine (WebKit: "Frame load interrupted"),
+        // so every failure is held back, whatever its text.
+        abortedRequests.push({ url: request.url(), entry: `${request.url()}${errorText ? ` — ${errorText}` : ""}` });
       };
       const abortedRequests: Array<{ url: string; entry: string }> = [];
       const downloadedUrls = new Set<string>();
