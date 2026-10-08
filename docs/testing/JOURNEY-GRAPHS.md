@@ -86,7 +86,7 @@ stateDiagram-v2
 | Empty → keyboard typed → Enter → reload → cleared | INV-DUE-04 | real, desktop Chromium: zero PATCHes while typing (through `0002-01-15`), one on Enter, out-of-range refused, Escape restores |
 | save failure → revert + retry | INV-DUE-06 | partial: component test plus browser journeys whose failure is injected with `page.route` |
 | legacy out-of-range row → page usable, correctable | (FIND-03 regression) | real, `due-date-integrity.spec.ts`; not a separate inventory action |
-| consistent display across header/list/queue/WhatsApp | INV-DUE-05 | partial (unit) |
+| consistent display across header/list/queue/WhatsApp | INV-DUE-05 | real (desktop Chromium; Asia/Jakarta and Pacific/Honolulu browsers) |
 
 FIND-02 and FIND-03 were fixed by PR #26 (merge `b51fba1`, staging only).
 
@@ -107,7 +107,7 @@ stateDiagram-v2
     Active --> Active: Buat ulang tautan + confirm (SHARE-02)
     Active --> Absent: Cabut tautan + confirm (SHARE-03)
     Active --> Expired: lifetime elapses (PUB-03, seeded)
-    Active --> Active: cancel confirm (SHARE-04, UNTESTED)
+    Active --> Active: cancel confirm (SHARE-04)
     Absent --> Active: Beranda Kirim pengingat creates a link (HOME-03)
     Active --> Active: Beranda Kirim pengingat, same token (HOME-03)
     Expired --> Active: Beranda Kirim pengingat issues a new token (HOME-03)
@@ -146,7 +146,7 @@ its path never reaches the browser. Opening the page never changes the share.
 | unknown token | generic not-found | PUB-02 | real |
 | expired | honest expired state, no data | PUB-03 | real (seeded expiry) |
 | revoked while open | not-found after reload | PUB-04 | real (owner revokes via UI) |
-| active, PDF | download with parity | PUB-05, PUB-06 | partial (request API) + MAN-PDF-01 |
+| active, PDF | download with parity | PUB-05, PUB-06 | real (clicked download, pdftotext) + MAN-PDF-01 for phone viewers |
 
 ## 4. Deal pipeline
 

@@ -17,10 +17,11 @@ a positive one.
 | 1 | FIND-03 (high): keyboard entry saved year 0002 and permanently broke the owner's invoice page | INV-DUE-04 | **Fixed** by PR #26 (merge `b51fba1`, staging). Regression: `e2e/invoices/due-date-integrity.spec.ts`. **Still open for Chris:** the read-only Production count of out-of-range `Invoice.dueDate` / `Deal.deadline` (PR #26 receipt §9). Any data repair is Chris-only. Legacy out-of-range dates still render raw on the list, Beranda, public page, and PDF. Deal `deadline` validation is still `z.coerce.date()`. |
 | 2 | FIND-02 (high): click/tap on the visible due-date field did nothing | INV-DUE-02, INV-DUE-03 | **Fixed** by PR #26 (`showPicker()` on click). Proven in Chromium desktop and 390px emulation. **Still open:** MAN-DUE-01 on a real Android Chrome phone and a real iPhone Safari. |
 | 3 | FIND-01 (medium): "Tandai terlambat" shows "Terkirim" | INV-STATUS-05 | Open. Needs a product decision from Chris before any code or test. |
-| 4 | FIND-04 (medium): blocked-popup detection never works -- `window.open(..., "noopener,noreferrer")` returns null by spec, so the **Buka WhatsApp** fallback shows even after WhatsApp opened (invoice detail and Beranda queue) | HOME-03, INV-WA-02 | **Fixed** by `fix/whatsapp-popup-fallback-2026-10-05` (PR into `staging`, open, not merged). Both surfaces open a blank tab on the click, cut its opener and navigate it with no Referer (`src/lib/whatsapp-popup.ts`). The two `test.fail()` tests are now positive regressions, and `e2e/whatsapp/popup-blocker.spec.ts` proves the fallback under a real Chromium blocker. HOME-03 and INV-WA-02 are real. **Still open:** MAN-WA-01 on real phones. |
+| 4 | FIND-04 (medium): blocked-popup detection never works -- `window.open(..., "noopener,noreferrer")` returns null by spec, so the **Buka WhatsApp** fallback shows even after WhatsApp opened (invoice detail and Beranda queue) | HOME-03, INV-WA-02 | **Fixed** by PR #29 (merge `ac53043`, staging). Both surfaces open a blank tab on the click, cut its opener and navigate it with no Referer (`src/lib/whatsapp-popup.ts`). The two `test.fail()` tests are now positive regressions, and `e2e/whatsapp/popup-blocker.spec.ts` proves the fallback under a real Chromium blocker. HOME-03 and INV-WA-02 are real. **Still open:** MAN-WA-01 on real phones. |
 | 5 | FIND-05 (medium): Beranda **Kirim pengingat** rotated the share token, so a link the brand already had returned 404 | HOME-03, SHARE-02 | **Fixed** by PR #30 (merge `e498ad5`, staging). Chris's decision: reminders reuse a usable active link; only **Buat ulang tautan** rotates. Beranda calls `POST /share/ensure` (`ensureShare`). Regression: `e2e/invoices/reminder-share-link.spec.ts` (reuse, repeat, no share, expired, Regenerate still rotates). |
 | 6 | FIND-06 (low): the invoice list shows stored status; Beranda/detail derive OVERDUE from the due date | INV-STATUS-06, INV-LIST-01 | Open, found in Phase 2A. Decide together with FIND-01. |
-| 7 | FIND-07 (medium): invoice detail showed an expired share as "Tautan aktif sampai <past date>" and its WhatsApp action sent that expired link | INV-STATUS-06, INV-WA-01, SHARE-01, SHARE-02 | **Fixed** by `fix/expired-share-reminder-2026-10-08` (PR into `staging`, open, not merged). The owner's share state is now inactive / active / expired; invoice detail shows an expired state with **Buat tautan baru** and sends through `POST /share/ensure`. Regression: `e2e/invoices/expired-share.spec.ts`. |
+| 7 | FIND-07 (medium): invoice detail showed an expired share as "Tautan aktif sampai <past date>" and its WhatsApp action sent that expired link | INV-STATUS-06, INV-WA-01, SHARE-01, SHARE-02 | **Fixed** by PR #31 (squash merge `979c3ec`, staging). The owner's share state is now inactive / active / expired; invoice detail shows an expired state with **Buat tautan baru** and sends through `POST /share/ensure`. Regression: `e2e/invoices/expired-share.spec.ts`. |
+| 8 | FIND-08 (low): the recipient's invoice page and PDF print the due date only inside the payment-terms block, so a deal without payment terms shows the recipient no due date | INV-DUE-05, PUB-01 | Open, noticed in Phase 2B. Current documented behaviour (`model.test.ts`); needs a product decision. No browser test asserts either behaviour. |
 
 ## Batch 1 — P0/P1 gaps with existing fixtures (done, Zero Routine Phase 1)
 
@@ -72,18 +73,49 @@ baseline are unchanged. Due dates are relative to the Jakarta calendar day.
 - Flake fix: the `fill()`-based due-date test in `invoice-journeys.spec.ts`
   now waits for hydration (reproduced with CPU throttling; see receipt).
 
-## Batch 2B — remaining Batch 2 items (separate PR)
+## Batch 2B — remaining Batch 2 items (done, Zero Routine Phase 2B)
 
-- INV-PDF-01 / PUB-05: click **Unduh PDF** and the recipient PDF action, and
-  assert the `download` event (not `page.request`).
-- DEAL-CREATE-06 / DEAL-CREATE-07: empty-submit validation; optional text
-  fields. The deadline picker stays manual (MAN-DEAL-01).
-- SET-04: edit the send template, then send from invoice; the message uses
-  the edit.
-- HOME-01: assert the rendered month total against fixture invoices.
-- A11Y-01: add invoice detail and the add-deal dialog's open state to the axe scan.
-- AUTH-02: click the landing CTA; assert the Auth.js sign-in page (no Google).
-- SHARE-04, INV-DUE-05.
+Delivered on `chore/zero-routine-regression-phase2b-2026-10-08` (receipt:
+`docs/receipts/DIBAYAR-ZERO-ROUTINE-REGRESSION-PHASE2B-2026-10-08.md`). No
+application code changed.
+
+- INV-PDF-01, PUB-05, PUB-06 (real, both projects):
+  `e2e/invoices/pdf-download.spec.ts` -- **Unduh PDF** clicked by the owner
+  and by a session-less recipient, the browser's download event, text read
+  with `pdftotext` (`e2e/support/pdf.ts`), bank details edited in Settings
+  first, owner and recipient text compared for equality.
+- DEAL-CREATE-06 (real, both projects) and the text fields of DEAL-CREATE-07:
+  `e2e/deals/create-validation.spec.ts`. DEAL-CREATE-07 stays **partial**:
+  the deadline's native picker is not driven (MAN-DEAL-01).
+- SET-04 (real, both projects): `e2e/settings/whatsapp-templates.spec.ts` --
+  both templates edited, then sent from a non-overdue and an overdue invoice.
+- HOME-01 (real, both projects): `e2e/home/monthly-income.spec.ts` on the new
+  opt-in `income-boundaries` overlay (draft, 1 ms before the month, first
+  instant of the month, first instant of next month).
+- AUTH-02 (real, both projects): `e2e/auth/sign-in-entry.spec.ts` -- landing
+  CTA -> Auth.js page -> the redirect to Google read without following it.
+- SHARE-04 (real, both projects): `e2e/invoices/share-cancel.spec.ts`.
+- INV-DUE-05 (real, desktop Chromium): `e2e/invoices/due-date-consistency.spec.ts`
+  in an Asia/Jakarta and a Pacific/Honolulu browser.
+- A11Y-01: invoice detail (plain, and with the regenerate confirmation open)
+  added to the axe scan; stays **partial** by rule.
+- INV-DUE-06: assessed, left **partial** (the failure can only be injected
+  with a stub).
+- CI: `poppler-utils` installed in the E2E jobs; new manual-dispatch
+  `journey-coverage-full` job (full E2E + ux-audit +
+  `coverage:journeys --require-results`).
+
+## Phase 2C — follow-ups from 2B
+
+- Put `journey-coverage-full` on a schedule once it has run green a few
+  times by hand and Chris has decided how its result relates to the
+  scheduled `e2e-cross-browser` acceptance runs (same workflow run today).
+- DEAL-CREATE-07 deadline and INV-DUE-03 on real phones (MAN-DEAL-01,
+  MAN-DUE-01); MAN-PDF-01 for phone PDF viewers.
+- A11Y-01: deal detail, the expired-share and contact-repair states of
+  invoice detail, Settings validation errors.
+- AUTH-02: the English landing CTA.
+- Decisions: FIND-01, FIND-06, FIND-08.
 
 ## Batch 3 — P2 navigation and resilience
 
@@ -105,8 +137,9 @@ repeated here; these are the program-level steps around them.
    P0/P1 action is `automated_real_interaction` or a recorded, justified
    `manual_*`/`blocked` entry. Track the outstanding list in
    `JOURNEY-COVERAGE.md`; no percentage target until Chris sets one.
-2. **Verify every real claim, not only @critical ones.** Add a scheduled (or
-   pre-release) full `test:e2e` run that feeds
+2. **Verify every real claim, not only @critical ones.** (Manual-dispatch CI
+   job `journey-coverage-full` added in Phase 2B; scheduling it is Phase 2C.)
+   Add a scheduled (or pre-release) full `test:e2e` run that feeds
    `coverage:journeys -- --results <results.json> --require-results`, so a
    non-@critical real claim that stops passing is caught. Firefox/WebKit
    results join once those projects are in a claim's scope.

@@ -139,6 +139,30 @@ Those helpers live in `e2e/support/share-links.ts` (`shareTest`,
 `sendReminder()`, `shownShareLink()`, `expectRecipientSeesInvoice()` /
 `...GetsNotFound()` / `...SeesExpired()`).
 
+PDF downloads: `e2e/invoices/pdf-download.spec.ts` clicks **Unduh PDF** and
+reads the downloaded file with `pdftotext` through `e2e/support/pdf.ts`
+(`downloadPdfByClick()`, `pdfText()`). The `pdftotext` binary
+(`poppler-utils`) must be installed locally; CI installs it in the
+`e2e-critical`, `e2e-cross-browser` and `journey-coverage-full` jobs. The
+helper also requires the response to be `Content-Disposition: attachment`,
+because headless Chromium "downloads" an inline PDF too. A clicked download
+makes the browser report the navigation request as aborted; the
+browser-health guard (`e2e/support/test.ts`) drops that one report only when
+the same page really received a download for that exact URL.
+
+Sign-in entry: `e2e/auth/sign-in-entry.spec.ts` clicks the landing CTA and
+the provider button on Auth.js's page, then reads Auth.js's redirect to
+Google with `route.fetch({ maxRedirects: 0 })` and shows a local stub.
+Playwright does not intercept the later hops of a redirect, so routing
+`accounts.google.com` alone does not keep a test off Google; never let a
+test follow that redirect.
+
+Due dates: the keyboard helpers for the due-date field live in
+`e2e/support/due-date.ts`. `e2e/invoices/due-date-consistency.spec.ts` runs
+its journey in an Asia/Jakarta and a Pacific/Honolulu browser
+(`test.use({ timezoneId })`) to catch dates formatted or counted in the
+viewer's timezone.
+
 Expired share links (FIND-07, fixed): `e2e/invoices/expired-share.spec.ts`
 checks invoice detail's expired state (Indonesian and English), that its
 **Kirim pengingat** replaces an expired link and reuses a usable one, and
@@ -162,6 +186,7 @@ prints the share token.
 | `npm run e2e:fixtures -- legacy-due-date` | Overwrites the seeded SENT invoice's due date with year 0002 (the FIND-03 value) on the guarded disposable DB only; the next `seed` restores it. Used by `e2e/invoices/due-date-integrity.spec.ts` via `seedLegacyInvalidDueDate()` |
 | `npm run e2e:fixtures -- follow-up-states` | Adds the follow-up overlay (overdue / due-soon invoices, invalid-contact deal) on top of a fresh `seed`; refuses to stack on anything else. The next `seed` removes it |
 | `npm run e2e:fixtures -- follow-up-expired-share` | On top of `follow-up-states`: gives the stored-`OVERDUE` invoice an already-expired share with a recoverable path (the app cannot backdate an expiry). Used by `e2e/invoices/reminder-share-link.spec.ts` via `applyFollowUpExpiredShare()`; refuses to replace an existing share. The next `seed` removes it |
+| `npm run e2e:fixtures -- income-boundaries` | On top of a fresh `seed`: four invoices on the edges of Beranda's monthly total (a draft, one created 1 ms before this Jakarta month, one at its first instant, one at the first instant of next month). Used by `e2e/home/monthly-income.spec.ts` via `applyIncomeBoundaries()`. The next `seed` removes them |
 | `npm run e2e:build` | Reproducible webpack production build, needed before any `test:e2e*` run |
 | `npm run test:e2e` | Semantic journey suite, chromium + chromium-mobile; visual snapshots are separate |
 | `npm run test:e2e:critical` | `@critical`-tagged tests only, chromium + chromium-mobile -- the PR gate |
@@ -336,7 +361,8 @@ fixed defect forces an inventory update. CI's `e2e-critical` job then runs
 referenced real test that ran there but was skipped, failed, or expected to
 fail is an error (non-@critical claims are listed as not exercised; add
 `--require-results` with a full-suite results file to make those errors
-too). `npm run test:journey-coverage` proves each of these rejections with
+too; the manual-dispatch CI job `journey-coverage-full` does exactly that
+with the full E2E run plus the ux-audit results). `npm run test:journey-coverage` proves each of these rejections with
 negative controls against `scripts/journey-coverage-fixtures/` (a synthetic,
 browserless Playwright project). `docs/testing/JOURNEY-COVERAGE.md` is
 generated from the inventory, and `docs/testing/JOURNEY-GRAPHS.md` holds the

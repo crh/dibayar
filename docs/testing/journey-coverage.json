@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "inventoryDate": "2026-10-08",
-  "baseline": "origin/staging e498ad5 (PR #30 merged) + branch fix/expired-share-reminder-2026-10-08 (FIND-07 fix)",
+  "baseline": "origin/staging 979c3ec (PR #31 squash-merged) + branch chore/zero-routine-regression-phase2b-2026-10-08 (Zero Routine Phase 2B)",
   "classificationRules": [
     "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
     "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
@@ -42,8 +42,8 @@
       "action": "Landing page 'sign in with Google' CTA starts sign-in",
       "persona": "visitor",
       "preconditions": "No session",
-      "interaction": "Open /masuk, click the Google sign-in CTA",
-      "expected": "Auth.js sign-in page with Google provider, callbackUrl=/dashboard",
+      "interaction": "Open /masuk with no session; click Masuk dengan Google; choose Google on the Auth.js page",
+      "expected": "Auth.js sign-in page offering only Google, callbackUrl=/dashboard; choosing it redirects to Google's authorization endpoint with this app's /api/auth/callback/google",
       "persisted": "n/a",
       "alternates": "English landing via dibayar-language cookie",
       "scope": [
@@ -51,8 +51,14 @@
         "chromium-mobile"
       ],
       "priority": "P1",
-      "status": "automated_partial",
+      "status": "automated_real_interaction",
       "tests": [
+        {
+          "file": "e2e/auth/sign-in-entry.spec.ts",
+          "title": "Masuk dengan Google on the landing page starts the Auth.js Google sign-in that returns to the dashboard",
+          "kind": "real",
+          "note": "The CTA click and the Auth.js page are unstubbed. The provider hand-off is read from Auth.js's own 302 without following it (route.fetch, maxRedirects 0), so its target is checked and Google is never contacted"
+        },
         {
           "file": "tests/ux-audit/baseline.landing.spec.ts",
           "title": "",
@@ -60,7 +66,8 @@
           "note": "Renders and screenshots the landing page; never clicks the CTA"
         }
       ],
-      "followUp": "Batch 2: click CTA and assert the sign-in page (no real Google round trip)"
+      "followUp": "The real Google round trip stays AUTH-03 / MAN-AUTH-01. English landing CTA not driven",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08"
     },
     {
       "id": "AUTH-03",
@@ -193,9 +200,9 @@
       "route": "/",
       "action": "Net invoiced this month card shows the correct IDR total",
       "persona": "owner",
-      "preconditions": "Invoices issued this month",
-      "interaction": "View Beranda",
-      "expected": "Correct Rp total for the current Jakarta month",
+      "preconditions": "Invoices created this Jakarta month, plus a draft and invoices just outside the month",
+      "interaction": "Open Beranda through the nav",
+      "expected": "Rp total = net (subtotal minus estimated PPh) of non-draft invoices created in the current Jakarta month, with the month label and paid count",
       "persisted": "n/a",
       "alternates": "Month rollover; no invoices; load error",
       "scope": [
@@ -203,8 +210,14 @@
         "chromium-mobile"
       ],
       "priority": "P1",
-      "status": "automated_partial",
+      "status": "automated_real_interaction",
       "tests": [
+        {
+          "file": "e2e/home/monthly-income.spec.ts",
+          "title": "the monthly card shows the net of this Jakarta month's non-draft invoices, and leaves out drafts and other months",
+          "kind": "real",
+          "note": "Expected totals are worked out in the spec from the fixture's literal amounts (base seed Rp 12.700.000; with the income-boundaries overlay Rp 14.660.000), not with summarizeMonthlyIncome(). The overlay adds a draft, an invoice 1 ms before the month, one at its first instant (the only one counted) and one at the first instant of next month"
+        },
         {
           "file": "e2e/auth/session.spec.ts",
           "title": "authenticated Beranda loads with real seeded data",
@@ -218,7 +231,7 @@
           "note": "Pure calculation unit tests"
         }
       ],
-      "followUp": "Batch 2: assert the rendered amount against fixture invoices"
+      "evidence": "Zero Routine Phase 2B, 2026-10-08"
     },
     {
       "id": "HOME-02",
@@ -929,17 +942,25 @@
       "action": "Required-field validation before submit",
       "persona": "owner",
       "preconditions": "Dialog open, required fields empty",
-      "interaction": "Click Simpan deal",
-      "expected": "Browser/inline validation, no request",
-      "persisted": "No row",
+      "interaction": "Open the dialog from Beranda (+ Deal: top bar, or the floating button on a phone); click Simpan deal with required fields missing",
+      "expected": "Browser validation: nothing is sent, the first missing required field gets focus, the dialog stays open with what was typed; once complete the same button saves",
+      "persisted": "No row for refused attempts; exactly one deal after the completed submit, present after reload",
       "alternates": "",
       "scope": [
         "chromium",
         "chromium-mobile"
       ],
       "priority": "P1",
-      "status": "not_covered",
-      "followUp": "Batch 2"
+      "status": "automated_real_interaction",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08",
+      "tests": [
+        {
+          "file": "e2e/deals/create-validation.spec.ts",
+          "title": "Simpan deal with required fields missing sends nothing and points at the first missing field; completing them saves the deal",
+          "kind": "real",
+          "note": "The validation bubble is browser chrome, not DOM, so the test checks focus, each required field's validity state, zero POST /api/deals, and the still-open dialog; then fills the fields and saves"
+        }
+      ]
     },
     {
       "id": "DEAL-CREATE-07",
@@ -958,9 +979,23 @@
         "manual: real phone"
       ],
       "priority": "P1",
-      "status": "manual_pending",
+      "status": "automated_partial",
       "manualCheck": "MAN-DEAL-01",
-      "followUp": "Batch 2: automate the text fields; deadline picker stays manual like INV-DUE-03"
+      "followUp": "Text fields automated in Phase 2B on both projects. The deadline's native date picker is not driven, so the action as a whole stays partial; MAN-DEAL-01 on a real phone still pending",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08",
+      "tests": [
+        {
+          "file": "e2e/deals/create-validation.spec.ts",
+          "title": "optional contact name and payment terms are saved and shown on the deal's detail page after reload",
+          "kind": "partial",
+          "note": "Real typing and real navigation for contact name and payment terms (saved, shown on detail, survive reload). Partial only because the action also includes picking a deadline, which no test drives"
+        },
+        {
+          "file": "e2e/deals/create-validation.spec.ts",
+          "title": "a deal saved without the optional fields shows them as empty, not as leftover text",
+          "kind": "partial"
+        }
+      ]
     },
     {
       "id": "DEAL-STAGE-01",
@@ -1469,17 +1504,30 @@
       "route": "/invoice/[id]",
       "action": "Due date shown consistently in header, list, queue and WhatsApp message",
       "persona": "owner",
-      "preconditions": "Due date set",
-      "interaction": "View after change",
-      "expected": "Same date everywhere (Jakarta calendar date)",
+      "preconditions": "Invoice in the Beranda queue",
+      "interaction": "Type a new due date with the keyboard on invoice detail (Enter); look at detail, the invoice list, the Beranda row; send WhatsApp from detail and from the row",
+      "expected": "The same Jakarta calendar date on every surface, and the Beranda count in Jakarta days, whatever the browser's timezone",
       "persisted": "n/a",
-      "alternates": "Timezone edge near midnight",
+      "alternates": "Browser in another timezone (Pacific/Honolulu run); recipient page/PDF print the due date only when the deal has payment terms (FIND-08)",
       "scope": [
+        "chromium",
         "unit"
       ],
       "priority": "P1",
-      "status": "automated_partial",
+      "status": "automated_real_interaction",
       "tests": [
+        {
+          "file": "e2e/invoices/due-date-consistency.spec.ts",
+          "title": "a typed due date reads as the same Jakarta calendar date on detail, list, Beranda and WhatsApp (Asia/Jakarta)",
+          "kind": "real",
+          "note": "Follow-up overlay invoice due today -> typed to 3 Jakarta days ahead; header, field (also after reload), list row, queue row with 'Jatuh tempo 3 hari lagi', and both WhatsApp messages"
+        },
+        {
+          "file": "e2e/invoices/due-date-consistency.spec.ts",
+          "title": "a typed due date reads as the same Jakarta calendar date on detail, list, Beranda and WhatsApp (Pacific/Honolulu)",
+          "kind": "real",
+          "note": "Same journey in a UTC-10 browser, whose own calendar date is a day behind Jakarta's most of the day"
+        },
         {
           "file": "src/lib/invoice-date-status.test.ts",
           "title": "",
@@ -1487,7 +1535,8 @@
           "note": "Pure date logic"
         }
       ],
-      "followUp": "Batch 2"
+      "followUp": "Desktop Chromium only, like INV-DUE-04 (no segment keyboard on a phone; the native picker cannot be driven). Server-side midnight edge stays unit-level",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08"
     },
     {
       "id": "INV-DUE-06",
@@ -1526,7 +1575,8 @@
           "kind": "partial",
           "note": "Desktop chromium; failure injected with page.route"
         }
-      ]
+      ],
+      "followUp": "Assessed in Phase 2B, left partial: the only browser way to make the save fail is to intercept the PATCH (a stub), which the rules class as partial. A stub-free failure would need the server itself to fail on demand"
     },
     {
       "id": "INV-STATUS-01",
@@ -1839,17 +1889,24 @@
       "action": "Download the invoice PDF (owner)",
       "persona": "owner",
       "preconditions": "",
-      "interaction": "Click Unduh PDF",
-      "expected": "PDF download with matching content, including bank details last saved in Settings (moved from SET-03)",
+      "interaction": "Edit bank details in Settings; open the invoice from the list; click Unduh PDF",
+      "expected": "The browser downloads <number>.pdf; its text has the invoice number, issuer, brand, description, amount, tax, payment terms, due date and the bank details last saved in Settings (moved from SET-03)",
       "persisted": "n/a",
       "alternates": "Incomplete issuer settings",
       "scope": [
         "chromium",
+        "chromium-mobile",
         "manual: phones"
       ],
       "priority": "P1",
-      "status": "automated_partial",
+      "status": "automated_real_interaction",
       "tests": [
+        {
+          "file": "e2e/invoices/pdf-download.spec.ts",
+          "title": "Unduh PDF on invoice detail downloads a PDF with the invoice, issuer and current bank details",
+          "kind": "real",
+          "note": "Bank details changed through Settings first; visible Unduh PDF click, the browser's download event, text read with pdftotext -layout and compared line by line with literal expected lines (the replaced bank details must be absent). File kept only under the test's output directory"
+        },
         {
           "file": "tests/ux-audit/fixtures.baseline.spec.ts",
           "title": "downloads owner and public PDFs for the same invoice and confirms they match",
@@ -1858,7 +1915,8 @@
         }
       ],
       "manualCheck": "MAN-PDF-01",
-      "followUp": "Batch 2: click the link and capture the download event; check the text (e.g. pdftotext, as the ux-audit job does), including bank details edited in Settings"
+      "followUp": "How a phone's browser hands the PDF to its viewer/downloads stays MAN-PDF-01",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08"
     },
     {
       "id": "INV-OWN-01",
@@ -2001,8 +2059,8 @@
       "action": "Cancel the regenerate/revoke confirmation",
       "persona": "owner",
       "preconditions": "Confirm visible",
-      "interaction": "Click Batal",
-      "expected": "Link unchanged",
+      "interaction": "Buat ulang tautan -> Batal; Cabut tautan -> Batal; reload",
+      "expected": "Warning closes; no request sent; the same link is shown and still opens for the recipient, also after reload",
       "persisted": "Unchanged",
       "alternates": "",
       "scope": [
@@ -2010,8 +2068,16 @@
         "chromium-mobile"
       ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 2"
+      "status": "automated_real_interaction",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08",
+      "tests": [
+        {
+          "file": "e2e/invoices/share-cancel.spec.ts",
+          "title": "Batal on Buat ulang tautan and on Cabut tautan leaves the link unchanged and working",
+          "kind": "real",
+          "note": "Invoice reached through the nav and list; zero share mutations recorded; link compared as a boolean; session-less recipient opens it before and after"
+        }
+      ]
     },
     {
       "id": "SHARE-05",
@@ -2159,8 +2225,8 @@
       "action": "Recipient downloads the PDF",
       "persona": "recipient",
       "preconditions": "Active share",
-      "interaction": "Click the PDF action",
-      "expected": "PDF download; invalid token discloses nothing",
+      "interaction": "Open the share link with no session; click Unduh PDF",
+      "expected": "The browser downloads <number>.pdf with the invoice's content; an invalid token discloses nothing",
       "persisted": "n/a",
       "alternates": "",
       "scope": [
@@ -2169,8 +2235,14 @@
         "manual: phones"
       ],
       "priority": "P1",
-      "status": "automated_partial",
+      "status": "automated_real_interaction",
       "tests": [
+        {
+          "file": "e2e/invoices/pdf-download.spec.ts",
+          "title": "a recipient's Unduh PDF downloads the same document the owner gets",
+          "kind": "real",
+          "note": "Recipient page in its own session-less context, opened with the link the owner's page shows; visible Unduh PDF click, real download event, text checked with pdftotext"
+        },
         {
           "file": "e2e/public/invoice.spec.ts",
           "title": "valid public PDF is downloadable without authentication",
@@ -2184,7 +2256,8 @@
         }
       ],
       "manualCheck": "MAN-PDF-01",
-      "followUp": "Batch 2"
+      "followUp": "Phone viewers stay MAN-PDF-01",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08"
     },
     {
       "id": "PUB-06",
@@ -2193,23 +2266,31 @@
       "action": "Recipient PDF matches owner PDF",
       "persona": "recipient",
       "preconditions": "",
-      "interaction": "Download both",
-      "expected": "Same content",
+      "interaction": "Owner clicks Unduh PDF on invoice detail; recipient clicks Unduh PDF on the public page",
+      "expected": "Same business content: identical extracted text, line for line (not byte-for-byte; PDF metadata differs per render)",
       "persisted": "n/a",
       "alternates": "",
       "scope": [
-        "chromium (ux-audit)"
+        "chromium",
+        "chromium-mobile"
       ],
       "priority": "P1",
-      "status": "automated_partial",
+      "status": "automated_real_interaction",
       "tests": [
+        {
+          "file": "e2e/invoices/pdf-download.spec.ts",
+          "title": "a recipient's Unduh PDF downloads the same document the owner gets",
+          "kind": "real",
+          "note": "Both PDFs obtained by clicking; pdftotext output of the two compared for equality after whitespace normalization, with a per-line diff on mismatch"
+        },
         {
           "file": "tests/ux-audit/fixtures.baseline.spec.ts",
           "title": "downloads owner and public PDFs for the same invoice and confirms they match",
           "kind": "partial",
           "note": "API-level parity; appropriate for this property"
         }
-      ]
+      ],
+      "evidence": "Zero Routine Phase 2B, 2026-10-08"
     },
     {
       "id": "PUB-07",
@@ -2327,8 +2408,8 @@
       "action": "Edit WhatsApp templates; the next message uses them",
       "persona": "owner",
       "preconditions": "",
-      "interaction": "Edit send/chase template, save, send from invoice",
-      "expected": "Message uses the edited template",
+      "interaction": "Settings (through the nav): rewrite the send and reminder templates, save, reload; open a non-overdue invoice and an overdue one from the list; click the WhatsApp action on each",
+      "expected": "Both templates persist; the non-overdue invoice's message is exactly the edited send template with its tokens filled, the overdue one's the edited reminder template",
       "persisted": "UserSettings templates",
       "alternates": "Reset to default (SET-05)",
       "scope": [
@@ -2336,9 +2417,16 @@
         "chromium-mobile"
       ],
       "priority": "P1",
-      "status": "not_covered",
-      "evidence": "INV-WA-01 only proves the seeded template is used",
-      "followUp": "Batch 2"
+      "status": "automated_real_interaction",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08",
+      "tests": [
+        {
+          "file": "e2e/settings/whatsapp-templates.spec.ts",
+          "title": "edited send and reminder templates persist and shape the next WhatsApp messages",
+          "kind": "real",
+          "note": "Follow-up overlay; each edited template uses every token once in an order the defaults never use, and the whole message is matched; wa.me answered by a local stub"
+        }
+      ]
     },
     {
       "id": "SET-05",
@@ -2426,7 +2514,7 @@
     {
       "id": "A11Y-01",
       "domain": "accessibility",
-      "route": "/, /deal, /invoice, /pengaturan",
+      "route": "/, /deal, /invoice, /invoice/[id], /pengaturan, /i/[token], add-deal dialog",
       "action": "No serious/critical automatically detectable violations",
       "persona": "assistive-technology user",
       "preconditions": "",
@@ -2444,7 +2532,7 @@
           "file": "e2e/smoke/accessibility.spec.ts",
           "title": "Beranda has no automatically-detectable serious/critical a11y violations",
           "kind": "partial",
-          "note": "Static scan, not an interaction; invoice detail and the public /i/ page are not scanned"
+          "note": "Static scan, not an interaction"
         },
         {
           "file": "e2e/smoke/accessibility.spec.ts",
@@ -2460,9 +2548,34 @@
           "file": "e2e/smoke/accessibility.spec.ts",
           "title": "Pengaturan has no automatically-detectable serious/critical a11y violations",
           "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Invoice detail has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial",
+          "note": "Added in Phase 2B; scanned after the share section has loaded"
+        },
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Invoice detail with the regenerate confirmation open has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial",
+          "note": "Added in Phase 2B"
+        },
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Add Deal dialog: correct role, accessible name, and a working focus trap",
+          "kind": "partial",
+          "note": "Dialog-scoped scan plus the focus trap; already ran, now listed here"
+        },
+        {
+          "file": "e2e/public/invoice.spec.ts",
+          "title": "valid share link renders recipient-safe invoice content and PDF action",
+          "kind": "partial",
+          "note": "Includes the axe scan of the public /i/ page; already ran, now listed here"
         }
       ],
-      "followUp": "Batch 2: add invoice detail and the public /i/ page to the scan list"
+      "followUp": "Stays partial by rule: an axe scan is rendering evidence, not an interaction. Not scanned: deal detail, the expired-share and contact-repair states of invoice detail, Settings validation errors",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08"
     },
     {
       "id": "A11Y-02",
@@ -2588,12 +2701,22 @@
       "id": "FIND-07",
       "severity": "medium",
       "summary": "Invoice detail treated an expired share as active: the share section read 'Tautan aktif sampai <past date>.' and Kirim lewat WhatsApp / Kirim pengingat sent that expired link, which shows the recipient 'Tautan ini sudah tidak berlaku.' Cause: getShareState reported any existing row as active, and sendWhatsApp reused the loaded link without checking expiry. Verified 2026-10-07 on the expired-share fixture (expiry 1 Jan 2020).",
-      "status": "fixed: fix/expired-share-reminder-2026-10-08 (PR into staging, open, not merged; not on main/Production). Chris's decision 2026-10-07: an expired share is never shown as active and never sent; invoice detail sends through the same ensure-share contract as Beranda. getShareState now reports inactive / active / expired (one expiry rule, no path for an expired share); invoice detail shows an expired state with Buat tautan baru (ID + EN) and its send asks POST /api/invoices/:id/share/ensure. Regression: e2e/invoices/expired-share.spec.ts, src/lib/invoice-share.test.ts, invoice-detail-client.test.tsx.",
+      "status": "fixed: PR #31 (squash merge 979c3ec, into staging 2026-10-08; not yet on main/Production). Chris's decision 2026-10-07: an expired share is never shown as active and never sent; invoice detail sends through the same ensure-share contract as Beranda. getShareState now reports inactive / active / expired (one expiry rule, no path for an expired share); invoice detail shows an expired state with Buat tautan baru (ID + EN) and its send asks POST /api/invoices/:id/share/ensure. Regression: e2e/invoices/expired-share.spec.ts, src/lib/invoice-share.test.ts, invoice-detail-client.test.tsx.",
       "actions": [
         "INV-STATUS-06",
         "INV-WA-01",
         "SHARE-01",
         "SHARE-02"
+      ]
+    },
+    {
+      "id": "FIND-08",
+      "severity": "low",
+      "summary": "The recipient's invoice page and PDF print 'Jatuh tempo' only inside the payment-terms block, so an invoice whose deal has no payment terms shows the recipient no due date at all, even though the owner set one and it appears on the owner's page, the list, Beranda and in WhatsApp messages. This is the documented behaviour of buildInvoiceDocumentModel (model.test.ts: 'omits the entire terms block when payment terms are empty, even with a due date set'). Noticed 2026-10-08 while writing the INV-DUE-05 journey.",
+      "status": "open: by current design, needs a product decision (show the due date on the document without payment terms, or keep). No browser test asserts either behaviour.",
+      "actions": [
+        "INV-DUE-05",
+        "PUB-01"
       ]
     }
   ]

@@ -69,6 +69,10 @@ Inventory: DEAL-CREATE-07.
 3. Open the deal's stage menu until it reaches Invoice, create an invoice.
    Expected: the invoice's due date defaults to the deadline.
 
+Automated since Zero Routine Phase 2B: the required-field check and the
+optional text fields (`e2e/deals/create-validation.spec.ts`). Only the
+deadline picker still needs this check.
+
 ### MAN-AUTH-01 — Real Google sign-in and sign-out (P0)
 
 Inventory: AUTH-03.
@@ -124,6 +128,11 @@ Inventory: INV-PDF-01, PUB-05.
 2. Recipient: open the share link in a private window and use the PDF action.
    Expected: same content as the owner PDF.
 3. On iPhone, confirm the PDF opens in the viewer and can be shared/saved.
+
+Automated since Zero Routine Phase 2B: the click, the download and the PDF's
+text for owner and recipient, including parity, in desktop and 390px
+Chromium (`e2e/invoices/pdf-download.spec.ts`). What still needs this check
+is how a real phone's browser hands the file to its viewer or downloads.
 
 ### MAN-SHARE-01 — Copy share link on phones (P1)
 
