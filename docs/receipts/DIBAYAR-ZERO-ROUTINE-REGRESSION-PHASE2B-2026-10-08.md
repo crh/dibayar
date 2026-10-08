@@ -163,3 +163,14 @@ Recorded at the end of this file (§14) after the run on the pushed head.
 ## 13. Commit history note
 
 No generated or untracked tree entered this branch's history (checked: no path containing `generated` in the PR diff). A squash merge is **not required** for hygiene; either merge style is fine.
+
+## 14. CI and review (recorded 2026-10-08)
+
+- **PR run `37755973009` on head `ad808af`** (all code, tests, CI and docs except this section): **success**. `lint-typecheck-test`, `e2e-critical`, `e2e-a11y` and `ux-audit` succeeded; `e2e-cross-browser` and `journey-coverage-full` skipped by design. `ux-audit` includes `@visual`, confirming the local visual failures were host drift. `e2e-critical` ran the PDF journeys with the newly installed `pdftotext`.
+- **Manual-dispatch run `37755956540` on `d1c8ac4`** (the last commit that changed tests; only docs follow it): **success** in every job, including the new **`journey-coverage-full`** (full E2E + ux-audit + `--require-results`) and **`e2e-cross-browser`** (all specs in Chromium, Firefox and WebKit). This is the first proof the new job works on CI. Being a manual run, it does not count toward the P2-2 scheduled-run acceptance.
+- **Codex review** on `d1c8ac4`: one P2 comment, that `JOURNEY-BACKLOG.md` linked to this receipt before the file existed. The receipt was added in `ad808af`, so the link now resolves. No reply was posted on the PR. No other comments; no human review yet.
+- The commit that adds this section is docs-only and starts one more PR run; its result is not recorded here.
+
+## 15. Final status
+
+**READY_FOR_CHRIS_REVIEW.** PR #32 is open and not merged; `main`, Production and hosted infrastructure are untouched.
