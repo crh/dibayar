@@ -135,6 +135,15 @@ rotates. `e2e/invoices/reminder-share-link.spec.ts` checks this with a
 `trackShareMutations()`, which lists the share requests the page sent. Share
 links are compared as booleans (`expect(a === b, "...").toBe(true)`) so a
 failing assertion never prints a token; keep that pattern in new share tests.
+Those helpers live in `e2e/support/share-links.ts` (`shareTest`,
+`sendReminder()`, `shownShareLink()`, `expectRecipientSeesInvoice()` /
+`...GetsNotFound()` / `...SeesExpired()`).
+
+Expired share links (FIND-07, fixed): `e2e/invoices/expired-share.spec.ts`
+checks invoice detail's expired state (Indonesian and English), that its
+**Kirim pengingat** replaces an expired link and reuses a usable one, and
+**Buat tautan baru**. The expired share comes from
+`applyFollowUpExpiredShare()`.
 
 Specs that change per-user state every other test depends on
 (`settings/language.spec.ts` changes `User.language`,

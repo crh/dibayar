@@ -13,88 +13,24 @@
 // Runs on the follow-up overlay (e2e/support/reseed.ts). Links are compared
 // as booleans and never interpolated into a message, so a failure can't
 // print a token. WhatsApp never leaves the machine (keepWhatsAppLocal()).
-import type { Locator, Page } from "@playwright/test";
-import { expect, test as base } from "../support/test";
+import type { Page } from "@playwright/test";
+import { expect } from "../support/test";
 import { loadFixtureManifest } from "../support/manifest";
 import { applyFollowUpExpiredShare, applyFollowUpStates, reseedFixtures } from "../support/reseed";
 import { primaryNav } from "../support/nav";
-import { followUpRow, followUpRowLink, keepWhatsAppLocal, parseWhatsAppLink } from "../support/follow-up";
+import { followUpRow, followUpRowLink, keepWhatsAppLocal } from "../support/follow-up";
+import {
+  expectRecipientGetsNotFound,
+  expectRecipientSeesInvoice,
+  sendReminder,
+  shareTest as test,
+  shownShareLink,
+  trackShareMutations,
+} from "../support/share-links";
 
-const NBSP = " ";
+const NBSP = "\u00a0";
 const INVOICE_NUMBER = "E2E/OVERDUE/003";
 const AMOUNT = `Rp${NBSP}8.000.000`;
-
-// `recipient`: a page in its own context with no session and no storage --
-// the brand opening the link on their own device.
-const test = base.extend<{ recipient: Page }>({
-  recipient: async ({ browser, baseURL, viewport, isMobile, hasTouch, userAgent, locale, timezoneId }, provide) => {
-    const context = await browser.newContext({
-      baseURL, viewport, isMobile, hasTouch, userAgent, locale, timezoneId,
-      storageState: { cookies: [], origins: [] },
-    });
-    try {
-      await provide(await context.newPage());
-    } finally {
-      await context.close();
-    }
-  },
-});
-
-async function expectRecipientSeesInvoice(recipient: Page, link: string, invoiceNumber: string, amount: string) {
-  const response = await recipient.goto(link);
-  expect(response?.status()).toBe(200);
-  await expect(recipient.getByText(invoiceNumber).first()).toBeVisible();
-  await expect(recipient.getByText(amount).first()).toBeVisible();
-  await expect(recipient.locator('p[role="alert"]')).toHaveCount(0);
-}
-
-async function expectRecipientGetsNotFound(recipient: Page, link: string, invoiceNumber: string) {
-  const response = await recipient.goto(link);
-  expect(response?.status()).toBe(404);
-  await expect(recipient.locator('p[role="alert"]')).toHaveText("Tautan ini tidak ditemukan.");
-  await expect(recipient.getByText(invoiceNumber)).toHaveCount(0);
-}
-
-// Every share mutation the page sends for this invoice, as "METHOD /suffix"
-// (no tokens: the request carries none).
-function trackShareMutations(page: Page, invoiceId: string): string[] {
-  const prefix = `/api/invoices/${invoiceId}`;
-  const mutations: string[] = [];
-  page.on("request", (request) => {
-    const { pathname } = new URL(request.url());
-    if (request.method() !== "GET" && pathname.startsWith(`${prefix}/share`)) {
-      mutations.push(`${request.method()} ${pathname.slice(prefix.length)}`);
-    }
-  });
-  return mutations;
-}
-
-// Clicks the row's visible Kirim pengingat and returns the public invoice
-// link inside the WhatsApp message it opened.
-async function sendReminder(page: Page, row: Locator): Promise<string> {
-  const button = row.getByRole("button", { name: "Kirim pengingat" });
-  const [popup] = await Promise.all([page.waitForEvent("popup"), button.click()]);
-  await expect.poll(() => popup.url()).toMatch(/^https:\/\/wa\.me\/628110000008\?text=/);
-  const { text } = parseWhatsAppLink(popup.url());
-  await popup.close();
-  // The send finished cleanly: no error, no blocked-popup fallback (FIND-04).
-  await expect(button).toBeVisible();
-  await expect(row.getByRole("alert")).toHaveCount(0);
-  await expect(row.getByRole("link", { name: "Buka WhatsApp" })).toHaveCount(0);
-
-  expect(text).toContain(INVOICE_NUMBER);
-  const origin = new URL(page.url()).origin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const links = text?.match(new RegExp(`${origin}/i/[A-Za-z0-9_-]{40,}`, "g")) ?? [];
-  expect(links.length, "the reminder carries exactly one public invoice link").toBe(1);
-  return links[0]!;
-}
-
-// The link invoice detail shows for the active share.
-async function shownShareLink(page: Page): Promise<string> {
-  const shown = page.getByTestId("share-link-track").locator("span[title]");
-  await expect(shown).toBeVisible();
-  return (await shown.getAttribute("title"))!;
-}
 
 async function openInvoiceFromQueue(page: Page, brand: string, invoiceId: string) {
   await followUpRowLink(page, brand).click();
@@ -138,7 +74,7 @@ test.describe("share link and reminders", { tag: "@critical" }, () => {
 
       await backToBeranda(page);
       const mutations = trackShareMutations(page, invoiceId);
-      const sentLink = await sendReminder(page, followUpRow(page, brand));
+      const sentLink = await sendReminder(page, followUpRow(page, brand), INVOICE_NUMBER);
       expect(sentLink === existingLink, "the reminder carries the link that already existed").toBe(true);
       expect(mutations).toEqual(["POST /share/ensure"]);
       // The link the brand already has still opens after the reminder.
@@ -166,8 +102,8 @@ test.describe("share link and reminders", { tag: "@critical" }, () => {
       const mutations = trackShareMutations(page, invoiceId);
       const row = followUpRow(page, brand);
 
-      const firstSent = await sendReminder(page, row);
-      const secondSent = await sendReminder(page, row);
+      const firstSent = await sendReminder(page, row, INVOICE_NUMBER);
+      const secondSent = await sendReminder(page, row, INVOICE_NUMBER);
 
       expect(firstSent === existingLink, "the first reminder carries the existing link").toBe(true);
       expect(secondSent === existingLink, "the second reminder carries the existing link").toBe(true);
@@ -193,10 +129,10 @@ test.describe("share link and reminders", { tag: "@critical" }, () => {
       await backToBeranda(page);
       const row = followUpRow(page, brand);
 
-      const createdLink = await sendReminder(page, row);
+      const createdLink = await sendReminder(page, row, INVOICE_NUMBER);
       await expectRecipientSeesInvoice(recipient, createdLink, INVOICE_NUMBER, AMOUNT);
 
-      const secondSent = await sendReminder(page, row);
+      const secondSent = await sendReminder(page, row, INVOICE_NUMBER);
       expect(secondSent === createdLink, "the second reminder reuses the link the first one created").toBe(true);
       await expectRecipientSeesInvoice(recipient, createdLink, INVOICE_NUMBER, AMOUNT);
 
@@ -222,7 +158,7 @@ test.describe("share link and reminders", { tag: "@critical" }, () => {
       await expect(recipient.getByText(INVOICE_NUMBER)).toHaveCount(0);
 
       const row = followUpRow(page, brand);
-      const sentLink = await sendReminder(page, row);
+      const sentLink = await sendReminder(page, row, INVOICE_NUMBER);
       expect(sentLink === expiredLink, "the reminder must not carry the expired link").toBe(false);
       await expectRecipientSeesInvoice(recipient, sentLink, INVOICE_NUMBER, AMOUNT);
       // The old link did not come back to life. An invoice has one share row,
@@ -230,7 +166,7 @@ test.describe("share link and reminders", { tag: "@critical" }, () => {
       await expectRecipientGetsNotFound(recipient, expiredLink, INVOICE_NUMBER);
 
       // The replacement is now the link every later reminder uses.
-      const secondSent = await sendReminder(page, row);
+      const secondSent = await sendReminder(page, row, INVOICE_NUMBER);
       expect(secondSent === sentLink, "the next reminder reuses the replacement link").toBe(true);
       await expectRecipientSeesInvoice(recipient, sentLink, INVOICE_NUMBER, AMOUNT);
       await openInvoiceFromQueue(page, brand, invoiceId);
@@ -265,7 +201,7 @@ test.describe("share link and reminders", { tag: "@critical" }, () => {
     await page.reload();
     expect((await shownShareLink(page)) === newLink, "the new link survives a reload").toBe(true);
     await backToBeranda(page);
-    const sentLink = await sendReminder(page, followUpRow(page, brand));
+    const sentLink = await sendReminder(page, followUpRow(page, brand), INVOICE_NUMBER);
     expect(sentLink === newLink, "the reminder carries the regenerated link").toBe(true);
     await expectRecipientSeesInvoice(recipient, newLink, INVOICE_NUMBER, AMOUNT);
     await expectRecipientGetsNotFound(recipient, oldLink, INVOICE_NUMBER);

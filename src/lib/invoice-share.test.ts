@@ -112,10 +112,13 @@ describe("hashShareToken", () => {
 });
 
 describe("getShareState", () => {
+  // Before existingShare's expiry (2026-10-14), so these don't depend on today's date.
+  const now = new Date("2026-08-01T00:00:00.000Z");
+
   it("returns not-found for an invoice not owned by the requesting user", async () => {
     const { db, shareFindUnique } = makeDb({ invoice: null });
 
-    const result = await getShareState(db, "invoice-1", "user-2");
+    const result = await getShareState(db, "invoice-1", "user-2", now);
 
     expect(result).toEqual({ kind: "not-found" });
     expect(shareFindUnique).not.toHaveBeenCalled();
@@ -124,17 +127,17 @@ describe("getShareState", () => {
   it("reports inactive when no share row exists", async () => {
     const { db } = makeDb({ share: null });
 
-    const result = await getShareState(db, "invoice-1", "user-1");
+    const result = await getShareState(db, "invoice-1", "user-1", now);
 
-    expect(result).toEqual({ kind: "state", active: false });
+    expect(result).toEqual({ kind: "state", status: "inactive" });
   });
 
   it("reports active with a null path (not an error) for a share created before encryption existed", async () => {
     const { db } = makeDb({ share: existingShare });
 
-    const result = await getShareState(db, "invoice-1", "user-1");
+    const result = await getShareState(db, "invoice-1", "user-1", now);
 
-    expect(result).toEqual({ kind: "state", active: true, path: null, expiresAt: existingShare.expiresAt });
+    expect(result).toEqual({ kind: "state", status: "active", path: null, expiresAt: existingShare.expiresAt });
     expect(JSON.stringify(result)).not.toContain("existing-hash");
   });
 
@@ -146,11 +149,11 @@ describe("getShareState", () => {
     };
     const { db } = makeDb({ share });
 
-    const result = await getShareState(db, "invoice-1", "user-1");
+    const result = await getShareState(db, "invoice-1", "user-1", now);
 
     expect(result).toEqual({
       kind: "state",
-      active: true,
+      status: "active",
       path: `/i/${realToken}`,
       expiresAt: existingShare.expiresAt,
     });
@@ -163,9 +166,9 @@ describe("getShareState", () => {
     const share: InvoiceShareRecord = { ...existingShare, tokenCiphertext: "not-a-real-ciphertext" };
     const { db } = makeDb({ share });
 
-    const result = await getShareState(db, "invoice-1", "user-1");
+    const result = await getShareState(db, "invoice-1", "user-1", now);
 
-    expect(result).toEqual({ kind: "state", active: true, path: null, expiresAt: existingShare.expiresAt });
+    expect(result).toEqual({ kind: "state", status: "active", path: null, expiresAt: existingShare.expiresAt });
   });
 
   it("reports active with a null path when AUTH_SECRET rotated since the ciphertext was written", async () => {
@@ -173,18 +176,57 @@ describe("getShareState", () => {
     process.env.AUTH_SECRET = "a-different-secret-than-when-this-was-encrypted";
     const { db } = makeDb({ share });
 
-    const result = await getShareState(db, "invoice-1", "user-1");
+    const result = await getShareState(db, "invoice-1", "user-1", now);
 
-    expect(result).toEqual({ kind: "state", active: true, path: null, expiresAt: existingShare.expiresAt });
+    expect(result).toEqual({ kind: "state", status: "active", path: null, expiresAt: existingShare.expiresAt });
   });
-  it("still reports an expired row as active with its past expiry (management view, not usability)", async () => {
-    const token = "expired-but-still-listed-token";
+
+  it("reports a recoverable share with no expiry as active (it never expires)", async () => {
+    const token = "legacy-no-expiry-token";
+    const { db } = makeDb({ share: { ...existingShare, tokenCiphertext: encryptShareToken(token), expiresAt: null } });
+
+    const result = await getShareState(db, "invoice-1", "user-1", now);
+
+    expect(result).toEqual({ kind: "state", status: "active", path: `/i/${token}`, expiresAt: null });
+  });
+
+  // FIND-07: an expired row used to be reported as active with its past
+  // expiry, so invoice detail showed and sent a dead link.
+  it("reports an expired share as expired, not active, and never returns its path", async () => {
+    const token = "expired-token-must-not-reach-the-owner-ui";
     const expiresAt = new Date("2020-01-01T00:00:00.000Z");
     const { db } = makeDb({ share: { ...existingShare, tokenCiphertext: encryptShareToken(token), expiresAt } });
 
-    const result = await getShareState(db, "invoice-1", "user-1");
+    const result = await getShareState(db, "invoice-1", "user-1", now);
 
-    expect(result).toEqual({ kind: "state", active: true, path: `/i/${token}`, expiresAt });
+    expect(result).toEqual({ kind: "state", status: "expired", expiresAt });
+    expect(JSON.stringify(result)).not.toContain(token);
+  });
+
+  it("treats a share expiring exactly now as expired, and one a millisecond later as active", async () => {
+    const tokenCiphertext = encryptShareToken("edge-token");
+    const atNow = makeDb({ share: { ...existingShare, tokenCiphertext, expiresAt: now } });
+    const justAfter = makeDb({ share: { ...existingShare, tokenCiphertext, expiresAt: new Date(now.getTime() + 1) } });
+
+    expect(await getShareState(atNow.db, "invoice-1", "user-1", now)).toEqual({ kind: "state", status: "expired", expiresAt: now });
+    expect((await getShareState(justAfter.db, "invoice-1", "user-1", now)).kind === "state").toBe(true);
+    expect(await getShareState(justAfter.db, "invoice-1", "user-1", now)).toMatchObject({ status: "active", path: "/i/edge-token" });
+  });
+
+  it("reports an expired share as expired even when its path is unrecoverable", async () => {
+    const expiresAt = new Date("2020-01-01T00:00:00.000Z");
+    const { db } = makeDb({ share: { ...existingShare, tokenCiphertext: null, expiresAt } });
+
+    expect(await getShareState(db, "invoice-1", "user-1", now)).toEqual({ kind: "state", status: "expired", expiresAt });
+  });
+
+  it("never writes: reading the state of an expired share does not replace or extend it", async () => {
+    const { db, shareUpsert, shareDeleteMany } = makeDb({ share: { ...existingShare, expiresAt: new Date("2020-01-01T00:00:00.000Z") } });
+
+    await getShareState(db, "invoice-1", "user-1", now);
+
+    expect(shareUpsert).not.toHaveBeenCalled();
+    expect(shareDeleteMany).not.toHaveBeenCalled();
   });
 });
 

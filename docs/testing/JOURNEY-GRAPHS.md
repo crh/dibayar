@@ -111,6 +111,9 @@ stateDiagram-v2
     Absent --> Active: Beranda Kirim pengingat creates a link (HOME-03)
     Active --> Active: Beranda Kirim pengingat, same token (HOME-03)
     Expired --> Active: Beranda Kirim pengingat issues a new token (HOME-03)
+    Active --> Active: invoice detail WhatsApp / Kirim pengingat, same token (INV-WA-01, INV-STATUS-06)
+    Expired --> Active: invoice detail Kirim pengingat issues a new token (INV-STATUS-06)
+    Expired --> Active: Buat tautan baru (SHARE-01)
 ```
 
 Beranda's **Kirim pengingat** calls `POST /share/ensure` (`ensureShare`): it
@@ -127,8 +130,14 @@ An invoice has one share row, so replacing an expired link leaves the old
 token unknown: the old URL then shows the generic not-found page, not the
 expired page.
 
-Not covered by this fix: invoice detail's own WhatsApp action reuses whatever
-link the page loaded, including an expired one (FIND-07, open).
+Invoice detail's WhatsApp action (**Kirim lewat WhatsApp** / **Kirim
+pengingat**) uses the same `POST /share/ensure` since the FIND-07 fix, so it
+too reuses a usable link and replaces an expired one. The owner's share state
+(`GET /share`, `getShareState`) is one of **inactive**, **active** or
+**expired**: an expired share reads "Tautan berbagi sudah tidak berlaku." with
+the date it ended and offers **Buat tautan baru** (one step, `POST /share`);
+its path never reaches the browser. Opening the page never changes the share.
+`e2e/invoices/expired-share.spec.ts` drives these.
 
 | Recipient opens `/i/<token>` when the share is… | Expected | Action | Status |
 |---|---|---|---|

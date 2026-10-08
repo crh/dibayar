@@ -31,6 +31,7 @@ function makeFetchMock(
   options: {
     shareGet?: JsonResult;
     sharePost?: JsonResult | JsonResult[];
+    shareEnsure?: JsonResult;
     shareDelete?: JsonResult;
     statusPatch?: JsonResult;
     contactGet?: JsonResult;
@@ -47,17 +48,40 @@ function makeFetchMock(
         body: { active: true, path: "/i/deterministic-token", expiresAt: "2026-10-17T00:00:00.000Z" },
       }];
 
+  // What POST .../share/ensure answers unless a test sets shareEnsure: like
+  // the server, the link that already exists (the one GET reported, or the
+  // one the last POST .../share issued), otherwise a newly issued one.
+  type ShareBody = { active?: boolean; path?: string | null; expiresAt?: string | null };
+  const loaded = shareGet.body as ShareBody;
+  let usableShare: ShareBody | null = shareGet.status === 200 && loaded.active && loaded.path ? loaded : null;
+
   return vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
     if (url.endsWith("/contact") && method === "GET") return jsonResponse(contactGet);
     if (url.endsWith("/share") && method === "GET") return jsonResponse(shareGet);
     if (url.endsWith("/share") && method === "POST") {
       const next = sharePostQueue.length > 1 ? sharePostQueue.shift()! : sharePostQueue[0];
+      if (next.status === 200) usableShare = next.body as ShareBody;
       return jsonResponse(next);
+    }
+    if (url.endsWith("/share/ensure") && method === "POST") {
+      if (options.shareEnsure) return jsonResponse(options.shareEnsure);
+      if (usableShare) return jsonResponse({ status: 200, body: { active: true, path: usableShare.path, expiresAt: usableShare.expiresAt ?? null } });
+      const issued = sharePostQueue[0];
+      if (issued.status === 200) usableShare = issued.body as ShareBody;
+      return jsonResponse(issued);
     }
     if (url.endsWith("/share") && method === "DELETE") return jsonResponse(shareDelete);
     return jsonResponse(statusPatch);
   });
+}
+
+// The share requests that can issue a link, in order, as "POST /share" (always
+// a new token) or "POST /share/ensure" (reuse, new only when needed).
+function shareLinkRequests(fetchMock: ReturnType<typeof makeFetchMock>): string[] {
+  return fetchMock.mock.calls
+    .filter(([url, init]) => init?.method === "POST" && /\/share(\/ensure)?$/.test(url))
+    .map(([url]) => `POST ${url.replace("/api/invoices/invoice-1", "")}`);
 }
 
 // The WhatsApp hand-off (src/lib/whatsapp-popup.ts) opens a blank tab on the
@@ -426,7 +450,7 @@ describe("InvoiceDetailClient", () => {
       expect(wa.open).toHaveBeenCalledTimes(1);
     });
 
-    it("opens WhatsApp directly, without creating a new link, when a link is already active", async () => {
+    it("sends the link that is already active: asks the server for it and never rotates it", async () => {
       const user = userEvent.setup();
       const wa = stubWhatsAppTab();
       const fetchMock = makeFetchMock({
@@ -440,12 +464,13 @@ describe("InvoiceDetailClient", () => {
       await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
       expect(await screen.findByTitle(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
 
-      const postCallsBefore = fetchMock.mock.calls.filter((call) => call[1]?.method === "POST").length;
+      expect(shareLinkRequests(fetchMock)).toEqual(["POST /share"]);
       await user.click(screen.getByRole("button", { name: "Kirim lewat WhatsApp" }));
 
-      await sentWhatsAppHref(wa);
-      const postCallsAfter = fetchMock.mock.calls.filter((call) => call[1]?.method === "POST").length;
-      expect(postCallsAfter).toBe(postCallsBefore);
+      const openedUrl = await sentWhatsAppHref(wa);
+      expect(openedUrl).toContain(encodeURIComponent(`${window.location.origin}/i/deterministic-token`));
+      // The send itself only asked for the existing link; nothing new was issued.
+      expect(shareLinkRequests(fetchMock)).toEqual(["POST /share", "POST /share/ensure"]);
     });
 
     it("sends the chase-template message (not the send template) once overdue, mentioning the due date", async () => {
@@ -560,7 +585,7 @@ describe("InvoiceDetailClient", () => {
           const method = init?.method ?? "GET";
           if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: { contactWa: "not-a-phone", brand: "Kopi Nusantara" } });
           if (url.endsWith("/share") && method === "GET") return jsonResponse({ status: 200, body: { active: false } });
-          if (url.endsWith("/share") && method === "POST") {
+          if (/\/share(\/ensure)?$/.test(url) && method === "POST") {
             return jsonResponse({ status: 200, body: { active: true, path: "/i/deterministic-token" } });
           }
           if (url.includes("/api/deals/") && method === "PATCH") {
@@ -599,7 +624,7 @@ describe("InvoiceDetailClient", () => {
           const method = init?.method ?? "GET";
           if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: { contactWa: "not-a-phone", brand: "Kopi Nusantara" } });
           if (url.endsWith("/share") && method === "GET") return jsonResponse({ status: 200, body: { active: false } });
-          if (url.endsWith("/share") && method === "POST") {
+          if (/\/share(\/ensure)?$/.test(url) && method === "POST") {
             return jsonResponse({ status: 200, body: { active: true, path: "/i/deterministic-token" } });
           }
           if (url.includes("/api/deals/") && method === "PATCH") {
@@ -653,10 +678,103 @@ describe("InvoiceDetailClient", () => {
 
       await user.click(whatsappButton);
 
-      // Reuses the recovered link directly -- no POST /share (no new token minted).
+      // Reuses the recovered link -- never the rotating POST /share (no new token minted).
       const openedUrl = await sentWhatsAppHref(wa);
-      expect(fetchMock.mock.calls.some((call) => call[1]?.method === "POST")).toBe(false);
+      expect(shareLinkRequests(fetchMock)).toEqual(["POST /share/ensure"]);
       expect(openedUrl).toContain(encodeURIComponent(`${window.location.origin}/i/recovered-token`));
+    });
+
+    // FIND-07: invoice detail used to send whatever link the page loaded,
+    // including one that had already expired.
+    describe("tautan kedaluwarsa (FIND-07)", () => {
+      const expiredGet = { status: 200, body: { active: false, expired: true, expiresAt: "2020-01-01T00:00:00.000Z" } };
+
+      it("sends a fresh link from the server when the share has expired, and then shows it as the active link", async () => {
+        const user = userEvent.setup();
+        const wa = stubWhatsAppTab();
+        const fetchMock = makeFetchMock({
+          contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+          shareGet: expiredGet,
+          shareEnsure: { status: 200, body: { active: true, path: "/i/fresh-token", expiresAt: "2026-12-30T00:00:00.000Z" } },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+        expect(await screen.findByText("Tautan berbagi sudah tidak berlaku.")).toBeDefined();
+        const whatsappButton = screen.getByRole("button", { name: "Kirim lewat WhatsApp" });
+        await waitFor(() => expect(whatsappButton).toHaveProperty("disabled", false));
+        await user.click(whatsappButton);
+
+        const openedUrl = await sentWhatsAppHref(wa);
+        expect(openedUrl).toContain(encodeURIComponent(`${window.location.origin}/i/fresh-token`));
+        expect(shareLinkRequests(fetchMock)).toEqual(["POST /share/ensure"]);
+        expect(await screen.findByTitle(`${window.location.origin}/i/fresh-token`)).toBeDefined();
+        expect(screen.getByText("Tautan aktif sampai 30 Des 2026.")).toBeDefined();
+        expect(screen.queryByText("Tautan berbagi sudah tidak berlaku.")).toBeNull();
+      });
+
+      it("sends the server's link, not the one the page loaded, when the server answers with a different one", async () => {
+        const user = userEvent.setup();
+        const wa = stubWhatsAppTab();
+        vi.stubGlobal("fetch", makeFetchMock({
+          contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+          // Loaded as active; by the time of the click it has expired and
+          // the server issues a replacement.
+          shareGet: { status: 200, body: { active: true, path: "/i/loaded-token", expiresAt: "2026-10-17T00:00:00.000Z" } },
+          shareEnsure: { status: 200, body: { active: true, path: "/i/replacement-token", expiresAt: "2027-01-15T00:00:00.000Z" } },
+        }));
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+        const whatsappButton = await screen.findByRole("button", { name: "Kirim lewat WhatsApp" });
+        await waitFor(() => expect(whatsappButton).toHaveProperty("disabled", false));
+        await user.click(whatsappButton);
+
+        const openedUrl = await sentWhatsAppHref(wa);
+        expect(openedUrl).toContain(encodeURIComponent(`${window.location.origin}/i/replacement-token`));
+        expect(openedUrl).not.toContain(encodeURIComponent(`${window.location.origin}/i/loaded-token`));
+        expect(await screen.findByTitle(`${window.location.origin}/i/replacement-token`)).toBeDefined();
+      });
+
+      it("closes the blank tab, sends nothing and says so when the server can't provide a link", async () => {
+        const user = userEvent.setup();
+        const wa = stubWhatsAppTab();
+        vi.stubGlobal("fetch", makeFetchMock({
+          contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+          shareGet: expiredGet,
+          shareEnsure: { status: 500, body: {} },
+        }));
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+        const whatsappButton = await screen.findByRole("button", { name: "Kirim lewat WhatsApp" });
+        await waitFor(() => expect(whatsappButton).toHaveProperty("disabled", false));
+        await user.click(whatsappButton);
+
+        expect((await screen.findByRole("alert")).textContent).toBe("Tautan berbagi belum bisa dibuat. Coba lagi.");
+        expect(wa.tab.close).toHaveBeenCalled();
+        expect(wa.href()).toBeNull();
+        // Still honestly expired: the failed request didn't turn it active.
+        expect(screen.getByText("Tautan berbagi sudah tidak berlaku.")).toBeDefined();
+      });
+
+      it("sends the link this tab remembers, without asking the server, when the server can't recover it (it could only replace it)", async () => {
+        const user = userEvent.setup();
+        const wa = stubWhatsAppTab();
+        window.sessionStorage.setItem("dibayar-share-path:invoice-1", "/i/remembered-token");
+        const fetchMock = makeFetchMock({
+          contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+          shareGet: { status: 200, body: { active: true, path: null, expiresAt: "2026-10-17T00:00:00.000Z" } },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+        const whatsappButton = await screen.findByRole("button", { name: "Kirim lewat WhatsApp" });
+        await waitFor(() => expect(whatsappButton).toHaveProperty("disabled", false));
+        await user.click(whatsappButton);
+
+        const openedUrl = await sentWhatsAppHref(wa);
+        expect(openedUrl).toContain(encodeURIComponent(`${window.location.origin}/i/remembered-token`));
+        expect(shareLinkRequests(fetchMock)).toEqual([]);
+      });
     });
 
     it("still shows the stale-link disabled reason for a share that predates link recovery (no path returned)", async () => {
@@ -913,6 +1031,79 @@ describe("InvoiceDetailClient", () => {
       await user.click(screen.getByRole("button", { name: "Ya, cabut tautan" }));
 
       expect(await screen.findByText(/belum ada tautan berbagi/i)).toBeDefined();
+    });
+
+    // FIND-07: an expired share used to render as "Tautan berbagi aktif." /
+    // "Tautan aktif sampai 1 Jan 2020."
+    describe("tautan kedaluwarsa (FIND-07)", () => {
+      const expiredGet = { status: 200, body: { active: false, expired: true, expiresAt: "2020-01-01T00:00:00.000Z" } };
+
+      it("says the link has expired and when, and shows no active state, link or regenerate/revoke controls", async () => {
+        window.sessionStorage.setItem("dibayar-share-path:invoice-1", "/i/expired-token");
+        vi.stubGlobal("fetch", makeFetchMock({ shareGet: expiredGet }));
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+        expect(await screen.findByText("Tautan berbagi sudah tidak berlaku.")).toBeDefined();
+        expect(screen.getByText("Berakhir pada 1 Jan 2020. Penerima tidak bisa lagi membuka invoice lewat tautan ini.")).toBeDefined();
+        expect(screen.queryByText("Tautan berbagi aktif.")).toBeNull();
+        expect(screen.queryByText(/Tautan aktif/)).toBeNull();
+        expect(screen.queryByTestId("share-link-track")).toBeNull();
+        expect(screen.queryByRole("button", { name: "Buat ulang tautan" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "Cabut tautan" })).toBeNull();
+        expect(screen.getByRole("button", { name: "Buat tautan baru" }).className).toContain("h-11");
+        // The dead link is forgotten, not kept around to be reused.
+        expect(window.sessionStorage.getItem("dibayar-share-path:invoice-1")).toBeNull();
+      });
+
+      it("says so in English", async () => {
+        window.localStorage.setItem("dibayar-language", "en");
+        vi.stubGlobal("fetch", makeFetchMock({ shareGet: expiredGet }));
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+        expect(await screen.findByText("The sharing link has expired.")).toBeDefined();
+        expect(screen.getByText("It ended on 1 Jan 2020. Recipients can no longer open the invoice with this link.")).toBeDefined();
+        expect(screen.queryByText(/Link active/)).toBeNull();
+        expect(screen.queryByText("Sharing link is active.")).toBeNull();
+        expect(screen.getByRole("button", { name: "Create a new link" })).toBeDefined();
+      });
+
+      it("Buat tautan baru issues a new link in one step (no confirmation: the old link is already dead) and shows it as active", async () => {
+        const user = userEvent.setup();
+        const fetchMock = makeFetchMock({
+          shareGet: expiredGet,
+          sharePost: { status: 200, body: { active: true, path: "/i/new-token", expiresAt: "2026-12-30T00:00:00.000Z" } },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+        await user.click(await screen.findByRole("button", { name: "Buat tautan baru" }));
+
+        expect(await screen.findByTitle(`${window.location.origin}/i/new-token`)).toBeDefined();
+        expect(screen.getByText("Tautan berbagi aktif.")).toBeDefined();
+        expect(screen.getByText("Tautan aktif sampai 30 Des 2026.")).toBeDefined();
+        expect(shareLinkRequests(fetchMock)).toEqual(["POST /share"]);
+      });
+
+      it("keeps the expired state and shows an error when the new link can't be created", async () => {
+        const user = userEvent.setup();
+        vi.stubGlobal("fetch", makeFetchMock({ shareGet: expiredGet, sharePost: { status: 500, body: {} } }));
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+        await user.click(await screen.findByRole("button", { name: "Buat tautan baru" }));
+
+        expect((await screen.findByRole("alert")).textContent).toBe("Tautan berbagi belum bisa dibuat. Coba lagi.");
+        expect(screen.getByText("Tautan berbagi sudah tidak berlaku.")).toBeDefined();
+      });
+
+      it("treats a malformed expired payload (expired but active, or no date) as a load error rather than guessing", async () => {
+        vi.stubGlobal("fetch", makeFetchMock({ shareGet: { status: 200, body: { active: true, expired: true, path: "/i/x", expiresAt: "2020-01-01T00:00:00.000Z" } } }));
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+        expect((await screen.findByRole("alert")).textContent).toBe("Status berbagi belum bisa dimuat. Coba lagi.");
+      });
     });
 
     it("shows a controlled Bahasa error when the share state cannot be loaded, with a retry", async () => {

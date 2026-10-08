@@ -318,7 +318,7 @@ async function verify() {
     ownerSettingsComplete: owner?.settings != null
       && ownerSettingsRequiredFields.every((field) => (owner.settings?.[field] ?? '').trim() !== ''),
     zeroSettingsMissing: zero?.settings == null,
-    overdueShareRecoverable: overdueShareState.kind === 'state' && overdueShareState.active && overdueShareState.path !== null,
+    overdueShareRecoverable: overdueShareState.kind === 'state' && overdueShareState.status === 'active' && overdueShareState.path !== null,
     // UX-audit "many-deals" fixture: at least 4 cards in MASUK (1 original +
     // 3 many-fixture) so the desktop board actually renders a dense column,
     // not just one card per stage.

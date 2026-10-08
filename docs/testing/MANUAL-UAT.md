@@ -106,6 +106,10 @@ Inventory: INV-WA-01, INV-WA-02, HOME-03.
    twice. Expected: both messages carry that same link, and reloading the
    private window still shows the invoice. Then **Buat ulang tautan** on the
    invoice and reload the private window. Expected: not found.
+   Since the FIND-07 fix (`fix/expired-share-reminder-2026-10-08`) the same
+   holds for **Kirim pengingat** / **Kirim lewat WhatsApp** on the invoice
+   page itself. An expired link cannot be produced by hand on staging (links
+   last 90 days); that case is covered by automation only.
 
 Automated since the FIND-04 fix: "popup opened -> one tab, no link" and a
 real Chromium blocker (`e2e/whatsapp/popup-blocker.spec.ts`). What still needs

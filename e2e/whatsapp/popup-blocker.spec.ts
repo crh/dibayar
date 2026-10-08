@@ -53,8 +53,8 @@ test.describe("WhatsApp when the browser blocks new windows", { tag: "@critical"
     await expect(action).toBeEnabled();
     await expect(page.getByRole("link", { name: "Buka WhatsApp" })).toHaveCount(0);
     const opened = trackOpenedPages(context);
-    // The seeded SENT invoice already has an active share link, so this
-    // click goes straight to window.open (no POST /share first).
+    // window.open runs inside the click, before the page asks the server
+    // for the link to send (POST .../share/ensure reuses the seeded one).
     await action.click();
 
     const fallback = page.getByRole("link", { name: "Buka WhatsApp" });

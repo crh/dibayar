@@ -108,7 +108,12 @@ type ShareState =
   | { kind: "loading" }
   | { kind: "load-error"; message: string }
   | { kind: "inactive"; error: string | null }
-  | { kind: "active"; link: string | null; expiresAt: string | null; error: string | null };
+  // The link is dead and is neither shown nor sent (FIND-07); only the date
+  // it ended is kept, to say so.
+  | { kind: "expired"; expiresAt: string; error: string | null }
+  // `linkRecoverable` is false when the server couldn't recover the path and
+  // `link`, if any, came from this tab's sessionStorage cache.
+  | { kind: "active"; link: string | null; linkRecoverable: boolean; expiresAt: string | null; error: string | null };
 
 function isValidExpiry(value: unknown): value is string | null | undefined {
   return value === undefined || value === null || (typeof value === "string" && !Number.isNaN(Date.parse(value)));
@@ -116,11 +121,13 @@ function isValidExpiry(value: unknown): value is string | null | undefined {
 
 function isValidGetPayload(
   payload: unknown,
-): payload is { active: boolean; path?: string | null; expiresAt?: string | null } {
+): payload is { active: boolean; expired?: boolean; path?: string | null; expiresAt?: string | null } {
   if (typeof payload !== "object" || payload === null) return false;
-  const { active, path, expiresAt } = payload as { active?: unknown; path?: unknown; expiresAt?: unknown };
+  const { active, expired, path, expiresAt } = payload as { active?: unknown; expired?: unknown; path?: unknown; expiresAt?: unknown };
   const validPath = path === undefined || path === null || (typeof path === "string" && SHARE_PATH_PATTERN.test(path));
-  return typeof active === "boolean" && validPath && isValidExpiry(expiresAt);
+  // An expired share is never also active, and always says when it ended.
+  const validExpired = expired === undefined || expired === false || (expired === true && active === false && typeof expiresAt === "string");
+  return typeof active === "boolean" && validPath && validExpired && isValidExpiry(expiresAt);
 }
 
 function isValidCreatePayload(payload: unknown): payload is { active: true; path: string; expiresAt?: string | null } {
@@ -135,13 +142,13 @@ function isValidRevokePayload(payload: unknown): payload is { active: false } {
 
 function withMutationError(prev: ShareState, message: string): ShareState {
   if (prev.kind === "inactive") return { kind: "inactive", error: message };
-  if (prev.kind === "active") return { ...prev, error: message };
+  if (prev.kind === "active" || prev.kind === "expired") return { ...prev, error: message };
   return { kind: "load-error", message };
 }
 
 function clearMutationError(prev: ShareState): ShareState {
   if (prev.kind === "inactive") return { kind: "inactive", error: null };
-  if (prev.kind === "active") return { ...prev, error: null };
+  if (prev.kind === "active" || prev.kind === "expired") return { ...prev, error: null };
   return prev;
 }
 
@@ -182,7 +189,11 @@ function useShareState(invoiceId: string) {
       }
       if (!payload.active) {
         clearCachedSharePath(invoiceId);
-        setShare({ kind: "inactive", error: null });
+        setShare(
+          payload.expired && payload.expiresAt
+            ? { kind: "expired", expiresAt: payload.expiresAt, error: null }
+            : { kind: "inactive", error: null },
+        );
         return;
       }
       // Prefer the server's own decrypted path -- it's authoritative and
@@ -195,6 +206,7 @@ function useShareState(invoiceId: string) {
       setShare({
         kind: "active",
         link: resolvedPath ? `${window.location.origin}${resolvedPath}` : null,
+        linkRecoverable: Boolean(payload.path),
         expiresAt: payload.expiresAt ?? null,
         error: null,
       });
@@ -217,11 +229,13 @@ function useShareState(invoiceId: string) {
     loadShareState();
   }, [loadShareState]);
 
-  const createOrRegenerate = useCallback(async () => {
+  // Both link-issuing requests answer in the same shape and leave the page
+  // in the same state: an active share showing the returned link.
+  const requestLink = useCallback(async (endpoint: "share" | "share/ensure") => {
     setPendingAction("create");
     setShare((prev) => clearMutationError(prev));
     try {
-      const response = await fetchWithTimeout(`/api/invoices/${invoiceId}/share`, { method: "POST" });
+      const response = await fetchWithTimeout(`/api/invoices/${invoiceId}/${endpoint}`, { method: "POST" });
       const payload = await response.json();
       if (!mountedRef.current) return null;
       if (!response.ok || !isValidCreatePayload(payload)) {
@@ -233,6 +247,7 @@ function useShareState(invoiceId: string) {
       setShare({
         kind: "active",
         link,
+        linkRecoverable: true,
         expiresAt: payload.expiresAt ?? null,
         error: null,
       });
@@ -244,6 +259,16 @@ function useShareState(invoiceId: string) {
       if (mountedRef.current) setPendingAction(null);
     }
   }, [invoiceId]);
+
+  // The explicit, destructive operation: always a new token, so a link
+  // already sent stops working ("Buat tautan berbagi" / "Buat ulang tautan").
+  const createOrRegenerate = useCallback(() => requestLink("share"), [requestLink]);
+
+  // A link to send: the server reuses the invoice's usable link and issues a
+  // new one only when there is none or it has expired (ensureShare, the same
+  // contract as the Beranda reminder). The server decides, so an expired link
+  // is never sent, even from a page that loaded before it expired.
+  const ensureLink = useCallback(() => requestLink("share/ensure"), [requestLink]);
 
   const revoke = useCallback(async () => {
     setPendingAction("revoke");
@@ -265,7 +290,7 @@ function useShareState(invoiceId: string) {
     }
   }, [invoiceId]);
 
-  return { share, setShare, isBusy, pendingAction, retryLoad, createOrRegenerate, revoke };
+  return { share, setShare, isBusy, pendingAction, retryLoad, createOrRegenerate, ensureLink, revoke };
 }
 
 // §4.5 item 3: just the link field + copy/regenerate/revoke management. The
@@ -334,6 +359,22 @@ function ShareSection({
             className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
           >
             {isBusy ? t("invoice.creating") : t("invoice.create")}
+          </button>
+        </>
+      ) : null}
+
+      {share.kind === "expired" ? (
+        <>
+          {share.error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{t(share.error)}</p> : null}
+          <p className="mt-3 text-[14px] font-semibold text-overdue">{t("invoice.shareExpired")}</p>
+          <p className="mt-1 text-[13px] text-muted">{t("invoice.shareExpiredOn", { date: formatDateCentral(share.expiresAt) })}</p>
+          <button
+            type="button"
+            disabled={isBusy}
+            onClick={handleCreateOrRegenerate}
+            className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
+          >
+            {isBusy ? t("invoice.creating") : t("invoice.createNew")}
           </button>
         </>
       ) : null}
@@ -593,10 +634,11 @@ export default function InvoiceDetailClient({
 
   // The owner's own Settings template (templateSend normally, templateChase
   // once the invoice is overdue -- T-21), resolved with the real
-  // invoice/deal tokens. Ensures a share link exists first (creating one on
-  // demand), so this is always usable as the entry point to the invoice's
-  // public link -- it never duplicates the share management state in
-  // ShareSection below, it just drives the same hook. `popup` was opened by
+  // invoice/deal tokens. Asks the server for a link to send first
+  // (ensureLink: the existing usable link, or a new one when there is none or
+  // it has expired -- FIND-07), so this is always usable as the entry point
+  // to the invoice's public link -- it never duplicates the share management
+  // state in ShareSection below, it just drives the same hook. `popup` was opened by
   // the click itself (openWhatsAppPopup); null means the browser blocked it
   // (F15), and a direct link then takes its place instead of failing
   // silently. FIND-04: the old window.open(href, ..., "noopener") returned
@@ -606,9 +648,13 @@ export default function InvoiceDetailClient({
     setIsSharingToWhatsApp(true);
     let handedOff = false;
     try {
-      const link = shareState.share.kind === "active" && shareState.share.link
-        ? shareState.share.link
-        : await shareState.createOrRegenerate();
+      // One exception: a link the server can't recover (a share older than
+      // tokenCiphertext) that this tab still remembers. The server could only
+      // answer by replacing it, so send the remembered one, as before.
+      const { share } = shareState;
+      const link = share.kind === "active" && share.link && !share.linkRecoverable
+        ? share.link
+        : await shareState.ensureLink();
       if (!link) return;
 
       const result = buildInvoiceWhatsApp({
