@@ -61,7 +61,7 @@ describe("GET /api/invoices/[id]/share", () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
     mockedGetShareState.mockResolvedValue({
       kind: "state",
-      active: true,
+      status: "active",
       path: "/i/recovered-token",
       expiresAt: new Date("2026-10-17T00:00:00.000Z"),
     });
@@ -79,7 +79,7 @@ describe("GET /api/invoices/[id]/share", () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
     mockedGetShareState.mockResolvedValue({
       kind: "state",
-      active: true,
+      status: "active",
       path: null,
       expiresAt: new Date("2026-10-17T00:00:00.000Z"),
     });
@@ -92,6 +92,32 @@ describe("GET /api/invoices/[id]/share", () => {
       path: null,
       expiresAt: "2026-10-17T00:00:00.000Z",
     });
+  });
+
+  it("returns inactive when there is no share", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedGetShareState.mockResolvedValue({ kind: "state", status: "inactive" });
+
+    const response = await GET(req("GET", "invoice-1"), makeContext("invoice-1"));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ active: false });
+  });
+
+  // FIND-07: an expired share is not active, and no path leaves the server.
+  it("returns an expired share as not active, with its expiry and no path", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedGetShareState.mockResolvedValue({
+      kind: "state",
+      status: "expired",
+      expiresAt: new Date("2020-01-01T00:00:00.000Z"),
+    });
+
+    const response = await GET(req("GET", "invoice-1"), makeContext("invoice-1"));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ active: false, expired: true, expiresAt: "2020-01-01T00:00:00.000Z" });
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
   });
 
   it("returns a controlled 500 without leaking database details", async () => {

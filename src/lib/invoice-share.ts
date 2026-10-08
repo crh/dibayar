@@ -39,34 +39,44 @@ export type InvoiceShareDb = InvoiceReadDb & {
   };
 };
 
+// The one expiry rule, shared by the owner's view (getShareState), reminders
+// (ensureShare) and the public lookup: a share with no expiry never expires,
+// and one expiring exactly now already has.
+function isShareExpired(expiresAt: Date | null, now: Date): expiresAt is Date {
+  return expiresAt !== null && expiresAt.getTime() <= now.getTime();
+}
+
 export type ShareStateResult =
   | { kind: "not-found" }
-  | { kind: "state"; active: false }
-  | { kind: "state"; active: true; path: string | null; expiresAt: Date | null };
+  | { kind: "state"; status: "inactive" }
+  | { kind: "state"; status: "active"; path: string | null; expiresAt: Date | null }
+  | { kind: "state"; status: "expired"; expiresAt: Date };
 
-// Active means a share row exists; revoking deletes the row rather than flagging it,
-// so a revoked token's hash is simply absent — indistinguishable from unknown/invalid.
-// path is the owner's own already-active link, recovered by decrypting
-// tokenCiphertext (see share-token-crypto.ts) -- null only for a share that
-// predates that column (created before this recovery existed) or whose
-// ciphertext fails to decrypt, in which case the owner falls back to
-// regenerating, exactly like before this existed.
-// An expired row still reports active, with its past expiresAt: this is the
-// owner's management view of the row, not a promise that the link opens.
-// "Usable right now" is ensureShare's question, not this one's.
+// The owner's view of the invoice's share row. Revoking deletes the row
+// rather than flagging it, so a revoked token's hash is simply absent --
+// indistinguishable from unknown/invalid.
+// "active" means the public link opens right now. Its path is the owner's own
+// link, recovered by decrypting tokenCiphertext (see share-token-crypto.ts)
+// -- null only for a share that predates that column or whose ciphertext
+// fails to decrypt, in which case the owner falls back to regenerating.
+// "expired" means the row exists but its link no longer opens (FIND-07: this
+// used to be reported as active). It carries no path: an expired link is
+// never shown or sent, only replaced. Reading the state never changes it.
 export async function getShareState(
   db: InvoiceShareDb,
   invoiceId: string,
   userId: string,
+  now: Date = new Date(),
 ): Promise<ShareStateResult> {
   const invoice = await getOwnedInvoice(db, invoiceId, userId);
   if (!invoice) return { kind: "not-found" };
 
   const share = await db.invoiceShare.findUnique({ where: { invoiceId } });
-  if (!share) return { kind: "state", active: false };
+  if (!share) return { kind: "state", status: "inactive" };
+  if (isShareExpired(share.expiresAt, now)) return { kind: "state", status: "expired", expiresAt: share.expiresAt };
 
   const token = share.tokenCiphertext ? decryptShareToken(share.tokenCiphertext) : null;
-  return { kind: "state", active: true, path: token ? `/i/${token}` : null, expiresAt: share.expiresAt };
+  return { kind: "state", status: "active", path: token ? `/i/${token}` : null, expiresAt: share.expiresAt };
 }
 
 export type CreateShareResult =
@@ -118,9 +128,8 @@ export type EnsureShareResult =
 
 // For sending a reminder (FIND-05): hands back the link the recipient may
 // already hold instead of rotating it. A share is reused only when it is
-// usable as a public link right now -- unexpired by the same rule
-// getPublicInvoiceDocumentByToken applies (a null expiry never expires), and
-// its path recoverable from tokenCiphertext. Reuse writes nothing, so the
+// usable as a public link right now -- unexpired (isShareExpired) and its
+// path recoverable from tokenCiphertext. Reuse writes nothing, so the
 // expiry is never extended. Anything else (no row, expired, a row that
 // predates tokenCiphertext or no longer decrypts) gets a new link, since the
 // old one either no longer opens or can't be put in a message.
@@ -136,7 +145,7 @@ export async function ensureShare(
 
   const now = nowFactory();
   const share = await db.invoiceShare.findUnique({ where: { invoiceId } });
-  if (share && (share.expiresAt === null || share.expiresAt.getTime() > now.getTime())) {
+  if (share && !isShareExpired(share.expiresAt, now)) {
     const token = share.tokenCiphertext ? decryptShareToken(share.tokenCiphertext) : null;
     if (token) return { kind: "reused", path: `/i/${token}`, expiresAt: share.expiresAt };
   }
@@ -287,6 +296,6 @@ export async function getPublicInvoiceDocumentByToken(
   });
 
   if (!row) return { kind: "invalid" };
-  if (row.expiresAt !== null && row.expiresAt.getTime() <= now.getTime()) return { kind: "expired" };
+  if (isShareExpired(row.expiresAt, now)) return { kind: "expired" };
   return { kind: "ok", input: toDocumentInput(row.invoice) };
 }
