@@ -2,7 +2,7 @@
 
 Claude Code (worker) prepared this for Chris, in Asia/Jakarta time. **PR #33 into `staging` is open and not merged.** Nothing was deployed or released. `main` and Production were not touched. No Production, hosted-staging or Neon database was read or written; no Vercel, Neon, OAuth or repository setting was changed; no `preview/*` or Neon branch was created; no visual baseline was updated; no schema migration was added; no application code, spec or fixture changed. No coverage-percentage threshold was added. No request went to Google or WhatsApp.
 
-**Final status: `READY_FOR_CHRIS_REVIEW`** (section 13). Three things need your attention when you review:
+**Final status: `READY_FOR_CHRIS_REVIEW`** (section 13; review fixes and the current final head are in section 14). Three things need your attention when you review:
 
 1. The workflow has one trigger beyond the brief's preferred shape: a `pull_request` trigger limited to the lane's own files (section 2).
 2. The schedule cannot fire until the workflow file is on `main`, and it will check `main`, not `staging` (section 2). No scheduled run exists yet.
@@ -42,10 +42,10 @@ All `workflow_dispatch` of `Journey coverage (full)` on this branch.
 | Run | Head | Result | Claims |
 |---|---|---|---|
 | `37882859422` (trial, before the final head) | `12e121f` | success | 113 real claims, 113 passed, 0 not exercised |
-| `37887980418` | `9bb3114` (final implementation) | success | 113 real claims, 113 passed, 0 not exercised, 0 failed, 0 passed only on retry |
-| `37887983419` | `9bb3114` (final implementation) | success | 113 real claims, 113 passed, 0 not exercised, 0 failed, 0 passed only on retry |
+| `37887980418` | `9bb3114` (final implementation before the review fixes) | success | 113 real claims, 113 passed, 0 not exercised, 0 failed, 0 passed only on retry |
+| `37887983419` | `9bb3114` (final implementation before the review fixes) | success | 113 real claims, 113 passed, 0 not exercised, 0 failed, 0 passed only on retry |
 
-`9bb3114` holds every workflow and validator change in this PR. The commits after it are documentation only: these run IDs, section 10, and one sentence in `docs/testing/E2E.md` about PR-triggered evidence naming the merge commit. Both final runs: full E2E 193 passed, 0 failed, 0 flaky; ux-audit specs 69 passed. These are manual runs; they say nothing about the schedule.
+**Superseded by section 14:** review fixes to the validator landed after these runs (`e993a9d`, `4e0b5ce`), so `9bb3114` is no longer the final implementation; the final-implementation runs are in section 14. As first written: `9bb3114` held every workflow and validator change at that point, and the commits directly after it were documentation only: these run IDs, section 10, and one sentence in `docs/testing/E2E.md` about PR-triggered evidence naming the merge commit. Both final runs: full E2E 193 passed, 0 failed, 0 flaky; ux-audit specs 69 passed. These are manual runs; they say nothing about the schedule.
 
 ## 4. Proof the scheduled cross-browser acceptance is isolated
 
@@ -131,7 +131,7 @@ All temporary; nothing from them is in the branch. Controls 1 and 2 used mutated
 
 Control 3's output was correct but was a 109-line list, so the check now ends with a hint naming the likely cause (commit `ce3e47d`). The untouched results still pass: 113 passed, 0 not exercised, exit 0.
 
-The validator's own test suite gained permanent negative controls for the register, the evidence and the CLI failure modes (33 tests, was 24).
+The validator's own test suite gained permanent negative controls for the register, the evidence and the CLI failure modes (33 tests at that point, was 24; 37 after the review fixes in section 14).
 
 ## 9. Local validation (2026-10-09)
 
@@ -196,3 +196,52 @@ Commit history: no generated or untracked file entered history, so either a squa
 ## 13. Final status
 
 **`READY_FOR_CHRIS_REVIEW`.** Stopped before merge. Merging PR #33 into `staging` needs your explicit authorization.
+
+## 14. Follow-up: review fixes (2026-10-09)
+
+Codex reviewed the PR twice. All four findings were valid and are fixed. Sections 1–13 are left as written except for the pointers to this section; no earlier run ID was changed.
+
+**Findings and root causes**
+
+| # | Finding | Root cause | Fix |
+|---|---|---|---|
+| 1 (P2) | A stale exception entry survived after its action was fully automated and dropped its manual check | `validateExceptions` treated the entry's own `manualCheck` as proof that a manual check remained | `e993a9d` |
+| 2 (P2) | A `product_decision` entry could name a different finding than the one blocking its action | Entry finding and action finding were each checked only for existence | `e993a9d` |
+| 3 (P2) | Evidence could report a claim as passed when one of several real tests for it failed | `verifyAgainstResults` marked a claim verified on the first pass, even with a failure beside it. The check still exited non-zero; only the counts were wrong | `4e0b5ce` |
+| 4 (P3) | This receipt named `9bb3114` as the final implementation after `e993a9d` changed the validator | The receipt was not yet updated | this section |
+
+**Validation rules added** (`scripts/journey-coverage.mjs`)
+
+- An entry's `manualCheck` must be declared by at least one member action; otherwise: `manualCheck … is not declared by any member action any more -- the entry is stale`.
+- "Every action is verified and no manual check remains" is now decided from the member actions only.
+- Unchanged and still enforced: the check must exist in `MANUAL-UAT.md`, and a member with a different manual check is rejected.
+- For `product_decision`: every member must declare a finding, it must be the entry's finding, and that finding's `actions` must list the member. Either direction disagreeing fails.
+- A real claim counts as passed only when every real test that ran for it passed; otherwise it is listed under failed.
+
+**Tests added** (`scripts/journey-coverage.test.mjs`, 37 tests, was 33)
+
+- Stale manual check: fully automated P0 and P1 action with a leftover entry; a multi-member entry where no member references the check; an outstanding member with an undeclared check; a member declaring a different check.
+- Still valid: a verified action that declares the matching check, alone and in a shared entry.
+- Product decision: correct association passes; blocked on FIND-1 while the entry names FIND-2; the finding not listing the member; the member declaring no finding.
+- Mixed results: one passing and one non-passing real test for the same claim is failed, not passed, in the outcome and in the evidence; two passing tests are one passed claim.
+
+Each new negative control was run against the previous logic first and failed there (finding 1 and 2 tests: 2 of 3 failed, the "still valid" one passed; finding 3 test: failed), then passed after the fix.
+
+**What did not change:** the checked-in register (9 entries, same rows), every action's status and classification (65/94, P0 28/30, 5 outstanding), `JOURNEY-COVERAGE.md` (no regeneration needed), `REVIEW_CHECKLIST.md` and the policy proposal, application code, specs, fixtures, workflows.
+
+**Local validation:** lint 0, typecheck 0, unit 944/944, build pass, `test:journey-coverage` 37/37, `coverage:journeys` OK. The stored full results still give 113 passed, 0 not exercised, and the stored broken-result control still fails. Browser suites were not re-run locally; no code they execute changed.
+
+**Final implementation head `4e0b5ce`** (every workflow and validator change; later commits are documentation only):
+
+| Run | Workflow / event | Result |
+|---|---|---|
+| `37892159744` | `Journey coverage (full)`, manual dispatch | success, 113 real claims, 113 passed, 0 not exercised, 0 failed |
+| `37892163469` | `Journey coverage (full)`, manual dispatch | success, 113 real claims, 113 passed, 0 not exercised, 0 failed |
+| `37892163882` | `Journey coverage (full)`, pull request | success, 113/113 |
+| `37892163912` | `CI`, pull request | success |
+
+Also green on the intermediate head `e993a9d`: `CI` `37890536207`, lane `37890536265`.
+
+**Review threads:** the two original P2 threads were answered and resolved on `e993a9d`. The P2 and P3 threads from the second review are answered and resolved with this commit. Whether Codex raises anything further on the final head is recorded in the PR, not here.
+
+**Status: `READY_FOR_CHRIS_REVIEW`.** Not merged.
