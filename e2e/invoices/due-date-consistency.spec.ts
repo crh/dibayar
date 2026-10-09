@@ -9,10 +9,9 @@
 // the invoice list, the Beranda queue row with its "N hari lagi" count, the
 // WhatsApp messages sent from the invoice page and from Beranda.
 //
-// Not checked here: the recipient's page and PDF. They print the due date
-// only when the deal has payment terms (buildInvoiceDocumentModel, pinned by
-// model.test.ts), and this fixture deal has none. Where they do print it,
-// invoices/pdf-download.spec.ts checks it.
+// Not checked here: the recipient's page and PDF. Those are in
+// public/due-date-without-terms.spec.ts (a deal with no payment terms, like
+// this one; FIND-08) and invoices/pdf-download.spec.ts (a deal with terms).
 //
 // A due date is a calendar date with no time of day (stored as UTC midnight),
 // and "N hari lagi" counts Asia/Jakarta days. The classic mistake is to

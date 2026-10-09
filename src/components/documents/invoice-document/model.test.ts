@@ -109,22 +109,37 @@ describe("buildInvoiceDocumentModel", () => {
     expect(model.scope.description).toBe("Jasa kerja sama konten");
   });
 
-  it("omits the entire terms block when payment terms are empty, even with a due date set", () => {
+  // FIND-08: payment terms and the due date are independent. A due date is
+  // shown to the recipient whenever it exists, with or without payment terms.
+  it.each([
+    { name: "terms and due date", paymentTerms: "Pembayaran penuh di muka", dueDate: "2026-10-15T00:00:00.000Z", terms: { text: "Pembayaran penuh di muka", dueDateLabel: "15 Oktober 2026" } },
+    { name: "terms only", paymentTerms: "Pembayaran penuh di muka", dueDate: null, terms: { text: "Pembayaran penuh di muka", dueDateLabel: null } },
+    { name: "due date only", paymentTerms: null, dueDate: "2026-10-15T00:00:00.000Z", terms: { text: null, dueDateLabel: "15 Oktober 2026" } },
+    { name: "neither", paymentTerms: null, dueDate: null, terms: null },
+  ])("terms block for $name", ({ paymentTerms, dueDate, terms }) => {
     const model = buildInvoiceDocumentModel({
       ...fullInput,
+      invoice: { ...fullInput.invoice, dueDate },
+      deal: { ...fullInput.deal, paymentTerms },
+    });
+
+    expect(model.terms).toEqual(terms);
+  });
+
+  it.each(["", "   "])("treats blank payment terms (%j) as absent and still keeps the due date", (paymentTerms) => {
+    const model = buildInvoiceDocumentModel({ ...fullInput, deal: { ...fullInput.deal, paymentTerms } });
+
+    expect(model.terms).toEqual({ text: null, dueDateLabel: "15 Oktober 2026" });
+  });
+
+  it("formats a due date stored as UTC midnight as that calendar date", () => {
+    const model = buildInvoiceDocumentModel({
+      ...fullInput,
+      invoice: { ...fullInput.invoice, dueDate: new Date("2026-12-31T00:00:00.000Z") },
       deal: { ...fullInput.deal, paymentTerms: null },
     });
 
-    expect(model.terms).toBeNull();
-  });
-
-  it("omits only the due-date line, keeping the terms block, when terms are present but the due date is missing", () => {
-    const model = buildInvoiceDocumentModel({
-      ...fullInput,
-      invoice: { ...fullInput.invoice, dueDate: null },
-    });
-
-    expect(model.terms).toEqual({ text: "Pembayaran penuh di muka", dueDateLabel: null });
+    expect(model.terms?.dueDateLabel).toBe("31 Desember 2026");
   });
 
   it("shows an em dash per missing bank field and flags incomplete when any one of the three is missing", () => {

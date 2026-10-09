@@ -112,16 +112,29 @@ describe("InvoiceDocumentPdf", () => {
     expect(text).toContain("Jasa kerja sama konten");
   });
 
-  it("omits the entire terms block when payment terms are empty, even with a due date set", () => {
+  // FIND-08: the due date is shown with or without payment terms.
+  it("shows the due date, with no payment-terms heading, when the deal has no payment terms", () => {
     const text = renderTree({ ...fullInput, deal: { ...fullInput.deal, paymentTerms: null } });
+    expect(text).toContain("Jatuh tempo:  15 Oktober 2026");
     expect(text).not.toContain("Syarat pembayaran");
-    expect(text).not.toContain("Jatuh tempo");
+    expect(text.indexOf("Pajak potong")).toBeLessThan(text.indexOf("Jatuh tempo"));
+    expect(text.indexOf("Jatuh tempo")).toBeLessThan(text.indexOf("Pembayaran ke"));
   });
 
   it("keeps the terms block but omits only the due-date line when the due date is missing", () => {
     const text = renderTree({ ...fullInput, invoice: { ...fullInput.invoice, dueDate: null } });
     expect(text).toContain("Syarat pembayaran");
     expect(text).toContain("Pembayaran penuh di muka");
+    expect(text).not.toContain("Jatuh tempo");
+  });
+
+  it("omits the terms block when there are neither payment terms nor a due date", () => {
+    const text = renderTree({
+      ...fullInput,
+      invoice: { ...fullInput.invoice, dueDate: null },
+      deal: { ...fullInput.deal, paymentTerms: null },
+    });
+    expect(text).not.toContain("Syarat pembayaran");
     expect(text).not.toContain("Jatuh tempo");
   });
 

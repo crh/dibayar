@@ -9,6 +9,7 @@ import type { BrowserContext, Locator, Page } from "@playwright/test";
 import { expect } from "./test";
 
 const ID_SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+const ID_LONG_MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
 
 // Asia/Jakarta calendar date (YYYY-MM-DD) right now.
 export function jakartaToday(): string {
@@ -24,6 +25,13 @@ export function addCalendarDays(calendarDate: string, days: number): string {
 export function shortIdDate(calendarDate: string): string {
   const [year, month, day] = calendarDate.split("-").map(Number);
   return `${day} ${ID_SHORT_MONTHS[month - 1]} ${year}`;
+}
+
+// "2026-10-04" -> "4 Oktober 2026", the long Indonesian date the invoice
+// document (recipient page and PDF) prints.
+export function longIdDate(calendarDate: string): string {
+  const [year, month, day] = calendarDate.split("-").map(Number);
+  return `${day} ${ID_LONG_MONTHS[month - 1]} ${year}`;
 }
 
 // The overlay's due dates and the page's "today" are both Jakarta-relative.

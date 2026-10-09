@@ -78,8 +78,8 @@ export function InvoiceDocumentPdf({ model }: { model: InvoiceDocumentModel }) {
 
         {model.terms ? (
           <View style={styles.section}>
-            <Text style={[styles.label, styles.bold]}>Syarat pembayaran</Text>
-            <Text style={styles.value}>{model.terms.text}</Text>
+            {model.terms.text ? <Text style={[styles.label, styles.bold]}>Syarat pembayaran</Text> : null}
+            {model.terms.text ? <Text style={styles.value}>{model.terms.text}</Text> : null}
             {model.terms.dueDateLabel ? (
               <Text style={styles.value}>
                 <Text style={styles.label}>Jatuh tempo: </Text>
