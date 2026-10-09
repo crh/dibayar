@@ -199,7 +199,7 @@ Commit history: no generated or untracked file entered history, so either a squa
 
 ## 14. Follow-up: review fixes (2026-10-09)
 
-Codex reviewed the PR twice. All four findings were valid and are fixed. Sections 1–13 are left as written except for the pointers to this section; no earlier run ID was changed.
+Codex reviewed the PR three times. All five findings were valid and are fixed. Sections 1–13 are left as written except for the pointers to this section; no earlier run ID was changed.
 
 **Findings and root causes**
 
@@ -209,6 +209,7 @@ Codex reviewed the PR twice. All four findings were valid and are fixed. Section
 | 2 (P2) | A `product_decision` entry could name a different finding than the one blocking its action | Entry finding and action finding were each checked only for existence | `e993a9d` |
 | 3 (P2) | Evidence could report a claim as passed when one of several real tests for it failed | `verifyAgainstResults` marked a claim verified on the first pass, even with a failure beside it. The check still exited non-zero; only the counts were wrong | `4e0b5ce` |
 | 4 (P3) | This receipt named `9bb3114` as the final implementation after `e993a9d` changed the validator | The receipt was not yet updated | this section |
+| 5 (P2) | A PR that changes only the inventory did not trigger the full-coverage lane, so a new non-critical claim could merge without being run | The `pull_request` path filter listed the lane's own files but not `docs/testing/journey-coverage.json` | `514f836`, approved by Chris in session |
 
 **Validation rules added** (`scripts/journey-coverage.mjs`)
 
@@ -231,7 +232,7 @@ Each new negative control was run against the previous logic first and failed th
 
 **Local validation:** lint 0, typecheck 0, unit 944/944, build pass, `test:journey-coverage` 37/37, `coverage:journeys` OK. The stored full results still give 113 passed, 0 not exercised, and the stored broken-result control still fails. Browser suites were not re-run locally; no code they execute changed.
 
-**Final implementation head `4e0b5ce`** (every workflow and validator change; later commits are documentation only):
+**Head `4e0b5ce`** (every validator change; final implementation until finding 5):
 
 | Run | Workflow / event | Result |
 |---|---|---|
@@ -242,6 +243,17 @@ Each new negative control was run against the previous logic first and failed th
 
 Also green on the intermediate head `e993a9d`: `CI` `37890536207`, lane `37890536265`.
 
-**Review threads:** the two original P2 threads were answered and resolved on `e993a9d`. The P2 and P3 threads from the second review are answered and resolved with this commit. Whether Codex raises anything further on the final head is recorded in the PR, not here.
+**Final implementation head `514f836`** (finding 5: the inventory added to the lane's `pull_request` paths, plus the matching lines in `docs/testing/E2E.md` and `JOURNEY-BACKLOG.md`; later commits change this receipt, `DAILY_LOG.md` and `STATE.md` only):
+
+| Run | Workflow / event | Result |
+|---|---|---|
+| `37904432475` | `Journey coverage (full)`, manual dispatch | success, 113 real claims, 113 passed, 0 not exercised, 0 failed |
+| `37904436246` | `Journey coverage (full)`, manual dispatch | success, 113 real claims, 113 passed, 0 not exercised, 0 failed |
+| `37904439335` | `Journey coverage (full)`, pull request | success |
+| `37904439363` | `CI`, pull request | success |
+
+With finding 5 the trigger is one step further from the brief's dispatch-plus-schedule shape (section 2): every PR that edits the inventory now gets the roughly 16-minute full run. It is still not a required check.
+
+**Review threads:** all five are answered and resolved (the two original P2 threads on `e993a9d`, the second review's P2 and P3 on `122b5e8`, the third review's P2 with this commit). Whether Codex raises anything further is recorded in the PR, not here.
 
 **Status: `READY_FOR_CHRIS_REVIEW`.** Not merged.
