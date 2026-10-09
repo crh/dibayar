@@ -349,10 +349,11 @@ function describeHits(hits) {
 
 // Confirms "real" claims against rows from readPlaywrightResults(). For each
 // automated_real_interaction action and claimed project, a claim is
-// "verified" when one of its real tests ran there and passed (a flaky pass
-// counts, with a warning), an error when a real test ran there and was
-// skipped, failed, or expected to fail, and "unverified" when the run did
-// not include it (e.g. a non-@critical test in the PR-gate run).
+// "verified" when at least one of its real tests ran there and every one
+// that ran passed (a flaky pass counts, with a warning), "failed" (and an
+// error) when a real test ran there and was skipped, failed, or expected to
+// fail, and "unverified" when the run did not include it (e.g. a
+// non-@critical test in the PR-gate run).
 const OUTCOME_TEXT = {
   skipped: "ran but was skipped",
   expected_failure: "ran as an expected failure (test.fail)",
@@ -375,6 +376,7 @@ export function verifyAgainstResults(inventory, rows) {
       const label = `${action.id} [${projectLabel(projectId)}]`;
       let passed = false;
       let ran = false;
+      let notPassed = false;
       for (const ref of realRefs) {
         for (const row of rowsFor(ref.file, ref.title, projectId)) {
           ran = true;
@@ -385,15 +387,19 @@ export function verifyAgainstResults(inventory, rows) {
               if (!flaky.includes(label)) flaky.push(label);
             }
           } else {
+            notPassed = true;
             errors.push(`${label}: real test "${ref.title}" ${OUTCOME_TEXT[row.outcome] ?? row.outcome}`);
           }
         }
       }
-      if (passed) verified.push(label);
-      else if (!ran) unverified.push(label);
+      // A claim counts as passed only when every real test that ran for it
+      // passed; one pass next to a failure is a failed claim, so the counts
+      // can never read "all passed" while the check itself fails.
+      if (!ran) unverified.push(label);
+      else if (passed && !notPassed) verified.push(label);
       else {
         failed.push(label);
-        errors.push(`${label}: no real test passed in this run`);
+        if (!passed) errors.push(`${label}: no real test passed in this run`);
       }
     }
   }

@@ -490,6 +490,41 @@ test("run results: a real claim is verified only where a real test passed, and a
   assert.deepEqual(notRun.errors, []);
 });
 
+// PR #33 review (Codex P2): a claim with several real tests must not count
+// as passed when one of them failed, or the evidence would say "all passed,
+// 0 failed" next to a FAIL verdict.
+test("run results negative control (PR #33 review): a claim with one passing and one non-passing real test is failed, not passed", () => {
+  const mixed = action({
+    scope: ["desktop"],
+    tests: [
+      { file: FIXTURE_SPEC, title: "passes everywhere", kind: "real" },
+      { file: FIXTURE_SPEC, title: "expected failure in the body", kind: "real" },
+    ],
+  });
+  const outcome = verifyAgainstResults({ actions: [mixed] }, fixtureRows);
+  assert.deepEqual(outcome.verified, []);
+  assert.deepEqual(outcome.failed, ["AUTH-01 [desktop]"]);
+  assert.match(outcome.errors.join("\n"), /AUTH-01 \[desktop\]: real test "expected failure in the body" ran as an expected failure/);
+  assert.doesNotMatch(outcome.errors.join("\n"), /no real test passed/);
+
+  const evidence = buildEvidence({ inventory: { actions: [mixed] }, outcome, reports: [], requireResults: true, source: {} });
+  assert.equal(evidence.everyRealClaimExercisedAndPassed, false);
+  assert.deepEqual(evidence.realClaims, { total: 1, passed: 0, notExercised: [], failed: ["AUTH-01 [desktop]"], passedOnlyOnRetry: [] });
+  assert.match(renderEvidence({ ...evidence, source: SOURCE }), /\| Passed in this run \| 0 \|/);
+  assert.match(renderEvidence({ ...evidence, source: SOURCE }), /\| Failed \| 1: AUTH-01 \[desktop\] \|/);
+
+  // Two real tests that both pass still make one passed claim.
+  const both = action({
+    scope: ["desktop"],
+    tests: [
+      { file: FIXTURE_SPEC, title: "passes everywhere", kind: "real" },
+      { file: FIXTURE_SPEC, title: "desktop only by project name", kind: "real" },
+    ],
+  });
+  const clean = verifyAgainstResults({ actions: [both] }, fixtureRows);
+  assert.deepEqual([clean.verified, clean.failed, clean.errors], [["AUTH-01 [desktop]"], [], []]);
+});
+
 // ---------------------------------------------------------------------------
 // Evidence for a release reviewer (--evidence), on the same real fixture run.
 // ---------------------------------------------------------------------------
