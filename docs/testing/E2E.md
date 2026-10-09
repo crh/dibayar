@@ -267,7 +267,9 @@ Triggers:
 - `workflow_dispatch`, for any other commit, such as the release candidate:
   `gh workflow run journey-coverage-full.yml --ref staging`.
 - `pull_request`, only for PRs that change the workflow file or
-  `scripts/journey-coverage*.mjs`.
+  `scripts/journey-coverage*.mjs`. Its evidence names the PR's temporary
+  merge commit, not the branch head, so use a dispatched run when the commit
+  matters.
 
 **What is the most recent commit for which every real claim was exercised and
 passed?** A run of this workflow is green only in that case, so:

@@ -42,10 +42,10 @@ All `workflow_dispatch` of `Journey coverage (full)` on this branch.
 | Run | Head | Result | Claims |
 |---|---|---|---|
 | `37882859422` (trial, before the final head) | `12e121f` | success | 113 real claims, 113 passed, 0 not exercised |
-| FINAL_RUN_1 | FINAL_HEAD | FINAL_RESULT_1 | FINAL_CLAIMS_1 |
-| FINAL_RUN_2 | FINAL_HEAD | FINAL_RESULT_2 | FINAL_CLAIMS_2 |
+| `37887980418` | `9bb3114` (final implementation) | success | 113 real claims, 113 passed, 0 not exercised, 0 failed, 0 passed only on retry |
+| `37887983419` | `9bb3114` (final implementation) | success | 113 real claims, 113 passed, 0 not exercised, 0 failed, 0 passed only on retry |
 
-FINAL_RUNS_NOTE
+`9bb3114` holds every workflow, validator and documentation change in this PR. The only commit after it adds these run IDs to this receipt. Both final runs: full E2E 193 passed, 0 failed, 0 flaky; ux-audit specs 69 passed. These are manual runs; they say nothing about the schedule.
 
 ## 4. Proof the scheduled cross-browser acceptance is isolated
 
@@ -162,7 +162,13 @@ Tree: `12e121f` plus the then-uncommitted docs and the hint commit; nothing afte
 
 ## 10. Latest-head CI and review state
 
-CI_STATE_SECTION
+On `9bb3114` (everything except the run IDs in this receipt):
+
+- Workflow `CI`, PR run `37887982844`: **success**. `lint-typecheck-test`, `e2e-critical`, `e2e-a11y`, `ux-audit` succeeded; `e2e-cross-browser` skipped by design (schedule and dispatch only).
+- Workflow `Journey coverage (full)`, PR-triggered run `37887982886`: **success**, 113/113. Its evidence names commit `fbacece`: on `pull_request` events GitHub checks out and reports the temporary merge commit of the PR with `staging`, not the branch head. Dispatched and scheduled runs report the real commit.
+- The two dispatched runs in section 3: **success**.
+
+The receipt-only commit after `9bb3114` triggers one more `CI` run and one more lane run; their result is in the PR, not here.
 
 Independent review: none recorded yet. This is the worker's own report; Luna/Archie verification and your review are still to come.
 
@@ -173,6 +179,7 @@ Independent review: none recorded yet. This is the worker's own report; Luna/Arc
 - **A green run is as fresh as its commit.** The evidence names the commit; it does not say whether `staging` has moved since.
 - **The `pull_request` trigger** adds a ~16-minute run to PRs that edit the lane's own files. It is not a required check.
 - **Gate F is procedural.** Nothing enforces it; the repository has no branch protection.
+- **PR-triggered evidence names the merge commit**, not the PR head (section 10). Use a dispatched run when the commit matters.
 - **Local evidence** (`--evidence` outside CI) records `HEAD` and does not record a dirty working tree. CI runs are from a clean checkout.
 - `STATE.md` `day_count` is still 12. Its rule cannot be verified from the repository; left unchanged and flagged, as in Phase 2B.
 - `STATE.md` `last_deploy` and the deployment section were not re-verified (no hosted system was inspected); only the Git-verifiable fields were corrected.
