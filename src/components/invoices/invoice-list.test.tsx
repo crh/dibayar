@@ -21,12 +21,22 @@ function makeInvoice(overrides: Partial<InvoiceWithDealBrand> = {}): InvoiceWith
   };
 }
 
-function renderList(invoices: InvoiceWithDealBrand[]) {
+// 19 Jul 2026, 10:00 in Jakarta.
+const NOW = new Date("2026-07-19T03:00:00.000Z");
+const YESTERDAY = new Date("2026-07-18T00:00:00.000Z");
+const TODAY = new Date("2026-07-19T00:00:00.000Z");
+const TOMORROW = new Date("2026-07-20T00:00:00.000Z");
+
+function renderList(invoices: InvoiceWithDealBrand[], language: "id" | "en" = "id") {
   return render(
-    <LanguageProvider initialLanguage="id">
-      <InvoiceList invoices={invoices} />
+    <LanguageProvider initialLanguage={language}>
+      <InvoiceList invoices={invoices} now={NOW} />
     </LanguageProvider>,
   );
+}
+
+function section(name: string) {
+  return screen.getByRole("heading", { level: 2, name }).closest("section")!;
 }
 
 describe("InvoiceList — grouping", () => {
@@ -35,7 +45,7 @@ describe("InvoiceList — grouping", () => {
       makeInvoice({ id: "i-draft", status: "DRAFT", deal: { brand: "Draf Brand" } }),
       makeInvoice({ id: "i-sent", status: "SENT", deal: { brand: "Sent Brand" } }),
       makeInvoice({ id: "i-due", status: "DUE", deal: { brand: "Due Brand" } }),
-      makeInvoice({ id: "i-overdue", status: "OVERDUE", deal: { brand: "Overdue Brand" } }),
+      makeInvoice({ id: "i-overdue", status: "OVERDUE", dueDate: YESTERDAY, deal: { brand: "Overdue Brand" } }),
       makeInvoice({ id: "i-paid", status: "PAID", deal: { brand: "Paid Brand" } }),
     ];
 
@@ -62,7 +72,7 @@ describe("InvoiceList — grouping", () => {
   it.each<InvoiceStatus>(["DRAFT", "SENT", "DUE", "OVERDUE", "PAID"])(
     "renders exactly one group heading for a lone %s invoice",
     (status) => {
-      renderList([makeInvoice({ status })]);
+      renderList([makeInvoice({ status, dueDate: YESTERDAY })]);
 
       const headings = screen.getAllByRole("heading", { level: 2 });
       expect(headings).toHaveLength(1);
@@ -88,6 +98,83 @@ describe("InvoiceList — grouping", () => {
 
     expect(screen.getByText("Belum ada invoice. Pindahkan deal ke tahap Invoice, lalu buat drafnya dari kartu deal.")).toBeDefined();
     expect(screen.queryByRole("heading", { level: 2 })).toBeNull();
+  });
+});
+
+// FIND-06: the list uses the same displayed status as Beranda and invoice
+// detail (deriveInvoiceDisplayStatus), for the group and for the chip.
+describe("InvoiceList — displayed status, not stored status", () => {
+  it.each<InvoiceStatus>(["SENT", "DUE", "OVERDUE"])("puts a stored %s invoice due yesterday under Terlambat with the Terlambat chip", (status) => {
+    renderList([makeInvoice({ status, dueDate: YESTERDAY })]);
+
+    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["Terlambat"]);
+    const row = within(section("Terlambat")).getByRole("link", { name: /Acme/ });
+    // The heading says Terlambat once; the second one is the row's chip.
+    expect(within(row).getByText("Terlambat")).toBeDefined();
+    expect(within(row).queryByText("Terkirim")).toBeNull();
+    expect(within(row).queryByText("Jatuh tempo")).toBeNull();
+  });
+
+  it.each([
+    ["due today", TODAY],
+    ["due tomorrow", TOMORROW],
+    ["with no due date", null],
+  ])("keeps a stored SENT invoice %s under Terkirim", (_label, dueDate) => {
+    renderList([makeInvoice({ status: "SENT", dueDate })]);
+
+    expect(screen.queryByRole("heading", { name: "Terlambat" })).toBeNull();
+    expect(within(within(section("Terkirim")).getByRole("link", { name: /Acme/ })).getByText("Terkirim")).toBeDefined();
+  });
+
+  it("keeps a stored DUE invoice that is not past due under Terkirim with its Jatuh tempo chip", () => {
+    renderList([makeInvoice({ status: "DUE", dueDate: TODAY })]);
+
+    expect(screen.queryByRole("heading", { name: "Terlambat" })).toBeNull();
+    expect(within(within(section("Terkirim")).getByRole("link", { name: /Acme/ })).getByText("Jatuh tempo")).toBeDefined();
+  });
+
+  it.each([
+    ["a future due date", TOMORROW],
+    ["no due date", null],
+  ])("shows a legacy stored OVERDUE invoice with %s as Terkirim, not Terlambat", (_label, dueDate) => {
+    renderList([makeInvoice({ status: "OVERDUE", dueDate })]);
+
+    expect(screen.queryByRole("heading", { name: "Terlambat" })).toBeNull();
+    expect(within(within(section("Terkirim")).getByRole("link", { name: /Acme/ })).getByText("Terkirim")).toBeDefined();
+  });
+
+  it.each([
+    ["DRAFT", "Draf", "Draf"],
+    ["PAID", "Lunas", "Lunas ✓"],
+  ] as const)("leaves a %s invoice with a past due date in its own group", (status, heading, chip) => {
+    renderList([makeInvoice({ status, dueDate: YESTERDAY })]);
+
+    expect(screen.getAllByRole("heading", { level: 2 }).map((node) => node.textContent)).toEqual([heading]);
+    expect(within(within(section(heading)).getByRole("link", { name: /Acme/ })).getByText(chip)).toBeDefined();
+  });
+
+  it("uses the Jakarta calendar day: due 18 Jul is not overdue at 23:59 on the 18th in Jakarta, and is at 00:01 on the 19th", () => {
+    const invoices = [makeInvoice({ status: "SENT", dueDate: YESTERDAY })];
+    const { unmount } = render(
+      <LanguageProvider initialLanguage="id">
+        <InvoiceList invoices={invoices} now={new Date("2026-07-18T16:59:00.000Z")} />
+      </LanguageProvider>,
+    );
+    expect(screen.queryByRole("heading", { name: "Terlambat" })).toBeNull();
+    unmount();
+
+    render(
+      <LanguageProvider initialLanguage="id">
+        <InvoiceList invoices={invoices} now={new Date("2026-07-18T17:01:00.000Z")} />
+      </LanguageProvider>,
+    );
+    expect(screen.getByRole("heading", { name: "Terlambat" })).toBeDefined();
+  });
+
+  it("groups and labels the same way in English", () => {
+    renderList([makeInvoice({ status: "SENT", dueDate: YESTERDAY })], "en");
+
+    expect(within(within(section("Overdue")).getByRole("link", { name: /Acme/ })).getByText("Overdue")).toBeDefined();
   });
 });
 

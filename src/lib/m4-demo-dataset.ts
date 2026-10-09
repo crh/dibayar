@@ -38,7 +38,7 @@ export function checkM4DemoTarget(connectionString: string | undefined, confirm:
 }
 
 type DealStage = "MASUK" | "NEGO" | "DEAL" | "KONTEN" | "INVOICE" | "DIBAYAR";
-type InvoiceTarget = "DRAFT" | "SENT" | "OVERDUE" | "PAID";
+type InvoiceTarget = "DRAFT" | "SENT" | "PAID";
 
 export type M4DemoDeal = {
   key: string;
@@ -115,7 +115,9 @@ export const M4_DEMO_DEALS: readonly M4DemoDeal[] = [
       feeIdr: 2_500_000,
       paymentTerms: "NET 7, dipotong PPh 21",
     },
-    invoice: { withholdingTaxType: "PPH21", dueOffsetDays: -4, statusPath: ["DRAFT", "SENT", "OVERDUE"] },
+    // Stored SENT: overdue is never set by hand. Due 4 days ago, so the app
+    // shows it as Terlambat and Beranda lists it for chasing.
+    invoice: { withholdingTaxType: "PPH21", dueOffsetDays: -4, statusPath: ["DRAFT", "SENT"] },
   },
   {
     key: "paid",

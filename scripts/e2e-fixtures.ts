@@ -27,8 +27,8 @@ import { getJakartaCalendarDate } from "../src/lib/invoice-date-status";
 import { encryptShareToken } from "../src/lib/share-token-crypto";
 
 const action = process.argv[2];
-if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states", "follow-up-expired-share", "income-boundaries"].includes(action ?? "")) {
-  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states|follow-up-expired-share|income-boundaries");
+if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states", "follow-up-expired-share", "income-boundaries", "status-consistency"].includes(action ?? "")) {
+  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states|follow-up-expired-share|income-boundaries|status-consistency");
 }
 
 const connectionString = process.env.DATABASE_URL;
@@ -136,7 +136,7 @@ const followUp = {
     // (NEXT_ACTIONS.OVERDUE in invoice-detail-client.tsx).
     overdueStored: `${prefix}-invoice-overdue-stored`,
     // Stored SENT, due yesterday: displayed as overdue purely by derivation
-    // (deriveInvoiceDisplayStatus), while its actions still follow SENT.
+    // (deriveInvoiceDisplayStatus); the only status action left is "Tandai lunas".
     overdueSent: `${prefix}-invoice-overdue-sent`,
     dueToday: `${prefix}-invoice-due-today`,
     dueWindowEdge: `${prefix}-invoice-due-window-edge`,
@@ -177,6 +177,24 @@ const incomeBoundaries = {
   monthStart: `${prefix}-income-month-start`,
   // SENT, created at the first instant of next Jakarta month: excluded.
   nextMonth: `${prefix}-income-next-month`,
+} as const;
+
+// Opt-in overlay for "one status rule everywhere" (FIND-01/FIND-06), applied
+// on top of `follow-up-states`. Five invoices whose stored status and due
+// date disagree or could be mistaken: the list, invoice detail and Beranda
+// must all show the status deriveInvoiceDisplayStatus() gives.
+const statusConsistency = {
+  rows: {
+    // Stored DUE, due yesterday: shown as overdue.
+    dueOverdue: { id: `${prefix}-status-due-overdue`, number: "E2E/STATUS/008", brand: "E2E Brand Status Tempo Lewat", status: "DUE", dueOffsetDays: -1 },
+    // Stored OVERDUE from before overdue became date-derived, due in 8 days: shown as sent.
+    legacyOverdueFuture: { id: `${prefix}-status-legacy-future`, number: "E2E/STATUS/009", brand: "E2E Brand Status Lama Belum Tempo", status: "OVERDUE", dueOffsetDays: 8 },
+    // Stored OVERDUE with no due date: shown as sent.
+    legacyOverdueNoDate: { id: `${prefix}-status-legacy-no-date`, number: "E2E/STATUS/010", brand: "E2E Brand Status Lama Tanpa Tanggal", status: "OVERDUE", dueOffsetDays: null },
+    // DRAFT and PAID with a past due date: always shown as stored.
+    draftPastDue: { id: `${prefix}-status-draft-past-due`, number: "E2E/STATUS/011", brand: "E2E Brand Status Draf Lewat Tempo", status: "DRAFT", dueOffsetDays: -1 },
+    paidPastDue: { id: `${prefix}-status-paid-past-due`, number: "E2E/STATUS/012", brand: "E2E Brand Status Lunas Lewat Tempo", status: "PAID", dueOffsetDays: -1 },
+  },
 } as const;
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -296,6 +314,8 @@ async function seed() {
     followUp: { ...followUp, brands: followUpBrands },
     // Only present in the database after `income-boundaries`.
     incomeBoundaries,
+    // Only present in the database after `status-consistency`.
+    statusConsistency,
   };
   await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
@@ -482,6 +502,42 @@ async function applyIncomeBoundaries() {
   console.log(JSON.stringify({ action: "income-boundaries", host: normalizedHost, prefix, jakartaMonth: `${year}-${String(month).padStart(2, "0")}`, invoices: applied }));
 }
 
+// Adds the status-consistency invoices (see statusConsistency above). Needs
+// the follow-up overlay, whose invoices cover the stored-SENT and
+// stored-OVERDUE cases, and refuses to run twice.
+async function applyStatusConsistency() {
+  const followUpInvoices = await prisma.invoice.count({ where: { userId: ids.owner, id: { in: Object.values(followUp.invoices) } } });
+  if (followUpInvoices !== Object.keys(followUp.invoices).length) throw new Error("E2E status-consistency overlay needs follow-up-states first");
+  const rows = Object.values(statusConsistency.rows);
+  const existing = await prisma.invoice.count({ where: { userId: ids.owner, id: { in: rows.map((row) => row.id) } } });
+  if (existing !== 0) throw new Error("E2E status-consistency overlay is already applied");
+
+  const today = getJakartaCalendarDate(new Date());
+  const now = new Date();
+  await prisma.deal.createMany({
+    data: rows.map((row) => ({ id: `${row.id}-deal`, userId: ids.owner, brand: row.brand, contactWa: "628110000030", scope: "E2E fixture: invoice status consistency", feeIdr: 2_000_000, status: row.status === "PAID" ? DealStatus.DIBAYAR : DealStatus.INVOICE })),
+  });
+  await prisma.dealStageTransition.createMany({
+    data: rows.map((row) => ({ id: `${row.id}-deal-initial-transition`, dealId: `${row.id}-deal`, fromStatus: null, toStatus: row.status === "PAID" ? DealStatus.DIBAYAR : DealStatus.INVOICE, createdAt: now })),
+  });
+  await prisma.invoice.createMany({
+    data: rows.map((row) => ({
+      id: row.id,
+      userId: ids.owner,
+      dealId: `${row.id}-deal`,
+      number: row.number,
+      subtotalIdr: 2_000_000,
+      withholdingTaxType: WithholdingTaxType.NONE,
+      status: InvoiceStatus[row.status],
+      dueDate: row.dueOffsetDays === null ? null : jakartaDueDate(today, row.dueOffsetDays),
+    })),
+  });
+
+  const applied = await prisma.invoice.count({ where: { userId: ids.owner, id: { in: rows.map((row) => row.id) } } });
+  if (applied !== rows.length) throw new Error(`E2E status-consistency overlay read-back expected ${rows.length} invoices, found ${applied}`);
+  console.log(JSON.stringify({ action: "status-consistency", host: normalizedHost, prefix, jakartaToday: today, invoices: applied }));
+}
+
 async function main() {
   try {
     if (action === "seed") await seed();
@@ -490,6 +546,7 @@ async function main() {
     else if (action === "follow-up-states") await applyFollowUpStates();
     else if (action === "follow-up-expired-share") await followUpExpiredShare();
     else if (action === "income-boundaries") await applyIncomeBoundaries();
+    else if (action === "status-consistency") await applyStatusConsistency();
     else await cleanup();
   } finally {
     await prisma.$disconnect();

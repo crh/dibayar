@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { summarizeMonthlyIncome } from "./income-summary";
 import { DUE_SOON_WINDOW_DAYS, selectAttentionInvoices } from "./invoice-date-status";
-import { createInvoice, type InvoiceCreateDb, type InvoiceRecord, type InvoiceTransactionClient } from "./invoices";
+import { ALLOWED_STATUS_TRANSITIONS, createInvoice, type InvoiceCreateDb, type InvoiceRecord, type InvoiceTransactionClient } from "./invoices";
 import {
   M4_DEMO_DEALS,
   M4_DEMO_STAGING_ENDPOINT,
@@ -139,12 +139,11 @@ describe("M4_DEMO_DEALS", () => {
   });
 
   it("uses only invoice transitions the app allows, starting from DRAFT", () => {
-    const allowed: Record<string, string[]> = { DRAFT: ["SENT"], SENT: ["DUE", "OVERDUE", "PAID"], DUE: ["OVERDUE", "PAID"], OVERDUE: ["PAID"] };
     for (const deal of M4_DEMO_DEALS) {
       if (!deal.invoice) continue;
       const path = deal.invoice.statusPath;
       expect(path[0]).toBe("DRAFT");
-      for (let i = 1; i < path.length; i += 1) expect(allowed[path[i - 1]]).toContain(path[i]);
+      for (let i = 1; i < path.length; i += 1) expect(ALLOWED_STATUS_TRANSITIONS[path[i - 1]]).toContain(path[i]);
     }
   });
 

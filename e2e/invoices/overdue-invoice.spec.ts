@@ -5,10 +5,9 @@
 //
 // Uses the follow-up overlay's invoice that is *stored* as OVERDUE and due 5
 // Jakarta days ago (applyFollowUpStates(), e2e/support/reseed.ts). That is
-// the state whose only status action is "Tandai lunas"
-// (NEXT_ACTIONS.OVERDUE in invoice-detail-client.tsx); a SENT invoice that is
-// merely past due also shows "Tandai jatuh tempo". This test does not touch
-// "Tandai terlambat" or status derivation (FIND-01 stays open).
+// Its only status action is "Tandai lunas", as for every invoice shown as
+// overdue; stored SENT/DUE invoices that are past due are covered by
+// status-consistency.spec.ts.
 //
 // WhatsApp never leaves the machine (keepWhatsAppLocal()).
 import { expect, test } from "../support/test";

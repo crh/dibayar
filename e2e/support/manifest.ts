@@ -59,6 +59,14 @@ export type FixtureManifest = {
   // IDs for the opt-in income overlay (applyIncomeBoundaries()); the rows
   // exist only after it is applied on top of a fresh seed.
   incomeBoundaries: { draft: string; previousMonth: string; monthStart: string; nextMonth: string };
+  // Rows of the opt-in status-consistency overlay (applyStatusConsistency());
+  // they exist only after it is applied on top of the follow-up overlay.
+  statusConsistency: {
+    rows: Record<
+      "dueOverdue" | "legacyOverdueFuture" | "legacyOverdueNoDate" | "draftPastDue" | "paidPastDue",
+      { id: string; number: string; brand: string; status: string; dueOffsetDays: number | null }
+    >;
+  };
 };
 
 const manifestPath = path.resolve(".hermes-runtime/e2e-fixtures/fixtures.json");

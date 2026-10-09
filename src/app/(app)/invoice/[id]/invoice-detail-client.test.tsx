@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { LanguageProvider } from "@/components/language-switcher";
 import InvoiceDetailClient from "./invoice-detail-client";
 
 // getByRole's accessible-name matching preserves the money formatter's real
@@ -306,7 +307,9 @@ describe("InvoiceDetailClient", () => {
         statusPatch: { status: 200, body: { invoice: { ...draftInvoice, status: "SENT" } } },
       }),
     );
-    render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "PAID" }} />);
+    // A fixed "now" before the fixture's due date: an undone invoice that is
+    // already past due is shown as overdue and offers only "Tandai lunas".
+    render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "PAID" }} now={new Date("2026-07-24T00:00:00.000Z")} />);
 
     await user.click(await screen.findByRole("button", { name: "Batalkan status lunas" }));
 
@@ -336,6 +339,54 @@ describe("InvoiceDetailClient", () => {
       expect(screen.getByRole("button", { name: "Tandai lunas" })).toBeDefined();
       // Not actually overdue by date, so the primary action stays the plain share label.
       expect(screen.getByRole("button", { name: "Kirim lewat WhatsApp" })).toBeDefined();
+    });
+
+    // FIND-01: overdue is never set by hand, in either language.
+    it.each([
+      ["id", "Tandai terlambat", "Tandai lunas"],
+      ["en", "Mark as overdue", "Mark as paid"],
+    ] as const)("offers no manual overdue action on a DUE invoice (%s)", async (language, removed, kept) => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(
+        <LanguageProvider initialLanguage={language}>
+          <InvoiceDetailClient
+            initialInvoice={{ ...draftInvoice, status: "DUE", dueDate: new Date("2026-07-30T00:00:00.000Z") }}
+            now={new Date("2026-07-24T00:00:00.000Z")}
+          />
+        </LanguageProvider>,
+      );
+
+      expect(await screen.findByRole("button", { name: kept })).toBeDefined();
+      expect(screen.queryByRole("button", { name: removed })).toBeNull();
+    });
+
+    it.each(["SENT", "DUE"] as const)("offers only Tandai lunas on a stored %s invoice that is shown as overdue", async (status) => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(
+        <InvoiceDetailClient
+          initialInvoice={{ ...draftInvoice, status, dueDate: new Date("2026-07-19T00:00:00.000Z") }}
+          now={new Date("2026-07-24T00:00:00.000Z")}
+        />,
+      );
+
+      expect(await screen.findByText("Terlambat")).toBeDefined();
+      expect(screen.getByRole("button", { name: "Tandai lunas" })).toBeDefined();
+      // Already shown as overdue: "mark due" would contradict the chip.
+      expect(screen.queryByRole("button", { name: "Tandai jatuh tempo" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Tandai terlambat" })).toBeNull();
+    });
+
+    it("still offers Tandai jatuh tempo on a SENT invoice that is not overdue", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(
+        <InvoiceDetailClient
+          initialInvoice={{ ...draftInvoice, status: "SENT", dueDate: new Date("2026-07-30T00:00:00.000Z") }}
+          now={new Date("2026-07-24T00:00:00.000Z")}
+        />,
+      );
+
+      expect(await screen.findByRole("button", { name: "Tandai jatuh tempo" })).toBeDefined();
+      expect(screen.getByRole("button", { name: "Tandai lunas" })).toBeDefined();
     });
 
     it("derives OVERDUE at 00:01 Jakarta the day after the due date, and switches the primary action to Kirim pengingat", async () => {
