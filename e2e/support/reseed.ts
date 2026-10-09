@@ -10,7 +10,7 @@
 // no reseed -- they never mutate fixture rows.
 import { execFileSync } from "node:child_process";
 
-function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states" | "follow-up-expired-share"): void {
+function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states" | "follow-up-expired-share" | "income-boundaries"): void {
   const env = { ...process.env, E2E_FIXTURE_CONFIRM: "non-production" };
   execFileSync("npx", ["tsx", "--env-file-if-exists=.env.local", "scripts/e2e-fixtures.ts", action], {
     stdio: "inherit",
@@ -46,4 +46,12 @@ export function applyFollowUpStates(): void {
 export function applyFollowUpExpiredShare(): void {
   applyFollowUpStates();
   runFixtureAction("follow-up-expired-share");
+}
+
+// Reseeds, then adds four invoices on the edges of the "this Jakarta month,
+// not a draft" rule behind Beranda's monthly total (scripts/e2e-fixtures.ts
+// applyIncomeBoundaries). Reseed afterwards, like every overlay.
+export function applyIncomeBoundaries(): void {
+  runFixtureAction("seed");
+  runFixtureAction("income-boundaries");
 }

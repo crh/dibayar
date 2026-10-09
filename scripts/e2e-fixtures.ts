@@ -27,8 +27,8 @@ import { getJakartaCalendarDate } from "../src/lib/invoice-date-status";
 import { encryptShareToken } from "../src/lib/share-token-crypto";
 
 const action = process.argv[2];
-if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states", "follow-up-expired-share"].includes(action ?? "")) {
-  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states|follow-up-expired-share");
+if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states", "follow-up-expired-share", "income-boundaries"].includes(action ?? "")) {
+  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states|follow-up-expired-share|income-boundaries");
 }
 
 const connectionString = process.env.DATABASE_URL;
@@ -162,6 +162,23 @@ const followUpBrands = {
   [followUp.deals.invalidContact]: "E2E Brand Kontak Tidak Valid",
 } as const;
 
+// Opt-in overlay for the Beranda "Net ditagihkan bulan ini" card (HOME-01).
+// Four invoices that sit on the rule's edges (src/lib/income-summary.ts:
+// non-DRAFT invoices created inside the current Asia/Jakarta month). Only
+// `monthStart` may be counted; the other three carry large amounts so that
+// counting any of them is unmistakable. Amounts and tax types are repeated
+// as literals in e2e/home/monthly-income.spec.ts on purpose.
+const incomeBoundaries = {
+  // DRAFT, created now: excluded by status.
+  draft: `${prefix}-income-draft`,
+  // SENT, created 1 ms before this Jakarta month began: excluded.
+  previousMonth: `${prefix}-income-previous-month`,
+  // SENT with PPh 23, created at the first instant of this Jakarta month: included.
+  monthStart: `${prefix}-income-month-start`,
+  // SENT, created at the first instant of next Jakarta month: excluded.
+  nextMonth: `${prefix}-income-next-month`,
+} as const;
+
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 async function cleanupRows() {
@@ -277,6 +294,8 @@ async function seed() {
     shareTokens,
     // Only present in the database after `follow-up-states`; see followUp.
     followUp: { ...followUp, brands: followUpBrands },
+    // Only present in the database after `income-boundaries`.
+    incomeBoundaries,
   };
   await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
@@ -426,6 +445,43 @@ async function followUpExpiredShare() {
   console.log(JSON.stringify({ action: "follow-up-expired-share", host: normalizedHost, prefix, shares: 1 }));
 }
 
+// Adds the income-boundary invoices (see incomeBoundaries above) on top of a
+// fresh seed. Month edges are computed here from the Jakarta calendar date
+// (UTC+7, no DST), not with the app's own getJakartaMonthBounds, so the
+// fixture does not inherit a mistake in the code it is there to check.
+async function applyIncomeBoundaries() {
+  const ownerInvoices = await prisma.invoice.count({ where: { userId: ids.owner } });
+  if (ownerInvoices !== Object.keys(invoiceIds).length) {
+    throw new Error(`E2E income overlay needs a fresh seed first (found ${ownerInvoices} owner invoices)`);
+  }
+
+  const now = new Date();
+  const [year, month] = getJakartaCalendarDate(now).split("-").map(Number);
+  const JAKARTA_OFFSET_MS = 7 * 60 * 60 * 1000;
+  const monthStart = new Date(Date.UTC(year, month - 1, 1) - JAKARTA_OFFSET_MS);
+  const nextMonthStart = new Date(Date.UTC(year, month, 1) - JAKARTA_OFFSET_MS);
+  const b = incomeBoundaries;
+  const rows = [
+    { id: b.draft, number: "E2E/INCOME/DRAFT", subtotalIdr: 50_000_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.DRAFT, createdAt: now },
+    { id: b.previousMonth, number: "E2E/INCOME/PREV", subtotalIdr: 40_000_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.SENT, createdAt: new Date(monthStart.getTime() - 1) },
+    { id: b.monthStart, number: "E2E/INCOME/START", subtotalIdr: 2_000_000, withholdingTaxType: WithholdingTaxType.PPH23, status: InvoiceStatus.SENT, createdAt: monthStart },
+    { id: b.nextMonth, number: "E2E/INCOME/NEXT", subtotalIdr: 30_000_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.SENT, createdAt: nextMonthStart },
+  ];
+  await prisma.deal.createMany({
+    data: rows.map((row) => ({ id: `${row.id}-deal`, userId: ids.owner, brand: `E2E Brand ${row.number}`, contactWa: "628110000020", scope: "E2E fixture: income boundary", feeIdr: row.subtotalIdr, status: DealStatus.INVOICE })),
+  });
+  await prisma.dealStageTransition.createMany({
+    data: rows.map((row) => ({ id: `${row.id}-deal-initial-transition`, dealId: `${row.id}-deal`, fromStatus: null, toStatus: DealStatus.INVOICE, createdAt: now })),
+  });
+  await prisma.invoice.createMany({
+    data: rows.map((row) => ({ ...row, userId: ids.owner, dealId: `${row.id}-deal`, dueDate: FIXTURE_FUTURE_DATE })),
+  });
+
+  const applied = await prisma.invoice.count({ where: { userId: ids.owner, id: { in: Object.values(b) } } });
+  if (applied !== rows.length) throw new Error(`E2E income overlay read-back expected ${rows.length} invoices, found ${applied}`);
+  console.log(JSON.stringify({ action: "income-boundaries", host: normalizedHost, prefix, jakartaMonth: `${year}-${String(month).padStart(2, "0")}`, invoices: applied }));
+}
+
 async function main() {
   try {
     if (action === "seed") await seed();
@@ -433,6 +489,7 @@ async function main() {
     else if (action === "legacy-due-date") await legacyDueDate();
     else if (action === "follow-up-states") await applyFollowUpStates();
     else if (action === "follow-up-expired-share") await followUpExpiredShare();
+    else if (action === "income-boundaries") await applyIncomeBoundaries();
     else await cleanup();
   } finally {
     await prisma.$disconnect();

@@ -28,8 +28,8 @@ import { expect, test } from "../support/test";
 import { loadFixtureManifest } from "../support/manifest";
 import { reseedFixtures, seedLegacyInvalidDueDate } from "../support/reseed";
 import { E2E_FIXTURE_PREFIX } from "../support/fixture-ids";
+import { activateVisibleText, DUE_DATE_FIELD_LABEL as FIELD_LABEL, focusFieldForTyping, visibleDisplay } from "../support/due-date";
 
-const FIELD_LABEL = "Tanggal jatuh tempo";
 const EMPTY_LABEL = "Belum ditentukan";
 const INVALID_STORED_LABEL = "Tanggal tidak valid";
 // The seeded SENT invoice's due date (FIXTURE_FUTURE_DATE).
@@ -61,28 +61,6 @@ function expectOnlySupportedDueDates(sent: Array<string | null>) {
   }
 }
 
-function fieldWrapper(page: Page): Locator {
-  return page.locator("#invoice-due-date").locator("xpath=..");
-}
-
-// The visible display is aria-hidden by design (the real <input> carries the
-// accessible name), so it is located by its text inside the field wrapper.
-function visibleDisplay(page: Page, text: string): Locator {
-  return fieldWrapper(page).getByText(text, { exact: true });
-}
-
-async function activateVisibleText(page: Page, display: Locator, isMobile: boolean) {
-  await display.scrollIntoViewIfNeeded();
-  await expect(display).toBeVisible();
-  await expect(display).toBeInViewport();
-  const box = await display.boundingBox();
-  expect(box, "visible due-date display has no layout box").not.toBeNull();
-  const x = box!.x + box!.width / 2;
-  const y = box!.y + box!.height / 2;
-  if (isMobile) await page.touchscreen.tap(x, y);
-  else await page.mouse.click(x, y);
-}
-
 async function supportsOpenPseudoClass(input: Locator): Promise<boolean> {
   return input.evaluate((element) => {
     try {
@@ -108,21 +86,6 @@ async function clearThroughUi(page: Page, invoiceId: string) {
   const clearPatch = page.waitForResponse((response) => isInvoicePatchRequest(invoiceId)(response.request()));
   await page.getByRole("button", { name: "Kosongkan" }).click();
   expect((await clearPatch).ok()).toBe(true);
-}
-
-// Clicks the visible text (as a person would) and, if that opened the native
-// picker, dismisses it with Escape so the keyboard reaches the segments.
-// Then moves to the first segment wherever the click landed.
-async function focusFieldForTyping(page: Page, display: Locator) {
-  const input = page.getByLabel(FIELD_LABEL);
-  await activateVisibleText(page, display, false);
-  await expect(input).toBeFocused();
-  if (await input.evaluate((element) => { try { return element.matches(":open"); } catch { return false; } })) {
-    await page.keyboard.press("Escape");
-    await expect.poll(() => input.evaluate((element) => element.matches(":open"))).toBe(false);
-  }
-  await expect(input).toBeFocused();
-  for (let i = 0; i < 3; i += 1) await page.keyboard.press("ArrowLeft");
 }
 
 test.describe("invoice due-date integrity (FIND-02, FIND-03)", { tag: "@critical" }, () => {

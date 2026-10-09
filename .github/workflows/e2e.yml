@@ -81,6 +81,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      # e2e/invoices/pdf-download.spec.ts reads the downloaded invoice PDFs
+      # with pdftotext (poppler-utils, e2e/support/pdf.ts) -- not preinstalled
+      # on the ubuntu-latest runner image. Same package the ux-audit job uses.
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+          pdftotext -v
       - run: npx prisma migrate deploy
       - run: npm run test:e2e:critical
       # The inventory's "real" claims against this actual run: a referenced
@@ -232,6 +239,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium firefox webkit
+      # e2e/invoices/pdf-download.spec.ts reads the downloaded invoice PDFs
+      # with pdftotext (poppler-utils, e2e/support/pdf.ts) -- not preinstalled
+      # on the ubuntu-latest runner image. Same package the ux-audit job uses.
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+          pdftotext -v
       - run: npx prisma migrate deploy
       - run: npm run test:e2e:all-browsers
       - if: always()
@@ -242,3 +256,72 @@ jobs:
             playwright-report/e2e
             test-results/e2e
           retention-days: 14
+
+  # Every "real" claim in docs/testing/journey-coverage.json checked against
+  # actual runs: the full non-visual E2E suite (not only @critical) plus the
+  # ux-audit specs, then `coverage:journeys --require-results`, which fails
+  # if any claimed test did not run and pass in its claimed project. The
+  # PR-gate e2e-critical job can only check the @critical claims.
+  #
+  # Manual dispatch only for now (Actions -> CI -> Run workflow): it roughly
+  # doubles the E2E time, so it does not run on every PR, and it is kept off
+  # the weekday schedule so a failure here cannot change the result of the
+  # scheduled e2e-cross-browser run. It enforces no coverage percentage and
+  # is not a release gate.
+  journey-coverage-full:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dibayar_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/dibayar_test?schema=public
+      AUTH_SECRET: ci-only-placeholder-not-a-real-secret
+      AUTH_GOOGLE_ID: ci-only-placeholder
+      AUTH_GOOGLE_SECRET: ci-only-placeholder
+      E2E_FIXTURE_CONFIRM: non-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+          pdftotext -v
+          pdfinfo -v
+      - run: npx prisma migrate deploy
+      - run: npm run test:e2e
+      # ux:audit's own @visual pass rewrites test-results/e2e/results.json,
+      # so keep the full run's results aside first.
+      - run: cp test-results/e2e/results.json "$RUNNER_TEMP/e2e-full-results.json"
+      - run: npm run ux:audit
+      - run: >-
+          npm run coverage:journeys --
+          --results "$RUNNER_TEMP/e2e-full-results.json"
+          --results test-results/ux-audit/results.json
+          --require-results
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journey-coverage-full-artifacts
+          path: |
+            artifacts/ux-audit
+            playwright-report/e2e
+            test-results/e2e
+            test-results/ux-audit
+          retention-days: 7

@@ -880,3 +880,19 @@ Starting state verified fresh: `main` = `origin/main` = `a60dfdf`, no open PRs, 
 - Archived from `STATE.md` decisions (3-day retention): the four 2026-10-04 entries; their full entries are above in this log.
 - Receipt `docs/receipts/DIBAYAR-FIND07-EXPIRED-SHARE-REMINDER-FIX-2026-10-08.md`.
 - Rubric self-score: Evidence honesty 2/2 (every number from a run here; the failed first control, the stray commit and the unverified `day_count` stated); shipped completeness 2/2 (all eight objectives met); security discipline 2/2 (owner scope and same-origin unchanged, less disclosed than before, `SECURITY.md` updated); scope discipline 1/2 (no merge/deploy/hosted DB/baselines, but an unrelated directory was committed and had to be untracked); report quality 2/2.
+
+## 2026-10-08 — Zero Routine Manual Regression Testing, Phase 2B (journey Batch 2B, PR #32)
+
+- Start gate: PR #31 squash-merged (`979c3ec`, one parent); the accidental Prisma backup is in neither the tree nor the history of `staging`. No overlapping work. Live baseline 56/94, P0 28/30, 13 outstanding.
+- Test/fixture/CI/docs only; no `src/` change, no dependency, no migration, no baseline.
+- Real now: INV-PDF-01, PUB-05, PUB-06 (visible Unduh PDF, download event, `pdftotext`, bank details edited in Settings first, owner/recipient text equal), DEAL-CREATE-06, SET-04, HOME-01 (opt-in `income-boundaries` overlay; totals computed in the spec), AUTH-02, SHARE-04 (all chromium + chromium-mobile), INV-DUE-05 (desktop Chromium, Asia/Jakarta and Pacific/Honolulu browsers).
+- Honest partials: DEAL-CREATE-07 (text fields automated, deadline picker manual), A11Y-01 (two invoice-detail scans added), INV-DUE-06 (assessed; failure needs a stub).
+- Harness: `e2e/support/pdf.ts`; browser-health guard drops the failed-request report of a clicked download only when that page got a download for that URL; due-date helpers shared.
+- CI: poppler-utils in `e2e-critical`/`e2e-cross-browser`; manual-dispatch `journey-coverage-full` job (full E2E + ux-audit + `--require-results`); not scheduled (shares a workflow run with the P2-2 scheduled job), no threshold.
+- Generated: real 65/94 (69.1%), P0 28/30, outstanding P0/P1 5 (INV-DUE-03, A11Y-01, DEAL-CREATE-07, INV-DUE-06, INV-STATUS-05); `--require-results` 113 passed, 0 not exercised.
+- Negative controls: 7 mutations each failed the intended journey; the PDF one passed at first (headless Chromium downloads inline PDFs), so the helper now requires an attachment response.
+- Found, not fixed: **FIND-08** recipient page/PDF show the due date only with payment terms (documented behaviour; decision). Auth.js's sign-in page loads a logo from `authjs.dev`.
+- Disclosed: a draft AUTH-02 test followed Auth.js's redirect and loaded Google's authorization page on one run (no credentials, nothing submitted); the committed test never follows it. Firefox/WebKit issues in the new specs found and fixed.
+- Gates: lint 0, typecheck 0, unit 944/944, build 0, e2e:build 0, journey self-test pass, diagnostics pass; critical 177/0/25; full 193/0/25; a11y 14/0/1; ux-audit specs 69/69, `@visual` 9/9 fail locally with pixel counts identical to clean `staging` run on the same host. Firefox+WebKit targeted: last full run 43/1/16, the one failure fixed and verified 27/27 over repeats.
+- Receipt `docs/receipts/DIBAYAR-ZERO-ROUTINE-REGRESSION-PHASE2B-2026-10-08.md`.
+- Rubric self-score: Evidence honesty 2/2 (every number from a run here; first-attempt control miss, Google page load and browser-specific failures disclosed; `day_count` flagged, not guessed); shipped completeness 2/2 (all eleven targets addressed, three left partial with reasons); security discipline 1/2 (no secrets, owner scoping untouched, but one draft test run reached Google's sign-in page); scope discipline 2/2 (no product change, no merge/deploy/hosted DB/baselines); report quality 2/2.

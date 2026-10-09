@@ -56,6 +56,9 @@ export type FixtureManifest = {
     expiredShareToken: string;
     brands: Record<string, string>;
   };
+  // IDs for the opt-in income overlay (applyIncomeBoundaries()); the rows
+  // exist only after it is applied on top of a fresh seed.
+  incomeBoundaries: { draft: string; previousMonth: string; monthStart: string; nextMonth: string };
 };
 
 const manifestPath = path.resolve(".hermes-runtime/e2e-fixtures/fixtures.json");
