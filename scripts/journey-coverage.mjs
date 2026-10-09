@@ -550,7 +550,8 @@ export function buildEvidence({ inventory, outcome, reports, requireResults, sou
     },
     errors: outcome.errors,
     results: reports.map(({ file, report }) => ({
-      file: path.basename(file),
+      // Parent directory kept: two inputs are often both named results.json.
+      file: path.join(path.basename(path.dirname(path.resolve(file))), path.basename(file)),
       startTime: report.stats?.startTime ?? null,
       expected: report.stats?.expected ?? null,
       unexpected: report.stats?.unexpected ?? null,
@@ -679,6 +680,11 @@ function main() {
   if (failures.length > 0) {
     console.error(`journey-coverage: ${failures.length} run-result error(s):`);
     for (const failure of failures) console.error(`  - ${failure}`);
+    if (options.requireResults && outcome.unverified.length > outcome.verified.length) {
+      console.error(
+        `journey-coverage: most real claims (${outcome.unverified.length} of ${outcome.verified.length + outcome.unverified.length + outcome.failed.length}) were not exercised -- check that --results points at the full \`npm run test:e2e\` results. \`npm run ux:audit\` overwrites test-results/e2e/results.json with its @visual run.`,
+      );
+    }
     process.exit(1);
   }
 }

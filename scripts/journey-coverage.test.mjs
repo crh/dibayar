@@ -458,7 +458,7 @@ test("evidence: every claim exercised and passed is reported as such, with the c
   assert.deepEqual(evidence.realClaims, { total: 2, passed: 2, notExercised: [], failed: [], passedOnlyOnRetry: [] });
   assert.equal(evidence.source.commit, "0123abc");
   assert.deepEqual(evidence.inventory.outstandingP0P1, []);
-  assert.equal(evidence.results[0].file, "results.json");
+  assert.equal(evidence.results[0].file, "somewhere/results.json");
   assert.equal(evidence.results[0].unexpected, 0);
   // Same inputs, same evidence: nothing is read from the clock or the environment.
   assert.deepEqual(evidenceFor([fixtureAction("passes everywhere")], fixtureRows), evidence);
@@ -529,6 +529,7 @@ test("CLI negative control: results from the wrong run fail --require-results an
     assert.equal(run.status, 1);
     assert.match(run.output, /0 real claim\(s\) passed in the run/);
     assert.match(run.output, /not exercised by the given run results/);
+    assert.match(run.output, /most real claims \(\d+ of \d+\) were not exercised -- check that --results points at the full/);
     const evidence = JSON.parse(readFileSync(path.join(dir, EVIDENCE_FILES.json), "utf8"));
     assert.equal(evidence.everyRealClaimExercisedAndPassed, false);
     assert.equal(evidence.source.commit, "feedc0de");
