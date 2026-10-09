@@ -9,6 +9,9 @@
 //       # ... and confirm "real" claims against an actual Playwright run
 //   node scripts/journey-coverage.mjs check --results <file> --require-results
 //       # ... and fail when any real claim was not exercised by that run
+//   node scripts/journey-coverage.mjs check --results <file> --require-results --evidence <dir>
+//       # ... and write journey-coverage-evidence.{json,md} there: the commit,
+//       # the claim counts and the verdict, for a release reviewer
 //
 // Metrics come only from the inventory and the referenced tests; nothing is
 // estimated. A test reference is resolved through Playwright's own registry
@@ -18,7 +21,8 @@
 // fixme'd in a claimed project does not count. The static check needs no
 // browser, build or database, so it runs on every PR; run results add what
 // only a real run can show.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildRegistry, readPlaywrightResults } from "./journey-coverage-discovery.mjs";
@@ -40,6 +44,18 @@ const REQUIRED_TEXT = ["domain", "route", "action", "persona", "interaction", "e
 // The lookbehind keeps "MAN-DEAL-01" (a manual check) from reading as "DEAL-01".
 const ACTION_REF_PATTERN = /(?<![A-Za-z0-9-])(?:AUTH|HOME|NAV|DEAL|INV|SHARE|PUB|SET|A11Y)(?:-[A-Z0-9]+)+\b/g;
 const MANUAL_REF_PATTERN = /\bMAN-[A-Z0-9]+-\d+\b/g;
+
+// Exception register (inventory.exceptions): why a P0/P1 action is not, or
+// not only, automated_real_interaction, and what a release needs for it.
+export const EXCEPTION_CATEGORIES = {
+  physical_device: "Physical / native device",
+  third_party_auth: "Third-party auth",
+  partial_by_rule: "Partial by classification rule",
+  product_decision: "Product decision",
+};
+const VERIFIED_STATUSES = ["automated_real_interaction", "manual_verified", "not_applicable"];
+const isOutstanding = (action) => ["P0", "P1"].includes(action.priority) && !VERIFIED_STATUSES.includes(action.status);
+export const EVIDENCE_FILES = { json: "journey-coverage-evidence.json", markdown: "journey-coverage-evidence.md" };
 
 export const PATHS = {
   inventory: "docs/testing/journey-coverage.json",
@@ -224,6 +240,8 @@ export function validateInventory(inventory, { readFile, fileExists, registry })
     }
   }
 
+  errors.push(...validateExceptions(inventory, { manualIds, findings }));
+
   for (const doc of [PATHS.graphs, PATHS.manual, PATHS.backlog]) {
     if (!fileExists(doc)) {
       errors.push(`missing companion doc ${doc}`);
@@ -232,6 +250,79 @@ export function validateInventory(inventory, { readFile, fileExists, registry })
     for (const ref of new Set(readFile(doc).match(ACTION_REF_PATTERN) ?? [])) {
       if (!seen.has(ref)) errors.push(`${doc}: references unknown action ${ref}`);
     }
+  }
+  return errors;
+}
+
+// The register must account for every P0/P1 action that is not verified, and
+// for every P0/P1 action that still carries a manual check, so neither can
+// be dropped or reclassified without the reason being edited too.
+export function validateExceptions(inventory, { manualIds, findings }) {
+  const errors = [];
+  const exceptions = inventory.exceptions ?? [];
+  if (!Array.isArray(exceptions)) return ["inventory.exceptions must be an array"];
+  const actions = new Map((inventory.actions ?? []).filter((action) => action?.id).map((action) => [action.id, action]));
+  const entryOf = new Map();
+  const text = (value) => typeof value === "string" && value.trim() !== "";
+
+  for (const [index, entry] of exceptions.entries()) {
+    const ids = Array.isArray(entry?.actions) ? entry.actions : [];
+    const where = `exceptions[${index}]${ids.length > 0 ? ` (${ids.join(", ")})` : ""}`;
+    if (ids.length === 0) errors.push(`${where}: actions must list at least one action id`);
+    if (!Object.hasOwn(EXCEPTION_CATEGORIES, entry?.category)) errors.push(`${where}: category must be one of ${Object.keys(EXCEPTION_CATEGORIES).join(", ")}`);
+    for (const field of ["reason", "releaseEvidence"]) {
+      if (!text(entry?.[field])) errors.push(`${where}: missing ${field}`);
+    }
+    if (typeof entry?.blocksRelease !== "boolean") errors.push(`${where}: blocksRelease must be true or false`);
+    if (typeof entry?.futureAutomation?.exists !== "boolean" || !text(entry?.futureAutomation?.strategy)) {
+      errors.push(`${where}: futureAutomation needs exists (true/false) and strategy`);
+    }
+    if (entry?.manualCheck && !manualIds.has(entry.manualCheck)) errors.push(`${where}: manualCheck ${entry.manualCheck} not found in ${PATHS.manual}`);
+    if (entry?.finding && !findings.has(entry.finding)) errors.push(`${where}: unknown finding ${entry.finding}`);
+
+    const members = [];
+    for (const id of ids) {
+      const action = actions.get(id);
+      if (!action) {
+        errors.push(`${where}: references unknown action ${id}`);
+        continue;
+      }
+      if (entryOf.has(id)) errors.push(`${where}: ${id} is already in another exception entry`);
+      entryOf.set(id, entry);
+      if (!["P0", "P1"].includes(action.priority)) errors.push(`${where}: ${id} is ${action.priority}; the register covers P0/P1 only`);
+      if (action.manualCheck && action.manualCheck !== entry.manualCheck) {
+        errors.push(`${where}: ${id} has manualCheck ${action.manualCheck}, so the entry must name it`);
+      }
+      members.push(action);
+    }
+    if (members.length === 0) continue;
+
+    if (!members.some(isOutstanding) && !entry.manualCheck) {
+      errors.push(`${where}: every action is verified and no manual check remains -- remove the entry`);
+    }
+    if (members.some((action) => action.priority === "P0" && isOutstanding(action)) && entry.blocksRelease === false) {
+      errors.push(`${where}: an outstanding P0 action blocks a release (fixed, signed off, or accepted by Chris); blocksRelease cannot be false`);
+    }
+    if (["physical_device", "third_party_auth"].includes(entry.category) && !entry.manualCheck) {
+      errors.push(`${where}: category ${entry.category} needs manualCheck`);
+    }
+    if (entry.category === "partial_by_rule") {
+      for (const action of members) {
+        if (action.status !== "automated_partial") errors.push(`${where}: partial_by_rule but ${action.id} is ${action.status}`);
+      }
+    }
+    if (entry.category === "product_decision") {
+      if (!entry.finding) errors.push(`${where}: category product_decision needs finding`);
+      for (const action of members) {
+        if (action.status !== "blocked") errors.push(`${where}: product_decision but ${action.id} is ${action.status}`);
+      }
+    }
+  }
+
+  for (const action of actions.values()) {
+    if (entryOf.has(action.id) || !["P0", "P1"].includes(action.priority)) continue;
+    if (isOutstanding(action)) errors.push(`${action.id}: ${action.priority} ${action.status} has no entry in the exception register (inventory.exceptions)`);
+    else if (action.manualCheck) errors.push(`${action.id}: manual check ${action.manualCheck} has no entry in the exception register (inventory.exceptions)`);
   }
   return errors;
 }
@@ -257,6 +348,8 @@ export function verifyAgainstResults(inventory, rows) {
   const warnings = [];
   const verified = [];
   const unverified = [];
+  const failed = [];
+  const flaky = [];
   const rowsFor = (file, title, projectId) =>
     rows.filter((row) => row.file === file && row.projectId === projectId && (row.title === title || row.fullTitle === title));
   for (const action of inventory.actions) {
@@ -271,7 +364,10 @@ export function verifyAgainstResults(inventory, rows) {
           ran = true;
           if (row.outcome === "passed" || row.outcome === "flaky") {
             passed = true;
-            if (row.outcome === "flaky") warnings.push(`${label}: "${ref.title}" passed only on retry (flaky)`);
+            if (row.outcome === "flaky") {
+              warnings.push(`${label}: "${ref.title}" passed only on retry (flaky)`);
+              if (!flaky.includes(label)) flaky.push(label);
+            }
           } else {
             errors.push(`${label}: real test "${ref.title}" ${OUTCOME_TEXT[row.outcome] ?? row.outcome}`);
           }
@@ -279,10 +375,13 @@ export function verifyAgainstResults(inventory, rows) {
       }
       if (passed) verified.push(label);
       else if (!ran) unverified.push(label);
-      else errors.push(`${label}: no real test passed in this run`);
+      else {
+        failed.push(label);
+        errors.push(`${label}: no real test passed in this run`);
+      }
     }
   }
-  return { errors: [...new Set(errors)], warnings, verified, unverified };
+  return { errors: [...new Set(errors)], warnings, verified, unverified, failed, flaky };
 }
 
 export function computeMetrics(inventory) {
@@ -296,9 +395,7 @@ export function computeMetrics(inventory) {
   const denominator = actions.length - byStatus.not_applicable;
   const pct = (count, total) => (total === 0 ? "n/a" : `${((100 * count) / total).toFixed(1)}%`);
   const priorityDenominator = (priority) => actions.filter((action) => action.priority === priority && action.status !== "not_applicable").length;
-  const outstanding = actions.filter(
-    (action) => ["P0", "P1"].includes(action.priority) && !["automated_real_interaction", "manual_verified", "not_applicable"].includes(action.status),
-  );
+  const outstanding = actions.filter(isOutstanding);
   return {
     total: actions.length,
     excluded: byStatus.not_applicable,
@@ -359,6 +456,22 @@ export function renderReport(inventory) {
     lines.push(`| ${action.id} | ${action.priority} | \`${action.status}\` | ${cell(action.action)} | ${cell(action.followUp ?? action.reason ?? action.manualCheck ?? "")} |`);
   }
   lines.push("");
+  lines.push("## Exception register (P0/P1 not fully automated)");
+  lines.push("");
+  lines.push("Every outstanding P0/P1 action above, plus every P0/P1 action that is automated or recorded but still has a manual check. \"Blocks a release\" means a normal `staging -> main` release waits for the evidence in the next column or for Chris's explicit acceptance in the release PR (`REVIEW_CHECKLIST.md` Gate F). A FAIL on any check is a finding, whatever this column says.");
+  lines.push("");
+  lines.push("| Actions | Category | Manual check / finding | Why it is not fully automated | Blocks a release | Evidence required before release | Future automation |");
+  lines.push("|---|---|---|---|---|---|---|");
+  const actionById = new Map(inventory.actions.map((action) => [action.id, action]));
+  for (const entry of inventory.exceptions ?? []) {
+    const members = entry.actions.map((id) => `${id} (${actionById.get(id).priority}, \`${actionById.get(id).status}\`)`).join("<br>");
+    const refs = [entry.manualCheck, entry.finding].filter(Boolean).join(", ") || "—";
+    const automation = `${entry.futureAutomation.exists ? "Yes" : "No"}: ${entry.futureAutomation.strategy}`;
+    lines.push(
+      `| ${members} | ${EXCEPTION_CATEGORIES[entry.category]} | ${refs} | ${cell(entry.reason)} | ${entry.blocksRelease ? "Yes" : "No"} | ${cell(entry.releaseEvidence)} | ${cell(automation)} |`,
+    );
+  }
+  lines.push("");
   lines.push("## Findings");
   lines.push("");
   lines.push("| ID | Severity | Summary | Status | Actions |");
@@ -391,15 +504,117 @@ export function renderReport(inventory) {
 
 export function parseArgs(argv) {
   const [mode = "check", ...rest] = argv;
-  const options = { mode, results: [], requireResults: false };
+  const options = { mode, results: [], requireResults: false, evidence: null };
   for (let index = 0; index < rest.length; index += 1) {
     if (rest[index] === "--results" && rest[index + 1]) options.results.push(rest[(index += 1)]);
+    else if (rest[index] === "--evidence" && rest[index + 1]) options.evidence = rest[(index += 1)];
     else if (rest[index] === "--require-results") options.requireResults = true;
     else throw new Error(`unknown argument "${rest[index]}"`);
   }
   if (!["check", "report"].includes(mode)) throw new Error(`mode must be check or report (got "${mode}")`);
   if (options.requireResults && options.results.length === 0) throw new Error("--require-results needs --results <file>");
+  if (options.evidence && options.results.length === 0) throw new Error("--evidence needs --results <file>");
   return options;
+}
+
+// What a run of `check --results ... --evidence <dir>` proved, for someone
+// who should not have to read the raw log: which commit, how many real
+// claims (action x project), and whether every one was exercised and passed.
+// Built only from its arguments, so the same inputs give the same evidence.
+// `source` is { commit, ref, event, runId, runAttempt, runUrl } (null when
+// unknown); `reports` is [{ file, report }] of Playwright JSON output.
+export function buildEvidence({ inventory, outcome, reports, requireResults, source }) {
+  const metrics = computeMetrics(inventory);
+  const total = outcome.verified.length + outcome.unverified.length + outcome.failed.length;
+  const everyClaimPassed = requireResults && outcome.errors.length === 0 && outcome.unverified.length === 0 && total > 0;
+  return {
+    schemaVersion: 1,
+    everyRealClaimExercisedAndPassed: everyClaimPassed,
+    requireResults,
+    source,
+    inventory: {
+      date: inventory.inventoryDate ?? null,
+      actions: metrics.total,
+      applicable: metrics.denominator,
+      automatedRealInteraction: metrics.byStatus.automated_real_interaction,
+      p0AutomatedRealInteraction: metrics.byPriority.P0.automated_real_interaction,
+      p0Applicable: metrics.p0Denominator,
+      outstandingP0P1: metrics.outstanding.map((action) => action.id),
+    },
+    realClaims: {
+      total,
+      passed: outcome.verified.length,
+      notExercised: outcome.unverified,
+      failed: outcome.failed,
+      passedOnlyOnRetry: outcome.flaky,
+    },
+    errors: outcome.errors,
+    results: reports.map(({ file, report }) => ({
+      file: path.basename(file),
+      startTime: report.stats?.startTime ?? null,
+      expected: report.stats?.expected ?? null,
+      unexpected: report.stats?.unexpected ?? null,
+      flaky: report.stats?.flaky ?? null,
+      skipped: report.stats?.skipped ?? null,
+    })),
+  };
+}
+
+export function renderEvidence(evidence) {
+  const { source, inventory, realClaims } = evidence;
+  const list = (labels) => (labels.length === 0 ? "0" : `${labels.length}: ${labels.join(", ")}`);
+  const run = source.runId ? `${source.runUrl ? `[${source.runId}](${source.runUrl})` : source.runId}${source.runAttempt ? ` (attempt ${source.runAttempt})` : ""}` : "not a CI run";
+  const lines = [];
+  lines.push("## Journey coverage: full real-claim verification");
+  lines.push("");
+  if (evidence.everyRealClaimExercisedAndPassed) lines.push(`**PASS** -- every real claim was exercised and passed on \`${source.commit ?? "unknown commit"}\`.`);
+  else if (!evidence.requireResults) lines.push("**NOT A FULL VERIFICATION** -- run without `--require-results`, so claims the run did not exercise were not errors.");
+  else lines.push(`**FAIL** -- not every real claim was exercised and passed on \`${source.commit ?? "unknown commit"}\`.`);
+  lines.push("");
+  lines.push("| | |");
+  lines.push("|---|---|");
+  lines.push(`| Commit | \`${source.commit ?? "unknown"}\` |`);
+  lines.push(`| Ref / event | ${source.ref ?? "unknown"} / ${source.event ?? "local"} |`);
+  lines.push(`| Run | ${run} |`);
+  lines.push(`| Inventory | ${inventory.actions} actions (${inventory.applicable} applicable), ${inventory.automatedRealInteraction} automated real interaction, P0 ${inventory.p0AutomatedRealInteraction}/${inventory.p0Applicable} |`);
+  lines.push(`| Real claims (action x project) | ${realClaims.total} |`);
+  lines.push(`| Passed in this run | ${realClaims.passed} |`);
+  lines.push(`| Not exercised | ${list(realClaims.notExercised)} |`);
+  lines.push(`| Failed | ${list(realClaims.failed)} |`);
+  lines.push(`| Passed only on retry | ${list(realClaims.passedOnlyOnRetry)} |`);
+  for (const result of evidence.results) {
+    lines.push(`| Results file \`${result.file}\` | started ${result.startTime ?? "?"}: ${result.expected ?? "?"} passed, ${result.unexpected ?? "?"} failed, ${result.flaky ?? "?"} flaky, ${result.skipped ?? "?"} skipped |`);
+  }
+  if (evidence.errors.length > 0) {
+    lines.push("");
+    lines.push("Errors:");
+    lines.push("");
+    for (const error of evidence.errors) lines.push(`- ${error}`);
+  }
+  lines.push("");
+  lines.push(`This is not release readiness and enforces no coverage percentage. Outstanding P0/P1 actions (${inventory.outstandingP0P1.length}): ${inventory.outstandingP0P1.join(", ") || "none"} -- see the exception register in \`${PATHS.report}\`.`);
+  lines.push("");
+  return lines.join("\n");
+}
+
+function evidenceSource(root, env) {
+  let commit = env.GITHUB_SHA ?? null;
+  if (!commit) {
+    try {
+      commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+    } catch {
+      commit = null;
+    }
+  }
+  const runId = env.GITHUB_RUN_ID ?? null;
+  return {
+    commit,
+    ref: env.GITHUB_REF_NAME ?? null,
+    event: env.GITHUB_EVENT_NAME ?? null,
+    runId,
+    runAttempt: env.GITHUB_RUN_ATTEMPT ?? null,
+    runUrl: runId && env.GITHUB_SERVER_URL && env.GITHUB_REPOSITORY ? `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${runId}` : null,
+  };
 }
 
 function main() {
@@ -409,7 +624,7 @@ function main() {
   try {
     options = parseArgs(process.argv.slice(2));
   } catch (error) {
-    console.error(`usage: journey-coverage.mjs check|report [--results <playwright-json>]... [--require-results]: ${error.message}`);
+    console.error(`usage: journey-coverage.mjs check|report [--results <playwright-json>]... [--require-results] [--evidence <dir>]: ${error.message}`);
     process.exit(2);
   }
   const registry = buildRegistry(root, PLAYWRIGHT_CONFIGS);
@@ -437,8 +652,25 @@ function main() {
   if (options.results.length === 0) return;
   const configKeyForTestDir = (testDir) =>
     PLAYWRIGHT_CONFIGS.find((config) => path.resolve(root, config.testDir) === path.resolve(testDir))?.key ?? null;
-  const rows = options.results.flatMap((file) => readPlaywrightResults(root, JSON.parse(readFileSync(path.resolve(file), "utf8")), configKeyForTestDir));
+  const reports = options.results.map((file) => {
+    try {
+      return { file, report: JSON.parse(readFileSync(path.resolve(file), "utf8")) };
+    } catch (error) {
+      console.error(`journey-coverage: cannot read Playwright results file ${file}: ${error.message}`);
+      console.error("journey-coverage: no claim was checked against a run");
+      return process.exit(2);
+    }
+  });
+  const rows = reports.flatMap(({ report }) => readPlaywrightResults(root, report, configKeyForTestDir));
   const outcome = verifyAgainstResults(inventory, rows);
+  if (options.evidence) {
+    const evidence = buildEvidence({ inventory, outcome, reports, requireResults: options.requireResults, source: evidenceSource(root, process.env) });
+    const dir = path.resolve(options.evidence);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(path.join(dir, EVIDENCE_FILES.json), `${JSON.stringify(evidence, null, 2)}\n`);
+    writeFileSync(path.join(dir, EVIDENCE_FILES.markdown), renderEvidence(evidence));
+    console.log(`journey-coverage: wrote ${path.join(options.evidence, EVIDENCE_FILES.json)} and ${EVIDENCE_FILES.markdown}`);
+  }
   for (const warning of outcome.warnings) console.warn(`journey-coverage: warning: ${warning}`);
   console.log(
     `journey-coverage: run results -- ${outcome.verified.length} real claim(s) passed in the run, ${outcome.unverified.length} not exercised by it${outcome.unverified.length ? ` (${outcome.unverified.join(", ")})` : ""}`,

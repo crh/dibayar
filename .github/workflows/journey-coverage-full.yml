@@ -1,0 +1,114 @@
+name: Journey coverage (full)
+
+# Every "real" claim in docs/testing/journey-coverage.json checked against
+# actual runs: the full non-visual E2E suite (not only @critical) plus the
+# ux-audit specs, then `coverage:journeys --require-results`, which fails if
+# any claimed test did not run and pass in its claimed project. The PR-gate
+# e2e-critical job (workflow "CI") can only check the @critical claims.
+#
+# A workflow of its own on purpose: the scheduled e2e-cross-browser run in
+# "CI" is an acceptance signal, and a job in that workflow would share its
+# run result. Nothing here is needed by, or reads from, that workflow.
+#
+# It enforces no coverage percentage and is not a release gate. What a run
+# proved (commit, claim counts, verdict) is on the run's summary page and in
+# the journey-coverage-full-evidence artifact; see docs/testing/E2E.md.
+#
+# GitHub runs `schedule` only from the default branch (main), against main.
+# For any other commit (a PR head, the staging release candidate) dispatch it:
+#   gh workflow run journey-coverage-full.yml --ref <branch>
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "43 4 * * 1,3,5"
+
+permissions:
+  contents: read
+
+jobs:
+  journey-coverage-full:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Bound to the exact 127.0.0.1:55432/dibayar_test target that
+    # scripts/e2e-fixtures.ts requires (see docs/testing/E2E.md). No hosted
+    # database, and no secret, is used by this workflow.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: dibayar_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:55432/dibayar_test?schema=public
+      # Placeholders, not credentials: Google OAuth is never exercised (see
+      # the same block in e2e.yml).
+      AUTH_SECRET: ci-only-placeholder-not-a-real-secret
+      AUTH_GOOGLE_ID: ci-only-placeholder
+      AUTH_GOOGLE_SECRET: ci-only-placeholder
+      E2E_FIXTURE_CONFIRM: non-production
+      EVIDENCE_DIR: artifacts/journey-coverage-full
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # pdftotext/pdfinfo (poppler-utils) for e2e/invoices/pdf-download.spec.ts
+      # and the ux-audit PDF specs -- not preinstalled on ubuntu-latest.
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+          pdftotext -v
+          pdfinfo -v
+      - run: npx prisma migrate deploy
+      - run: npm run test:e2e
+      # ux:audit's own @visual pass rewrites test-results/e2e/results.json,
+      # so keep the full run's results aside first.
+      - run: cp test-results/e2e/results.json "$RUNNER_TEMP/e2e-full-results.json"
+      - run: npm run ux:audit
+      - name: Check every real claim against this run
+        run: >-
+          npm run coverage:journeys --
+          --results "$RUNNER_TEMP/e2e-full-results.json"
+          --results test-results/ux-audit/results.json
+          --require-results
+          --evidence "$EVIDENCE_DIR"
+      - name: Summarize what this run proved
+        if: always()
+        run: |
+          if [ -f "$EVIDENCE_DIR/journey-coverage-evidence.md" ]; then
+            cat "$EVIDENCE_DIR/journey-coverage-evidence.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## Journey coverage: full real-claim verification"
+              echo
+              echo "**NO EVIDENCE** -- this run stopped before the claim check, so it verified nothing about \`$GITHUB_SHA\`. See the failed step."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journey-coverage-full-evidence
+          path: artifacts/journey-coverage-full
+          if-no-files-found: ignore
+          retention-days: 90
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journey-coverage-full-artifacts
+          path: |
+            artifacts/ux-audit
+            playwright-report/e2e
+            test-results/e2e
+            test-results/ux-audit
+          retention-days: 7

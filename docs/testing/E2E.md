@@ -143,7 +143,7 @@ PDF downloads: `e2e/invoices/pdf-download.spec.ts` clicks **Unduh PDF** and
 reads the downloaded file with `pdftotext` through `e2e/support/pdf.ts`
 (`downloadPdfByClick()`, `pdfText()`). The `pdftotext` binary
 (`poppler-utils`) must be installed locally; CI installs it in the
-`e2e-critical`, `e2e-cross-browser` and `journey-coverage-full` jobs. The
+`e2e-critical` and `e2e-cross-browser` jobs and in the `Journey coverage (full)` workflow. The
 helper also requires the response to be `Content-Disposition: attachment`,
 because headless Chromium "downloads" an inline PDF too. A clicked download
 makes the browser report the navigation request as aborted; the

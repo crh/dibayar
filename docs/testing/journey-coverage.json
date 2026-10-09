@@ -1,13 +1,14 @@
 {
   "schemaVersion": 1,
-  "inventoryDate": "2026-10-08",
-  "baseline": "origin/staging 979c3ec (PR #31 squash-merged) + branch chore/zero-routine-regression-phase2b-2026-10-08 (Zero Routine Phase 2B)",
+  "inventoryDate": "2026-10-09",
+  "baseline": "origin/staging eace1b2 (PR #32 merged) + branch chore/zero-routine-regression-phase2c-2026-10-09 (Zero Routine Phase 2C: exception register added; no action, status or test reference changed)",
   "classificationRules": [
     "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
     "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
     "automated_partial: the test uses page.goto to skip the in-app entry point, fill() on a picker control, page.request/API calls, page.evaluate fetch, stubs/mocks, component tests with fireEvent, or asserts only rendering (screenshots, axe scans, text presence).",
-    "A test that is test.skip()-ed or test.fixme()-ed in a project does not count for that project; a test.fail()-annotated (expected-failure) test never counts as coverage. `npm run coverage:journeys` enforces this: every titled reference must be a test Playwright itself registers (`playwright test --list`), and each claimed project needs a real test that its AST shows is not skipped, fixme'd or expected to fail there; a condition it cannot evaluate does not count. With `--results <playwright-json>` it also checks the claims against an actual run (CI does this for the @critical run).",
-    "tests/ux-audit specs run in the CI ux-audit job, which is report-gated (scripts/ux-audit.ts), not a per-test exit-code gate; they are credited but called out as such."
+    "A test that is test.skip()-ed or test.fixme()-ed in a project does not count for that project; a test.fail()-annotated (expected-failure) test never counts as coverage. `npm run coverage:journeys` enforces this: every titled reference must be a test Playwright itself registers (`playwright test --list`), and each claimed project needs a real test that its AST shows is not skipped, fixme'd or expected to fail there; a condition it cannot evaluate does not count. With `--results <playwright-json>` it also checks the claims against an actual run: CI does this for the @critical run on every PR, and the separate `Journey coverage (full)` workflow does it for every real claim (`--require-results`).",
+    "tests/ux-audit specs run in the CI ux-audit job, which is report-gated (scripts/ux-audit.ts), not a per-test exit-code gate; they are credited but called out as such.",
+    "A P0/P1 action that is not `automated_real_interaction` or `manual_verified`, or that still carries a manual check, must have an entry in the exception register (`exceptions` in the inventory): its category, why it is not fully automated, whether it blocks a release, the evidence a release needs, and whether an automation strategy exists. `npm run coverage:journeys` fails when an entry is missing, stale, or contradicts the action's status."
   ],
   "actions": [
     {
@@ -2636,6 +2637,136 @@
       "priority": "P2",
       "status": "not_covered",
       "followUp": "Batch 3"
+    }
+  ],
+  "exceptions": [
+    {
+      "actions": [
+        "INV-DUE-03",
+        "INV-DUE-02"
+      ],
+      "category": "physical_device",
+      "manualCheck": "MAN-DUE-01",
+      "reason": "Choosing a date happens inside the OS/browser date picker, which is native UI outside the page: Playwright can show that the picker opens (INV-DUE-02, Chromium desktop and 390px emulation) but cannot drive or observe a choice in it, and emulation is not a phone.",
+      "blocksRelease": true,
+      "releaseEvidence": "MAN-DUE-01 logged PASS in MANUAL-UAT.md for the release candidate on staging, on a real Android Chrome phone and a real iPhone Safari (plus the desktop targets of the device matrix).",
+      "futureAutomation": {
+        "exists": true,
+        "strategy": "A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built."
+      }
+    },
+    {
+      "actions": [
+        "AUTH-03"
+      ],
+      "category": "third_party_auth",
+      "manualCheck": "MAN-AUTH-01",
+      "reason": "The round trip runs on Google's own sign-in pages with a real Google account. The suite sends no traffic to Google and stores no Google credential; tests sign in through a seeded database session, and AUTH-02 automates the entry only up to Auth.js's redirect, which is read and never followed.",
+      "blocksRelease": true,
+      "releaseEvidence": "MAN-AUTH-01 (sign-in and sign-out) logged PASS on staging for the release candidate; it is step 1 of MAN-REL-01. The recorded 2026-09-30 run covers sign-in only, on an older commit.",
+      "futureAutomation": {
+        "exists": false,
+        "strategy": "Not planned: it would need a stored Google test credential and automated traffic to Google's sign-in pages, which this project rules out. Stays a per-release manual check."
+      }
+    },
+    {
+      "actions": [
+        "DEAL-CREATE-07"
+      ],
+      "category": "physical_device",
+      "manualCheck": "MAN-DEAL-01",
+      "reason": "The deadline field is a native date input, so choosing the date has the same limit as INV-DUE-03. The other optional fields (contact name, payment terms) are driven for real in both projects.",
+      "blocksRelease": false,
+      "releaseEvidence": "The two create-validation journeys green in CI on the release head. MAN-DEAL-01 run on a phone and logged; if it was not run, the release PR says so.",
+      "futureAutomation": {
+        "exists": true,
+        "strategy": "A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built."
+      }
+    },
+    {
+      "actions": [
+        "INV-WA-01",
+        "INV-WA-02",
+        "HOME-03"
+      ],
+      "category": "physical_device",
+      "manualCheck": "MAN-WA-01",
+      "reason": "The hand-off to the WhatsApp app, and popup blocking in real phone and in-app browsers, happen outside the browser under test. The suite answers wa.me from a local stub so nothing reaches WhatsApp. Automated for real: the message and link the app builds, exactly one tab, no Referer, and the fallback under a real Chromium popup blocker.",
+      "blocksRelease": false,
+      "releaseEvidence": "The automated journeys green in CI on the release head. MAN-WA-01 run on Android Chrome and iPhone Safari and logged; if it was not run, the release PR says so.",
+      "futureAutomation": {
+        "exists": true,
+        "strategy": "A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built. The WhatsApp app itself would stay manual either way."
+      }
+    },
+    {
+      "actions": [
+        "INV-PDF-01",
+        "PUB-05"
+      ],
+      "category": "physical_device",
+      "manualCheck": "MAN-PDF-01",
+      "reason": "How a phone's browser hands a downloaded PDF to its viewer or its downloads is OS behaviour outside the page. Automated for real: the click, the download and the PDF's text for owner and recipient, in desktop and 390px Chromium.",
+      "blocksRelease": false,
+      "releaseEvidence": "The pdf-download journeys green in CI on the release head. MAN-PDF-01 run on a phone and logged; if it was not run, the release PR says so.",
+      "futureAutomation": {
+        "exists": true,
+        "strategy": "A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built."
+      }
+    },
+    {
+      "actions": [
+        "SHARE-05"
+      ],
+      "category": "physical_device",
+      "manualCheck": "MAN-SHARE-01",
+      "reason": "Clipboard permission and the copy confirmation on real phone browsers differ from desktop Chromium, where the test grants clipboard access to its own context. Automated for real on desktop Chromium only.",
+      "blocksRelease": false,
+      "releaseEvidence": "The share-copy journey green in CI on the release head. MAN-SHARE-01 run on a phone and logged; if it was not run, the release PR says so.",
+      "futureAutomation": {
+        "exists": true,
+        "strategy": "A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built."
+      }
+    },
+    {
+      "actions": [
+        "A11Y-01"
+      ],
+      "category": "partial_by_rule",
+      "reason": "An axe scan is rendering evidence, not an interaction, so the classification rules cap this action at partial however many pages are scanned. Not scanned yet: deal detail, the expired-share and contact-repair states of invoice detail, Settings validation errors.",
+      "blocksRelease": false,
+      "releaseEvidence": "CI job e2e-a11y green on the release head (it runs on every PR and push). No manual sign-off.",
+      "futureAutomation": {
+        "exists": false,
+        "strategy": "It cannot become automated_real_interaction under the current rules. The scan can be widened to the unscanned states; screen-reader behaviour is MAN-A11Y-01 (P2)."
+      }
+    },
+    {
+      "actions": [
+        "INV-DUE-06"
+      ],
+      "category": "partial_by_rule",
+      "reason": "The clicks, typing and reload are real, but the only browser way to make the save fail is to intercept the PATCH with page.route, and the rules class a stubbed response as partial.",
+      "blocksRelease": false,
+      "releaseEvidence": "The two failed-save journeys in e2e/invoices/due-date-integrity.spec.ts green in CI job e2e-critical on the release head. No manual sign-off.",
+      "futureAutomation": {
+        "exists": false,
+        "strategy": "A stub-free failure needs a way to make the server itself fail on demand in tests (the same seam NAV-08 waits for). None is designed."
+      }
+    },
+    {
+      "actions": [
+        "INV-STATUS-05"
+      ],
+      "category": "product_decision",
+      "finding": "FIND-01",
+      "reason": "Deliberately untested: 'Tandai terlambat' stores OVERDUE but the chip shows Terkirim again when there is no past due date, and a test of either behaviour would lock in an answer Chris has not given.",
+      "blocksRelease": true,
+      "releaseEvidence": "Chris's decision on FIND-01, or his explicit acceptance in the release PR of shipping the current behaviour.",
+      "futureAutomation": {
+        "exists": true,
+        "strategy": "An ordinary Playwright journey on both projects once FIND-01 is decided; no technical obstacle."
+      }
     }
   ],
   "findings": [
