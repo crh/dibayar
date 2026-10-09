@@ -5,12 +5,16 @@ import type { InvoiceStatus, InvoiceWithDealBrand } from "@/lib/invoices";
 import { useLanguage } from "@/components/language-switcher";
 import { StatusChip, MoneyDisplay, EmptyState } from "@/components/design-system";
 import { formatDate } from "@/lib/format/date";
+import { deriveInvoiceDisplayStatus } from "@/lib/invoice-date-status";
 
 type InvoiceGroupKey = "overdue" | "sent" | "draft" | "paid";
 
 // Fixed display order, independent of the DB orderBy: Overdue, Sent (DUE
 // folded in), Draft, Paid. DUE is a distinct stored status but has no
 // section of its own — it reads as "sent, and now also due".
+// Grouping and the chip use the displayed status (deriveInvoiceDisplayStatus,
+// the same rule as Beranda and invoice detail), not the stored one, so an
+// invoice past its due date is under Overdue here too (FIND-06).
 const INVOICE_GROUPS: ReadonlyArray<{ key: InvoiceGroupKey; statuses: readonly InvoiceStatus[]; titleKey: string }> = [
   { key: "overdue", statuses: ["OVERDUE"], titleKey: "invoice.overdue" },
   { key: "sent", statuses: ["SENT", "DUE"], titleKey: "invoice.sent" },
@@ -20,18 +24,30 @@ const INVOICE_GROUPS: ReadonlyArray<{ key: InvoiceGroupKey; statuses: readonly I
 
 type InvoiceListProps = {
   invoices: InvoiceWithDealBrand[];
+  // The moment the status is derived against. The page passes its own
+  // render time, so server render and hydration agree; a tab left open past
+  // Jakarta midnight shows the new day's status on its next load.
+  now?: Date;
 };
 
-export function InvoiceList({ invoices }: InvoiceListProps) {
+export function InvoiceList({ invoices, now }: InvoiceListProps) {
   const { language, t } = useLanguage();
+  const referenceNow = now ?? new Date();
 
   if (invoices.length === 0) {
     return <EmptyState>{t("dashboard.noInvoices")}</EmptyState>;
   }
 
+  const displayed = invoices.map((invoice) => ({
+    invoice,
+    displayStatus: deriveInvoiceDisplayStatus(
+      { status: invoice.status, dueDate: invoice.dueDate ? new Date(invoice.dueDate) : null },
+      referenceNow,
+    ),
+  }));
   const groups = INVOICE_GROUPS.map((group) => ({
     ...group,
-    invoices: invoices.filter((invoice) => group.statuses.includes(invoice.status)),
+    invoices: displayed.filter((row) => group.statuses.includes(row.displayStatus)),
   })).filter((group) => group.invoices.length > 0);
 
   return (
@@ -48,7 +64,7 @@ export function InvoiceList({ invoices }: InvoiceListProps) {
           </div>
 
           <ul className="flex flex-col gap-2">
-            {group.invoices.map((invoice) => (
+            {group.invoices.map(({ invoice, displayStatus }) => (
               <li key={invoice.id}>
                 <Link
                   href={`/invoice/${invoice.id}`}
@@ -62,7 +78,7 @@ export function InvoiceList({ invoices }: InvoiceListProps) {
                   </div>
                   <div className="flex flex-shrink-0 flex-col items-end gap-1.5">
                     <MoneyDisplay value={invoice.subtotalIdr} language={language} size="card" />
-                    <StatusChip status={invoice.status} language={language} />
+                    <StatusChip status={displayStatus} language={language} />
                   </div>
                 </Link>
               </li>

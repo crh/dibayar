@@ -170,6 +170,15 @@ checks invoice detail's expired state (Indonesian and English), that its
 **Buat tautan baru**. The expired share comes from
 `applyFollowUpExpiredShare()`.
 
+Invoice status (FIND-01 and FIND-06, fixed): the status a person sees is
+`deriveInvoiceDisplayStatus()` on the list, the detail page and Beranda, and
+no control or API call sets OVERDUE. `e2e/invoices/status-consistency.spec.ts`
+checks the three surfaces against each other on the `status-consistency`
+overlay; `e2e/invoices/status-lifecycle.spec.ts` asserts the complete set of
+status actions at each step, so a returning **Tandai terlambat** fails it.
+Due dates in these fixtures are relative to today's Jakarta date; the specs
+call `expectSameJakartaDay()` so a run across midnight fails with that reason.
+
 Specs that change per-user state every other test depends on
 (`settings/language.spec.ts` changes `User.language`,
 `settings/bank-details.spec.ts` changes `UserSettings`) reseed in an
@@ -188,6 +197,7 @@ prints the share token.
 | `npm run e2e:fixtures -- follow-up-states` | Adds the follow-up overlay (overdue / due-soon invoices, invalid-contact deal) on top of a fresh `seed`; refuses to stack on anything else. The next `seed` removes it |
 | `npm run e2e:fixtures -- follow-up-expired-share` | On top of `follow-up-states`: gives the stored-`OVERDUE` invoice an already-expired share with a recoverable path (the app cannot backdate an expiry). Used by `e2e/invoices/reminder-share-link.spec.ts` via `applyFollowUpExpiredShare()`; refuses to replace an existing share. The next `seed` removes it |
 | `npm run e2e:fixtures -- income-boundaries` | On top of a fresh `seed`: four invoices on the edges of Beranda's monthly total (a draft, one created 1 ms before this Jakarta month, one at its first instant, one at the first instant of next month). Used by `e2e/home/monthly-income.spec.ts` via `applyIncomeBoundaries()`. The next `seed` removes them |
+| `npm run e2e:fixtures -- status-consistency` | On top of `follow-up-states`: five invoices whose stored status and due date disagree (stored DUE due yesterday, legacy stored OVERDUE due in 8 days and with no due date, DRAFT and PAID due yesterday). Used by `e2e/invoices/status-consistency.spec.ts` via `applyStatusConsistency()`; refuses to run twice. The next `seed` removes them |
 | `npm run e2e:build` | Reproducible webpack production build, needed before any `test:e2e*` run |
 | `npm run test:e2e` | Semantic journey suite, chromium + chromium-mobile; visual snapshots are separate |
 | `npm run test:e2e:critical` | `@critical`-tagged tests only, chromium + chromium-mobile -- the PR gate |

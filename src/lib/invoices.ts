@@ -129,15 +129,18 @@ export type InvoiceStatusDb = {
   };
 };
 
-const ALLOWED_STATUS_TRANSITIONS: Record<InvoiceStatus, readonly InvoiceStatus[]> = {
+// Nothing may move an invoice *to* OVERDUE: overdue is derived from the due
+// date against the Jakarta calendar day (deriveInvoiceDisplayStatus in
+// invoice-date-status.ts), never assigned by hand (FIND-01). A stored
+// OVERDUE row can still exist from before that rule; it stays payable.
+export const ALLOWED_STATUS_TRANSITIONS: Record<InvoiceStatus, readonly InvoiceStatus[]> = {
   DRAFT: ["SENT"],
-  SENT: ["DUE", "OVERDUE", "PAID"],
-  DUE: ["OVERDUE", "PAID"],
+  SENT: ["DUE", "PAID"],
+  DUE: ["PAID"],
   OVERDUE: ["PAID"],
-  // T-19: undo a mistaken/reversed "paid" mark. Back to SENT specifically
-  // (not DUE/OVERDUE) since those are date-derived states the invoice will
-  // naturally re-enter on its own once dueDate is re-evaluated if it's
-  // actually overdue -- SENT is the neutral "awaiting payment" state.
+  // T-19: undo a mistaken/reversed "paid" mark. Back to SENT specifically:
+  // SENT is the neutral "awaiting payment" state, and the invoice shows as
+  // overdue again on its own if its due date has passed.
   PAID: ["SENT"],
 };
 

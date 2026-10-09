@@ -13,8 +13,11 @@ Sources: `src/lib/invoices.ts` (`ALLOWED_STATUS_TRANSITIONS`),
 
 ## 1. Invoice payment status
 
-Stored status changes only through the buttons the UI offers. The server
-also allows `SENT → OVERDUE`, but no UI control offers it, so it is not a user action.
+Stored status changes only through the buttons the UI offers. Nothing moves
+an invoice *to* `OVERDUE`: overdue is derived from the due date, the
+**Tandai terlambat** button was removed, and the status API rejects the
+transition (FIND-01, fixed). A stored `OVERDUE` exists only on rows written
+before that.
 
 ```mermaid
 stateDiagram-v2
@@ -22,9 +25,8 @@ stateDiagram-v2
     DRAFT --> SENT: Tandai sudah dikirim (INV-STATUS-01)
     SENT --> DUE: Tandai jatuh tempo (INV-STATUS-02)
     SENT --> PAID: Tandai lunas (INV-STATUS-03)
-    DUE --> OVERDUE: Tandai terlambat (INV-STATUS-05, BLOCKED FIND-01)
     DUE --> PAID: Tandai lunas (INV-STATUS-03)
-    OVERDUE --> PAID: Tandai lunas (INV-STATUS-06)
+    OVERDUE --> PAID: Tandai lunas, legacy stored rows (INV-STATUS-06)
     PAID --> SENT: Batalkan status lunas (INV-STATUS-04)
 ```
 
@@ -35,26 +37,30 @@ stateDiagram-v2
 | SENT → DUE | Tandai jatuh tempo | INV-STATUS-02 | real + reload |
 | SENT → PAID | Tandai lunas | INV-STATUS-03 | partial (no reload, old test) |
 | DUE → PAID | Tandai lunas | INV-STATUS-03 | real + reload |
-| DUE → OVERDUE | Tandai terlambat | INV-STATUS-05 | **BLOCKED** (FIND-01 product decision) |
+| DUE → OVERDUE | none: removed | INV-STATUS-05 (not applicable) | not a user action. The journey for SENT → DUE asserts the button is absent; `src/lib/invoices.test.ts` asserts the API rejects it |
 | OVERDUE → PAID | Tandai lunas | INV-STATUS-06 | real + reload, list and Beranda agree (`overdue-invoice.spec.ts`, follow-up overlay invoice stored OVERDUE) |
 | PAID → SENT | Batalkan status lunas | INV-STATUS-04 | real + reload |
 | any → failure | PATCH error | INV-STATUS-07 | **UNTESTED** |
-| SENT → OVERDUE | none (server-only) | — | not a user action |
+| SENT → OVERDUE | none | — | not a user action; rejected by the API |
 
 **Displayed vs stored status.** The chip shows `deriveInvoiceDisplayStatus`:
 `DRAFT`/`PAID` as stored. For anything else it shows `OVERDUE` when the
 Jakarta due date is past, and a stored `OVERDUE` falls back to `SENT` when it
-is not. The action buttons follow the *stored* status. So after `DUE → OVERDUE`
-with no past due date, the person sees chip **Terkirim** with only
-**Tandai lunas** offered (FIND-01). Date-derived display is a pure function
+is not. The action buttons follow the *stored* status, minus
+**Tandai jatuh tempo** on an invoice already shown as overdue, so every
+overdue invoice offers only **Tandai lunas**. A legacy row stored `OVERDUE`
+without a past due date shows chip **Terkirim** and **Tandai lunas**.
+Date-derived display is a pure function
 with unit tests (`src/lib/invoice-date-status.test.ts`), and its rendering is
 checked by `tests/ux-audit/states/needs-chasing.spec.ts`. In the browser,
 `e2e/home/follow-up-queue.spec.ts` (HOME-02) checks the derived reasons on
 the Jakarta-date boundaries (due yesterday, today, in 7 and in 8 days) on the
 follow-up overlay, and that a stored-SENT invoice due yesterday opens as
-**Terlambat** with **Kirim pengingat**. The invoice *list* does not derive:
-it groups and labels by stored status, so that same invoice sits under
-**Terkirim** there (FIND-06, open, no test asserts it either way).
+**Terlambat** with **Kirim pengingat**. The invoice *list* uses the same
+function for its groups and chips (FIND-06, fixed):
+`e2e/invoices/status-consistency.spec.ts` checks that list, detail and
+Beranda agree for stored `SENT`, `DUE` and `OVERDUE` rows on both sides of
+the due date, on the `status-consistency` overlay.
 
 ## 2. Invoice due date
 

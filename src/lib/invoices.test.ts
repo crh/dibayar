@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  ALLOWED_STATUS_TRANSITIONS,
   createInvoice,
   getOwnedInvoice,
   getOwnedInvoiceContact,
@@ -451,6 +452,42 @@ describe("updateInvoiceStatus", () => {
       where: { id: "invoice-1", userId: "user-1" },
       data: { status: "SENT" },
     });
+  });
+
+  // FIND-01: overdue is derived from the due date, never assigned by hand.
+  it.each(["DRAFT", "SENT", "DUE", "PAID"] as const)("rejects a manual %s to OVERDUE transition without writing", async (from) => {
+    const { db, update } = makeStatusDb({ ...existingInvoice, status: from });
+
+    const result = await updateInvoiceStatus(db, "invoice-1", "user-1", "OVERDUE");
+
+    expect(result).toEqual({ kind: "invalid-transition" });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("allows no transition into OVERDUE from any status", () => {
+    for (const targets of Object.values(ALLOWED_STATUS_TRANSITIONS)) expect(targets).not.toContain("OVERDUE");
+  });
+
+  it.each([
+    ["SENT", "DUE"],
+    ["SENT", "PAID"],
+    ["DUE", "PAID"],
+  ] as const)("still allows %s to %s", async (from, to) => {
+    const { db, update } = makeStatusDb({ ...existingInvoice, status: from });
+
+    const result = await updateInvoiceStatus(db, "invoice-1", "user-1", to);
+
+    expect(result).toMatchObject({ kind: "updated", invoice: { status: to } });
+    expect(update).toHaveBeenCalledWith({ where: { id: "invoice-1", userId: "user-1" }, data: { status: to } });
+  });
+
+  it("keeps a legacy stored OVERDUE invoice payable", async () => {
+    const { db, update } = makeStatusDb({ ...existingInvoice, status: "OVERDUE" });
+
+    const result = await updateInvoiceStatus(db, "invoice-1", "user-1", "PAID");
+
+    expect(result).toMatchObject({ kind: "updated", invoice: { status: "PAID" } });
+    expect(update).toHaveBeenCalledWith({ where: { id: "invoice-1", userId: "user-1" }, data: { status: "PAID" } });
   });
 
   it("rejects PAID to any status other than SENT (T-19 undo is the only PAID transition)", async () => {

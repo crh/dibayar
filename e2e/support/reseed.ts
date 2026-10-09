@@ -10,7 +10,7 @@
 // no reseed -- they never mutate fixture rows.
 import { execFileSync } from "node:child_process";
 
-function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states" | "follow-up-expired-share" | "income-boundaries"): void {
+function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states" | "follow-up-expired-share" | "income-boundaries" | "status-consistency"): void {
   const env = { ...process.env, E2E_FIXTURE_CONFIRM: "non-production" };
   execFileSync("npx", ["tsx", "--env-file-if-exists=.env.local", "scripts/e2e-fixtures.ts", action], {
     stdio: "inherit",
@@ -54,4 +54,13 @@ export function applyFollowUpExpiredShare(): void {
 export function applyIncomeBoundaries(): void {
   runFixtureAction("seed");
   runFixtureAction("income-boundaries");
+}
+
+// The follow-up overlay, plus five invoices whose stored status and due date
+// disagree (scripts/e2e-fixtures.ts applyStatusConsistency): stored DUE due
+// yesterday, legacy stored OVERDUE that is not past due, and DRAFT/PAID with
+// a past due date. Reseed afterwards, like every overlay.
+export function applyStatusConsistency(): void {
+  applyFollowUpStates();
+  runFixtureAction("status-consistency");
 }

@@ -16,10 +16,10 @@ a positive one.
 |---|---|---|---|
 | 1 | FIND-03 (high): keyboard entry saved year 0002 and permanently broke the owner's invoice page | INV-DUE-04 | **Fixed** by PR #26 (merge `b51fba1`, staging). Regression: `e2e/invoices/due-date-integrity.spec.ts`. **Still open for Chris:** the read-only Production count of out-of-range `Invoice.dueDate` / `Deal.deadline` (PR #26 receipt §9). Any data repair is Chris-only. Legacy out-of-range dates still render raw on the list, Beranda, public page, and PDF. Deal `deadline` validation is still `z.coerce.date()`. |
 | 2 | FIND-02 (high): click/tap on the visible due-date field did nothing | INV-DUE-02, INV-DUE-03 | **Fixed** by PR #26 (`showPicker()` on click). Proven in Chromium desktop and 390px emulation. **Still open:** MAN-DUE-01 on a real Android Chrome phone and a real iPhone Safari. |
-| 3 | FIND-01 (medium): "Tandai terlambat" shows "Terkirim" | INV-STATUS-05 | Open. Needs a product decision from Chris before any code or test. |
+| 3 | FIND-01 (medium): "Tandai terlambat" shows "Terkirim" | INV-STATUS-05, INV-STATUS-02, INV-STATUS-06 | **Fixed** by PR #34 (staging). Chris's decision: overdue is never set by hand. The button is gone and the status API rejects any move to OVERDUE; INV-STATUS-05 is now not applicable. Regression: `e2e/invoices/status-lifecycle.spec.ts`, `e2e/invoices/status-consistency.spec.ts`. Stored rows are not rewritten. |
 | 4 | FIND-04 (medium): blocked-popup detection never works -- `window.open(..., "noopener,noreferrer")` returns null by spec, so the **Buka WhatsApp** fallback shows even after WhatsApp opened (invoice detail and Beranda queue) | HOME-03, INV-WA-02 | **Fixed** by PR #29 (merge `ac53043`, staging). Both surfaces open a blank tab on the click, cut its opener and navigate it with no Referer (`src/lib/whatsapp-popup.ts`). The two `test.fail()` tests are now positive regressions, and `e2e/whatsapp/popup-blocker.spec.ts` proves the fallback under a real Chromium blocker. HOME-03 and INV-WA-02 are real. **Still open:** MAN-WA-01 on real phones. |
 | 5 | FIND-05 (medium): Beranda **Kirim pengingat** rotated the share token, so a link the brand already had returned 404 | HOME-03, SHARE-02 | **Fixed** by PR #30 (merge `e498ad5`, staging). Chris's decision: reminders reuse a usable active link; only **Buat ulang tautan** rotates. Beranda calls `POST /share/ensure` (`ensureShare`). Regression: `e2e/invoices/reminder-share-link.spec.ts` (reuse, repeat, no share, expired, Regenerate still rotates). |
-| 6 | FIND-06 (low): the invoice list shows stored status; Beranda/detail derive OVERDUE from the due date | INV-STATUS-06, INV-LIST-01 | Open, found in Phase 2A. Decide together with FIND-01. |
+| 6 | FIND-06 (low): the invoice list shows stored status; Beranda/detail derive OVERDUE from the due date | INV-STATUS-06, INV-LIST-01 | **Fixed** by PR #34 (staging), together with FIND-01. The list groups and labels by the same displayed status as Beranda and detail. Regression: `e2e/invoices/status-consistency.spec.ts`. |
 | 7 | FIND-07 (medium): invoice detail showed an expired share as "Tautan aktif sampai <past date>" and its WhatsApp action sent that expired link | INV-STATUS-06, INV-WA-01, SHARE-01, SHARE-02 | **Fixed** by PR #31 (squash merge `979c3ec`, staging). The owner's share state is now inactive / active / expired; invoice detail shows an expired state with **Buat tautan baru** and sends through `POST /share/ensure`. Regression: `e2e/invoices/expired-share.spec.ts`. |
 | 8 | FIND-08 (low): the recipient's invoice page and PDF print the due date only inside the payment-terms block, so a deal without payment terms shows the recipient no due date | INV-DUE-05, PUB-01 | Open, noticed in Phase 2B. Current documented behaviour (`model.test.ts`); needs a product decision. No browser test asserts either behaviour. |
 
@@ -134,7 +134,8 @@ changed status.
 - A11Y-01: deal detail, the expired-share and contact-repair states of
   invoice detail, Settings validation errors.
 - AUTH-02: the English landing CTA.
-- Decisions (Chris): FIND-01, FIND-06, FIND-08.
+- Decisions (Chris): FIND-08. (FIND-01 and FIND-06 were decided and fixed
+  on `fix/invoice-status-consistency-2026-10-09`.)
 
 ## Batch 3 — P2 navigation and resilience
 

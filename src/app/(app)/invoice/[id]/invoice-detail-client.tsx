@@ -34,10 +34,9 @@ const NEXT_ACTIONS: Record<InvoiceRecord["status"], NextAction[]> = {
     { status: "DUE", labelKey: "invoice.markDue" },
     { status: "PAID", labelKey: "invoice.markPaid" },
   ],
-  DUE: [
-    { status: "OVERDUE", labelKey: "invoice.markOverdue" },
-    { status: "PAID", labelKey: "invoice.markPaid" },
-  ],
+  // No action leads to OVERDUE: it is derived from the due date, never set
+  // by hand (FIND-01; the server rejects it too, see ALLOWED_STATUS_TRANSITIONS).
+  DUE: [{ status: "PAID", labelKey: "invoice.markPaid" }],
   OVERDUE: [{ status: "PAID", labelKey: "invoice.markPaid" }],
   // T-19: undo, not a forward step -- kept visually distinct (secondary
   // variant) so it doesn't read as just another "mark as..." action.
@@ -501,6 +500,9 @@ export default function InvoiceDetailClient({
   const dueDateRange = { min: formatDateCentral(DUE_DATE_MIN), max: formatDateCentral(DUE_DATE_MAX) };
   const displayStatus = deriveInvoiceDisplayStatus({ status: invoice.status, dueDate: normalizedDueDate }, referenceNow);
   const isOverdue = displayStatus === "OVERDUE";
+  // Actions follow the stored status (what the server will accept), minus
+  // "mark due" on an invoice already shown as overdue.
+  const nextActions = NEXT_ACTIONS[invoice.status].filter((action) => !(isOverdue && action.status === "DUE"));
   const shareState = useShareState(invoice.id);
   const [isSharingToWhatsApp, setIsSharingToWhatsApp] = useState(false);
 
@@ -766,7 +768,7 @@ export default function InvoiceDetailClient({
             >
               {isOverdue ? t("invoice.sendReminder") : t("invoice.shareViaWhatsApp")}
             </Button>
-            {NEXT_ACTIONS[invoice.status].map((action) => (
+            {nextActions.map((action) => (
               <Button
                 key={action.status}
                 type="button"

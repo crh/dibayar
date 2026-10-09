@@ -11,24 +11,29 @@
 // because the client sets its state from the PATCH response and only a
 // reload proves the server stored it.
 //
-// Deliberately not exercised: DUE -> OVERDUE via "Tandai terlambat". With no
-// past due date the displayed status is re-derived back to SENT
-// (deriveInvoiceDisplayStatus in src/lib/invoice-date-status.ts), so the
-// person sees "Terkirim" right after asking for "Terlambat". Whether that is
-// intended is an open product question (FIND-01 in
-// docs/testing/JOURNEY-COVERAGE.md); asserting either behaviour here would
-// lock in an answer nobody has made yet.
+// There is no DUE -> OVERDUE step: overdue is derived from the due date
+// (deriveInvoiceDisplayStatus in src/lib/invoice-date-status.ts) and the
+// "Tandai terlambat" action was removed (FIND-01). This journey asserts it
+// stays gone on a DUE invoice, before and after a reload.
 import type { Page } from "@playwright/test";
 import { expect, test } from "../support/test";
 import { loadFixtureManifest } from "../support/manifest";
 import { reseedFixtures } from "../support/reseed";
 
+// Every status action the page has ever offered, including the removed
+// manual overdue.
+const STATUS_ACTIONS = ["Tandai sudah dikirim", "Tandai jatuh tempo", "Tandai terlambat", "Tandai lunas", "Batalkan status lunas"];
+
+// `actions` is the complete set of status actions the page may offer.
 async function expectStatus(page: Page, chip: string, actions: string[]) {
   const header = page.getByRole("main").locator("header").first();
   await expect(header.getByText(chip, { exact: true })).toBeVisible();
   const statusSection = page.getByRole("region", { name: "Status pembayaran" });
   for (const action of actions) {
     await expect(statusSection.getByRole("button", { name: action, exact: true })).toBeVisible();
+  }
+  for (const other of STATUS_ACTIONS.filter((name) => !actions.includes(name))) {
+    await expect(page.getByRole("button", { name: other, exact: true }), `"${other}" must not be offered`).toHaveCount(0);
   }
 }
 
@@ -70,9 +75,10 @@ test.describe("invoice status lifecycle", { tag: "@critical" }, () => {
     await expectStatus(page, "Terkirim", ["Tandai jatuh tempo", "Tandai lunas"]);
 
     await clickAndPersist(page, invoiceId, "Tandai jatuh tempo");
-    await expectStatus(page, "Jatuh tempo", ["Tandai terlambat", "Tandai lunas"]);
+    // A DUE invoice can only be marked paid; nobody marks it overdue by hand.
+    await expectStatus(page, "Jatuh tempo", ["Tandai lunas"]);
     await page.reload();
-    await expectStatus(page, "Jatuh tempo", ["Tandai terlambat", "Tandai lunas"]);
+    await expectStatus(page, "Jatuh tempo", ["Tandai lunas"]);
 
     await clickAndPersist(page, invoiceId, "Tandai lunas");
     await expect(page.getByText("Invoice ini sudah ditandai lunas.")).toBeVisible();
