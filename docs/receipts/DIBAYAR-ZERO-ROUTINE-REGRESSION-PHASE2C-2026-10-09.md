@@ -45,7 +45,7 @@ All `workflow_dispatch` of `Journey coverage (full)` on this branch.
 | `37887980418` | `9bb3114` (final implementation) | success | 113 real claims, 113 passed, 0 not exercised, 0 failed, 0 passed only on retry |
 | `37887983419` | `9bb3114` (final implementation) | success | 113 real claims, 113 passed, 0 not exercised, 0 failed, 0 passed only on retry |
 
-`9bb3114` holds every workflow, validator and documentation change in this PR. The only commit after it adds these run IDs to this receipt. Both final runs: full E2E 193 passed, 0 failed, 0 flaky; ux-audit specs 69 passed. These are manual runs; they say nothing about the schedule.
+`9bb3114` holds every workflow and validator change in this PR. The commits after it are documentation only: these run IDs, section 10, and one sentence in `docs/testing/E2E.md` about PR-triggered evidence naming the merge commit. Both final runs: full E2E 193 passed, 0 failed, 0 flaky; ux-audit specs 69 passed. These are manual runs; they say nothing about the schedule.
 
 ## 4. Proof the scheduled cross-browser acceptance is isolated
 
@@ -162,13 +162,13 @@ Tree: `12e121f` plus the then-uncommitted docs and the hint commit; nothing afte
 
 ## 10. Latest-head CI and review state
 
-On `9bb3114` (everything except the run IDs in this receipt):
+On `9bb3114` (everything except the later documentation-only commits):
 
 - Workflow `CI`, PR run `37887982844`: **success**. `lint-typecheck-test`, `e2e-critical`, `e2e-a11y`, `ux-audit` succeeded; `e2e-cross-browser` skipped by design (schedule and dispatch only).
 - Workflow `Journey coverage (full)`, PR-triggered run `37887982886`: **success**, 113/113. Its evidence names commit `fbacece`: on `pull_request` events GitHub checks out and reports the temporary merge commit of the PR with `staging`, not the branch head. Dispatched and scheduled runs report the real commit.
 - The two dispatched runs in section 3: **success**.
 
-The receipt-only commit after `9bb3114` triggers one more `CI` run and one more lane run; their result is in the PR, not here.
+The documentation-only commits after `9bb3114` each trigger one more `CI` run and one more lane run; their results are in the PR, not here.
 
 Independent review: none recorded yet. This is the worker's own report; Luna/Archie verification and your review are still to come.
 
