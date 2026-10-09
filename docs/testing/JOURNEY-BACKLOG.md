@@ -114,7 +114,8 @@ changed status.
 
 - The full real-claim check is its own workflow, `Journey coverage (full)`
   (`.github/workflows/journey-coverage-full.yml`): dispatch, a
-  Monday/Wednesday/Friday schedule, and PRs that change the lane itself. It
+  Monday/Wednesday/Friday schedule, and PRs that change the lane itself
+  or the inventory. It
   no longer shares a workflow run with the scheduled `e2e-cross-browser`
   acceptance runs. The schedule starts only when the file reaches `main`.
 - Each run states what it proved (commit, real-claim count, not exercised) on

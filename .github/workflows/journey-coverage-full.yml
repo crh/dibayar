@@ -18,8 +18,9 @@ name: Journey coverage (full)
 # For any other commit (a PR head, the staging release candidate) dispatch it:
 #   gh workflow run journey-coverage-full.yml --ref <branch>
 #
-# The pull_request trigger covers only changes to this lane itself, so an
-# edit to it is proven before it merges. It is also what first registered
+# The pull_request trigger covers only changes to this lane itself and to
+# the inventory whose claims it checks, so an edit to either is proven
+# before it merges. It is also what first registered
 # the workflow: GitHub answers 404 to a dispatch of a workflow file that is
 # not on the default branch and has never run.
 on:
@@ -31,6 +32,7 @@ on:
       - .github/workflows/journey-coverage-full.yml
       - scripts/journey-coverage.mjs
       - scripts/journey-coverage-discovery.mjs
+      - docs/testing/journey-coverage.json
 
 permissions:
   contents: read

@@ -266,8 +266,10 @@ Triggers:
   once the workflow file has reached `main` through a release.
 - `workflow_dispatch`, for any other commit, such as the release candidate:
   `gh workflow run journey-coverage-full.yml --ref staging`.
-- `pull_request`, only for PRs that change the workflow file or
-  `scripts/journey-coverage*.mjs`. Its evidence names the PR's temporary
+- `pull_request`, only for PRs that change the workflow file,
+  `scripts/journey-coverage.mjs`, `scripts/journey-coverage-discovery.mjs`
+  or the inventory (`docs/testing/journey-coverage.json`), so a new or
+  changed claim is run for real before it merges. Its evidence names the PR's temporary
   merge commit, not the branch head, so use a dispatched run when the commit
   matters.
 
