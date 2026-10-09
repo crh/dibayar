@@ -105,17 +105,36 @@ application code changed.
   `journey-coverage-full` job (full E2E + ux-audit +
   `coverage:journeys --require-results`).
 
-## Phase 2C — follow-ups from 2B
+## Phase 2C — reliability and release-readiness infrastructure (done)
 
-- Put `journey-coverage-full` on a schedule once it has run green a few
-  times by hand and Chris has decided how its result relates to the
-  scheduled `e2e-cross-browser` acceptance runs (same workflow run today).
+Delivered on `chore/zero-routine-regression-phase2c-2026-10-09` (receipt:
+`docs/receipts/DIBAYAR-ZERO-ROUTINE-REGRESSION-PHASE2C-2026-10-09.md`). CI,
+validator and docs only: no application code, no new journey, and no action
+changed status.
+
+- The full real-claim check is its own workflow, `Journey coverage (full)`
+  (`.github/workflows/journey-coverage-full.yml`): dispatch, a
+  Monday/Wednesday/Friday schedule, and PRs that change the lane itself
+  or the inventory. It
+  no longer shares a workflow run with the scheduled `e2e-cross-browser`
+  acceptance runs. The schedule starts only when the file reaches `main`.
+- Each run states what it proved (commit, real-claim count, not exercised) on
+  its summary page and in a 90-day evidence artifact
+  (`docs/testing/E2E.md`, "Full real-claim verification").
+- Exception register for P0/P1 actions that are not fully automated, in the
+  inventory (`exceptions`), validated by `npm run coverage:journeys` and
+  rendered into `JOURNEY-COVERAGE.md`.
+- `REVIEW_CHECKLIST.md` Gate F now separates automated CI blockers, manual
+  sign-off, product decisions, and informational items.
+
+## Carried forward from 2B (not done in 2C)
+
 - DEAL-CREATE-07 deadline and INV-DUE-03 on real phones (MAN-DEAL-01,
   MAN-DUE-01); MAN-PDF-01 for phone PDF viewers.
 - A11Y-01: deal detail, the expired-share and contact-repair states of
   invoice detail, Settings validation errors.
 - AUTH-02: the English landing CTA.
-- Decisions: FIND-01, FIND-06, FIND-08.
+- Decisions (Chris): FIND-01, FIND-06, FIND-08.
 
 ## Batch 3 — P2 navigation and resilience
 
@@ -137,11 +156,13 @@ repeated here; these are the program-level steps around them.
    P0/P1 action is `automated_real_interaction` or a recorded, justified
    `manual_*`/`blocked` entry. Track the outstanding list in
    `JOURNEY-COVERAGE.md`; no percentage target until Chris sets one.
-2. **Verify every real claim, not only @critical ones.** (Manual-dispatch CI
-   job `journey-coverage-full` added in Phase 2B; scheduling it is Phase 2C.)
-   Add a scheduled (or pre-release) full `test:e2e` run that feeds
+2. **Verify every real claim, not only @critical ones.** (Done in Phase 2C:
+   the `Journey coverage (full)` workflow, scheduled and dispatchable.) A
+   full `test:e2e` run feeds
    `coverage:journeys -- --results <results.json> --require-results`, so a
-   non-@critical real claim that stops passing is caught. Firefox/WebKit
+   non-@critical real claim that stops passing is caught. Still open: the
+   schedule only runs once the workflow is on `main`, and its scheduled
+   reliability is unproven until it has run there. Firefox/WebKit
    results join once those projects are in a claim's scope.
 3. **State-transition coverage.** For each graph in `JOURNEY-GRAPHS.md`
    (deal stages, invoice status, share-link lifecycle, due-date edits),
@@ -157,11 +178,13 @@ repeated here; these are the program-level steps around them.
    can't prove: native date picker choice (MAN-DUE-01), WhatsApp hand-off
    (MAN-WA-01), PDF open/save (MAN-PDF-01). Until then these stay manual and
    are logged per release in `MANUAL-UAT.md`; never counted as automated.
-6. **Trustworthy release gate.** Once 1–2 are green for a few weeks: a
-   pre-release checklist that requires the full-run results check, zero
-   `expected_failure` entries on P0 actions (there are none as of
-   2026-10-04), and the manual-only items from 5
-   signed off. A CI coverage threshold is a separate Chris decision.
+6. **Trustworthy release gate.** The checklist exists since Phase 2C
+   (`REVIEW_CHECKLIST.md` Gate F: CI blockers, manual sign-off, product
+   decisions, informational). The full-run results check is informational
+   there. Once 1–2 are green for a few weeks, Chris decides whether it
+   becomes a blocker. There are no `expected_failure` entries on P0 actions
+   (none as of 2026-10-09). A CI coverage threshold is a separate Chris
+   decision.
 7. **Keep the inventory honest.** Every PR that adds or changes a user-facing
    action updates `journey-coverage.json` (`REVIEW_CHECKLIST.md`); a fixed
    defect's `test.fail()` removal now forces the inventory update
@@ -170,8 +193,10 @@ repeated here; these are the program-level steps around them.
 ## Manual (before the next `staging -> main` release)
 
 MAN-REL-01, MAN-DUE-01 (all four device targets), MAN-AUTH-01 (including
-sign-out), MAN-WA-01, MAN-PDF-01, MAN-SHARE-01. Log the results in
-`docs/testing/MANUAL-UAT.md`.
+sign-out), MAN-DEAL-01, MAN-WA-01, MAN-PDF-01, MAN-SHARE-01. Log the results in
+`docs/testing/MANUAL-UAT.md`. Which of these block a release and which are
+expected but not blocking is in the exception register
+(`docs/testing/JOURNEY-COVERAGE.md`) and `REVIEW_CHECKLIST.md` Gate F.
 
 ## Not planned
 

@@ -37,12 +37,29 @@
 - [ ] STATE.md day_count equals the count of Asia/Jakarta calendar days since phase_started with activity
 
 ## Gate F — Production release (`staging -> main` PR only)
-<!-- CI-green is not release readiness. These are listed in the release PR body. -->
-- [ ] Full `@critical` + `@a11y` CI green on the release head; latest scheduled `e2e-cross-browser` result linked
-- [ ] Current `docs/testing/JOURNEY-COVERAGE.md` "Outstanding P0/P1 actions" pasted into the PR; every open **P0** (`blocked`, `manual_pending`, `not_covered`, `automated_partial`) is either fixed or explicitly accepted by Chris
-- [ ] `docs/testing/MANUAL-UAT.md` MAN-REL-01 run on staging, plus every P0 manual check, logged with device/browser/date/result
-- [ ] Known-defect expected-failure tests (`test.fail`) listed by finding ID — they are open bugs, not coverage
-- [ ] Findings fixed on `staging` but still awaiting real-device UAT or a Production data check (e.g. FIND-02/FIND-03: MAN-DUE-01, out-of-range due-date count) listed with their status, not reported as closed
+<!-- CI-green is not release readiness. Each item below is answered in the release PR body.
+     Per-action detail (why, evidence, automation outlook) is the generated exception register in
+     docs/testing/JOURNEY-COVERAGE.md. No coverage percentage is a gate. -->
+
+**F1 — Automated CI blockers (absolute: a red or missing item stops the release)**
+- [ ] Workflow `CI` green on the release head: `lint-typecheck-test` (includes `coverage:journeys`), `e2e-critical`, `e2e-a11y`, `ux-audit`
+- [ ] No `test.fail()` expected-failure test covers a P0 action; any that exist are listed by finding ID (they are open bugs, not coverage)
+
+**F2 — Manual sign-off (logged in `docs/testing/MANUAL-UAT.md` with device/browser/date/staging SHA/result)**
+- [ ] MAN-REL-01 run on staging against the release candidate
+- [ ] Every register entry marked "Blocks a release: Yes" with a manual check is logged PASS (today: MAN-DUE-01 on a real Android Chrome phone and a real iPhone Safari; MAN-AUTH-01 sign-in and sign-out). A FAIL or a missing run blocks the release unless Chris accepts the risk in the PR
+- [ ] Every other manual check in the register (today: MAN-DEAL-01, MAN-WA-01, MAN-PDF-01, MAN-SHARE-01) is logged, or listed in the PR as not run. Not run does not block by itself; a FAIL is a finding and is handled as one
+
+**F3 — Product decisions and risk acceptance (Chris, explicit, in the release PR)**
+- [ ] Current `docs/testing/JOURNEY-COVERAGE.md` "Outstanding P0/P1 actions" and "Exception register" pasted into the PR
+- [ ] Every outstanding **P0** is fixed, signed off under F2, or explicitly accepted by Chris
+- [ ] Every "Product decision" register entry (today: INV-STATUS-05 / FIND-01) is decided, or Chris explicitly accepts shipping the current behaviour
+- [ ] "Partial by classification rule" entries (today: A11Y-01, INV-DUE-06) need no acceptance while their tests are green under F1; say so, do not report them as covered
+
+**F4 — Informational (linked, never a blocker by themselves)**
+- [ ] Latest scheduled `e2e-cross-browser` result (workflow `CI`) linked
+- [ ] Latest `Journey coverage (full)` run for the release head linked, with its summary (commit, real-claim count, not exercised); dispatch one if the head has none (`docs/testing/E2E.md`). Not a release gate yet
+- [ ] Open low-severity findings (today: FIND-06, FIND-08) and findings fixed on `staging` but still awaiting real-device UAT or a Production data check (e.g. FIND-02/FIND-03: MAN-DUE-01, out-of-range due-date count) listed with their status, not reported as closed
 
 ## Stop rules
 - Any Gate A–C failure after 2 fix attempts → do not commit; log blocker in STATE.md.

@@ -22,6 +22,20 @@ inventory entry points at a check that is not defined here.
   tokens, cookies, or personal data on screen).
 - A FAIL on a P0 check blocks a Production release until it is fixed or
   Chris explicitly accepts the risk.
+- Which checks a release waits for is in the exception register
+  (`docs/testing/JOURNEY-COVERAGE.md`, generated from the inventory) and
+  `REVIEW_CHECKLIST.md` Gate F. In short:
+
+  | Check | Why it is manual | A release without a logged PASS |
+  |---|---|---|
+  | MAN-REL-01 | Release smoke on the hosted environment | Blocked |
+  | MAN-DUE-01 (P0) | Native date picker on real phones | Blocked, unless Chris accepts the risk in the release PR |
+  | MAN-AUTH-01 (P0) | Real Google sign-in, a third party | Blocked, unless Chris accepts the risk in the release PR |
+  | MAN-DEAL-01, MAN-WA-01, MAN-PDF-01, MAN-SHARE-01 (P1) | Phone-only remainder of flows that are automated on Chromium | Not blocked; the release PR lists each one as run or not run |
+  | MAN-A11Y-01 (P2) | Screen reader | Not blocked |
+
+  A FAIL on any of them is a finding, whatever the table says about a
+  missing run.
 
 ## Device matrix (minimum before a Production release)
 
@@ -162,9 +176,10 @@ Inventory: A11Y-03.
    the invoice, mark it sent, set a due date (MAN-DUE-01 steps 3–5), create a
    share link, open it in a private window, then revoke it and reload the
    private window (expected: not found).
-3. Confirm `npm run coverage:journeys` output and the outstanding P0/P1 list in
-   `docs/testing/JOURNEY-COVERAGE.md` are attached to the release PR, with
-   each open P0 explicitly accepted or fixed.
+3. Confirm `npm run coverage:journeys` output and the outstanding P0/P1 list
+   and exception register in `docs/testing/JOURNEY-COVERAGE.md` are attached
+   to the release PR, with each open P0 explicitly accepted or fixed
+   (`REVIEW_CHECKLIST.md` Gate F).
 
 ## Exploratory testing charter (each new feature)
 
