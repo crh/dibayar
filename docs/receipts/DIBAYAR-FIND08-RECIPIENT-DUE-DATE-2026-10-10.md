@@ -114,11 +114,12 @@ After reverting: no `NEGATIVE-CONTROL` marker in `src` or `e2e`, working tree cl
 The inventory changed, so both workflows run on this PR.
 
 - First head `7314524`: `CI` `37995112761`: `lint-typecheck-test`, `e2e-critical`, `ux-audit` (includes `@visual`) success; `e2e-a11y` failed before any test ran. `Journey coverage (full)` `37995112912` failed the same way. Both failures are the runner's `Initialize containers` step timing out while pulling `postgres:16` from Docker Hub ("Docker pull failed with exit code 1"); no test executed in either job.
-- CI_FINAL_PLACEHOLDER
+- Head `54ed5d0` (the same code plus this receipt): `CI` `37996895961` success: `lint-typecheck-test`, `e2e-critical`, `e2e-a11y`, `ux-audit` all success (`e2e-cross-browser` skipped by design on PRs). `Journey coverage (full)` `37996895809` success (113 real claim(s) passed in the run, 0 not exercised by it).
+- The commit after `54ed5d0` only fills in sections 11, 12 and 14 of this receipt. Its runs are reported on the PR, not here.
 
 ## 12. Review-thread status
 
-Codex reviewed `7314524` and raised one P2 on `STATE.md`: the receipt it points to was not in the branch. Valid: this receipt was written but not yet committed when the PR opened. Fixed by committing it. REVIEW_FINAL_PLACEHOLDER
+Codex reviewed `7314524` and raised one P2 on `STATE.md`: the receipt it points to was not in the branch. Valid: this receipt was written but not yet committed when the PR opened. Fixed by committing it. in `54ed5d0`, and replied on the thread. No other finding on that review. No human review yet.
 
 ## 13. Untouched
 
@@ -126,4 +127,10 @@ Codex reviewed `7314524` and raised one P2 on `STATE.md`: the receipt it points 
 
 ## 14. Final status
 
-FINAL_STATUS_PLACEHOLDER
+**`READY_FOR_CHRIS_REVIEW`.** PR #35 is open into `staging` and is not merged; merging needs your explicit authorization.
+
+For you to decide:
+
+1. Merge PR #35.
+2. Whether the due date without payment terms should stand alone as `Jatuh tempo: <date>` (as built) or sit under a heading.
+3. FIND-09: print the issue date as the Jakarta day, or keep the UTC day.
