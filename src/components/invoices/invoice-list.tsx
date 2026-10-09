@@ -24,7 +24,9 @@ const INVOICE_GROUPS: ReadonlyArray<{ key: InvoiceGroupKey; statuses: readonly I
 
 type InvoiceListProps = {
   invoices: InvoiceWithDealBrand[];
-  // Injectable for tests; defaults to the real current time.
+  // The moment the status is derived against. The page passes its own
+  // render time, so server render and hydration agree; a tab left open past
+  // Jakarta midnight shows the new day's status on its next load.
   now?: Date;
 };
 
