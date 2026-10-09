@@ -720,13 +720,17 @@ async function runPdfParity(page: Page, baseURL: string) {
     if (!taxBlock) throw new Error("Missing HTML tax block");
     add("tax", "Pajak potong", text(taxBlock.querySelector(":scope > p:nth-child(2)")), "Pajak potong");
 
+    // The due date is shown with or without payment terms (FIND-08), so it
+    // is looked up on its own, as the PDF side does.
     const termsBlock = directChildren.find((child) => text(child.querySelector(":scope > h2")) === "Syarat pembayaran");
     if (termsBlock) {
       const termLines = Array.from(termsBlock.querySelectorAll(":scope > p")).map((element) => text(element));
       add("terms", "Syarat pembayaran", termLines[0] ?? "", "Syarat pembayaran");
-      const dueLine = termLines.find((line) => line.startsWith("Jatuh tempo: "));
-      if (dueLine) add("dueDate", "Jatuh tempo", valueAfter(dueLine, "Jatuh tempo: "), "Jatuh tempo");
     }
+    const dueLine = directChildren
+      .flatMap((child) => Array.from(child.querySelectorAll(":scope > p")).map((element) => text(element)))
+      .find((line) => line.startsWith("Jatuh tempo: "));
+    if (dueLine) add("dueDate", "Jatuh tempo", valueAfter(dueLine, "Jatuh tempo: "), "Jatuh tempo");
 
     const bankBlock = directChildren.find((child) => text(child.querySelector(":scope > div > h2")) === "Pembayaran ke");
     if (!bankBlock) throw new Error("Missing HTML bank block");

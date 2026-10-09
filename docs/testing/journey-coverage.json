@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "inventoryDate": "2026-10-09",
-  "baseline": "origin/staging 096a400 (PR #33 merged) + branch fix/invoice-status-consistency-2026-10-09 (FIND-01 + FIND-06 fix)",
+  "inventoryDate": "2026-10-10",
+  "baseline": "origin/staging dbf9e73 (PR #34 merged) + branch fix/recipient-due-date-without-payment-terms-2026-10-09 (FIND-08 fix)",
   "classificationRules": [
     "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
     "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
@@ -1534,7 +1534,7 @@
       "interaction": "Type a new due date with the keyboard on invoice detail (Enter); look at detail, the invoice list, the Beranda row; send WhatsApp from detail and from the row",
       "expected": "The same Jakarta calendar date on every surface, and the Beranda count in Jakarta days, whatever the browser's timezone",
       "persisted": "n/a",
-      "alternates": "Browser in another timezone (Pacific/Honolulu run); recipient page/PDF print the due date only when the deal has payment terms (FIND-08)",
+      "alternates": "Browser in another timezone (Pacific/Honolulu run); recipient page and PDF, including a deal with no payment terms (FIND-08, fixed)",
       "scope": [
         "chromium",
         "unit"
@@ -1553,6 +1553,18 @@
           "title": "a typed due date reads as the same Jakarta calendar date on detail, list, Beranda and WhatsApp (Pacific/Honolulu)",
           "kind": "real",
           "note": "Same journey in a UTC-10 browser, whose own calendar date is a day behind Jakarta's most of the day"
+        },
+        {
+          "file": "e2e/public/due-date-without-terms.spec.ts",
+          "title": "a recipient sees the due date on the page and in the PDF when the deal has no payment terms (Asia/Jakarta)",
+          "kind": "real",
+          "note": "FIND-08 regression. The recipient's page and both PDFs print the same Jakarta calendar date (long form) the owner's page shows, for a follow-up overlay invoice whose deal has no payment terms"
+        },
+        {
+          "file": "e2e/public/due-date-without-terms.spec.ts",
+          "title": "a recipient sees the due date on the page and in the PDF when the deal has no payment terms (Pacific/Honolulu)",
+          "kind": "real",
+          "note": "Same journey in a UTC-10 browser"
         },
         {
           "file": "src/lib/invoice-date-status.test.ts",
@@ -2167,9 +2179,9 @@
       "persona": "recipient (no session)",
       "preconditions": "Active share",
       "interaction": "Open the link",
-      "expected": "Invoice identity, totals, tax, payment details, due date; no owner controls",
+      "expected": "Invoice identity, totals, tax, payment details, due date (with or without payment terms); no owner controls",
       "persisted": "n/a",
-      "alternates": "",
+      "alternates": "Deal with no payment terms: the due date is still shown and no payment-terms heading or text appears (FIND-08, fixed)",
       "scope": [
         "chromium",
         "chromium-mobile"
@@ -2181,6 +2193,18 @@
           "file": "e2e/public/invoice.spec.ts",
           "title": "valid share link renders recipient-safe invoice content and PDF action",
           "kind": "real"
+        },
+        {
+          "file": "e2e/public/due-date-without-terms.spec.ts",
+          "title": "a recipient sees the due date on the page and in the PDF when the deal has no payment terms (Asia/Jakarta)",
+          "kind": "real",
+          "note": "FIND-08 regression. Owner opens an invoice whose deal has no payment terms from the list and creates its share link with the visible button; a session-less recipient opens it: 'Jatuh tempo: <date>' visible, no 'Syarat pembayaran', no empty line, no controls; same after reload"
+        },
+        {
+          "file": "e2e/public/due-date-without-terms.spec.ts",
+          "title": "a recipient sees the due date on the page and in the PDF when the deal has no payment terms (Pacific/Honolulu)",
+          "kind": "real",
+          "note": "Same journey in a UTC-10 browser"
         }
       ]
     },
@@ -2285,6 +2309,12 @@
           "note": "Recipient page in its own session-less context, opened with the link the owner's page shows; visible Unduh PDF click, real download event, text checked with pdftotext"
         },
         {
+          "file": "e2e/public/due-date-without-terms.spec.ts",
+          "title": "a recipient sees the due date on the page and in the PDF when the deal has no payment terms (Asia/Jakarta)",
+          "kind": "real",
+          "note": "FIND-08 regression. Recipient's visible Unduh PDF click on an invoice whose deal has no payment terms; pdftotext output has the 'Jatuh tempo: <date>' line between the tax line and the bank block and no 'Syarat pembayaran'"
+        },
+        {
           "file": "e2e/public/invoice.spec.ts",
           "title": "valid public PDF is downloadable without authentication",
           "kind": "partial",
@@ -2323,6 +2353,12 @@
           "title": "a recipient's Unduh PDF downloads the same document the owner gets",
           "kind": "real",
           "note": "Both PDFs obtained by clicking; pdftotext output of the two compared for equality after whitespace normalization, with a per-line diff on mismatch"
+        },
+        {
+          "file": "e2e/public/due-date-without-terms.spec.ts",
+          "title": "a recipient sees the due date on the page and in the PDF when the deal has no payment terms (Asia/Jakarta)",
+          "kind": "real",
+          "note": "FIND-08 regression. Owner and recipient PDFs of an invoice with a due date and no payment terms, both clicked; extracted text equal"
         },
         {
           "file": "tests/ux-audit/fixtures.baseline.spec.ts",
@@ -2871,11 +2907,23 @@
     {
       "id": "FIND-08",
       "severity": "low",
-      "summary": "The recipient's invoice page and PDF print 'Jatuh tempo' only inside the payment-terms block, so an invoice whose deal has no payment terms shows the recipient no due date at all, even though the owner set one and it appears on the owner's page, the list, Beranda and in WhatsApp messages. This is the documented behaviour of buildInvoiceDocumentModel (model.test.ts: 'omits the entire terms block when payment terms are empty, even with a due date set'). Noticed 2026-10-08 while writing the INV-DUE-05 journey.",
-      "status": "open: by current design, needs a product decision (show the due date on the document without payment terms, or keep). No browser test asserts either behaviour.",
+      "summary": "The recipient's invoice page and PDF printed 'Jatuh tempo' only inside the payment-terms block, so an invoice whose deal had no payment terms showed the recipient no due date at all, even though the owner set one and it appears on the owner's page, the list, Beranda and in WhatsApp messages. buildInvoiceDocumentModel built the terms block only when payment terms existed. Noticed 2026-10-08 while writing the INV-DUE-05 journey.",
+      "status": "fixed: PR #35 (into staging; not yet on main/Production). Chris's decision 2026-10-09: a due date is shown to the recipient whenever it exists, with or without payment terms, and no payment-terms text is invented. Payment terms and the due date are now independent in the canonical document model, which the recipient page and both PDFs render. Regression: e2e/public/due-date-without-terms.spec.ts (recipient page, reload, clicked recipient and owner PDFs, Asia/Jakarta and Pacific/Honolulu browsers) and the four-combination tests in src/components/documents/invoice-document/.",
       "actions": [
         "INV-DUE-05",
-        "PUB-01"
+        "PUB-01",
+        "PUB-05",
+        "PUB-06"
+      ]
+    },
+    {
+      "id": "FIND-09",
+      "severity": "low",
+      "summary": "The invoice document (recipient page and both PDFs) prints 'Tanggal terbit' as the UTC calendar day of Invoice.createdAt (formatDateLong formats in UTC). An invoice created between 00:00 and 06:59 Asia/Jakarta therefore shows the previous day as its issue date. Seen 2026-10-10 04:00 WIB while running the FIND-08 journey: an invoice created that morning printed '9 Oktober 2026'. Due dates are not affected (stored as UTC midnight of the calendar date).",
+      "status": "open: not changed in the FIND-08 PR (out of its scope). Needs a product decision (print the Asia/Jakarta calendar day, or keep). No browser test asserts either behaviour.",
+      "actions": [
+        "PUB-01",
+        "INV-PDF-01"
       ]
     }
   ]

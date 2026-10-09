@@ -164,6 +164,16 @@ its journey in an Asia/Jakarta and a Pacific/Honolulu browser
 (`test.use({ timezoneId })`) to catch dates formatted or counted in the
 viewer's timezone.
 
+Recipient due date (FIND-08, fixed): the invoice document shows the due date
+with or without payment terms. `e2e/public/due-date-without-terms.spec.ts`
+uses a follow-up overlay invoice (those deals have no payment terms): the
+owner creates the share link with the visible button, a session-less
+`recipient` reads `Jatuh tempo: <date>` on the page (also after a reload) and
+in the PDF downloaded by clicking **Unduh PDF**, with no `Syarat pembayaran`
+anywhere, and the owner's PDF text equals the recipient's. The expected long
+date comes from `longIdDate()` (`e2e/support/follow-up.ts`), not the app's
+formatter.
+
 Expired share links (FIND-07, fixed): `e2e/invoices/expired-share.spec.ts`
 checks invoice detail's expired state (Indonesian and English), that its
 **Kirim pengingat** replaces an expired link and reuses a usable one, and

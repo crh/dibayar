@@ -93,6 +93,7 @@ stateDiagram-v2
 | save failure → revert + retry | INV-DUE-06 | partial: component test plus browser journeys whose failure is injected with `page.route` |
 | legacy out-of-range row → page usable, correctable | (FIND-03 regression) | real, `due-date-integrity.spec.ts`; not a separate inventory action |
 | consistent display across header/list/queue/WhatsApp | INV-DUE-05 | real (desktop Chromium; Asia/Jakarta and Pacific/Honolulu browsers) |
+| due date on the recipient's page and PDF, deal with no payment terms | INV-DUE-05, PUB-01, PUB-05, PUB-06 (FIND-08 regression) | real, desktop + mobile, both timezones (`e2e/public/due-date-without-terms.spec.ts`) |
 
 FIND-02 and FIND-03 were fixed by PR #26 (merge `b51fba1`, staging only).
 

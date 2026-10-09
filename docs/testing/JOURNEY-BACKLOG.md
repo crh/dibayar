@@ -21,7 +21,8 @@ a positive one.
 | 5 | FIND-05 (medium): Beranda **Kirim pengingat** rotated the share token, so a link the brand already had returned 404 | HOME-03, SHARE-02 | **Fixed** by PR #30 (merge `e498ad5`, staging). Chris's decision: reminders reuse a usable active link; only **Buat ulang tautan** rotates. Beranda calls `POST /share/ensure` (`ensureShare`). Regression: `e2e/invoices/reminder-share-link.spec.ts` (reuse, repeat, no share, expired, Regenerate still rotates). |
 | 6 | FIND-06 (low): the invoice list shows stored status; Beranda/detail derive OVERDUE from the due date | INV-STATUS-06, INV-LIST-01 | **Fixed** by PR #34 (staging), together with FIND-01. The list groups and labels by the same displayed status as Beranda and detail. Regression: `e2e/invoices/status-consistency.spec.ts`. |
 | 7 | FIND-07 (medium): invoice detail showed an expired share as "Tautan aktif sampai <past date>" and its WhatsApp action sent that expired link | INV-STATUS-06, INV-WA-01, SHARE-01, SHARE-02 | **Fixed** by PR #31 (squash merge `979c3ec`, staging). The owner's share state is now inactive / active / expired; invoice detail shows an expired state with **Buat tautan baru** and sends through `POST /share/ensure`. Regression: `e2e/invoices/expired-share.spec.ts`. |
-| 8 | FIND-08 (low): the recipient's invoice page and PDF print the due date only inside the payment-terms block, so a deal without payment terms shows the recipient no due date | INV-DUE-05, PUB-01 | Open, noticed in Phase 2B. Current documented behaviour (`model.test.ts`); needs a product decision. No browser test asserts either behaviour. |
+| 8 | FIND-08 (low): the recipient's invoice page and PDF print the due date only inside the payment-terms block, so a deal without payment terms shows the recipient no due date | INV-DUE-05, PUB-01, PUB-05, PUB-06 | **Fixed** by PR #35 (staging). Chris's decision: a due date is shown to the recipient whenever it exists, with or without payment terms; no payment-terms text is invented. Payment terms and the due date are independent in the canonical document model. Regression: `e2e/public/due-date-without-terms.spec.ts`, and the four-combination tests in `src/components/documents/invoice-document/`. |
+| 9 | FIND-09 (low): the invoice document prints `Tanggal terbit` as the UTC day of `createdAt`, so an invoice created between 00:00 and 06:59 WIB shows the previous day | PUB-01, INV-PDF-01 | Open, noticed 2026-10-10 during the FIND-08 work. Not changed; needs a product decision. No browser test asserts either behaviour. |
 
 ## Batch 1 — P0/P1 gaps with existing fixtures (done, Zero Routine Phase 1)
 
@@ -134,8 +135,9 @@ changed status.
 - A11Y-01: deal detail, the expired-share and contact-repair states of
   invoice detail, Settings validation errors.
 - AUTH-02: the English landing CTA.
-- Decisions (Chris): FIND-08. (FIND-01 and FIND-06 were decided and fixed
-  on `fix/invoice-status-consistency-2026-10-09`.)
+- Decisions (Chris): FIND-09. (FIND-01 and FIND-06 were decided and fixed
+  on `fix/invoice-status-consistency-2026-10-09`; FIND-08 on
+  `fix/recipient-due-date-without-payment-terms-2026-10-09`.)
 
 ## Batch 3 — P2 navigation and resilience
 
