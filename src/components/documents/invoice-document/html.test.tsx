@@ -112,10 +112,20 @@ describe("InvoiceDocumentHtml", () => {
     expect(screen.getByText("Jasa kerja sama konten")).toBeDefined();
   });
 
-  it("omits the entire terms block when payment terms are empty, even with a due date set", () => {
+  // FIND-08: the due date is shown with or without payment terms.
+  it("shows the due date alone, with no payment-terms heading or empty value, when the deal has no payment terms", () => {
     renderDoc({ ...fullInput, deal: { ...fullInput.deal, paymentTerms: null } });
+    const dueDate = screen.getByText("Jatuh tempo:").closest("p")!;
+    expect(dueDate.textContent).toBe("Jatuh tempo: 15 Oktober 2026");
     expect(screen.queryByText("Syarat pembayaran")).toBeNull();
-    expect(screen.queryByText(/Jatuh tempo/)).toBeNull();
+    // The block holds that one line: no empty heading or paragraph.
+    expect(dueDate.parentElement!.children).toHaveLength(1);
+    const article = dueDate.closest("article")!;
+    for (const element of article.querySelectorAll("p, h2")) expect(element.textContent!.trim()).not.toBe("");
+    // Still between the tax line and the bank block.
+    const text = article.textContent!;
+    expect(text.indexOf("Pajak potong")).toBeLessThan(text.indexOf("Jatuh tempo:"));
+    expect(text.indexOf("Jatuh tempo:")).toBeLessThan(text.indexOf("Pembayaran ke"));
   });
 
   it("keeps the terms block but omits only the due-date line when the due date is missing", () => {
@@ -123,6 +133,14 @@ describe("InvoiceDocumentHtml", () => {
     expect(screen.getByText("Syarat pembayaran")).toBeDefined();
     expect(screen.getByText("Pembayaran penuh di muka")).toBeDefined();
     expect(screen.queryByText(/Jatuh tempo/)).toBeNull();
+  });
+
+  it("omits the terms block when there are neither payment terms nor a due date", () => {
+    renderDoc({ ...fullInput, invoice: { ...fullInput.invoice, dueDate: null }, deal: { ...fullInput.deal, paymentTerms: null } });
+    expect(screen.queryByText("Syarat pembayaran")).toBeNull();
+    expect(screen.queryByText(/Jatuh tempo/)).toBeNull();
+    const article = screen.getByText("INVOICE").closest("article")!;
+    for (const child of article.children) expect(child.textContent!.trim()).not.toBe("");
   });
 
   it("shows the visible incomplete-account notice, with em dashes for missing fields, when any bank field is missing", () => {
