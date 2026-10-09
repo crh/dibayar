@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "inventoryDate": "2026-10-09",
-  "baseline": "origin/staging eace1b2 (PR #32 merged) + branch chore/zero-routine-regression-phase2c-2026-10-09 (Zero Routine Phase 2C: exception register added; no action, status or test reference changed)",
+  "baseline": "origin/staging 096a400 (PR #33 merged) + branch fix/invoice-status-consistency-2026-10-09 (FIND-01 + FIND-06 fix)",
   "classificationRules": [
     "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
     "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
@@ -1351,7 +1351,7 @@
       "persona": "owner",
       "preconditions": "Invoices exist",
       "interaction": "Click the invoice row",
-      "expected": "Detail with matching total",
+      "expected": "Each row is in the group, and shows the chip, of the status its detail page shows (derived from the due date: FIND-06); the detail opened from the row has the matching total",
       "persisted": "n/a",
       "alternates": "Empty list",
       "scope": [
@@ -1365,8 +1365,33 @@
           "file": "e2e/invoices/invoice-journeys.spec.ts",
           "title": "invoice list navigates to invoice detail with matching totals",
           "kind": "real"
+        },
+        {
+          "file": "e2e/invoices/status-consistency.spec.ts",
+          "title": "a stored SENT invoice due yesterday is Terlambat on the list, its detail page and Beranda, with no status action that contradicts it",
+          "kind": "real",
+          "note": "Row found under Terlambat (not Terkirim), clicked, detail agrees; Back returns to the same group"
+        },
+        {
+          "file": "e2e/invoices/status-consistency.spec.ts",
+          "title": "a stored DUE invoice due yesterday is Terlambat on the list, its detail page and Beranda, with no status action that contradicts it",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/invoices/status-consistency.spec.ts",
+          "title": "the invoice list groups and labels every invoice by the status its detail page shows, and keeps doing so after reload",
+          "kind": "partial",
+          "note": "All four groups with every row's chip, before and after reload: stored SENT/DUE/OVERDUE due in the past under Terlambat; due today, in 7 and in 8 days and legacy stored OVERDUE under Terkirim; DRAFT and PAID with a past due date unmoved. Reached through the nav, but it asserts rendering only, so partial by rule"
+        },
+        {
+          "file": "src/components/invoices/invoice-list.test.tsx",
+          "title": "",
+          "kind": "partial",
+          "note": "Component test: grouping and chip per stored status and due date, Jakarta midnight boundary, English"
         }
-      ]
+      ],
+      "finding": "FIND-06",
+      "evidence": "FIND-06 regression added 2026-10-09"
     },
     {
       "id": "INV-DUE-01",
@@ -1613,9 +1638,9 @@
       "persona": "owner",
       "preconditions": "SENT invoice",
       "interaction": "Click Tandai jatuh tempo, reload",
-      "expected": "Chip Jatuh tempo; persists",
+      "expected": "Chip Jatuh tempo; persists. The only status action then offered is Tandai lunas: there is no Tandai terlambat (FIND-01)",
       "persisted": "Invoice.status = DUE",
-      "alternates": "",
+      "alternates": "Not offered on an invoice already shown as overdue (INV-STATUS-06)",
       "scope": [
         "chromium",
         "chromium-mobile"
@@ -1629,7 +1654,8 @@
           "kind": "real"
         }
       ],
-      "evidence": "Added 2026-10-03 (pilot)"
+      "evidence": "Added 2026-10-03 (pilot). Since the FIND-01 fix (2026-10-09) the journey also asserts, before and after reload, that a DUE invoice offers Tandai lunas and no other status action",
+      "finding": "FIND-01"
     },
     {
       "id": "INV-STATUS-03",
@@ -1694,32 +1720,28 @@
       "route": "/invoice/[id]",
       "action": "Mark a DUE invoice as overdue",
       "persona": "owner",
-      "preconditions": "DUE invoice",
-      "interaction": "Click Tandai terlambat",
-      "expected": "UNDECIDED -- see FIND-01",
-      "persisted": "Invoice.status = OVERDUE",
+      "preconditions": "",
+      "interaction": "",
+      "expected": "",
+      "persisted": "",
       "alternates": "",
-      "scope": [
-        "chromium",
-        "chromium-mobile"
-      ],
+      "scope": [],
       "priority": "P1",
-      "status": "blocked",
-      "reason": "Product question FIND-01: with no past due date the chip immediately shows Terkirim again. Testing either behaviour would lock in an undecided answer.",
-      "finding": "FIND-01",
-      "followUp": "Chris decision, then Batch 1"
+      "status": "not_applicable",
+      "reason": "Removed by product decision (Chris, 2026-10-09, FIND-01): overdue is derived from the due date against the Jakarta calendar day and cannot be set by hand. The 'Tandai terlambat' control no longer exists and the status API rejects any transition to OVERDUE. Not automated, because there is nothing left to do; that the control stays absent on a DUE invoice is asserted by the INV-STATUS-02 journey (e2e/invoices/status-lifecycle.spec.ts) and the rejected transitions by src/lib/invoices.test.ts. Re-inventory if a manual overdue ever returns.",
+      "finding": "FIND-01"
     },
     {
       "id": "INV-STATUS-06",
       "domain": "invoices",
       "route": "/invoice/[id]",
-      "action": "Mark an OVERDUE invoice as paid / send overdue reminder",
+      "action": "Mark an overdue invoice as paid / send overdue reminder",
       "persona": "owner",
-      "preconditions": "Invoice stored as OVERDUE whose due date is in the past (Jakarta)",
+      "preconditions": "Invoice shown as overdue: its due date is in the past (Jakarta) and it is stored as SENT, DUE or OVERDUE",
       "interaction": "Open from the invoice list; click Kirim pengingat; click Tandai lunas; reload; check list and Beranda",
-      "expected": "Chip Terlambat and only Tandai lunas as status action; reminder uses the Settings chase template and carries the invoice's usable share link (the existing one, or a new one when there is none or it has expired -- never an expired link); after Tandai lunas: Lunas chip, Batalkan status lunas, gone from the queue, in the list's Lunas group",
+      "expected": "Chip Terlambat on the list, the detail page and Beranda, and only Tandai lunas as status action (no Tandai jatuh tempo, no Tandai terlambat), whichever status is stored; reminder uses the Settings chase template and carries the invoice's usable share link (the existing one, or a new one when there is none or it has expired -- never an expired link); after Tandai lunas: Lunas chip, Batalkan status lunas, gone from the queue, in the list's Lunas group",
       "persisted": "Invoice.status = PAID. InvoiceShare: the reminder asks POST /api/invoices/:id/share/ensure, which leaves a usable share untouched and replaces an expired one",
-      "alternates": "A SENT invoice that is merely past due shows Terlambat but its actions follow SENT (Tandai jatuh tempo / Tandai lunas); the list still groups it under Terkirim (FIND-06)",
+      "alternates": "A legacy invoice stored as OVERDUE whose due date is not past (or missing) reads Terkirim everywhere, is not in the Beranda queue, and still offers Tandai lunas",
       "scope": [
         "chromium",
         "chromium-mobile"
@@ -1744,9 +1766,27 @@
           "title": "Kirim pengingat on invoice detail sends the active link that already exists and does not rotate it",
           "kind": "real",
           "note": "Link made with Buat tautan berbagi, page reloaded, two visible Kirim pengingat clicks: both carry that link, only POST /share/ensure sent, link still opens and is still shown after reload"
+        },
+        {
+          "file": "e2e/invoices/status-consistency.spec.ts",
+          "title": "a stored SENT invoice due yesterday is Terlambat on the list, its detail page and Beranda, with no status action that contradicts it",
+          "kind": "real",
+          "note": "FIND-06/FIND-01 regression. Follow-up overlay invoice stored SENT, due yesterday: found under Terlambat in the list, opened by its row, Terlambat chip and only Tandai lunas on detail (also after reload, Back and Forward), 'Telat 1 hari' on Beranda"
+        },
+        {
+          "file": "e2e/invoices/status-consistency.spec.ts",
+          "title": "a stored DUE invoice due yesterday is Terlambat on the list, its detail page and Beranda, with no status action that contradicts it",
+          "kind": "real",
+          "note": "Same journey for an invoice stored DUE, due yesterday (status-consistency overlay)"
+        },
+        {
+          "file": "e2e/invoices/status-consistency.spec.ts",
+          "title": "a legacy invoice stored as OVERDUE but not past due reads Terkirim everywhere and can still be marked paid",
+          "kind": "real",
+          "note": "Legacy stored OVERDUE with a due date in 8 days and with none: Terkirim on list and detail, Kirim lewat WhatsApp (not the reminder), absent from Beranda; visible Tandai lunas accepted by the server, Lunas after reload and in the list"
         }
       ],
-      "evidence": "Added 2026-10-04 (Zero Routine Phase 2A, follow-up overlay). Share-link evidence added 2026-10-08 with the FIND-07 fix",
+      "evidence": "Added 2026-10-04 (Zero Routine Phase 2A, follow-up overlay). Share-link evidence added 2026-10-08 with the FIND-07 fix. Stored SENT/DUE and legacy stored-OVERDUE evidence added 2026-10-09 with the FIND-01/FIND-06 fix",
       "finding": "FIND-07"
     },
     {
@@ -2753,20 +2793,6 @@
         "exists": false,
         "strategy": "A stub-free failure needs a way to make the server itself fail on demand in tests (the same seam NAV-08 waits for). None is designed."
       }
-    },
-    {
-      "actions": [
-        "INV-STATUS-05"
-      ],
-      "category": "product_decision",
-      "finding": "FIND-01",
-      "reason": "Deliberately untested: 'Tandai terlambat' stores OVERDUE but the chip shows Terkirim again when there is no past due date, and a test of either behaviour would lock in an answer Chris has not given.",
-      "blocksRelease": true,
-      "releaseEvidence": "Chris's decision on FIND-01, or his explicit acceptance in the release PR of shipping the current behaviour.",
-      "futureAutomation": {
-        "exists": true,
-        "strategy": "An ordinary Playwright journey on both projects once FIND-01 is decided; no technical obstacle."
-      }
     }
   ],
   "findings": [
@@ -2774,9 +2800,11 @@
       "id": "FIND-01",
       "severity": "medium",
       "summary": "'Tandai terlambat' on a DUE invoice with no past due date stores OVERDUE, but the chip immediately re-derives to Terkirim (deriveInvoiceDisplayStatus). The person asked for 'Terlambat' and sees 'Terkirim'.",
-      "status": "open: needs a product decision (keep manual overdue, hide the action without a past due date, or show stored OVERDUE)",
+      "status": "fixed: PR #34 (into staging; not yet on main/Production). Chris's decision 2026-10-09: overdue is never set by hand. 'Tandai terlambat' is removed from invoice detail and SENT/DUE -> OVERDUE from the status contract (the API answers 409), so the contradiction can no longer be created; an invoice shown as overdue also no longer offers 'Tandai jatuh tempo'. INV-STATUS-05 is re-inventoried as not applicable. Regression: e2e/invoices/status-lifecycle.spec.ts (a DUE invoice offers only Tandai lunas), e2e/invoices/status-consistency.spec.ts, src/lib/invoices.test.ts, invoice-detail-client.test.tsx. Stored rows are not rewritten: a legacy stored OVERDUE that is not past due still reads Terkirim and stays payable.",
       "actions": [
-        "INV-STATUS-05"
+        "INV-STATUS-05",
+        "INV-STATUS-02",
+        "INV-STATUS-06"
       ]
     },
     {
@@ -2822,7 +2850,7 @@
       "id": "FIND-06",
       "severity": "low",
       "summary": "The invoice list groups and labels by stored status, while Beranda and invoice detail derive OVERDUE from the Jakarta due date. A SENT invoice due yesterday shows 'Telat 1 hari' on Beranda and 'Terlambat' on detail, but sits under Terkirim with a TERKIRIM chip in the list.",
-      "status": "open: needs a product decision; related to FIND-01 (stored vs derived OVERDUE). No test asserts the list's grouping of this state.",
+      "status": "fixed: PR #34 (into staging; not yet on main/Production). Chris's decision 2026-10-09: one displayed-status rule everywhere. The invoice list now groups and labels by deriveInvoiceDisplayStatus(), the function Beranda and invoice detail already used. Regression: e2e/invoices/status-consistency.spec.ts (list, detail and Beranda agree for stored SENT and stored DUE due yesterday; due today / in 7 / in 8 days are not overdue; DRAFT and PAID unmoved) and src/components/invoices/invoice-list.test.tsx.",
       "actions": [
         "INV-STATUS-06",
         "INV-LIST-01"
