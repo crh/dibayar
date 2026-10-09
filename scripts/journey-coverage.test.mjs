@@ -285,6 +285,60 @@ test("exception register negative control: a stale or contradictory entry is rej
   assert.match(errorsFor([action({ ...pending, priority: "P2" })], [exception()]), /AUTH-01 is P2; the register covers P0\/P1 only/);
 });
 
+// PR #33 review (Codex P2): entry.manualCheck alone must not keep an entry
+// alive. The members decide whether a manual check remains.
+test("exception register negative control (PR #33 review): an entry whose manual check no member declares any more is stale", () => {
+  const errorsFor = (actions, exceptions) => validateRegister(actions, exceptions).join("\n");
+  const stale = /manualCheck MAN-X-01 is not declared by any member action any more -- the entry is stale; remove it or its manualCheck/;
+  // Fully automated, the action's own manualCheck removed, the old entry left behind.
+  assert.match(errorsFor([action()], [exception({ blocksRelease: false })]), stale);
+  assert.match(errorsFor([action({ priority: "P1" })], [exception({ blocksRelease: false })]), stale);
+  // Several members, none of which still references the entry's check.
+  const mixed = [action(), action({ id: "AUTH-02", priority: "P1" })];
+  assert.match(errorsFor(mixed, [exception({ actions: ["AUTH-01", "AUTH-02"], blocksRelease: false })]), stale);
+  // An outstanding member does not excuse a manual check nobody declares.
+  assert.match(errorsFor([action(partial)], [exception()]), stale);
+  // A member that declares a different check than the entry.
+  files[PATHS.manual] = "### MAN-X-01 — a manual check\n### MAN-Z-02 — another";
+  try {
+    const other = errorsFor([action({ manualCheck: "MAN-Z-02" })], [exception({ blocksRelease: false })]);
+    assert.match(other, /AUTH-01 has manualCheck MAN-Z-02, so the entry must name it/);
+    assert.match(other, stale);
+  } finally {
+    files[PATHS.manual] = "### MAN-X-01 — a manual check";
+  }
+});
+
+test("exception register (PR #33 review): a verified action that still declares the entry's manual check keeps a valid entry", () => {
+  assert.deepEqual(validateRegister([action({ manualCheck: "MAN-X-01" })], [exception({ blocksRelease: false })]), []);
+  // One member still declaring it is enough for a shared entry.
+  const shared = [action({ manualCheck: "MAN-X-01" }), action({ id: "AUTH-02", priority: "P1" })];
+  assert.deepEqual(validateRegister(shared, [exception({ actions: ["AUTH-01", "AUTH-02"], blocksRelease: false })]), []);
+});
+
+// PR #33 review (Codex P2): the register must send the reviewer to the
+// decision that actually blocks the action, checked in both directions.
+test("exception register negative control (PR #33 review): a product_decision entry must name the finding that blocks its actions", () => {
+  const decision = (overrides = {}) => exception({ category: "product_decision", manualCheck: undefined, finding: "FIND-1", ...overrides });
+  const errorsFor = (actions, exceptions, findings) => validateRegister(actions, exceptions, findings).join("\n");
+  const both = [{ id: "FIND-1", actions: ["AUTH-01"] }, { id: "FIND-2", actions: ["AUTH-01"] }];
+  // Correct association in both directions.
+  assert.deepEqual(validateRegister([action(blockedOn)], [decision()], both), []);
+  // Blocked on FIND-1, entry names FIND-2; both findings exist.
+  assert.match(errorsFor([action(blockedOn)], [decision({ finding: "FIND-2" })], both), /AUTH-01 is blocked on FIND-1, but the entry names FIND-2/);
+  // The finding does not list the member action.
+  assert.match(
+    errorsFor([action(blockedOn)], [decision()], [{ id: "FIND-1", actions: ["NAV-01"] }, { id: "FIND-2", actions: [] }]),
+    /finding FIND-1 does not list AUTH-01 in its actions/,
+  );
+  assert.match(errorsFor([action(blockedOn)], [decision()], [{ id: "FIND-1" }]), /finding FIND-1 does not list AUTH-01 in its actions/);
+  // The member action declares no finding at all.
+  assert.match(
+    errorsFor([action({ ...blockedOn, finding: undefined })], [decision()], both),
+    /product_decision but AUTH-01 declares no finding; it must declare FIND-1/,
+  );
+});
+
 test("exception register: every field is required", () => {
   const errors = validateRegister([action(pending)], [{ actions: ["AUTH-01"], manualCheck: "MAN-X-01" }]).join("\n");
   assert.match(errors, /category must be one of physical_device, third_party_auth, partial_by_rule, product_decision/);

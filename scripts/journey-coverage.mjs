@@ -297,7 +297,14 @@ export function validateExceptions(inventory, { manualIds, findings }) {
     }
     if (members.length === 0) continue;
 
-    if (!members.some(isOutstanding) && !entry.manualCheck) {
+    // Whether a manual check remains is decided by the member actions, never
+    // by the entry naming one: an entry must not keep obsolete UAT alive after
+    // its actions dropped the check.
+    const declaresEntryCheck = Boolean(entry.manualCheck) && members.some((action) => action.manualCheck === entry.manualCheck);
+    if (entry.manualCheck && !declaresEntryCheck) {
+      errors.push(`${where}: manualCheck ${entry.manualCheck} is not declared by any member action any more -- the entry is stale; remove it or its manualCheck`);
+    }
+    if (!members.some(isOutstanding) && !members.some((action) => action.manualCheck)) {
       errors.push(`${where}: every action is verified and no manual check remains -- remove the entry`);
     }
     if (members.some((action) => action.priority === "P0" && isOutstanding(action)) && entry.blocksRelease === false) {
@@ -311,10 +318,19 @@ export function validateExceptions(inventory, { manualIds, findings }) {
         if (action.status !== "automated_partial") errors.push(`${where}: partial_by_rule but ${action.id} is ${action.status}`);
       }
     }
+    // exception -> finding -> action and action -> finding -> exception must
+    // agree, so the register cannot point a reviewer at the wrong decision.
     if (entry.category === "product_decision") {
       if (!entry.finding) errors.push(`${where}: category product_decision needs finding`);
+      const listed = findings.get(entry.finding)?.actions ?? [];
       for (const action of members) {
         if (action.status !== "blocked") errors.push(`${where}: product_decision but ${action.id} is ${action.status}`);
+        if (!entry.finding) continue;
+        if (!action.finding) errors.push(`${where}: product_decision but ${action.id} declares no finding; it must declare ${entry.finding}`);
+        else if (action.finding !== entry.finding) errors.push(`${where}: ${action.id} is blocked on ${action.finding}, but the entry names ${entry.finding}`);
+        if (findings.has(entry.finding) && !listed.includes(action.id)) {
+          errors.push(`${where}: finding ${entry.finding} does not list ${action.id} in its actions`);
+        }
       }
     }
   }
