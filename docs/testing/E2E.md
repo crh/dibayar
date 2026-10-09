@@ -7,7 +7,8 @@ interaction between App Router navigation, `window.history`, `useSearchParams`,
 and client component state -- exactly the class of bug that escaped the prior
 test suite in the V3/V4 deal-filter regressions.
 
-Baseline note: as of this writing, this suite was built on top of the
+Historical baseline note (the suite has long since been merged; it now lives
+on `staging` and `main`): as first written, this suite was built on top of the
 unmerged `hermes/ux-phase-2` candidate SHA `b48a2974e3cb7269a7af35fc3c88c9ffa5bc7f97`
 (branch `hermes/playwright-e2e`, worktree `../dibayar-playwright-e2e`), not `main`
 -- see `DIBAYAR-PLAYWRIGHT-E2E-HANDOFF.md` for why and what that means for
@@ -197,7 +198,7 @@ prints the share token.
 | `npm run test:e2e:headed` | Headed chromium run (assumes a build already exists -- run `npm run e2e:build` first if not) |
 | `npm run test:e2e:ui` | Playwright UI mode |
 | `npm run test:diagnostics-selftest` | Negative-control proof that `browserDiagnostics` (below) still fails a test on a real pageerror/5xx; no build or database needed |
-| `npm run coverage:journeys` / `coverage:journeys:report` | Validate the user-action inventory (`docs/testing/journey-coverage.json`) against Playwright's registry / regenerate `docs/testing/JOURNEY-COVERAGE.md`; no browser or DB needed. Add `-- --results <results.json>` to check real claims against an actual run |
+| `npm run coverage:journeys` / `coverage:journeys:report` | Validate the user-action inventory (`docs/testing/journey-coverage.json`) against Playwright's registry / regenerate `docs/testing/JOURNEY-COVERAGE.md`; no browser or DB needed. Add `-- --results <results.json>` to check real claims against an actual run, `--require-results` to fail on claims that run did not exercise, and `--evidence <dir>` to write what the run proved (`journey-coverage-evidence.json` / `.md`) |
 
 `E2E_PORT` (default 3300) and `E2E_SKIP_WEBSERVER=1` (reuse an already-running
 server, e.g. for `test:e2e:headed`/`:ui` iteration) are available as env
@@ -227,10 +228,68 @@ convention.
 
 ## CI
 
-See `.github/workflows/e2e.yml`. The PR gate runs lint/typecheck/unit tests,
-then the Chromium desktop/mobile critical journeys. Accessibility runs in a
-separate blocking job with its own report artifacts. A weekday schedule and
-manual dispatch run the semantic suite in Firefox and WebKit as well.
+Two workflows, kept apart on purpose.
+
+`.github/workflows/e2e.yml` (workflow `CI`): the PR gate runs
+lint/typecheck/unit tests, then the Chromium desktop/mobile critical journeys.
+Accessibility runs in a separate blocking job with its own report artifacts. A
+weekday schedule and manual dispatch run the semantic suite in Firefox and
+WebKit as well (`e2e-cross-browser`); those scheduled runs are an acceptance
+signal (`STATE.md` P2-2).
+
+`.github/workflows/journey-coverage-full.yml` (workflow
+`Journey coverage (full)`): see the next section. It has no job in `CI`, and
+`CI` has no job in it, so neither workflow's run result can change the
+other's.
+
+### Full real-claim verification
+
+The PR gate can only check the `@critical` claims of the inventory against a
+real run. `Journey coverage (full)` checks all of them: it runs the full
+non-visual suite (`npm run test:e2e`), then `npm run ux:audit`, then
+
+```bash
+npm run coverage:journeys -- \
+  --results <full e2e results.json> --results test-results/ux-audit/results.json \
+  --require-results --evidence artifacts/journey-coverage-full
+```
+
+which fails when any real claim (an action in a claimed project) did not run
+and pass. It uses the same guarded CI Postgres as the other jobs, no secret
+and no hosted database. It enforces no coverage percentage and is not a
+release gate (`REVIEW_CHECKLIST.md` Gate F lists it as informational).
+
+Triggers:
+
+- `schedule`: Monday, Wednesday and Friday, 04:43 UTC. GitHub runs schedules
+  only from the default branch, so this checks `main`, and it starts only
+  once the workflow file has reached `main` through a release.
+- `workflow_dispatch`, for any other commit, such as the release candidate:
+  `gh workflow run journey-coverage-full.yml --ref staging`.
+- `pull_request`, only for PRs that change the workflow file or
+  `scripts/journey-coverage*.mjs`.
+
+**What is the most recent commit for which every real claim was exercised and
+passed?** A run of this workflow is green only in that case, so:
+
+```bash
+gh run list --workflow journey-coverage-full.yml --status success --limit 5 \
+  --json databaseId,headSha,headBranch,event,createdAt
+```
+
+Add `--branch staging` or `--commit <sha>` to ask about one branch or commit.
+Each run's summary page (`gh run view <id> --web`) states the commit, the
+number of real claims, how many passed, and which were not exercised or
+failed, without opening a log. The same content is in the
+`journey-coverage-full-evidence` artifact (`journey-coverage-evidence.json`
+and `.md`, kept 90 days; `gh run download <id> -n journey-coverage-full-evidence`).
+In the JSON, `everyRealClaimExercisedAndPassed` is `true` only when the check
+ran with `--require-results`, found at least one claim, and none failed or
+went unexercised. A run that stopped before the claim check says "NO
+EVIDENCE" on its summary page and uploads no evidence file.
+
+A green run proves the real claims, nothing more: outstanding and manual
+items are in the exception register in `docs/testing/JOURNEY-COVERAGE.md`.
 
 The shared Playwright fixture (`e2e/support/test.ts`) attaches browser
 diagnostics for page exceptions, unexpected console errors, failed requests,
@@ -311,9 +370,10 @@ judged against an assertion rather than against a picture.
 
 ## Known limitations / not yet automated
 
-- The scheduled Firefox/WebKit job is configured but has not been exercised
-  in this local environment; CI installs the required browser system
-  dependencies.
+- The scheduled Firefox/WebKit job runs in CI on weekdays against `main`
+  (GitHub schedules run from the default branch only); CI installs the
+  required browser system dependencies. Locally, Firefox and WebKit need
+  `npx playwright install firefox webkit` first.
 - The Escape-key dialog-close test uses a short empirical `waitForTimeout`
   rather than a semantic wait -- see the comment at
   `e2e/deals/add-deal-dialog.spec.ts` for what was tried and why.
@@ -361,8 +421,14 @@ fixed defect forces an inventory update. CI's `e2e-critical` job then runs
 referenced real test that ran there but was skipped, failed, or expected to
 fail is an error (non-@critical claims are listed as not exercised; add
 `--require-results` with a full-suite results file to make those errors
-too; the manual-dispatch CI job `journey-coverage-full` does exactly that
-with the full E2E run plus the ux-audit results). `npm run test:journey-coverage` proves each of these rejections with
+too; the `Journey coverage (full)` workflow does exactly that with the full
+E2E run plus the ux-audit results, see "Full real-claim verification"
+above). The inventory's `exceptions` array is the exception register: every
+P0/P1 action that is not `automated_real_interaction` or `manual_verified`,
+or that still has a manual check, needs an entry (category, reason, whether
+it blocks a release, the evidence a release needs, automation outlook), and
+the check fails when one is missing, stale, or contradicts the action's
+status. `npm run test:journey-coverage` proves each of these rejections with
 negative controls against `scripts/journey-coverage-fixtures/` (a synthetic,
 browserless Playwright project). `docs/testing/JOURNEY-COVERAGE.md` is
 generated from the inventory, and `docs/testing/JOURNEY-GRAPHS.md` holds the
