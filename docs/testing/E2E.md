@@ -59,9 +59,25 @@ smoke item outside CI.
 
 Two session tokens exist for the same fixture owner:
 `E2E_OWNER_SESSION_TOKEN` (used by almost everything, via project-level
-`storageState`) and `E2E_OWNER_SIGNOUT_SESSION_TOKEN` (used only by the
-sign-out journey, since signing out deletes the Session row server-side and
-would otherwise invalidate every other test's cookie).
+`storageState`) and `E2E_OWNER_SIGNOUT_SESSION_TOKEN`, the disposable one
+(`disposableOwnerSessionCookie()` in `e2e/support/auth.ts`), used only by the
+journeys that end or expire a session: signing out deletes the Session row
+server-side and Auth.js deletes an expired one, either of which would
+otherwise invalidate every other test's cookie. Those specs
+(`e2e/auth/session.spec.ts`, `settings-sign-out.spec.ts`,
+`session-expiry.spec.ts`) reseed before each test, and the last two also
+after it.
+
+Session expiry: `expireDisposableOwnerSession()` (`e2e/support/reseed.ts`)
+moves the disposable session's `expires` into the past and leaves the row in
+place, which is how a real session ends. It is called in the middle of a
+test, with a page already open. `e2e/auth/session-expiry.spec.ts` then
+reloads, goes Back, follows a nav link and clicks **Tandai lunas**; the 401
+is the server's own answer, nothing is stubbed. Two requests that see the
+expired row at the same moment both try to delete it, so the server log
+shows an Auth.js `SessionTokenError` ("No record was found for a delete")
+during these tests. Auth.js catches it and the request still ends at
+sign-in; it is not a test failure.
 
 Tests that need an unauthenticated context override per-test:
 ```ts
@@ -189,6 +205,16 @@ status actions at each step, so a returning **Tandai terlambat** fails it.
 Due dates in these fixtures are relative to today's Jakarta date; the specs
 call `expectSameJakartaDay()` so a run across midnight fails with that reason.
 
+Secondary navigation and Beranda links: `e2e/smoke/secondary-nav.spec.ts`
+(account menu **Pengaturan**, the two detail back links, the legacy
+`/dashboard` addresses) and `e2e/home/beranda-links.spec.ts` (follow-up rows,
+deal-terdekat rows, both **Lihat semua** links) click the visible link and
+then walk reload, Back and Forward. Invoice detail does not print the brand,
+so a row's target is checked by invoice number and amount. Before leaving an
+invoice detail page, wait for its WhatsApp action to be enabled: that is when
+its contact and share fetches have settled, and leaving earlier reports them
+as failed requests.
+
 Specs that change per-user state every other test depends on
 (`settings/language.spec.ts` changes `User.language`,
 `settings/bank-details.spec.ts` changes `UserSettings`) reseed in an
@@ -208,6 +234,7 @@ prints the share token.
 | `npm run e2e:fixtures -- follow-up-expired-share` | On top of `follow-up-states`: gives the stored-`OVERDUE` invoice an already-expired share with a recoverable path (the app cannot backdate an expiry). Used by `e2e/invoices/reminder-share-link.spec.ts` via `applyFollowUpExpiredShare()`; refuses to replace an existing share. The next `seed` removes it |
 | `npm run e2e:fixtures -- income-boundaries` | On top of a fresh `seed`: four invoices on the edges of Beranda's monthly total (a draft, one created 1 ms before this Jakarta month, one at its first instant, one at the first instant of next month). Used by `e2e/home/monthly-income.spec.ts` via `applyIncomeBoundaries()`. The next `seed` removes them |
 | `npm run e2e:fixtures -- status-consistency` | On top of `follow-up-states`: five invoices whose stored status and due date disagree (stored DUE due yesterday, legacy stored OVERDUE due in 8 days and with no due date, DRAFT and PAID due yesterday). Used by `e2e/invoices/status-consistency.spec.ts` via `applyStatusConsistency()`; refuses to run twice. The next `seed` removes them |
+| `npm run e2e:fixtures -- expire-disposable-session` | Sets the owner's disposable session's `expires` one minute into the past (the row stays). Used mid-test by `e2e/auth/session-expiry.spec.ts` via `expireDisposableOwnerSession()`; the shared owner session is not touched. The next `seed` restores it |
 | `npm run e2e:build` | Reproducible webpack production build, needed before any `test:e2e*` run |
 | `npm run test:e2e` | Semantic journey suite, chromium + chromium-mobile; visual snapshots are separate |
 | `npm run test:e2e:critical` | `@critical`-tagged tests only, chromium + chromium-mobile -- the PR gate |

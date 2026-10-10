@@ -177,7 +177,8 @@ moves are offered (card menu, deal detail, desktop drag).
 | Owner (session) | full (all actions above) | not-found UI / 404 API (INV-OWN-01, real) | view | allowed |
 | Second owner | — | denied (INV-OWN-01, real) | view | allowed (own data only) |
 | Recipient (no session) | — | — | view only, no owner controls (PUB-01, real) | redirect to sign-in (AUTH-01, real) |
-| Expired session | — | — | view | redirect (AUTH-07, **UNTESTED**) |
+| Expired session | no data: reload, Back and in-app links end on sign-in; a change is answered 401, shown as an error, nothing stored (AUTH-07, real) | — | view | redirect (AUTH-07, real) |
+| Signed-out session (after **Keluar**) | — | — | view | redirect; the old token is refused from a fresh browser too (AUTH-05, AUTH-06, real) |
 
 ## 6. Combination policy (no Cartesian products)
 

@@ -141,8 +141,30 @@ changed status.
 
 ## Batch 3 — P2 navigation and resilience
 
-AUTH-06, AUTH-07, AUTH-08, NAV-07, NAV-09, NAV-10, HOME-05, HOME-06,
-HOME-07, DEAL-DETAIL-02, DEAL-DETAIL-04, SET-05, SET-07, SET-08,
+### Batch A (done, Staging Autopilot v2, 2026-10-10)
+
+Delivered on `chore/journey-batch-a-nav-session-2026-10-10` (receipt:
+`docs/receipts/DIBAYAR-AUTOPILOT-BATCH-A-NAV-SESSION-2026-10-10.md`). Tests
+and one fixture action only; no application code changed. All nine are real
+in `chromium` and `chromium-mobile`.
+
+- AUTH-06: `e2e/auth/settings-sign-out.spec.ts` -- Pengaturan **Keluar**,
+  **Batal** (session survives a reload), **Ya, keluar**, and the same token
+  refused from a fresh browser.
+- AUTH-07: `e2e/auth/session-expiry.spec.ts` -- a session that expires with a
+  page open (new fixture action `expire-disposable-session`): reload, Back,
+  an in-app link, and **Tandai lunas** (401, visible error, nothing stored).
+- NAV-07, NAV-09, NAV-10, AUTH-08: `e2e/smoke/secondary-nav.spec.ts` -- the
+  account menu's **Pengaturan** (click and keyboard), both detail back links
+  with reload/Back/Forward, and the legacy `/dashboard` addresses signed in
+  and signed out.
+- HOME-05, HOME-06, HOME-07: `e2e/home/beranda-links.spec.ts` -- every
+  follow-up row and every deal-terdekat row opens its own record; both
+  **Lihat semua** links.
+
+### Still open
+
+DEAL-DETAIL-02, DEAL-DETAIL-04, SET-05, SET-07, SET-08,
 INV-STATUS-07 (`page.route` failure injection is acceptable here: the
 interaction is real, and only the server response is stubbed), A11Y-04.
 NAV-08 waits for a safe failure-injection seam.
