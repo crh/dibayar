@@ -106,13 +106,22 @@ hotfix/*    urgent Production fix
   `claude/*`, `test/*`, `security/*`, `ux/*`) are classified by **purpose**, and
   are ordinary CI-only branches unless they are explicitly `preview/*`. Prefer
   the standard prefixes for new work.
-- Branch protection is not available on the repository's current GitHub plan,
-  so `main`/`staging` discipline is procedural. Do not push directly to either.
-  Every local clone should install the version-controlled pre-push guard
-  (`scripts/git-safeguards/install-hooks.sh`), which blocks local pushes,
-  force-pushes, creation, and deletion of `main`/`staging`. It is a per-clone,
-  bypassable guard, not server-side protection; see
-  `docs/GIT-SAFEGUARDS-AND-BACKUPS.md`, which also covers the daily Git backups.
+- The public repository has an **active server-side branch ruleset**:
+  [Dibayar — protect main and staging](https://github.com/crh/dibayar/rules/24837655),
+  applied only to `main` and `staging` (verified 2026-10-10). It requires
+  pull requests, resolved review threads, and successful GitHub Actions checks
+  `lint-typecheck-test`, `e2e-critical`, `e2e-a11y`, and `ux-audit`;
+  it blocks deletions and force pushes, with no bypass actors. Do not push
+  directly to either branch. Ordinary feature/fix/chore branches are not targeted.
+  Merge and squash are allowed, but the merge-commit-only rule for
+  `staging -> main` and `main -> staging` remains procedural. Required status
+  checks are non-strict: merging does not require retesting the PR against
+  the latest base; inspect post-merge CI on `staging` and `main`.
+- Every local clone should also install the version-controlled pre-push guard
+  (`scripts/git-safeguards/install-hooks.sh`) as defense in depth. It blocks
+  local pushes, force pushes, creation, and deletion of `main`/`staging`.
+  It is per-clone and bypassable; see `docs/GIT-SAFEGUARDS-AND-BACKUPS.md`
+  for limitations and daily Git backups.
 - There is no `release/*` branch. Add release branches only if the project ever
   needs parallel release trains or long stabilization cycles.
 
