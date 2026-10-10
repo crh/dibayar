@@ -10,7 +10,7 @@
 // no reseed -- they never mutate fixture rows.
 import { execFileSync } from "node:child_process";
 
-function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states" | "follow-up-expired-share" | "income-boundaries" | "status-consistency"): void {
+function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states" | "follow-up-expired-share" | "income-boundaries" | "status-consistency" | "expire-disposable-session"): void {
   const env = { ...process.env, E2E_FIXTURE_CONFIRM: "non-production" };
   execFileSync("npx", ["tsx", "--env-file-if-exists=.env.local", "scripts/e2e-fixtures.ts", action], {
     stdio: "inherit",
@@ -63,4 +63,13 @@ export function applyIncomeBoundaries(): void {
 export function applyStatusConsistency(): void {
   applyFollowUpStates();
   runFixtureAction("status-consistency");
+}
+
+// Expires the owner's disposable session while leaving its row in place
+// (scripts/e2e-fixtures.ts expireDisposableSession). Does not reseed: it is
+// called mid-test, with a page already open on that session. Reseed before
+// the test (the row may have been consumed) and it is restored by the next
+// seed.
+export function expireDisposableOwnerSession(): void {
+  runFixtureAction("expire-disposable-session");
 }
