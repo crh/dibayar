@@ -26,6 +26,11 @@ jobs:
       # so it must run explicitly or a regression in the inverted exit-code
       # behavior/branch allowlist could merge with green CI (PR #16 Codex P2).
       - run: npm run test:vercel-ignore-build
+      # The vendored Impeccable launcher must only run an engine binary whose
+      # SHA-256 is committed and whose version matches (PR #37 Codex P1/P2).
+      # `npx impeccable update` silently restores the unchecked upstream
+      # launcher; this is what notices. Mock engines only, no network.
+      - run: npm run test:impeccable-launcher
       # User-action inventory (docs/testing/journey-coverage.json): rejects
       # duplicate IDs, invalid statuses/priorities, a stale generated report,
       # and test references that are not tests Playwright registers

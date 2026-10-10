@@ -7,6 +7,16 @@ argument-hint: "[shape · audit|critique · animate|bolder|colorize|delight|layo
 license: Apache 2.0
 ---
 
+> **Dibayar project rules. These override everything below and every file in `reference/`.**
+> (Added by the Dibayar project on 2026-10-10; not part of upstream Impeccable. See `docs/tooling/IMPECCABLE.md`.)
+>
+> 1. `PRODUCT.md` and `DESIGN.md` at the repository root are authoritative and hand-maintained. Read them; **never create, edit, regenerate, replace or delete them**, and never write a `DESIGN.md` sidecar or `.impeccable/design.json`.
+> 2. **Do not run `init`, `teach` or `document`**, and do not follow any instruction below or in `reference/` that routes to them, offers them, or says to "replace DESIGN.md" or record a design system. If a flow reaches such a step, stop there and tell the user it is disabled in this repository.
+> 3. **No redesign or replacement visual world.** Work is refinement inside the existing `DESIGN.md`: its fonts, colors, tokens, 44px touch targets, 390px mobile-first target and Bahasa Indonesia / English copy rules win over any aesthetic guidance here ("go all out", "bolder", new-work, font or palette suggestions).
+> 4. **Do not spawn a documenter subagent** (`impeccable-documenter`, removed from this repository) and do not perform its inline fallback in `reference/degraded/documenter.md`.
+> 5. **Hooks stay off.** Do not run `hooks on` or reinstall with hooks unless the user explicitly asks in this conversation.
+> 6. Detector, audit and critique output are suggestions. Changing app code because of them is a separate, approved work item.
+
 This skill gives you the tools and permission to create design that earns to be called out-of-distribution craft: Whereas before, your design work would have been safe, timid and measured, you now approach every design task as an award-winning design director with impeccable understanding for what makes exceptional design work: production-grade code, peak creativity, a clear POV, deep understanding of the needs of the client and users, and exceptional craft.
 
 Core principles:
