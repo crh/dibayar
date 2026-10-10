@@ -1,11 +1,12 @@
 # Git safeguards and daily Git backups
 
-Dibayar is a private repository on **GitHub Free**, so GitHub branch protection
-and rulesets are unavailable (`GET .../branches/main/protection` returns 403
-"Upgrade to GitHub Pro"). Nothing on GitHub's side stops a person or agent with
-write credentials from pushing to, force-pushing, or deleting `main` or
-`staging`. This document covers the two local safeguards that reduce that risk,
-plus the remaining GitHub-side setting:
+Dibayar is a **public** repository on **GitHub Free** with one active
+[server-side branch ruleset](https://github.com/crh/dibayar/rules/24837655)
+protecting exactly `main` and `staging` (verified 2026-10-10). The ruleset
+requires PRs, resolved review threads, and the four CI jobs documented in
+`docs/DEVELOPMENT-WORKFLOW.md`; it blocks deletion and force pushes and has
+no bypass actors. This document covers two complementary local safeguards
+and one GitHub-side setting:
 
 1. **Local pre-push guard**: a version-controlled hook in every local clone.
 2. **Daily Git backups on ALPHA**: immutable, verified `git bundle` snapshots.
@@ -72,17 +73,19 @@ scripts/git-safeguards/install-hooks.sh --check         # 0 = installed and curr
 
 ### Limitations (read this)
 
-- **This is not server-side protection.** It is per-clone and bypassable:
-  `git push --no-verify`, any clone where it isn't installed, the GitHub web
-  UI (including "Delete branch" on a PR), the GitHub API, `gh`, or any
-  credential with write access.
-- **GitHub-hosted PR merges never run a developer's local hook.** Merging a PR
-  into `staging` or `main` is governed only by the workflow and Chris's
-  approvals.
-- A new clone is unprotected until someone runs the installer.
-- The only enforceable remote-side protection would be a paid GitHub plan or
-  public visibility, and both have been declined. The workflow, reviews, and
-  the backups below are the remaining controls.
+- **The local hook is not server-side protection.** It is per-clone and
+  bypassable (e.g. `git push --no-verify`, an unguarded clone, or `gh`).
+  However, the GitHub ruleset independently rejects disallowed operations
+  on `main` and `staging`, including when the local hook is bypassed.
+- **GitHub-hosted PR merges never run a developer's local hook.** They remain
+  subject to the active GitHub ruleset as well as the documented workflow
+  and Chris's merge approvals.
+- A new clone lacks this *local* guard until the installer runs; the
+  repository-level ruleset still applies.
+- The GitHub ruleset has no bypass actors, but a repository admin can change
+  or disable it through GitHub settings. Required CI checks are non-strict,
+  and merge + squash are allowed; the merge-commit-only release/sync policy
+  remains procedural. See `docs/DEVELOPMENT-WORKFLOW.md`.
 
 ---
 
