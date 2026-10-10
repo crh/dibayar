@@ -27,8 +27,8 @@ import { getJakartaCalendarDate } from "../src/lib/invoice-date-status";
 import { encryptShareToken } from "../src/lib/share-token-crypto";
 
 const action = process.argv[2];
-if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states", "follow-up-expired-share", "income-boundaries", "status-consistency"].includes(action ?? "")) {
-  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states|follow-up-expired-share|income-boundaries|status-consistency");
+if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states", "follow-up-expired-share", "income-boundaries", "status-consistency", "expire-disposable-session"].includes(action ?? "")) {
+  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states|follow-up-expired-share|income-boundaries|status-consistency|expire-disposable-session");
 }
 
 const connectionString = process.env.DATABASE_URL;
@@ -538,6 +538,20 @@ async function applyStatusConsistency() {
   console.log(JSON.stringify({ action: "status-consistency", host: normalizedHost, prefix, jakartaToday: today, invoices: applied }));
 }
 
+// Makes the owner's disposable session (the one the sign-out journey uses)
+// already expired, the state a real session reaches once its lifetime has
+// run out: the row stays, its `expires` is in the past, and Auth.js rejects
+// and deletes it on the next request. The shared owner session every other
+// test's cookie relies on is not touched. The next `seed` restores it.
+async function expireDisposableSession() {
+  const result = await prisma.session.updateMany({
+    where: { sessionToken: sessionTokens.ownerSignout, userId: ids.owner },
+    data: { expires: new Date(Date.now() - 60_000) },
+  });
+  if (result.count !== 1) throw new Error(`E2E session expiry expected 1 row, updated ${result.count}`);
+  console.log(JSON.stringify({ action: "expire-disposable-session", host: normalizedHost, prefix, updated: result.count }));
+}
+
 async function main() {
   try {
     if (action === "seed") await seed();
@@ -547,6 +561,7 @@ async function main() {
     else if (action === "follow-up-expired-share") await followUpExpiredShare();
     else if (action === "income-boundaries") await applyIncomeBoundaries();
     else if (action === "status-consistency") await applyStatusConsistency();
+    else if (action === "expire-disposable-session") await expireDisposableSession();
     else await cleanup();
   } finally {
     await prisma.$disconnect();

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "inventoryDate": "2026-10-10",
-  "baseline": "origin/staging dbf9e73 (PR #34 merged) + branch fix/recipient-due-date-without-payment-terms-2026-10-09 (FIND-08 fix)",
+  "baseline": "origin/staging 794d34d (PR #35 merged) + branch chore/journey-batch-a-nav-session-2026-10-10 (Batch A: P2 navigation and session resilience)",
   "classificationRules": [
     "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
     "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
@@ -146,17 +146,25 @@
       "action": "Sign out from Settings with in-app confirm",
       "persona": "owner",
       "preconditions": "Valid session",
-      "interaction": "Pengaturan -> Keluar -> confirm (and cancel)",
-      "expected": "Confirm leads to sign-out; cancel keeps the session",
-      "persisted": "Session row deleted on confirm",
+      "interaction": "Reach Pengaturan through the nav -> Keluar -> Batal -> reload; Keluar -> Ya, keluar -> confirm on the Auth.js page",
+      "expected": "Keluar only asks; Batal removes the question and the session survives a reload; Ya, keluar leads to Auth.js's sign-out page, after which Pengaturan redirects to sign-in and shows no owner data",
+      "persisted": "Session row deleted on confirm: the same token presented from a fresh browser context is redirected to sign-in",
       "alternates": "Cancel",
       "scope": [
         "chromium",
         "chromium-mobile"
       ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 3"
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/auth/settings-sign-out.spec.ts",
+          "title": "Keluar asks first: Batal keeps the session, Ya, keluar ends it for that token",
+          "kind": "real",
+          "note": "Disposable owner session; reseeds before and after. The token-replay step is what proves the row is gone (signing out also clears the browser's cookie)"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
     },
     {
       "id": "AUTH-07",
@@ -164,17 +172,36 @@
       "route": "any protected route",
       "action": "Session expiry mid-use",
       "persona": "owner",
-      "preconditions": "Session row deleted/expired while a page is open",
-      "interaction": "Reload or navigate",
-      "expected": "Redirect to sign-in, no data shown, no 5xx",
-      "persisted": "n/a",
-      "alternates": "Client-side mutation after expiry should fail visibly",
+      "preconditions": "A page is open on a session whose row then expires (expires in the past; fixture action expire-disposable-session on the guarded test database)",
+      "interaction": "Reload; browser Back; click a primary-nav link; click Tandai lunas on an open invoice",
+      "expected": "Reload, Back and an in-app link all end on sign-in with no owner data and no 5xx; a status change is answered 401, the page shows 'Status invoice belum bisa diperbarui.' and keeps the old status",
+      "persisted": "Nothing stored: the owner's valid session still sees the invoice as sent",
+      "alternates": "The error does not tell the person to sign in again (observation, not asserted)",
       "scope": [
-        "chromium"
+        "chromium",
+        "chromium-mobile"
       ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 3 (delete the dedicated sign-out session row, then act)"
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/auth/session-expiry.spec.ts",
+          "title": "reloading an open invoice after the session expired goes to sign-in, and Back shows no data",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/auth/session-expiry.spec.ts",
+          "title": "following a link in the app after the session expired goes to sign-in",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/auth/session-expiry.spec.ts",
+          "title": "Tandai lunas after the session expired is refused, says so, and stores nothing",
+          "kind": "real",
+          "note": "The 401 is the server's own answer to the expired session, not a stub"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
     },
     {
       "id": "AUTH-08",
@@ -183,8 +210,8 @@
       "action": "Legacy /dashboard URL redirects to Beranda",
       "persona": "owner",
       "preconditions": "Valid session",
-      "interaction": "Follow 'Kembali ke dashboard' on invoice detail (links to /dashboard)",
-      "expected": "Lands on / (Beranda)",
+      "interaction": "Follow 'Kembali ke dashboard' on invoice detail (links to /dashboard); open /dashboard and /dashboard/invoices/[id] directly",
+      "expected": "Lands on / (Beranda); the old invoice address lands on /invoice/[id]; signed out, both end on sign-in with no data",
       "persisted": "n/a",
       "alternates": "Unauthenticated -> sign-in",
       "scope": [
@@ -192,8 +219,28 @@
         "chromium-mobile"
       ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 3, together with NAV-09"
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/smoke/secondary-nav.spec.ts",
+          "title": "invoice detail's Kembali ke dashboard lands on Beranda, with working Back and Forward",
+          "kind": "real",
+          "note": "The only in-app link to /dashboard"
+        },
+        {
+          "file": "e2e/smoke/secondary-nav.spec.ts",
+          "title": "the legacy /dashboard addresses redirect to Beranda and to the invoice",
+          "kind": "partial",
+          "note": "page.goto, as an old bookmark would arrive"
+        },
+        {
+          "file": "e2e/smoke/secondary-nav.spec.ts",
+          "title": "the legacy /dashboard addresses send a signed-out visitor to sign-in",
+          "kind": "partial",
+          "note": "page.goto without a session"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
     },
     {
       "id": "HOME-01",
@@ -378,8 +425,8 @@
       "action": "Open an invoice from the follow-up queue",
       "persona": "owner",
       "preconditions": "Queue has rows",
-      "interaction": "Click the row link",
-      "expected": "Invoice detail for that invoice",
+      "interaction": "Click each row link in Perlu dikejar; Back; Forward; reload",
+      "expected": "Invoice detail for that row's own invoice (URL, number and amount); Back returns to the unchanged queue",
       "persisted": "n/a",
       "alternates": "",
       "scope": [
@@ -387,8 +434,22 @@
         "chromium-mobile"
       ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 3"
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/home/beranda-links.spec.ts",
+          "title": "every follow-up row opens its own invoice, and Back returns to the queue",
+          "kind": "real",
+          "note": "Follow-up overlay; all four rows"
+        },
+        {
+          "file": "e2e/home/follow-up-queue.spec.ts",
+          "title": "lists overdue and due-soon invoices with their reasons in order, and keeps them after reload",
+          "kind": "real",
+          "note": "Opens the first row as part of HOME-02"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
     },
     {
       "id": "HOME-06",
@@ -397,8 +458,8 @@
       "action": "Open a deal from 'deal terdekat'",
       "persona": "owner",
       "preconditions": "Deals with deadlines",
-      "interaction": "Click the deal row",
-      "expected": "Deal detail",
+      "interaction": "Click each row in 3 deal terdekat; Back; Forward; reload",
+      "expected": "Deal detail for the deal that row names (URL and heading); Back returns to Beranda",
       "persisted": "n/a",
       "alternates": "Empty list",
       "scope": [
@@ -406,8 +467,16 @@
         "chromium-mobile"
       ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 3"
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/home/beranda-links.spec.ts",
+          "title": "every deal terdekat row opens its own deal, and Back returns to Beranda",
+          "kind": "real",
+          "note": "Which three deals are listed is unit-tested (nearest-deals.test.tsx); this checks each listed row's link"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
     },
     {
       "id": "HOME-07",
@@ -416,8 +485,8 @@
       "action": "'Lihat semua' links to Deal board / Invoice list",
       "persona": "owner",
       "preconditions": "Sections have content",
-      "interaction": "Click Lihat semua",
-      "expected": "Navigates to /deal or /invoice",
+      "interaction": "Click Lihat semua in Perlu dikejar, Back, then Lihat semua in 3 deal terdekat",
+      "expected": "Perlu dikejar -> /invoice (the invoice list), 3 deal terdekat -> /deal (the unfiltered board); reload, Back and Forward work",
       "persisted": "n/a",
       "alternates": "",
       "scope": [
@@ -425,8 +494,15 @@
         "chromium-mobile"
       ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 3"
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/home/beranda-links.spec.ts",
+          "title": "Lihat semua opens the invoice list from Perlu dikejar and the deal board from 3 deal terdekat",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
     },
     {
       "id": "HOME-08",
@@ -643,8 +719,8 @@
       "action": "Account menu 'Pengaturan' item",
       "persona": "owner",
       "preconditions": "Authenticated",
-      "interaction": "Open menu, choose Pengaturan",
-      "expected": "Settings page",
+      "interaction": "Open the account menu (click/tap, or Enter from the keyboard), choose Pengaturan",
+      "expected": "Settings page with the owner's data; the menu is closed; reload, Back and Forward work; Escape closes the menu and returns focus without navigating",
       "persisted": "n/a",
       "alternates": "",
       "scope": [
@@ -652,8 +728,21 @@
         "chromium-mobile"
       ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 3"
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/smoke/secondary-nav.spec.ts",
+          "title": "account menu Pengaturan opens Settings, closes the menu, and Back returns",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/smoke/secondary-nav.spec.ts",
+          "title": "account menu Pengaturan works from the keyboard",
+          "kind": "real",
+          "note": "Enter opens, Escape closes and returns focus, Enter on the item navigates; on the phone sheet the item is one Tab after Tutup"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
     },
     {
       "id": "NAV-08",
@@ -678,8 +767,8 @@
       "action": "Invoice detail back link",
       "persona": "owner",
       "preconditions": "On invoice detail",
-      "interaction": "Click 'Kembali ke dashboard'",
-      "expected": "Lands on Beranda (via /dashboard redirect)",
+      "interaction": "Invoice list -> invoice -> click 'Kembali ke dashboard'",
+      "expected": "Lands on Beranda at / (via the /dashboard redirect) with Beranda marked current; reload stays; Back is the invoice, Forward is Beranda",
       "persisted": "n/a",
       "alternates": "",
       "scope": [
@@ -687,8 +776,15 @@
         "chromium-mobile"
       ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 3"
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/smoke/secondary-nav.spec.ts",
+          "title": "invoice detail's Kembali ke dashboard lands on Beranda, with working Back and Forward",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
     },
     {
       "id": "NAV-10",
@@ -697,8 +793,8 @@
       "action": "Deal detail back link",
       "persona": "owner",
       "preconditions": "On deal detail",
-      "interaction": "Click 'Kembali ke papan deal'",
-      "expected": "Deal board",
+      "interaction": "Deal board -> card menu -> Lihat detail -> click 'Kembali ke papan deal'",
+      "expected": "Deal board at /deal with the card visible and Deal marked current; reload stays; Back is the deal, Forward is the board",
       "persisted": "n/a",
       "alternates": "",
       "scope": [
@@ -706,8 +802,15 @@
         "chromium-mobile"
       ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 3"
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/smoke/secondary-nav.spec.ts",
+          "title": "deal detail's Kembali ke papan deal returns to the board, with working Back and Forward",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
     },
     {
       "id": "DEAL-LIST-01",
