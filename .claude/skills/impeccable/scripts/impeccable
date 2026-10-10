@@ -1,0 +1,189 @@
+#!/bin/sh
+# Impeccable launcher (Dibayar-hardened).
+#
+# MODIFIED from the upstream Impeccable 4.5.2 launcher (Apache-2.0, see
+# ../LICENSE and ../NOTICE.md) by the Dibayar project on 2026-10-10. Upstream
+# trusted IMPECCABLE_BIN, the sibling binary and the version cache without any
+# check, accepted any engine version from ~/.impeccable/bin or PATH, and
+# verified downloads only against a .sha256 file from the same release. This
+# version runs an engine binary only when BOTH hold:
+#
+#   1. its SHA-256 equals the digest committed in ./engine-digests.txt for the
+#      engine version in ./VERSION and the current platform, and
+#   2. it then answers `engine-probe` with exactly that version.
+#
+# That applies to every candidate: IMPECCABLE_BIN, the sibling binary, the
+# version-pinned cache, ~/.impeccable/bin/impeccable, `impeccable` on PATH,
+# and a fresh download. No candidate is executed, not even for the probe,
+# before its digest has matched. A platform with no committed digest, a
+# missing manifest, or a missing SHA-256 tool fails closed.
+#
+# `npx impeccable update` overwrites this file with the upstream launcher;
+# scripts/impeccable-launcher.test.mjs fails when that happens. See
+# docs/tooling/IMPECCABLE.md.
+set -eu
+
+die() {
+  echo "impeccable: $*" >&2
+  exit 127
+}
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+# What the binary needs to know about its home: the skill directory (for
+# reference/*.md and command-metadata.json) and how to name itself in the
+# commands it prints.
+: "${IMPECCABLE_SKILL_DIR:=$(CDPATH= cd -- "$dir/.." && pwd)}"
+: "${IMPECCABLE_SELF:=$0}"
+export IMPECCABLE_SKILL_DIR IMPECCABLE_SELF
+
+docs="docs/tooling/IMPECCABLE.md"
+
+case "$(uname -s 2>/dev/null || echo unknown)" in
+  Darwin) os=darwin ;;
+  Linux) os=linux ;;
+  *) os=unknown ;;
+esac
+case "$(uname -m 2>/dev/null || echo unknown)" in
+  arm64|aarch64) arch=arm64 ;;
+  x86_64|amd64) arch=x64 ;;
+  *) arch=unknown ;;
+esac
+if [ "$os" = unknown ] || [ "$arch" = unknown ]; then
+  die "unsupported platform ($(uname -s 2>/dev/null || echo unknown) $(uname -m 2>/dev/null || echo unknown)); no reviewed engine digest exists for it. See $docs."
+fi
+platform="$os-$arch"
+
+# The expected engine version, from the vendored VERSION file only.
+[ -f "$dir/VERSION" ] || die "missing $dir/VERSION; cannot tell which engine version is expected."
+version=$(tr -d '[:space:]' < "$dir/VERSION")
+case "$version" in
+  ""|*[!0-9.]*|.*|*.|*..*) die "invalid engine version in $dir/VERSION." ;;
+esac
+
+# The committed trust manifest: "<engine version> <platform> <sha256>".
+manifest="$dir/engine-digests.txt"
+[ -f "$manifest" ] || die "missing trust manifest $manifest; refusing to run any engine binary. See $docs."
+expected=$(awk -v v="$version" -v p="$platform" '$1 == v && $2 == p { print $3 }' "$manifest")
+case "$expected" in
+  "") die "no reviewed digest for engine $version on $platform in $manifest; refusing to run any engine binary. To add one, follow \"Trusting an engine binary\" in $docs." ;;
+  *[!0-9a-f]*) die "malformed or duplicate digest for engine $version on $platform in $manifest." ;;
+esac
+[ "${#expected}" -eq 64 ] || die "malformed digest for engine $version on $platform in $manifest."
+
+if command -v sha256sum >/dev/null 2>&1; then
+  hasher=sha256sum
+elif command -v shasum >/dev/null 2>&1; then
+  hasher=shasum
+else
+  die "no SHA-256 tool (sha256sum or shasum) found; cannot verify the engine binary, refusing to run it."
+fi
+sha256_of() {
+  if [ "$hasher" = sha256sum ]; then
+    digest=$(sha256sum "$1" 2>/dev/null) || return 1
+  else
+    digest=$(shasum -a 256 "$1" 2>/dev/null) || return 1
+  fi
+  printf '%s\n' "${digest%% *}"
+}
+
+# True only when $1 is a regular file whose digest matches the manifest and
+# which then reports the expected engine version. $2 names it in messages.
+trusted() {
+  [ -f "$1" ] || return 1
+  actual=$(sha256_of "$1") || actual=""
+  if [ "$actual" != "$expected" ]; then
+    echo "impeccable: refusing $2 ($1): SHA-256 ${actual:-unreadable} is not the reviewed digest for engine $version on $platform." >&2
+    return 1
+  fi
+  if [ ! -x "$1" ]; then
+    # Lost the executable bit in transit (zip extraction, some copiers).
+    chmod +x "$1" 2>/dev/null || return 1
+  fi
+  reported=$(IMPECCABLE_LAUNCHER_PROBE=1 "$1" engine-probe 2>/dev/null | head -n 1 | tr -d '\r') || reported=""
+  if [ "$reported" != "impeccable-engine $version" ]; then
+    echo "impeccable: refusing $2 ($1): it reports \"$reported\", expected \"impeccable-engine $version\"." >&2
+    return 1
+  fi
+  return 0
+}
+
+# An explicit override is never silently replaced by another candidate.
+if [ -n "${IMPECCABLE_BIN:-}" ]; then
+  if trusted "$IMPECCABLE_BIN" "IMPECCABLE_BIN"; then
+    exec "$IMPECCABLE_BIN" "$@"
+  fi
+  die "IMPECCABLE_BIN is set but is not the reviewed engine $version for $platform; unset it or point it at a verified binary."
+fi
+
+bin="$dir/bin/$platform/impeccable"
+if [ -e "$bin" ] && trusted "$bin" "bundled engine"; then
+  exec "$bin" "$@"
+fi
+
+cache_root="${IMPECCABLE_HOME:-${HOME:-/nonexistent}/.impeccable}"
+cached="$cache_root/bin/$version/impeccable"
+if [ -e "$cached" ] && trusted "$cached" "cached engine"; then
+  exec "$cached" "$@"
+fi
+
+home_bin="${HOME:-/nonexistent}/.impeccable/bin/impeccable"
+if [ -e "$home_bin" ] && trusted "$home_bin" "user-installed engine"; then
+  exec "$home_bin" "$@"
+fi
+
+path_bin=$(command -v impeccable 2>/dev/null || true)
+case "$path_bin" in
+  /*)
+    if trusted "$path_bin" "engine on PATH"; then
+      exec "$path_bin" "$@"
+    fi
+    ;;
+esac
+
+# Last resort: fetch this version's binary for the current platform into the
+# version-pinned user cache. The download is held to the same committed digest
+# as every other candidate, so neither the release channel nor
+# IMPECCABLE_DOWNLOAD_BASE is trusted; no .sha256 sidecar is consulted.
+if [ -n "${IMPECCABLE_LAUNCHER_PROBE:-}" ]; then
+  # Reached from another launcher's probe: never download.
+  exit 127
+fi
+base="${IMPECCABLE_DOWNLOAD_BASE:-https://github.com/pbakaus/impeccable/releases/download}"
+url="$base/engine-v$version/impeccable-$platform"
+setup_help() {
+  echo "Engine $version setup needs network access and write permission to $cache_root/bin/$version." >&2
+  echo "Alternatively place a verified engine binary at $cached, or set IMPECCABLE_HOME to a writable cache location. See $docs." >&2
+}
+if ! mkdir -p "$cache_root/bin/$version" 2>/dev/null; then
+  echo "impeccable: engine $version is not installed; cannot create cache directory: $cache_root/bin/$version" >&2
+  setup_help
+  exit 127
+fi
+tmp="$cache_root/bin/$version/.impeccable.part.$$"
+if ! (umask 077; : > "$tmp") 2>/dev/null; then
+  echo "impeccable: engine $version is not installed; cannot write to cache directory: $cache_root/bin/$version" >&2
+  setup_help
+  exit 127
+fi
+fetched=0
+if command -v curl >/dev/null 2>&1; then
+  curl -fsSL --retry 2 -o "$tmp" "$url" 2>/dev/null && fetched=1
+elif command -v wget >/dev/null 2>&1; then
+  wget -q -O "$tmp" "$url" 2>/dev/null && fetched=1
+fi
+if [ "$fetched" != 1 ] || [ ! -s "$tmp" ]; then
+  rm -f "$tmp" 2>/dev/null
+  echo "impeccable: could not download engine $version from $url; check network access and curl or wget availability." >&2
+  setup_help
+  exit 127
+fi
+if ! trusted "$tmp" "downloaded engine"; then
+  rm -f "$tmp" 2>/dev/null
+  die "the download from $url is not the reviewed engine $version for $platform; it was deleted and not run."
+fi
+if ! mv -f "$tmp" "$cached" 2>/dev/null; then
+  rm -f "$tmp" 2>/dev/null
+  die "could not cache the verified download at $cached."
+fi
+exec "$cached" "$@"
