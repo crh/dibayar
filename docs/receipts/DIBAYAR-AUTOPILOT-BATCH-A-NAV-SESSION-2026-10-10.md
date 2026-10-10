@@ -94,11 +94,20 @@ Not run locally: full `test:e2e`, `@visual`, a11y and ux-audit (no application o
 
 ## 8. Latest-head CI
 
-CI_PLACEHOLDER
+On implementation head `bef4fe9` (the last commit that changes a test, fixture or inventory file):
+
+- Workflow `CI`, run `38008973876`: **success**. `lint-typecheck-test`, `e2e-critical`, `e2e-a11y`, `ux-audit` all success; `e2e-cross-browser` skipped by design (scheduled/dispatch only).
+- Workflow `Journey coverage (full)`, run `38008973820` (triggered because the inventory changed): **PASS**. 131 real claims (action x project), 131 passed, 0 not exercised, 0 failed, 0 passed only on retry. Full E2E 231 passed / 0 failed / 0 flaky / 25 skipped; ux-audit 69/69. Its evidence names the PR's temporary merge commit `055f9dc`, not the branch head.
+
+The commit that adds this section is docs-only (this receipt). CI must be green on it too before the merge; the merge is not performed otherwise.
 
 ## 9. Codex findings and fixes
 
-REVIEW_PLACEHOLDER
+Codex reviewed `bef4fe9`: one finding, no code or test finding.
+
+| # | Severity | Finding | Verdict | Fix |
+|---|---|---|---|---|
+| 1 | P2 | This receipt still contained its CI, review and final-status placeholders | Valid | Sections 8, 9 and 13 filled in from the runs above (this commit, docs-only) |
 
 ## 10. Unresolved and manual items
 
@@ -116,4 +125,6 @@ Normal merge commit. No generated or large artifact entered the branch history.
 
 ## 13. Final status
 
-STATUS_PLACEHOLDER
+**Merge-ready under the standing `staging`-only authorization, pending green CI on the docs-only head that adds this text.** All nine Batch A actions are real in chromium and chromium-mobile; CI and the full real-claim run are green on the implementation head; the one review finding is fixed; no hard stop applies. Nothing here touches `main` or Production.
+
+The merge commit is recorded in `STATE.md` by the next autopilot batch, which starts from it.
