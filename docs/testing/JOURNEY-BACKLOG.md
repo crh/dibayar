@@ -186,11 +186,32 @@ They are not inventory evidence: no action's status or test list changed.
 
 ### Still open
 
-DEAL-DETAIL-04, SET-05, SET-07, SET-08,
-INV-STATUS-07 (`page.route` failure injection is acceptable here: the
-interaction is real, and only the server response is stubbed), A11Y-04.
-NAV-08 waits for a safe failure-injection seam. (DEAL-DETAIL-02 is real since
-the FIND-10 fix, 2026-10-11: `e2e/deals/patch-keeps-stage.spec.ts`.)
+NAV-08 waits for a safe failure-injection seam.
+
+### Phase 2 of the one-shot autopilot (done, 2026-10-11)
+
+Delivered on `test/p2-detail-settings-status-a11y-2026-10-11` (receipt:
+`docs/receipts/DIBAYAR-E2E-AUTOPILOT-ONE-SHOT-2026-10-11.md` §6). Tests, one
+fixture action (`incomplete-issuer-settings`), inventory and docs; no
+application code. All six are real in `chromium` and `chromium-mobile`;
+DEAL-DETAIL-02 became real with the FIND-10 fix.
+
+- DEAL-DETAIL-04: `e2e/deals/deal-whatsapp.spec.ts` -- **Buka WhatsApp** on
+  deal detail: one tab, the deal's number, no Referer, no opener.
+- INV-STATUS-07: `e2e/invoices/status-failure.spec.ts` -- a real 409 (the
+  invoice was paid in another tab, then **Tandai jatuh tempo** in the stale
+  one), plus a `page.route` failure with retry, which is partial by rule.
+- SET-05: `e2e/settings/template-reset.spec.ts` -- **Kembalikan ke bawaan**
+  for each template, reload, and the next WhatsApp message.
+- SET-07: `e2e/settings/incomplete-issuer.spec.ts` -- the notice on invoice
+  detail, in Pengaturan and on the recipient page, until the details are
+  saved.
+- SET-08: `e2e/settings/save-failure.spec.ts` -- a real 400 (a WhatsApp
+  number the form accepts and the server rejects), plus a `page.route`
+  failure with retry (partial by rule).
+- A11Y-04: `e2e/smoke/reduced-motion.spec.ts` -- menus, dialog and **Tandai
+  lunas** under `prefers-reduced-motion: reduce`, with motion measured after
+  every step, and a control without the preference.
 
 ## Next phase — Zero Routine Manual Regression Testing
 

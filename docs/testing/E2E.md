@@ -215,6 +215,23 @@ invoice detail page, wait for its WhatsApp action to be enabled: that is when
 its contact and share fetches have settled, and leaving earlier reports them
 as failed requests.
 
+Failures without a stub: where the server can be made to refuse a request
+through the UI alone, the failure test uses that and counts as real
+evidence. `e2e/invoices/status-failure.spec.ts` marks an invoice paid in a
+second tab and then presses **Tandai jatuh tempo** in the first (the server
+answers 409); `e2e/settings/save-failure.spec.ts` saves an issuer WhatsApp
+number of 33 characters, which the form allows and the server rejects (400).
+Each file also has a `page.route` version with a retry; that one is partial
+by the inventory's rules, like the due-date failure tests. A test that
+expects a 4xx opts in with `expectedErrorResponses` for that one request.
+
+Reduced motion (`e2e/smoke/reduced-motion.spec.ts`): the context is created
+with `reducedMotion: "reduce"`, and after each real interaction the test
+reads `document.getAnimations()` and the computed animation and transition
+durations of every element; nothing may exceed the 0.01 ms the rule in
+`globals.css` sets. A control test without the preference must report the
+account menu's 200 ms animation, so the measurement is known to see motion.
+
 A deal's stage after a contact edit (FIND-10, fixed): a PATCH that names no
 stage must not move the deal. `e2e/deals/patch-keeps-stage.spec.ts` saves a
 contact name on a Nego deal and repairs a WhatsApp number from invoice detail
@@ -279,6 +296,7 @@ prints the share token.
 | `npm run e2e:fixtures -- income-boundaries` | On top of a fresh `seed`: four invoices on the edges of Beranda's monthly total (a draft, one created 1 ms before this Jakarta month, one at its first instant, one at the first instant of next month). Used by `e2e/home/monthly-income.spec.ts` via `applyIncomeBoundaries()`. The next `seed` removes them |
 | `npm run e2e:fixtures -- status-consistency` | On top of `follow-up-states`: five invoices whose stored status and due date disagree (stored DUE due yesterday, legacy stored OVERDUE due in 8 days and with no due date, DRAFT and PAID due yesterday). Used by `e2e/invoices/status-consistency.spec.ts` via `applyStatusConsistency()`; refuses to run twice. The next `seed` removes them |
 | `npm run e2e:fixtures -- expire-disposable-session` | Sets the owner's disposable session's `expires` one minute into the past (the row stays). Used mid-test by `e2e/auth/session-expiry.spec.ts` via `expireDisposableOwnerSession()`; the shared owner session is not touched. The next `seed` restores it |
+| `npm run e2e:fixtures -- incomplete-issuer-settings` | Removes the owner's `UserSettings` row: an account that never saved Pengaturan (the form cannot produce that state). Used by `e2e/settings/incomplete-issuer.spec.ts` via `applyIncompleteIssuerSettings()`. The next `seed` restores the settings |
 | `npm run e2e:build` | Reproducible webpack production build, needed before any `test:e2e*` run |
 | `npm run test:e2e` | Semantic journey suite, chromium + chromium-mobile; visual snapshots are separate |
 | `npm run test:e2e:critical` | `@critical`-tagged tests only, chromium + chromium-mobile -- the PR gate |

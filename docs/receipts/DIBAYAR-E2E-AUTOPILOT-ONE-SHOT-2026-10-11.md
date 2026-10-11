@@ -36,12 +36,12 @@ Statuses: TODO / IN_PROGRESS / DONE / BLOCKED. Updated per PR.
 | B3 | Long journey: resilience and permissions | DONE | PR 1, `e2e/journeys/resilience-permissions.spec.ts` |
 | C1 | NAV-08 route error boundary | TODO | Phase 2 |
 | C2 | DEAL-DETAIL-02 contact name | DONE (real, both projects) | PR 2 (FIND-10 fix), `e2e/deals/patch-keeps-stage.spec.ts` |
-| C3 | DEAL-DETAIL-04 WhatsApp from deal detail | TODO | Phase 2 |
-| C4 | INV-STATUS-07 failed status update | TODO | Phase 2 |
-| C5 | SET-05 reset template | TODO | Phase 2 |
-| C6 | SET-07 incomplete issuer notice | TODO | Phase 2 |
-| C7 | SET-08 failed settings save | TODO | Phase 2 |
-| C8 | A11Y-04 reduced motion | TODO | Phase 2 |
+| C3 | DEAL-DETAIL-04 WhatsApp from deal detail | DONE (real, both projects) | PR 3 |
+| C4 | INV-STATUS-07 failed status update | DONE (real: stub-free 409; plus a partial stubbed test) | PR 3 |
+| C5 | SET-05 reset template | DONE (real, both projects) | PR 3 |
+| C6 | SET-07 incomplete issuer notice | DONE (real, both projects; fixture precondition) | PR 3 |
+| C7 | SET-08 failed settings save | DONE (real: stub-free 400; plus a partial stubbed test) | PR 3 |
+| C8 | A11Y-04 reduced motion | DONE (real, both projects; see the classification note) | PR 3 |
 | A1 | MAN-DUE-01 native picker, real devices | BLOCKED (no device, see §3) | Phase 3 handoff |
 | A2 | MAN-AUTH-01 real Google sign-in and sign-out | BLOCKED (needs a person, see §3) | Phase 3 handoff |
 | A3 | MAN-REL-01 | BLOCKED (contains A1 and A2) | Phase 3 handoff |
@@ -376,3 +376,92 @@ CI on the first head `a4c0e60`: `CI` `38111441524` and
 `Journey coverage (full)` `38111441540`, both success.
 
 CI: pending, filled in below.
+
+## 6. PR 3 — six P2 actions (Workstream C, part 1)
+
+Branch `test/p2-detail-settings-status-a11y-2026-10-11`, stacked on PR #42.
+Tests, one fixture action, inventory and docs. No `src/` change.
+
+| Action | Registered test (file → title) | Projects | Visible control | Outcome asserted | Persistence / no mutation | Classification |
+|---|---|---|---|---|---|---|
+| DEAL-DETAIL-04 | `e2e/deals/deal-whatsapp.spec.ts` → "Buka WhatsApp on deal detail opens one chat with the deal's own number" | chromium, chromium-mobile | **Buka WhatsApp** on deal detail (reached through the board card menu) | one new tab at exactly `https://wa.me/628110000002`, one request, no Referer, `window.opener` null | the deal page is unchanged (no repair form, no error) | real |
+| INV-STATUS-07 | `e2e/invoices/status-failure.spec.ts` → "a status change the server refuses (the invoice was paid in another tab) shows an error and changes nothing" | both | **Tandai jatuh tempo** in a tab that still shows Terkirim | server answers 409 itself; alert "Status invoice belum bisa diperbarui."; chip and actions unchanged; no paid moment | reload shows Lunas (the other tab's change) and never Jatuh tempo | real |
+| | same file → "a failed Tandai lunas shows an error, keeps the status after a reload, and a second try works" | both | **Tandai lunas** | alert; chip unchanged; retry succeeds | stored status read through the API is SENT; reload shows Terkirim | partial (failure injected with `page.route`) |
+| SET-05 | `e2e/settings/template-reset.spec.ts` → "Kembalikan ke bawaan restores one template's default, leaves everything else, and the next message uses it" | both | **Kembalikan ke bawaan** under each template | that template is the default text; "Tersimpan" | reload; the other template and issuer/bank fields unchanged; the next WhatsApp message (local stub) is the default text | real |
+| SET-07 | `e2e/settings/incomplete-issuer.spec.ts` → "missing issuer and bank details warn on invoice detail, in Pengaturan and on the brand's page, until they are saved" | both | nav → Invoice → invoice; nav → Pengaturan; **Simpan pengaturan** | notice on invoice detail and in Pengaturan; "Detail rekening belum lengkap." for the recipient; an incomplete form is refused with three field errors and sends no request | after a complete save all three notices are gone, also after reload | real (the starting state is a fixture precondition) |
+| SET-08 | `e2e/settings/save-failure.spec.ts` → "a save the server rejects (WhatsApp number too long) shows an error, keeps what was typed, and stores nothing" | both | **Simpan pengaturan** | server answers 400 itself; alert "Gagal menyimpan. Coba lagi."; no "Tersimpan"; typed values still in the form | reload shows the seeded values, including the fields that were valid; the corrected form then saves | real |
+| | same file → "a failed save shows an error and keeps the form; pressing Simpan again saves it" | both | **Simpan pengaturan** | alert; form kept; retry saves | stored settings read through the API are the seeded ones | partial (`page.route`) |
+| A11Y-04 | `e2e/smoke/reduced-motion.spec.ts` → "opening the account menu and the add-deal dialog, and marking an invoice paid, all work with no motion" | both | **Menu akun**, Escape, **+ Deal**, **Tutup**, nav → Invoice, **Tandai lunas** | each control works; after each step the longest running animation and the longest computed animation/transition duration on the page are ≤ 0.01 ms; the menu is at opacity 1, no transform | paid status after reload | real |
+| | same file → "control: with no motion preference the account menu animates and buttons have transitions" | both | **Menu akun** | the same measurement reports 200 ms and ≥ 150 ms | — | partial (the measurement's control) |
+
+### Classification notes
+
+- INV-STATUS-07 and SET-08 are real because of the stub-free test in each
+  file. The backlog had expected `page.route` here; that version is kept as
+  a second, partial reference. Had only the stubbed test existed, both would
+  be `automated_partial`, as INV-DUE-06 is.
+- A11Y-04 is classed real, and this is the one judgement call: the rules
+  class "screenshots, axe scans, text presence" as partial. This test is
+  none of those. It drives the controls and asserts their outcomes, and what
+  it asserts about motion is the browser's own animation state after each
+  interaction. If Chris reads the rule more strictly, the inventory status
+  is the only thing to change.
+- SET-07: the state "never saved Pengaturan" cannot be produced through the
+  form (it refuses an empty required field), so it is the documented
+  fixture precondition `incomplete-issuer-settings` (deletes the fixture
+  owner's `UserSettings` row on the guarded database; the next seed restores
+  it). Nothing after it is seeded.
+
+### Negative controls
+
+Six mutations in `src/`, one build, run on `chromium`, reverted from Git
+(`git diff -- src` empty), rebuilt:
+
+| Mutation | Fails |
+|---|---|
+| deal detail opens WhatsApp twice | DEAL-DETAIL-04 (tab list) |
+| `updateStatus` swallows the error | both INV-STATUS-07 tests (no alert) |
+| `resetTemplate` saves the form unchanged | SET-05 (value) |
+| invoice detail ignores `hasIncompleteIssuer` | SET-07 (no notice) |
+| settings form shows "saved" on a failed response | both SET-08 tests (no alert) |
+| the reduced-motion rule removed from `globals.css` | A11Y-04 (motion > 0.01 ms); its control still passes |
+
+### Cross-browser
+
+The scheduled `e2e-cross-browser` job runs every spec in Firefox and WebKit
+too, so the six files were run there locally. Two things surfaced and were
+fixed in the tests: WebKit sends an empty `Referer` header where the others
+send none (asserted as "no referring address"), and one Firefox run in about
+eight reported an aborted request when the reduced-motion test jumped to
+`/invoice` with `page.goto`; it now uses the nav link. After that: 60/60
+over five repeats of those two files in four engines.
+
+### Observations, not changed
+
+- The invoice-detail notice says "di Pengaturan" but is plain text, not a
+  link.
+- **Kembalikan ke bawaan** saves the whole form at once, so an unsaved edit
+  in another field is saved with it.
+- The issuer WhatsApp field has no length limit in the form; the server's
+  limit (32) surfaces only as the generic "Gagal menyimpan. Coba lagi.".
+
+### Inventory after this PR
+
+Real 81/93 (87.1%), was 75/93 after PR 2 and 74/93 at the start. P0 real
+28/30, outstanding P0/P1 4, both unchanged. `not_covered` 1 (NAV-08).
+
+### Validation
+
+Local, on the PR branch (ALPHA, 2026-10-11):
+
+| Gate | Result |
+|---|---|
+| lint / typecheck | 0 / 0 |
+| `npm test` | 987 / 987 |
+| build and e2e:build | 0 |
+| journey self-test, `coverage:journeys` | 37 / 37; OK, real 87.1%, P0 real 93.3%, 4 outstanding P0/P1 |
+| the six new files, four engines | 36 tests: chromium and chromium-mobile 18/18; Firefox and WebKit 18/18 after the two fixes above |
+| full `test:e2e`, both projects | 259 passed, 0 failed, 25 skipped |
+| `coverage:journeys -- --results` on that run | 141 real claims passed; 4 not exercised (the ux-audit ones) |
+
+CI and review: pending, filled in below.

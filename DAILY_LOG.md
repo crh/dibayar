@@ -983,3 +983,14 @@ Starting state verified fresh: `main` = `origin/main` = `a60dfdf`, no open PRs, 
 - Gates: lint 0, typecheck 0, unit 987/987, build 0, e2e:build 0, journey self-test 37/37, `coverage:journeys` OK; full `test:e2e` 241 passed / 0 failed / 25 skipped; results check 129 passed, 4 not exercised (ux-audit).
 - Rubric self-score: Evidence honesty 2/2 (the refused merge and the unrepaired rows are stated); shipped completeness 1/2 (fix complete and tested, but nothing merged: the session cannot merge); security discipline 2/2 (no secrets, no hosted system, owner scoping untouched); focus 2/2 (a defect found by the brief's own target, fixed narrowly; FIND-11 recorded, not fixed); deploy health 2/2 (no deploy); report quality 2/2.
 
+## 2026-10-11 — One-shot E2E autopilot, PR 3: six P2 actions
+
+- PR #42 after review: reviewer agent approve-with-nits (2 P2 on documentation accuracy: the exposure window and INV-WA-03 attribution; fixed). Running the regression in Firefox and WebKit found a WebKit hydration race in the test (dialog opened by address) and a Firefox-cancelled favicon fetch reported by the health guard; both fixed, guard self-test passes. CI on `a4c0e60` green (`38111441524`, `38111441540`).
+- PR 3, stacked on #42: `e2e/deals/deal-whatsapp.spec.ts`, `e2e/invoices/status-failure.spec.ts`, `e2e/settings/template-reset.spec.ts`, `save-failure.spec.ts`, `incomplete-issuer.spec.ts`, `e2e/smoke/reduced-motion.spec.ts`; fixture action `incomplete-issuer-settings` (removes the fixture owner's `UserSettings` row; guarded like every other action). No `src/` change.
+- Classification: INV-STATUS-07 and SET-08 are real through stub-free server refusals (409 and 400); their `page.route` variants are partial references. A11Y-04 is classed real on measured motion after real interactions; flagged as a judgement call.
+- Generated: real 81/93 = 87.1% (74 at the start of the day), P0 28/30, outstanding P0/P1 4, `not_covered` 1 (NAV-08).
+- Negative controls (6 `src/` mutations, one build, reverted from Git, rebuilt): each new real test failed for its mutation; the reduced-motion control test kept passing.
+- Cross-browser: WebKit sends an empty `Referer` where others send none; a Firefox abort when jumping pages with `goto`. Fixed in the tests; 60/60 over five repeats in four engines.
+- Gates: lint 0, typecheck 0, unit 987/987, build 0, e2e:build 0, journey self-test 37/37; full `test:e2e` 259 passed / 0 failed / 25 skipped; results check 141 passed, 4 not exercised (ux-audit).
+- Rubric self-score: Evidence honesty 2/2 (the judgement call and the stub/stub-free split are stated); shipped completeness 1/2 (six actions complete, nothing merged); security discipline 2/2; focus 2/2; deploy health 2/2 (no deploy); report quality 2/2.
+

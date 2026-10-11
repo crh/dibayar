@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "inventoryDate": "2026-10-11",
-  "baseline": "origin/staging 390bc38 (PR #36 merged) + one-shot autopilot 2026-10-11 (PR #41 long journeys; FIND-10 fix with DEAL-DETAIL-02)",
+  "baseline": "origin/staging 390bc38 (PR #36 merged) + one-shot autopilot 2026-10-11 (PR #41 long journeys; PR #42 FIND-10 fix with DEAL-DETAIL-02; Phase 2: DEAL-DETAIL-04, INV-STATUS-07, SET-05, SET-07, SET-08, A11Y-04)",
   "classificationRules": [
     "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
     "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
@@ -1321,17 +1321,25 @@
       "action": "Open WhatsApp chat with the brand contact",
       "persona": "owner",
       "preconditions": "Valid number",
-      "interaction": "Click the WhatsApp action",
-      "expected": "wa.me popup for the contact",
+      "interaction": "Board card menu -> Lihat detail; click/tap Buka WhatsApp",
+      "expected": "Exactly one new tab at wa.me/<the deal's number>, no prefilled text, no Referer, no opener; the deal page is unchanged",
       "persisted": "n/a",
-      "alternates": "Blocked popup",
+      "alternates": "Invalid number (DEAL-DETAIL-03); real phone and the WhatsApp app (MAN-WA-01)",
       "scope": [
         "chromium",
         "chromium-mobile"
       ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 3"
+      "status": "automated_real_interaction",
+      "evidence": "One-shot autopilot 2026-10-11 (Phase 2)",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-whatsapp.spec.ts",
+          "title": "Buka WhatsApp on deal detail opens one chat with the deal's own number",
+          "kind": "real",
+          "note": "wa.me answered by a local stub (keepWhatsAppLocal), so the tab's address is the exact link the app built and nothing reaches WhatsApp"
+        }
+      ]
     },
     {
       "id": "DEAL-DETAIL-05",
@@ -1918,15 +1926,32 @@
       "route": "/invoice/[id]",
       "action": "Status update failure shows an error",
       "persona": "owner",
-      "preconditions": "PATCH fails",
-      "interaction": "Click a status action",
-      "expected": "Alert, status unchanged",
+      "preconditions": "The server refuses the PATCH (409 after the invoice was paid in another tab), or the PATCH fails",
+      "interaction": "Click/tap a status action",
+      "expected": "Alert 'Status invoice belum bisa diperbarui.', the shown status and actions stay, no paid moment; a reload shows what the server holds",
       "persisted": "Unchanged",
       "alternates": "",
-      "scope": [],
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 3 (route-level failure injection via page.route is acceptable here)"
+      "status": "automated_real_interaction",
+      "evidence": "One-shot autopilot 2026-10-11 (Phase 2)",
+      "tests": [
+        {
+          "file": "e2e/invoices/status-failure.spec.ts",
+          "title": "a status change the server refuses (the invoice was paid in another tab) shows an error and changes nothing",
+          "kind": "real",
+          "note": "No stub: the same owner marks the invoice paid in a second tab, then the first tab's Tandai jatuh tempo is answered 409 by the server itself (PAID -> DUE is not allowed)"
+        },
+        {
+          "file": "e2e/invoices/status-failure.spec.ts",
+          "title": "a failed Tandai lunas shows an error, keeps the status after a reload, and a second try works",
+          "kind": "partial",
+          "note": "Real click, reload and retry, but the failure is injected with page.route (a stub), so by rule it is partial"
+        }
+      ]
     },
     {
       "id": "INV-WA-01",
@@ -2631,16 +2656,25 @@
       "action": "Reset a template to default",
       "persona": "owner",
       "preconditions": "Edited template",
-      "interaction": "Click reset, save",
-      "expected": "Default restored",
+      "interaction": "Click/tap Kembalikan ke bawaan under a template (it saves by itself); reload",
+      "expected": "That template is the default again; the other template and every other setting are unchanged; the next WhatsApp message is built from the default",
       "persisted": "UserSettings",
       "alternates": "",
       "scope": [
-        "chromium"
+        "chromium",
+        "chromium-mobile"
       ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 3"
+      "status": "automated_real_interaction",
+      "evidence": "One-shot autopilot 2026-10-11 (Phase 2)",
+      "tests": [
+        {
+          "file": "e2e/settings/template-reset.spec.ts",
+          "title": "Kembalikan ke bawaan restores one template's default, leaves everything else, and the next message uses it",
+          "kind": "real",
+          "note": "Both templates are first edited and saved through the form; then each is reset in turn, with a reload after each and a WhatsApp message (local stub) after the first"
+        }
+      ]
     },
     {
       "id": "SET-06",
@@ -2681,15 +2715,26 @@
       "route": "/pengaturan, /invoice/[id]",
       "action": "Incomplete issuer settings warn on invoice detail",
       "persona": "owner",
-      "preconditions": "Missing issuer fields",
-      "interaction": "Open invoice detail",
-      "expected": "Dependency notice",
-      "persisted": "n/a",
+      "preconditions": "The owner has never saved Pengaturan (no UserSettings row; guarded fixture action incomplete-issuer-settings)",
+      "interaction": "Nav -> Invoice -> invoice detail; nav -> Pengaturan; save an incomplete form, then a complete one; back to the invoice",
+      "expected": "Notice on invoice detail and in Pengaturan, 'Detail rekening belum lengkap.' on the recipient page; all three gone after the details are saved, also after reload",
+      "persisted": "UserSettings (created by the save)",
       "alternates": "",
-      "scope": [],
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 3"
+      "status": "automated_real_interaction",
+      "evidence": "One-shot autopilot 2026-10-11 (Phase 2)",
+      "tests": [
+        {
+          "file": "e2e/settings/incomplete-issuer.spec.ts",
+          "title": "missing issuer and bank details warn on invoice detail, in Pengaturan and on the brand's page, until they are saved",
+          "kind": "real",
+          "note": "The starting state is a fixture precondition (the form cannot produce it); every step after it is through the UI. The invoice notice is plain text with no link to Pengaturan, so the journey reaches Pengaturan through the navigation"
+        }
+      ]
     },
     {
       "id": "SET-08",
@@ -2697,15 +2742,32 @@
       "route": "/pengaturan",
       "action": "Settings save failure shows an error",
       "persona": "owner",
-      "preconditions": "PATCH fails",
-      "interaction": "Save",
-      "expected": "Error, form values kept",
+      "preconditions": "The server rejects the save (400: issuer WhatsApp number over 32 characters, which the form does not limit), or the PATCH fails",
+      "interaction": "Edit fields; click/tap Simpan pengaturan",
+      "expected": "Alert 'Gagal menyimpan. Coba lagi.', no 'Tersimpan', the typed values stay in the form; a reload shows the stored values",
       "persisted": "Unchanged",
       "alternates": "",
-      "scope": [],
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 3"
+      "status": "automated_real_interaction",
+      "evidence": "One-shot autopilot 2026-10-11 (Phase 2)",
+      "tests": [
+        {
+          "file": "e2e/settings/save-failure.spec.ts",
+          "title": "a save the server rejects (WhatsApp number too long) shows an error, keeps what was typed, and stores nothing",
+          "kind": "real",
+          "note": "No stub: the form accepts a 33-character number and the server's own validation answers 400"
+        },
+        {
+          "file": "e2e/settings/save-failure.spec.ts",
+          "title": "a failed save shows an error and keeps the form; pressing Simpan again saves it",
+          "kind": "partial",
+          "note": "Real typing, click and retry, but the failure is injected with page.route (a stub), so by rule it is partial"
+        }
+      ]
     },
     {
       "id": "A11Y-01",
@@ -2822,16 +2884,31 @@
       "action": "Reduced-motion preference respected",
       "persona": "motion-sensitive user",
       "preconditions": "prefers-reduced-motion: reduce",
-      "interaction": "Open menus/dialogs, mark paid",
-      "expected": "No large animations",
+      "interaction": "Open and close the account menu and the add-deal dialog, go to an invoice through the nav, Tandai lunas",
+      "expected": "Every control works, and after each step no animation or transition on the page lasts longer than 0.01 ms (document.getAnimations() and computed durations of every element)",
       "persisted": "n/a",
       "alternates": "",
       "scope": [
-        "chromium"
+        "chromium",
+        "chromium-mobile"
       ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 3"
+      "status": "automated_real_interaction",
+      "evidence": "One-shot autopilot 2026-10-11 (Phase 2)",
+      "tests": [
+        {
+          "file": "e2e/smoke/reduced-motion.spec.ts",
+          "title": "opening the account menu and the add-deal dialog, and marking an invoice paid, all work with no motion",
+          "kind": "real",
+          "note": "Context option reducedMotion: 'reduce'. The outcome is measured motion, not a screenshot: running animations and the computed animation/transition duration of every element after each real interaction"
+        },
+        {
+          "file": "e2e/smoke/reduced-motion.spec.ts",
+          "title": "control: with no motion preference the account menu animates and buttons have transitions",
+          "kind": "partial",
+          "note": "The measurement's own control: without the preference it reports the menu's 200 ms animation and transitions of at least 150 ms"
+        }
+      ]
     }
   ],
   "exceptions": [
