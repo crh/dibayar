@@ -261,9 +261,12 @@ nothing looked wrong when saving.
 
 Cause: `dealPatchSchema` was `dealInputSchema.partial()`. zod's `partial()`
 keeps a field's default, so every `PATCH /api/deals/:id` without a `status`
-was parsed as `status: "MASUK"`. Present since the M1 slice (`65393b6`,
-2026-07-14); `git branch -r --contains` lists `origin/main`, so it is on
-Production.
+was parsed as `status: "MASUK"`. The schema line dates from the M1 slice
+(`65393b6`, 2026-07-14). The first screen to send such a PATCH was the
+Beranda queue's number repair (`7633904`, 2026-08-09); the contact name and
+the deal-detail repair came with T-17 (`f696973`, 2026-08-23), which also
+introduced the stage history. All three commits are ancestors of
+`origin/main`, so the defect is on Production.
 
 Why nothing caught it: the unit test for "a non-status update records no
 transition" used a deal already at Masuk, and the contact-repair journey
@@ -297,15 +300,26 @@ rebuilt: 12 of 12 over two repeats in both projects.
   "Nama kontak disimpan". Persistence: value after reload and after
   re-entering from the board; stage, history and board column unchanged.
   Negative control: the unfixed build (above).
-- DEAL-DETAIL-03: second test reference added; status unchanged.
+- INV-WA-03 (already real through ux-audit): the invoice-detail repair test
+  added as a second real reference. DEAL-DETAIL-03: unchanged apart from
+  the stage assertions in its existing test.
+- The Beranda queue's repair (HOME-04, `automated_partial`) gets no browser
+  regression here; that path is covered at repository level by
+  `src/lib/deals.test.ts`.
 - FIND-10 (high, fixed) and FIND-11 (low, open) added.
 - Real: 75/93 (80.6%), was 74/93. P0 28/30, outstanding P0/P1 4, unchanged.
 
 ### Not done, on purpose
 
 - No stored row is repaired. Deals already moved to Masuk this way stay
-  there; each has a `→ Masuk` history entry at the time of the contact edit.
-  A read-only Production count of those needs Chris.
+  there. One reset since T-17 (2026-08-23) has a `→ Masuk` history entry at
+  the time of the edit; a Beranda repair between 2026-08-09 and T-17 left
+  none. A read-only Production count of such entries is therefore a lower
+  bound, and it needs Chris.
+- Two older quirks of the same schema, reached by no screen today: a PATCH
+  with `feeIdr` null or empty stores 0, and `deadline: null` stores
+  1970-01-01 (`z.coerce`). "A patch changes only what it names" holds for
+  omitted keys; these two are named keys with a surprising meaning.
 - FIND-11 (low, open): a saved contact name cannot be removed. Emptying the
   field sends an empty PATCH, the page says "Nama kontak disimpan" and puts
   the old name back (verified in the browser). Needs a small decision.
@@ -324,4 +338,20 @@ Local, on the PR branch (ALPHA, 2026-10-11), with the fix:
 | full `test:e2e`, both projects | 241 passed, 0 failed, 25 skipped |
 | `coverage:journeys -- --results` on that run | 129 real claims passed; 4 not exercised (the ux-audit ones) |
 
-CI and review: pending, filled in below.
+### Independent review (PR #42, head `a4c0e60`)
+
+A separate read-only reviewer agent. Verdict: **approve with nits**, no P1;
+it reproduced the zod behaviour itself and confirmed the fix, the create
+path, the six PATCH callers (two send a status, four do not) and that no
+other schema has the pattern.
+
+| # | Sev. | Finding | Disposition |
+|---|---|---|---|
+| P2-a | P2 | "Each affected deal has a `→ Masuk` history entry" is wrong for Beranda repairs made before the stage history existed; the count for Chris is a lower bound; "since `65393b6`" is the schema line, not the first trigger | Fixed in the receipt, inventory, backlog and STATE.md |
+| P2-b | P2 | The invoice-detail repair test was attached to DEAL-DETAIL-03, whose control it never touches; FIND-10's action list lacked INV-WA-03 and HOME-04 | Fixed: reference moved to INV-WA-03, both actions listed; the missing Beranda browser regression is stated |
+| P3-a | P3 | `stageHistory()` had a dead conditional and no auto-wait | Fixed: a retried `toHaveText([...])` on the history labels |
+| P3-b | P3 | Pre-existing `z.coerce` quirks in the patch schema (fee null → 0, deadline null → 1970) | Not changed (no screen sends them); recorded above and in FIND-10 |
+| P3-c | P3 | The second E2E test had no timeout headroom | Fixed: `test.setTimeout(60_000)` |
+| P3-e | P3 | This section said "pending" | This table |
+
+CI: pending, filled in below.

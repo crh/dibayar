@@ -36,10 +36,11 @@ async function openDealFromBoard(page: Page, brand: string, isMobile: boolean) {
   await expect(page.getByRole("heading", { level: 1, name: brand })).toBeVisible();
 }
 
-// The stage history, top to bottom, without the dates.
-async function stageHistory(page: Page): Promise<string[]> {
-  const items = page.locator("div", { has: page.getByRole("heading", { name: "Riwayat tahap" }) }).last().getByRole("listitem");
-  return (await items.locator("span").first().count()) === 0 ? [] : items.evaluateAll((nodes) => nodes.map((node) => node.querySelector("span")?.textContent ?? ""));
+// The stage history is exactly these entries, top to bottom (each item is a
+// label span followed by a date span).
+async function expectStageHistory(page: Page, entries: string[]) {
+  const labels = page.locator("div", { has: page.getByRole("heading", { name: "Riwayat tahap" }) }).last().getByRole("listitem").locator("span:first-child");
+  await expect(labels).toHaveText(entries);
 }
 
 test.describe("changing a deal's contact keeps its stage (FIND-10)", { tag: "@critical" }, () => {
@@ -60,7 +61,7 @@ test.describe("changing a deal's contact keeps its stage (FIND-10)", { tag: "@cr
     await expect(field).toHaveValue("");
     await expect(field).toHaveAttribute("placeholder", "Belum diisi");
     await expect(page.getByText("Tahap saat ini: Nego")).toBeVisible();
-    expect(await stageHistory(page)).toEqual(["Deal dibuat langsung di tahap Nego"]);
+    await expectStageHistory(page, ["Deal dibuat langsung di tahap Nego"]);
 
     await field.fill("Rina Kemitraan");
     const first = await responseTo(page, "PATCH", `/api/deals/${dealId}`, () => press(save, isMobile));
@@ -75,7 +76,7 @@ test.describe("changing a deal's contact keeps its stage (FIND-10)", { tag: "@cr
     // Nothing else about the deal changed: same stage, same single history
     // entry, same number, and the stage buttons of a Nego deal.
     await expect(page.getByText("Tahap saat ini: Nego")).toBeVisible();
-    expect(await stageHistory(page)).toEqual(["Deal dibuat langsung di tahap Nego"]);
+    await expectStageHistory(page, ["Deal dibuat langsung di tahap Nego"]);
     await expect(page.getByText("+62 811-0000-002", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Lanjut ke Deal", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Kembali ke Masuk", exact: true })).toBeVisible();
@@ -99,10 +100,12 @@ test.describe("changing a deal's contact keeps its stage (FIND-10)", { tag: "@cr
     // And through the board again, not only this page's own reload.
     await openDealFromBoard(page, brand, isMobile);
     await expect(field).toHaveValue("Bima Pemasaran");
-    expect(await stageHistory(page)).toEqual(["Deal dibuat langsung di tahap Nego"]);
+    await expectStageHistory(page, ["Deal dibuat langsung di tahap Nego"]);
   });
 
   test("a WhatsApp number repaired from invoice detail leaves the deal at Invoice", async ({ page, context, isMobile }) => {
+    // A deal is created, moved four times and invoiced before the repair.
+    test.setTimeout(60_000);
     const brand = "E2E Brand Nomor Diperbaiki";
     await keepWhatsAppLocal(context);
 
@@ -152,7 +155,7 @@ test.describe("changing a deal's contact keeps its stage (FIND-10)", { tag: "@cr
     await expect(page.getByText("Tahap saat ini: Invoice")).toBeVisible();
     await expect(page.getByText("+62 812-3456-7890", { exact: true })).toBeVisible();
     await expect(page.getByRole("link", { name: /^Lihat invoice .+ →$/ })).toBeVisible();
-    expect(await stageHistory(page)).toEqual(["Konten → Invoice", "Deal → Konten", "Nego → Deal", "Masuk → Nego", "Deal dibuat langsung di tahap Masuk"]);
+    await expectStageHistory(page, ["Konten → Invoice", "Deal → Konten", "Nego → Deal", "Masuk → Nego", "Deal dibuat langsung di tahap Masuk"]);
     await page.goto("/deal");
     const stageFilter = page.getByRole("group", { name: /filter tahap deal/i });
     await press(stageFilter.getByRole("button", { name: "Masuk", exact: true }), isMobile);

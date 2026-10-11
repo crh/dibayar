@@ -1310,12 +1310,6 @@
           "title": "an invalid number opens the repair form; the repaired number is saved, survives reload, and is used by Buka WhatsApp",
           "kind": "real",
           "note": "Follow-up overlay deal with contactWa 12345678; wa.me stubbed locally"
-        },
-        {
-          "file": "e2e/deals/patch-keeps-stage.spec.ts",
-          "title": "a WhatsApp number repaired from invoice detail leaves the deal at Invoice",
-          "kind": "real",
-          "note": "The same repair from invoice detail (Simpan & kirim) on a deal at Invoice with an invoice; FIND-10 regression"
         }
       ],
       "evidence": "Added 2026-10-04 (Zero Routine Phase 2A, follow-up overlay)"
@@ -2015,7 +2009,9 @@
       "persisted": "Deal.contactWa",
       "alternates": "Still invalid",
       "scope": [
-        "chromium 390 (ux-audit, id+en)"
+        "chromium 390 (ux-audit, id+en)",
+        "chromium",
+        "chromium-mobile"
       ],
       "priority": "P1",
       "status": "automated_real_interaction",
@@ -2025,6 +2021,12 @@
           "title": "executes the 123-capture matrix and non-visual checks",
           "kind": "real",
           "note": "F15 flow; ux-audit job, report-gated"
+        },
+        {
+          "file": "e2e/deals/patch-keeps-stage.spec.ts",
+          "title": "a WhatsApp number repaired from invoice detail leaves the deal at Invoice",
+          "kind": "real",
+          "note": "Invoice detail: Kirim lewat WhatsApp -> repair panel -> Simpan & kirim, on a deal at Invoice with an invoice (chromium, chromium-mobile). Also the FIND-10 regression for this surface: the deal stays at Invoice"
         }
       ]
     },
@@ -3046,11 +3048,13 @@
     {
       "id": "FIND-10",
       "severity": "high",
-      "summary": "Any change to a deal that did not itself name a stage moved the deal back to Masuk and wrote a '<stage> → Masuk' entry into its history: saving the contact name on deal detail, and repairing the WhatsApp number on deal detail, on invoice detail (Simpan & kirim) or in the Beranda queue. Cause: dealPatchSchema was dealInputSchema.partial(), and zod's partial() keeps the create schema's status default ('MASUK'), so every PATCH /api/deals/:id without a status carried status MASUK. The page kept showing the old stage until its next load. Present since the M1 slice (65393b6, 2026-07-14), so it is on main/Production. Found 2026-10-11 by the first DEAL-DETAIL-02 journey (stage read after a reload on a Nego deal); the earlier unit test used a deal already at Masuk and the contact-repair journey did not read the stage.",
-      "status": "fixed: fix/deal-patch-keeps-stage-2026-10-11 (into staging; not yet on main/Production). The patch schema now has no status default, so a patch changes only what it names. Regression: src/lib/deal-validation.test.ts, src/lib/deals.test.ts (every non-Masuk stage x four patch shapes), e2e/deals/patch-keeps-stage.spec.ts (contact name on a Nego deal; number repaired from invoice detail on an Invoice deal), e2e/deals/contact-repair.spec.ts (stage and history asserted). Stored rows are not repaired: deals already moved to Masuk this way stay there, and their history shows the '→ Masuk' entry at the time of the edit. A read-only Production count of such transitions needs Chris.",
+      "summary": "Any change to a deal that did not itself name a stage moved the deal back to Masuk and wrote a '<stage> → Masuk' entry into its history: saving the contact name on deal detail, and repairing the WhatsApp number on deal detail, on invoice detail (Simpan & kirim) or in the Beranda queue. Cause: dealPatchSchema was dealInputSchema.partial(), and zod's partial() keeps the create schema's status default ('MASUK'), so every PATCH /api/deals/:id without a status carried status MASUK. The page kept showing the old stage until its next load. The schema line dates from the M1 slice (65393b6, 2026-07-14, on main). The first screen that sent such a PATCH was the Beranda queue repair (7633904, 2026-08-09); the contact name and the deal-detail repair came with T-17 (f696973, 2026-08-23), which also introduced the stage history. All of it is on main/Production. Found 2026-10-11 by the first DEAL-DETAIL-02 journey (stage read after a reload on a Nego deal); the earlier unit test used a deal already at Masuk and the contact-repair journey did not read the stage.",
+      "status": "fixed: fix/deal-patch-keeps-stage-2026-10-11 (into staging; not yet on main/Production). The patch schema now has no status default, so a patch changes only what it names. Regression: src/lib/deal-validation.test.ts, src/lib/deals.test.ts (every non-Masuk stage x four patch shapes), e2e/deals/patch-keeps-stage.spec.ts (contact name on a Nego deal; number repaired from invoice detail on an Invoice deal), e2e/deals/contact-repair.spec.ts (stage and history asserted). The Beranda queue's repair has no browser regression (HOME-04 stays partial); it is covered at repository level by src/lib/deals.test.ts. Stored rows are not repaired: deals already moved to Masuk this way stay there. A deal reset since T-17 has a '→ Masuk' history entry at the time of the edit; a Beranda repair between 2026-08-09 and T-17 left no history entry, so a count of such transitions is a lower bound. That read-only Production count needs Chris. Still open in the same schema, not reached by any screen: a PATCH with feeIdr null or '' stores 0, and deadline null stores 1970-01-01 (z.coerce).",
       "actions": [
         "DEAL-DETAIL-02",
-        "DEAL-DETAIL-03"
+        "DEAL-DETAIL-03",
+        "INV-WA-03",
+        "HOME-04"
       ]
     },
     {
