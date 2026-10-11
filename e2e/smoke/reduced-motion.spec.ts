@@ -99,6 +99,10 @@ test.describe("reduced motion", { tag: "@critical" }, () => {
     await recordFinishedMotion(page);
     await page.goto("/");
     expect(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(false);
+    // Beranda's loading placeholders pulse on a 2 s animation of their own.
+    // Wait until they are gone, so the longest animation measured below is
+    // the menu's (CI run 38127790377 measured 2000 ms here once, on retry 200).
+    await expect(page.locator('[data-testid$="-skeleton"]')).toHaveCount(0);
     const menu = await openAccountMenu(page, isMobile);
     expect(await menu.evaluate((element) => getComputedStyle(element).animationDuration)).toBe("0.2s");
     const motion = await measureMotion(page);
