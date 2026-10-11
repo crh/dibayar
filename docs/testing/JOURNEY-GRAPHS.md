@@ -181,6 +181,14 @@ moves are offered (card menu, deal detail, desktop drag).
 | Expired session | no data: reload, Back and in-app links end on sign-in; a change is answered 401, shown as an error, nothing stored (AUTH-07, real) | — | view | redirect (AUTH-07, real) |
 | Signed-out session (after **Keluar**) | — | — | view | redirect; the old token is refused from a fresh browser too (AUTH-05, AUTH-06, real) |
 
+### Route error
+
+| State | Control | Action | Status |
+|---|---|---|---|
+| page data fails → error card inside the app shell | nav link, reload | NAV-08 | real |
+| error card → still failing | Coba lagi | NAV-08 | real (the server is asked again, the card stays) |
+| error card → page | Coba lagi | NAV-08 | real (FIND-12, fixed) |
+
 ## 6. Combination policy (no Cartesian products)
 
 - **Per-PR gate**: `chromium` (desktop) and `chromium-mobile` (390px, touch),

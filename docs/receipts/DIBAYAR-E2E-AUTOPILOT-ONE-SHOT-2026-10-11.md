@@ -34,7 +34,7 @@ Statuses: TODO / IN_PROGRESS / DONE / BLOCKED. Updated per PR.
 | B1 | Long journey: deal → paid invoice → recipient | DONE | PR 1, `e2e/journeys/deal-to-paid.spec.ts` |
 | B2 | Long journey: settings → recipient | DONE | PR 1, `e2e/journeys/settings-to-recipient.spec.ts` |
 | B3 | Long journey: resilience and permissions | DONE | PR 1, `e2e/journeys/resilience-permissions.spec.ts` |
-| C1 | NAV-08 route error boundary | TODO | Phase 2 |
+| C1 | NAV-08 route error boundary | DONE (real, both projects; found and fixed FIND-12) | PR 4, `e2e/smoke/route-error-retry.spec.ts` |
 | C2 | DEAL-DETAIL-02 contact name | DONE (real, both projects) | PR 2 (FIND-10 fix), `e2e/deals/patch-keeps-stage.spec.ts` |
 | C3 | DEAL-DETAIL-04 WhatsApp from deal detail | DONE (real, both projects) | PR 3 |
 | C4 | INV-STATUS-07 failed status update | DONE (real: stub-free 409; plus a partial stubbed test) | PR 3 |
@@ -375,7 +375,9 @@ chromium-mobile, firefox and webkit, and 20/20 over ten more in Firefox.
 CI on the first head `a4c0e60`: `CI` `38111441524` and
 `Journey coverage (full)` `38111441540`, both success.
 
-CI: pending, filled in below.
+CI on the final head `709ba14`: `CI` `38114185424` success (four required
+checks green) and `Journey coverage (full)` `38114185458` success. No Codex
+thread was opened on this PR. Unmerged, for the reason in §4.
 
 ## 6. PR 3 — six P2 actions (Workstream C, part 1)
 
@@ -483,4 +485,129 @@ up from 4) stay under the 20-per-minute limiter.
 After the fixes: the five touched files 64/64 over two repeats in chromium,
 chromium-mobile, firefox and webkit.
 
-CI: pending, filled in below.
+CI on the final head `9415dd2`: `CI` `38115668118` success (four required
+checks green) and `Journey coverage (full)` `38115668099` success; the first
+head `5e0bc37` was green too (`38114365253`, `38114365220`). No Codex thread
+was opened on this PR. Unmerged, for the reason in §4.
+
+## 7. PR 4 — NAV-08 and FIND-12: Coba lagi never recovered (product fix)
+
+Branch `fix/route-error-retry-2026-10-11`, stacked on PR #43.
+
+### The seam (the decision the brief asked to be made carefully)
+
+NAV-08 was `not_covered` "until a safe failure-injection seam exists". A
+`page.route` response cannot be that seam: the error boundary only shows
+when a server component really throws, and a stubbed document or RSC
+response never reaches it. What was added instead is a failure of the test
+database itself:
+
+- `npm run e2e:fixtures -- invoice-table-outage` renames the `Invoice` table
+  to `Invoice__e2e_outage`; `end-invoice-table-outage` renames it back.
+  Rows, indexes and foreign keys move with the name; nothing is deleted.
+- While the table is away, the invoice list's own query fails
+  (`TableDoesNotExist`), its server component throws, and the app shows its
+  route error card. No request is intercepted and no line of `src/` knows
+  about tests.
+- Same guards as every fixture action: target pinned to
+  `127.0.0.1:55432/dibayar_test`, `E2E_FIXTURE_CONFIRM=non-production`.
+- A table left renamed would fail every later spec, so the outage is ended
+  in three places: the test's `finally`, its `afterEach`, and the start of
+  every other action of the script (including `seed` and `cleanup`).
+
+Risk that remains, stated plainly: a process killed between the two renames
+leaves the local test database without an `Invoice` table until the next
+`npm run e2e:fixtures -- <any action>` or E2E run; `tests/ux-audit` has its
+own fixture script, which does not heal it. CI databases are created per
+job, so this is a local-machine risk only.
+
+### The defect it found (FIND-12, medium)
+
+The first run of the journey: after the outage ended, **Coba lagi** left
+"Gagal memuat." on screen and sent no request. `src/app/(app)/error.tsx`
+called `reset()`. In this Next.js version (16.3; its bundled docs,
+`node_modules/next/dist/docs/.../error.md`) `reset()` re-renders the
+boundary's children without re-fetching, which for a failed server render is
+the same failure; `retry()` is the function that asks the server again. So
+the button never recovered from the one kind of error this boundary mostly
+sees. Only a manual reload helped.
+
+### The fix
+
+`src/app/(app)/error.tsx`: the component takes `retry` and the button calls
+it. No other application file changed.
+
+### Tests
+
+| Test | Proves | Red before the fix |
+|---|---|---|
+| `e2e/smoke/route-error-retry.spec.ts` → "a page whose data fails shows Gagal memuat. inside the app, and Coba lagi recovers once the data is back" | nav → Invoice during the outage: card, with nav and account menu working; Coba lagi during the outage reaches the server and the card stays; another page is unaffected; Back returns to the card; after the outage Coba lagi shows the list; reload and a link into an invoice work | yes (the retry sent no request) |
+| same file → "a page that fails on first load shows the same card, and Coba lagi recovers it" | the same on a full document load | yes |
+| `src/app/(app)/error.test.tsx` (2) | the card's text and button; Coba lagi calls `retry`, not `reset` | 1 of 2 |
+
+Both E2E tests run in `chromium` and `chromium-mobile` (and passed in
+Firefox and WebKit locally: 24/24 over three repeats in the four engines).
+
+The browser-health guard gained one per-test opt-in, `expectedConsoleError`
+(a single pattern): a thrown server component makes React log one console
+error ("Minified React error #441" in Chromium and WebKit, the bare word
+"Error" in Firefox). Only this spec opts in; page errors, failed requests,
+5xx and any other console error still fail it. The guard's self-test passes.
+
+### Inventory
+
+- NAV-08: `not_covered` → `automated_real_interaction`, both projects.
+- FIND-12 (medium, fixed) added.
+- Real 82/93 (88.2%). `not_covered` 0. P0 real 28/30 and the four
+  outstanding P0/P1 are unchanged.
+- INV-DUE-06 (P1, partial because its failure is a stub) could now use the
+  same seam for a stub-free failure. Not done here; noted in the inventory.
+
+### Negative control
+
+The spec and the unit test were run against the unfixed `error.tsx`
+(restored from `origin/staging`, built): both E2E tests failed waiting for
+the retry's request, which was never sent, and 1 of the 2 unit tests failed.
+The fix was then restored from Git (`git diff -- src` empty) and rebuilt.
+
+### Validation
+
+Local, on the PR branch (ALPHA, 2026-10-11):
+
+| Gate | Result |
+|---|---|
+| lint / typecheck | 0 / 0 |
+| `npm test` | 989 / 989 (987 before; +2 for the error card) |
+| build and e2e:build | 0 |
+| journey self-test, diagnostics self-test, `coverage:journeys` | 37 / 37; pass; OK, real 88.2%, P0 real 93.3%, 4 outstanding P0/P1 |
+| `route-error-retry.spec.ts`, three repeats, four engines | 24 / 24 |
+| full `test:e2e`, both projects | 263 passed, 0 failed, 25 skipped |
+| `coverage:journeys -- --results` on that run | 145 real claims passed; 4 not exercised (the ux-audit ones) |
+| `Invoice` table after the run | present (`end-invoice-table-outage` reported nothing to end) |
+
+CI and review: pending when this was written; see the PR.
+
+## 8. Workstream A — outcome
+
+No manual check was executed, and none is recorded as passed.
+
+| Check | Status | Why |
+|---|---|---|
+| MAN-DUE-01 (P0, release gate) | PENDING — requires real device/user action | no Android or iPhone reachable (§3); INV-DUE-03 stays `manual_pending` |
+| MAN-AUTH-01 (P0, release gate) | PENDING — requires real device/user action | a real Google sign-in and sign-out needs the account holder; the 2026-09-30 entry is sign-in only, on `cab167f` |
+| MAN-REL-01 (release gate) | PENDING | contains the two above |
+| MAN-DEAL-01, MAN-WA-01, MAN-PDF-01, MAN-SHARE-01 | PENDING | phones |
+| MAN-A11Y-01 | PENDING | screen reader on a phone |
+
+The one desktop Chrome reachable through the browser extension was
+deliberately not used: the staging deployment is still the pre-mission
+commit (nothing could be merged, §4), so a run there would not be evidence
+for this candidate, and the picker and the Google page are exactly the parts
+that tool should not or cannot operate.
+
+Handoff for the person with the devices:
+`docs/receipts/DIBAYAR-E2E-REAL-DEVICE-HANDOFF-2026-10-11.md` (URL, synthetic
+data, order of checks, expected results, what to keep out of captures, how
+to file the result). `docs/testing/MANUAL-UAT.md` points to it and has no new
+log row. No Production release PR was opened and no release gate was
+changed.

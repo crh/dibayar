@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "inventoryDate": "2026-10-11",
-  "baseline": "origin/staging 390bc38 (PR #36 merged) + one-shot autopilot 2026-10-11 (PR #41 long journeys; PR #42 FIND-10 fix with DEAL-DETAIL-02; Phase 2: DEAL-DETAIL-04, INV-STATUS-07, SET-05, SET-07, SET-08, A11Y-04)",
+  "baseline": "origin/staging 390bc38 (PR #36 merged) + one-shot autopilot 2026-10-11 (PR #41 long journeys; PR #42 FIND-10 fix with DEAL-DETAIL-02; PR #43 six P2 actions; FIND-12 fix with NAV-08)",
   "classificationRules": [
     "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
     "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
@@ -747,18 +747,41 @@
     {
       "id": "NAV-08",
       "domain": "global",
-      "route": "(app) error boundary",
+      "route": "(app) error boundary, seen on /invoice",
       "action": "Route error boundary with retry",
       "persona": "owner",
-      "preconditions": "Server component throws",
-      "interaction": "Click Coba lagi",
-      "expected": "Error card, retry re-renders",
+      "preconditions": "A page's server component throws: the invoice list's query fails while the guarded fixture action invoice-table-outage holds the Invoice table of the test database out of reach",
+      "interaction": "Nav -> Invoice (or reload on /invoice); click/tap Coba lagi",
+      "expected": "'Gagal memuat.' and Coba lagi inside the working app shell; Coba lagi asks the server again: the card stays while the failure lasts and is replaced by the page once it is over",
       "persisted": "n/a",
-      "alternates": "",
-      "scope": [],
+      "alternates": "Failure on first load (reload); Back/Forward around the card",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Needs a safe failure-injection seam; not planned until one exists"
+      "status": "automated_real_interaction",
+      "evidence": "One-shot autopilot 2026-10-11 (FIND-12 fix PR)",
+      "tests": [
+        {
+          "file": "e2e/smoke/route-error-retry.spec.ts",
+          "title": "a page whose data fails shows Gagal memuat. inside the app, and Coba lagi recovers once the data is back",
+          "kind": "real",
+          "note": "No stub and no application seam: the query really fails (table renamed on the disposable test database, renamed back by the test, its afterEach and every other fixture action). Also the FIND-12 regression"
+        },
+        {
+          "file": "e2e/smoke/route-error-retry.spec.ts",
+          "title": "a page that fails on first load shows the same card, and Coba lagi recovers it",
+          "kind": "real",
+          "note": "The same on a full document load"
+        },
+        {
+          "file": "src/app/(app)/error.test.tsx",
+          "title": "",
+          "kind": "partial",
+          "note": "Component test: Coba lagi calls retry, not reset"
+        }
+      ]
     },
     {
       "id": "NAV-09",
@@ -1733,7 +1756,7 @@
           "note": "Desktop chromium; failure injected with page.route"
         }
       ],
-      "followUp": "Assessed in Phase 2B, left partial: the only browser way to make the save fail is to intercept the PATCH (a stub), which the rules class as partial. A stub-free failure would need the server itself to fail on demand"
+      "followUp": "Assessed in Phase 2B, left partial: the only browser way to make the save fail is to intercept the PATCH (a stub), which the rules class as partial. A stub-free failure would need the server itself to fail on demand (the invoice-table-outage fixture action added for NAV-08 on 2026-10-11 can do that; not yet used here)"
     },
     {
       "id": "INV-STATUS-01",
@@ -3141,6 +3164,15 @@
       "status": "open: not changed (outside the FIND-10 fix). Needs a small decision: let an empty name clear it, or say that it cannot be cleared. No browser test asserts either behaviour.",
       "actions": [
         "DEAL-DETAIL-02"
+      ]
+    },
+    {
+      "id": "FIND-12",
+      "severity": "medium",
+      "summary": "The route error card's Coba lagi never recovered from a failed server render. src/app/(app)/error.tsx called reset(), which in this Next.js version (16.3) only re-renders what the browser already holds, i.e. the same failure; the documented way to ask the server again is retry(). After the cause was gone the button still left 'Gagal memuat.' on screen and sent no request; only a manual reload helped. Found 2026-10-11 by the first NAV-08 journey, the first test to make a server component really fail and then recover.",
+      "status": "fixed: fix/route-error-retry-2026-10-11 (into staging; not yet on main/Production). error.tsx now uses the retry prop. Regression: e2e/smoke/route-error-retry.spec.ts (both tests) and src/app/(app)/error.test.tsx.",
+      "actions": [
+        "NAV-08"
       ]
     }
   ]

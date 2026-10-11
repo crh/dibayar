@@ -994,3 +994,16 @@ Starting state verified fresh: `main` = `origin/main` = `a60dfdf`, no open PRs, 
 - Gates: lint 0, typecheck 0, unit 987/987, build 0, e2e:build 0, journey self-test 37/37; full `test:e2e` 259 passed / 0 failed / 25 skipped; results check 141 passed, 4 not exercised (ux-audit).
 - Rubric self-score: Evidence honesty 2/2 (the judgement call and the stub/stub-free split are stated); shipped completeness 1/2 (six actions complete, nothing merged); security discipline 2/2; focus 2/2; deploy health 2/2 (no deploy); report quality 2/2.
 
+## 2026-10-11 — One-shot E2E autopilot, PR 4: NAV-08 and FIND-12 (Coba lagi never recovered); close-out
+
+- PR #43 after review: reviewer agent approve-with-nits (P2: interactions on a just-reloaded form; A11Y-04's measurement strengthened with the browser's own `animationend`/`transitionend` durations and kept real as a disclosed judgement call). Final head `9415dd2`: CI `38115668118` and full coverage `38115668099` green. PR #42 final head `709ba14`: `38114185424`, `38114185458` green.
+- NAV-08 seam: fixture actions `invoice-table-outage` / `end-invoice-table-outage` rename the `Invoice` table of the guarded test database away and back, so the invoice list's query really fails. No stub, no `src/` seam. Ended in the test's `finally`, in `afterEach`, and at the start of every other fixture action.
+- **FIND-12 (medium)**, found by the first run of that journey: after the failure was over, **Coba lagi** left the error card and sent no request. `error.tsx` called `reset()`; Next 16.3's own docs say `retry()` is what re-fetches. Fixed in `src/app/(app)/error.tsx`.
+- Tests: `e2e/smoke/route-error-retry.spec.ts` (two journeys, chromium + chromium-mobile; 24/24 over three repeats in four engines), `src/app/(app)/error.test.tsx` (2). Against the unfixed boundary: both journeys and 1 unit test fail.
+- Guard: per-test `expectedConsoleError` (one pattern) for React's console report of the thrown server component; guard self-test passes. A first version took a list and broke on Playwright's `[value, options]` reading of a two-element array; caught by a three-repeat run, not by the first pass.
+- Generated: real 82/93 = 88.2% (74/93 at the start of the day), P0 28/30, outstanding P0/P1 4 (INV-DUE-03, DEAL-CREATE-07, INV-DUE-06, A11Y-01), `not_covered` 0.
+- Workstream A: nothing executed, nothing marked passed. Handoff `docs/receipts/DIBAYAR-E2E-REAL-DEVICE-HANDOFF-2026-10-11.md`; INV-DUE-03 stays `manual_pending`.
+- Gates: lint 0, typecheck 0, unit 989/989, build 0, e2e:build 0, journey self-test 37/37, diagnostics self-test pass; full `test:e2e` 263 passed / 0 failed / 25 skipped; results check 145 passed, 4 not exercised (ux-audit).
+- **Not done**: no PR is merged (the session cannot merge), so `origin/staging` is `390bc38`, there is no post-merge staging CI and no full real-claim run on a final staging SHA. `main` untouched at `308a339`. Terminal status BLOCKED_PARTIAL.
+- Rubric self-score: Evidence honesty 2/2 (what is unmerged and unverified is stated first); shipped completeness 1/2 (all autonomous work done and green on its PRs; nothing on `staging`); security discipline 2/2 (the outage touches only the guarded test database; no secrets, no hosted system); focus 2/2; deploy health 2/2 (no deploy); report quality 2/2.
+

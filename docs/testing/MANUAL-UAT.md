@@ -204,3 +204,8 @@ regression test (in `e2e/`) before the fix is promoted.
 | Date (WIB) | Check | Tester | Device / OS / Browser | Lang | Staging SHA | Result | Evidence / notes |
 |---|---|---|---|---|---|---|---|
 | 2026-09-30 | MAN-AUTH-01 steps 1–2 (sign-in round trip; sign-out not recorded) | see receipt | desktop browser, Chris's consented Google account | id | `cab167f` | PASS | `docs/receipts/DIBAYAR-HOBBY-STAGING-ACTIVATION-2026-09-29.md` §Smoke |
+
+No run is logged for the 2026-10-11 E2E autopilot's changes: the machine it
+ran on had no phone and could not complete a Google sign-in. Every check
+above is still pending for that candidate. The work order for the person
+with the devices is `docs/receipts/DIBAYAR-E2E-REAL-DEVICE-HANDOFF-2026-10-11.md`.

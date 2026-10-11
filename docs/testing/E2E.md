@@ -215,6 +215,18 @@ invoice detail page, wait for its WhatsApp action to be enabled: that is when
 its contact and share fetches have settled, and leaving earlier reports them
 as failed requests.
 
+The route error boundary (NAV-08; FIND-12, fixed):
+`e2e/smoke/route-error-retry.spec.ts` makes the invoice list's query fail for
+real (`startInvoiceTableOutage()`), reaches `/invoice` through the nav and by
+reload, and presses **Coba lagi** while the failure lasts (the card stays)
+and after it ends (the list appears). No request is intercepted. Rules for a
+spec that uses the outage: end it in a `finally` and again in `afterEach`,
+keep it `workers: 1`, and never leave a page fetch in flight when it starts.
+A thrown server component makes React log one console error; the spec opts
+in with `expectedConsoleError` (one pattern, per test), and every other
+diagnostic still fails it. The server log shows `TableDoesNotExist` during
+these tests; that is the injected failure, not a problem.
+
 Failures without a stub: where the server can be made to refuse a request
 through the UI alone, the failure test uses that and counts as real
 evidence. `e2e/invoices/status-failure.spec.ts` marks an invoice paid in a
@@ -297,6 +309,7 @@ prints the share token.
 | `npm run e2e:fixtures -- status-consistency` | On top of `follow-up-states`: five invoices whose stored status and due date disagree (stored DUE due yesterday, legacy stored OVERDUE due in 8 days and with no due date, DRAFT and PAID due yesterday). Used by `e2e/invoices/status-consistency.spec.ts` via `applyStatusConsistency()`; refuses to run twice. The next `seed` removes them |
 | `npm run e2e:fixtures -- expire-disposable-session` | Sets the owner's disposable session's `expires` one minute into the past (the row stays). Used mid-test by `e2e/auth/session-expiry.spec.ts` via `expireDisposableOwnerSession()`; the shared owner session is not touched. The next `seed` restores it |
 | `npm run e2e:fixtures -- incomplete-issuer-settings` | Removes the owner's `UserSettings` row: an account that never saved Pengaturan (the form cannot produce that state). Used by `e2e/settings/incomplete-issuer.spec.ts` via `applyIncompleteIssuerSettings()`. The next `seed` restores the settings |
+| `npm run e2e:fixtures -- invoice-table-outage` / `end-invoice-table-outage` | Renames the `Invoice` table of the test database away, and back. While it is away every query on it fails, so a server component that reads invoices really throws. Nothing is deleted. Used mid-test by `e2e/smoke/route-error-retry.spec.ts` via `startInvoiceTableOutage()` / `endInvoiceTableOutage()`. Every other action of the script ends a left-over outage before doing anything else |
 | `npm run e2e:build` | Reproducible webpack production build, needed before any `test:e2e*` run |
 | `npm run test:e2e` | Semantic journey suite, chromium + chromium-mobile; visual snapshots are separate |
 | `npm run test:e2e:critical` | `@critical`-tagged tests only, chromium + chromium-mobile -- the PR gate |
