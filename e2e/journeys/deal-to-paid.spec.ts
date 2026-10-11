@@ -35,7 +35,9 @@
 // Nothing is filled into the hidden date input.
 //
 // WhatsApp never leaves the machine (keepWhatsAppLocal()). The share link is
-// a bearer token: it is compared as a boolean and never printed.
+// a bearer token of the disposable test database: assertions about it compare
+// booleans, so a failure message does not print it. (Playwright's own report
+// still records the address a page was sent to, as in every share spec.)
 import type { Page } from "@playwright/test";
 import { expect } from "../support/test";
 import { primaryNav } from "../support/nav";
@@ -44,7 +46,7 @@ import { focusFieldForTyping, visibleDisplay } from "../support/due-date";
 import { expectSameJakartaDay, jakartaToday, keepWhatsAppLocal, parseWhatsAppLink, trackOpenedPages } from "../support/follow-up";
 import { downloadPdfByClick } from "../support/pdf";
 import { shareTest as test, shownShareLink, trackShareMutations } from "../support/share-links";
-import { escapeRegExp, expectNoOwnerControls, press, responseTo, rupiah, typeInto } from "../support/journey";
+import { escapeRegExp, expectNoOwnerControls, press, responseTo, rupiah, typeInto, watchPageHealth } from "../support/journey";
 
 const DEAL = {
   brand: "E2E Brand Perjalanan Lunas",
@@ -82,6 +84,7 @@ test.describe("journey: deal to paid invoice", { tag: "@critical" }, () => {
     const startedOn = jakartaToday();
     const fee = rupiah(DEAL.feeIdr);
     const whatsAppRequests = await keepWhatsAppLocal(context);
+    const expectRecipientHealthy = watchPageHealth(recipient, "the recipient's page");
     let dealId = "";
     let invoiceId = "";
     let invoiceNumber = "";
@@ -225,9 +228,8 @@ test.describe("journey: deal to paid invoice", { tag: "@critical" }, () => {
       await expect(send).toBeEnabled();
 
       expect(message.number).toBe(DEAL.contactWa);
-      expect(message.text).toContain(DEAL.brand);
-      expect(message.text).toContain(invoiceNumber);
-      expect(message.text).toContain(fee);
+      // Booleans: the message holds the share link.
+      for (const part of [DEAL.brand, invoiceNumber, fee]) expect(message.text?.includes(part), `the message names "${part}"`).toBe(true);
       const linksInMessage = message.text?.match(new RegExp(`${escapeRegExp(new URL(page.url()).origin)}/i/[A-Za-z0-9_-]{40,}`, "g")) ?? [];
       expect(linksInMessage.length, "the message carries exactly one public invoice link").toBe(1);
       expect(linksInMessage[0] === shareLink, "the message carries the link the page shows").toBe(true);
@@ -320,6 +322,8 @@ test.describe("journey: deal to paid invoice", { tag: "@critical" }, () => {
     });
 
     await test.step("the invoice list, the deal board and Beranda agree", async () => {
+      // Beranda's total is this Jakarta month's; say so if the run crossed it.
+      expectSameJakartaDay(startedOn);
       await press(primaryNav(page).getByRole("link", { name: "Invoice", exact: true }), isMobile);
       await expect(page).toHaveURL(/\/invoice$/);
       const row = page.getByRole("region", { name: "Lunas" }).getByRole("link", { name: new RegExp(escapeRegExp(DEAL.brand)) });
@@ -358,6 +362,7 @@ test.describe("journey: deal to paid invoice", { tag: "@critical" }, () => {
       await expectNoOwnerControls(recipient);
     });
 
+    expectRecipientHealthy();
     expectSameJakartaDay(startedOn);
   });
 });

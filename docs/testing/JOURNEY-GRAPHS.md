@@ -207,7 +207,7 @@ already real; they change no status above.
 |---|---|---|
 | `deal-to-paid.spec.ts` | create deal → `MASUK → NEGO` (card menu) → `NEGO → DEAL → KONTEN → INVOICE` (detail) → Buat invoice → `DRAFT → SENT` → no share → active share → WhatsApp send (link reused) → recipient page + PDF → `SENT → PAID` → `INVOICE → DIBAYAR` (card menu) → Beranda total | DEAL-CREATE-01, DEAL-CREATE-02, DEAL-STAGE-01, DEAL-STAGE-03, DEAL-DETAIL-05, INV-STATUS-01, INV-STATUS-03, SHARE-01, INV-WA-01, PUB-01, PUB-05, PUB-06, INV-PDF-01, HOME-01 |
 | `settings-to-recipient.spec.ts` | Pengaturan save → reload → invoice detail → WhatsApp send (saved template, link reused) → owner PDF → recipient page + PDF → Pengaturan, Back, Forward | SET-03, SET-04, INV-WA-01, INV-PDF-01, PUB-01, PUB-05, PUB-06 |
-| `resilience-permissions.spec.ts` | deal detail edit in progress → session expires → refused save and stage move → nav link, Back, Forward, reload → reused token → valid session unchanged → second owner → expired link → active link → revoke → reload, Back, Forward, PDF | AUTH-07, AUTH-01, INV-OWN-01, PUB-02, PUB-03, PUB-04, SHARE-03 |
+| `resilience-permissions.spec.ts` | deal detail edit in progress → session expires → refused save and stage move → nav link, Back, Forward, reload → reused token → valid session unchanged → second owner → expired link → active link → revoke → reload, Back, Forward, PDF | AUTH-07, AUTH-01, INV-OWN-01 (reads only), PUB-02, PUB-03, PUB-04, SHARE-03 |
 
 Not on any long journey: `SENT → DUE`, the PAID undo, regenerate, the
 due-date picker (MAN-DUE-01; the desktop project types the date, the phone

@@ -49,6 +49,22 @@ export async function responseTo(page: Page, method: string, pathname: string, a
   return response;
 }
 
+// The browser-health guard (e2e/support/test.ts) watches only the test's own
+// `page`. The journeys also drive a recipient and other signed-in browsers;
+// this records what must never happen on those pages either -- an uncaught
+// page exception or an HTTP 5xx -- and the returned function fails the test
+// if either was seen. Expected 4xx answers (a revoked link's 404, a refused
+// token's 401) are not recorded.
+export function watchPageHealth(page: Page, label: string): () => void {
+  const problems: string[] = [];
+  page.on("pageerror", (error) => problems.push(`${label}: page error: ${error.message}`));
+  page.on("response", (response) => {
+    // Pathname only: a public invoice URL carries its bearer token.
+    if (response.status() >= 500) problems.push(`${label}: HTTP ${response.status()} ${new URL(response.url()).pathname.replace(/\/i\/[^/]+/, "/i/<token>").replace(/\/invoices\/[^/]+\/pdf$/, "/invoices/<token>/pdf")}`);
+  });
+  return () => expect(problems, `no page error or 5xx on ${label}`).toEqual([]);
+}
+
 // Nothing an owner uses to run the app is on the page: no app navigation, no
 // account menu, no status, share or settings controls.
 export async function expectNoOwnerControls(page: Page): Promise<void> {

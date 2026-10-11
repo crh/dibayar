@@ -90,7 +90,7 @@ the checkpoint list is the header comment of each file and
 `docs/testing/E2E.md`.
 
 **B1, deal to paid.** Beranda (monthly total Rp 12.700.000) → **+ Deal**
-(floating button on the phone, top-bar link on desktop) → seven fields typed
+(floating button on the phone, top-bar link on desktop) → six fields typed
 (keyboard on the phone) → saved, reload → **Lanjut ke Nego** from the board
 card's menu → **Lihat detail** → Deal, Konten, Invoice on deal detail, history
 after reload → **Buat invoice** → the draft `INV/yyyy/mm/nnn` for Rp 2.500.000
@@ -126,14 +126,14 @@ recipient PDF text equals the owner's → recipient reload → Pengaturan again,
 Back, Forward.
 
 **B3, resilience and permissions.** Disposable owner session: Beranda →
-**Deal** → card menu → deal detail → a contact name typed →
+**Deal** → card menu → deal detail → a contact name entered (`fill()`) →
 `expire-disposable-session` (the existing guarded fixture action) →
 **Simpan**: 401, "Nama kontak belum bisa disimpan. Coba lagi.", the typed
 text still in the field → **Lanjut ke Deal**: 401, "Deal belum bisa
 diperbarui. Coba lagi.", stage unchanged → nav link, Back, Forward, reload:
-sign-in, none of the owner's data → the same token in a fresh browser:
-sign-in, API 401 → the shared valid session: no contact name, stage Nego,
-one history entry → the second user: empty board, not-found page, API 404 →
+sign-in, none of the owner's data → the same token in a fresh browser
+(Auth.js has deleted the expired row by then): sign-in, API 401 → the shared valid session: no contact name, stage Nego,
+one history entry → the second user (reads only): empty board, not-found page, API 404 →
 recipient: the expired link says expired, the active link shows the invoice,
 the owner revokes it through **Cabut tautan** → reload 404, Back (expired
 page), Forward (not found, no invoice, no PDF link), PDF API 404.
@@ -186,4 +186,27 @@ Local, on the PR branch (ALPHA, 2026-10-11):
 Not run locally: `ux:audit`, `@visual`, the a11y job, Firefox and WebKit. The
 PR changes no application code; CI runs the first three.
 
-CI and review: pending, filled in below.
+### Independent review (PR #41, head `a515f2d`)
+
+A separate read-only reviewer agent (no access to this session's reasoning,
+read the diff from Git objects, ran nothing). Verdict: **approve with nits**,
+no P1.
+
+| # | Sev. | Finding | Disposition |
+|---|---|---|---|
+| P2-1 | P2 | The browser-health guard watches only `page`; the recipient and the other browsers of the journeys were unwatched | Fixed: `watchPageHealth()` in `e2e/support/journey.ts` records page exceptions and HTTP 5xx on every extra page and fails the test at the end |
+| P3-1 | P3 | "The share link is never printed" overstated (Playwright's report records `goto` addresses; `toContain` on the message would print it on failure) | Fixed: message checks are booleans; the comment now says what is and is not kept out of failure output |
+| P3-2 | P3 | B1's Jakarta-day guard ran after the Beranda total it explains | Fixed: checked at the start of that step too |
+| P3-3 | P3 | "Typed" was true for B1 only; B2 and B3 use `fill()` | Fixed in wording (comments, receipt): "entered", `fill()` in both projects |
+| P3-4 | P3 | Graphs §7 listed PUB-02 and INV-OWN-01 for B3, which opened no unknown token and wrote nothing as the second user | Fixed: B3 now opens the invalid token too; INV-OWN-01 marked "reads only" |
+| P3-5 | P3 | Receipt said seven fields; B1 types six | Fixed |
+| P3-6 | P3 | "Not from a cache" proves less than it says (Playwright's Chromium has no back/forward cache); suggested asserting `goForward()` is not null | Comment reworded. The suggested assertion was tried and is wrong here: `goForward()` returns null for App Router's history navigation although the page does move, so the existing URL assertions stay as the proof |
+| P3-7 | P3 | B2's old-values list lacked the seeded issuer email | Fixed, and asserted equal to the manifest's |
+| P3-8 | P3 | "Same token refused" tests a row Auth.js has already deleted | Wording fixed |
+| P3-9 | P3 | Backlog said "see below" for a section above | Fixed |
+| P3-10 | P3 | Receipt said "one history entry"; code did not count | Fixed: the history list is asserted to have exactly one item |
+
+After the fixes: typecheck 0, lint 0, the three journeys 12/12 over two
+repeats in both projects.
+
+CI: pending, filled in below.

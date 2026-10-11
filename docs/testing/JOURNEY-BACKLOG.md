@@ -215,7 +215,8 @@ repeated here; these are the program-level steps around them.
    browser-history on each. Failure-injection edges use `page.route` as in
    Batch 3 (the interaction stays real).
 4. **Critical journeys end to end.** (Done 2026-10-11, Batch D: three long
-   journeys in `e2e/journeys/`, `chromium` and `chromium-mobile`, see below.)
+   journeys in `e2e/journeys/`, `chromium` and `chromium-mobile`, see "Batch D"
+   above.)
    Two or three long journeys (deal →
    invoice → share → recipient → paid; settings change visible on the
    recipient page) that cross pages and reloads, in `chromium` and

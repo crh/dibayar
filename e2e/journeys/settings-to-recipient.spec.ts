@@ -23,8 +23,8 @@
 //
 // Preconditions come from the base seed only (scripts/e2e-fixtures.ts): the
 // fixture owner's complete settings and their sent invoice E2E/SENT/001 with
-// an active share link. Every changed value is typed and saved through the
-// UI. The owner's own invoice page does not print issuer or bank details
+// an active share link. Every changed value is entered into its visible
+// field (fill(), in both projects) and saved through the UI. The owner's own invoice page does not print issuer or bank details
 // (the document does), so "what the owner sees" is the owner's PDF.
 //
 // All values are synthetic. WhatsApp never leaves the machine
@@ -39,10 +39,11 @@ import { reseedFixtures } from "../support/reseed";
 import { keepWhatsAppLocal, parseWhatsAppLink, trackOpenedPages } from "../support/follow-up";
 import { downloadPdfByClick } from "../support/pdf";
 import { shareTest as test, shownShareLink, trackShareMutations } from "../support/share-links";
-import { escapeRegExp, expectNoOwnerControls, press, responseTo, rupiah } from "../support/journey";
+import { escapeRegExp, expectNoOwnerControls, press, responseTo, rupiah, watchPageHealth } from "../support/journey";
 
 const SEEDED = {
   issuerName: "E2E Fixture Owner",
+  issuerEmail: "e2e-t0-owner@example.invalid",
   issuerAddress: "Jl. Fixture E2E No. 1, Jakarta",
   issuerWhatsapp: "628199999999",
   bankName: "Bank E2E Fixture",
@@ -117,6 +118,9 @@ test.describe("journey: settings reach the recipient", { tag: "@critical" }, () 
     const invoiceId = manifest.invoices.sent;
     const brand = manifest.brands[manifest.deals.invoiceSent];
     const whatsAppRequests = await keepWhatsAppLocal(context);
+    const expectRecipientHealthy = watchPageHealth(recipient, "the recipient's page");
+    // The old-values list really is the seed's.
+    expect(SEEDED.issuerEmail).toBe(manifest.owner.email);
 
     await test.step("Beranda -> Pengaturan shows the seeded settings", async () => {
       await page.goto("/");
@@ -167,7 +171,7 @@ test.describe("journey: settings reach the recipient", { tag: "@critical" }, () 
       const prefix = `JALAN-KIRIM ${brand} | ${INVOICE_NUMBER} | ${rupiah(6_000_000)} | tempo 31 Des 2099 | `;
       expect(message.text?.startsWith(prefix), "the message is built from the saved template, token by token").toBe(true);
       expect(message.text?.slice(prefix.length) === shareLink, "the template's {tautan} is the link the page shows").toBe(true);
-      expect(message.text).not.toContain("Halo ");
+      expect(message.text?.includes("Halo "), "nothing of the default template is in the message").toBe(false);
       expect(opened).toHaveLength(1);
       expect(whatsAppRequests).toHaveLength(1);
       // Sending reused the existing link.
@@ -225,5 +229,6 @@ test.describe("journey: settings reach the recipient", { tag: "@critical" }, () 
       await expect(page).toHaveURL(/\/pengaturan$/);
       await expectUpdatedSettings(page);
     });
+    expectRecipientHealthy();
   });
 });

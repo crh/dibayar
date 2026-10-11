@@ -5,7 +5,8 @@
 // - The owner's session expires while a deal is open and half edited. The
 //   save and the stage move they then try are refused and say so, the app's
 //   own links, Back, Forward and a reload all end at sign-in without showing
-//   their data, the same session token is refused from another browser, and
+//   their data, the same session token (by then deleted by Auth.js, as an
+//   expired one is) is refused from another browser, and
 //   nothing they tried was stored. A different signed-in user still sees
 //   none of it.
 // - The brand's invoice link is revoked by the owner while the brand has the
@@ -18,7 +19,7 @@
 // brand's browser history, tied into one sequence.
 //
 // Checkpoints, in order (each is a test.step):
-//   1. Beranda -> Deal -> a deal's detail page; a contact name is typed
+//   1. Beranda -> Deal -> a deal's detail page; a contact name is entered
 //   2. the session expires (the page stays open)
 //   3. Simpan and Lanjut ke Deal are refused (401), each with a visible error
 //   4. a link in the app, Back, Forward and a reload end at sign-in, no data
@@ -44,7 +45,7 @@ import { loadFixtureManifest } from "../support/manifest";
 import { primaryNav } from "../support/nav";
 import { expireDisposableOwnerSession, reseedFixtures } from "../support/reseed";
 import { expectRecipientGetsNotFound, expectRecipientSeesExpired, expectRecipientSeesInvoice, shareTest as test } from "../support/share-links";
-import { expectNoOwnerControls, press, responseTo, rupiah } from "../support/journey";
+import { expectNoOwnerControls, press, responseTo, rupiah, watchPageHealth } from "../support/journey";
 
 const NEGO_DEAL_ID = `${E2E_FIXTURE_PREFIX}-deal-nego`;
 const TYPED_CONTACT_NAME = "Kontak Yang Tidak Tersimpan";
@@ -91,8 +92,11 @@ test.describe("journey: resilience and permissions", { tag: "@critical" }, () =>
     expect(dealId).toBe(NEGO_DEAL_ID);
     const brand = manifest.brands[dealId];
     const contactName = page.getByLabel("Nama kontak", { exact: true });
+    // The guard in support/test.ts watches `page` only; most of this journey
+    // happens in other browsers.
+    const healthChecks = [watchPageHealth(recipient, "the recipient's page")];
 
-    await test.step("Beranda -> Deal -> deal detail, and a contact name is typed but not yet saved", async () => {
+    await test.step("Beranda -> Deal -> deal detail, and a contact name is entered but not yet saved", async () => {
       await page.goto("/");
       await expect(page.getByRole("heading", { level: 2, name: "Net ditagihkan bulan ini" })).toBeVisible();
       await press(primaryNav(page).getByRole("link", { name: "Deal", exact: true }), isMobile);
@@ -116,7 +120,7 @@ test.describe("journey: resilience and permissions", { tag: "@critical" }, () =>
       expect(save.status()).toBe(401);
       await expect(page.getByRole("alert").filter({ hasText: "Nama kontak belum bisa disimpan. Coba lagi." })).toBeVisible();
       await expect(page.getByRole("status").filter({ hasText: "Nama kontak disimpan" })).toHaveCount(0);
-      // What was typed is still in the field, to try again after signing in.
+      // What was entered is still in the field, to try again after signing in.
       await expect(contactName).toHaveValue(TYPED_CONTACT_NAME);
 
       const move = await responseTo(page, "PATCH", `/api/deals/${dealId}`, () => press(page.getByRole("button", { name: "Lanjut ke Deal", exact: true }), isMobile));
@@ -144,6 +148,7 @@ test.describe("journey: resilience and permissions", { tag: "@critical" }, () =>
       const reused = await newBrowser(browser, device, [disposableOwnerSessionCookie(baseURL!)]);
       try {
         const reusedPage = await reused.newPage();
+        healthChecks.push(watchPageHealth(reusedPage, "the reused-token browser"));
         await reusedPage.goto(`/deal/${dealId}`);
         await expectSignInWithoutOwnerData(reusedPage);
         expect((await reused.request.get(`/api/deals/${dealId}`)).status()).toBe(401);
@@ -157,22 +162,26 @@ test.describe("journey: resilience and permissions", { tag: "@critical" }, () =>
       const valid = await newBrowser(browser, device, [ownerSessionCookie(baseURL!)]);
       try {
         const validPage = await valid.newPage();
+        healthChecks.push(watchPageHealth(validPage, "the valid owner's browser"));
         await validPage.goto(`/deal/${dealId}`);
         await expect(validPage.getByRole("heading", { level: 1, name: brand })).toBeVisible();
         await expect(validPage.getByText("Tahap saat ini: Nego")).toBeVisible();
         await expect(validPage.getByLabel("Nama kontak", { exact: true })).toHaveValue("");
         // One history entry: its creation. No move was recorded.
-        await expect(validPage.getByText("Deal dibuat langsung di tahap Nego")).toBeVisible();
+        const history = validPage.locator("div", { has: validPage.getByRole("heading", { name: "Riwayat tahap" }) }).last().getByRole("listitem");
+        await expect(history).toHaveCount(1);
+        await expect(history).toContainText("Deal dibuat langsung di tahap Nego");
         await expect(validPage.getByText("Nego → Deal")).toHaveCount(0);
       } finally {
         await valid.close();
       }
     });
 
-    await test.step("a different signed-in user sees neither the card nor the deal", async () => {
+    await test.step("a different signed-in user sees neither the card nor the deal (reads only; writes are INV-OWN-01's own spec)", async () => {
       const other = await newBrowser(browser, device, [otherOwnerSessionCookie(baseURL!)]);
       try {
         const otherPage = await other.newPage();
+        healthChecks.push(watchPageHealth(otherPage, "the second user's browser"));
         await otherPage.goto("/deal");
         // Their own board: every stage is there, and every stage is empty.
         await expect(otherPage.getByRole("group", { name: /filter tahap deal/i })).toBeVisible();
@@ -199,6 +208,7 @@ test.describe("journey: resilience and permissions", { tag: "@critical" }, () =>
       const valid = await newBrowser(browser, device, [ownerSessionCookie(baseURL!)]);
       try {
         const ownerPage = await valid.newPage();
+        healthChecks.push(watchPageHealth(ownerPage, "the owner's browser while revoking"));
         await ownerPage.goto("/invoice");
         await press(ownerPage.getByRole("link", { name: new RegExp(manifest.brands[manifest.deals.invoiceSent]) }), isMobile);
         await expect(ownerPage).toHaveURL(new RegExp(`/invoice/${manifest.invoices.sent}$`));
@@ -224,7 +234,9 @@ test.describe("journey: resilience and permissions", { tag: "@critical" }, () =>
       await expect(alert).toHaveText("Tautan ini sudah tidak berlaku.");
       await expect(recipient.getByText(PAID_INVOICE_NUMBER)).toHaveCount(0);
 
-      // Forward does not bring the invoice back from a cache.
+      // Forward fetches the link again and is refused again. (Playwright's
+      // Chromium runs without the back/forward cache, so this does not show
+      // what a browser that restores pages from that cache would display.)
       await recipient.goForward();
       await expect(recipient).toHaveURL(new RegExp(`${activeLink}$`));
       await expect(alert).toHaveText("Tautan ini tidak ditemukan.");
@@ -235,6 +247,9 @@ test.describe("journey: resilience and permissions", { tag: "@critical" }, () =>
       const pdf = await recipient.request.get(`/api/public/invoices/${manifest.shareTokens.active}/pdf`);
       expect(pdf.status()).toBe(404);
       await expectRecipientGetsNotFound(recipient, activeLink, SENT_INVOICE_NUMBER);
+      // A token that never existed gets the same answer as the revoked one.
+      await expectRecipientGetsNotFound(recipient, `/i/${manifest.shareTokens.invalid}`, SENT_INVOICE_NUMBER);
     });
+    for (const check of healthChecks) check();
   });
 });
