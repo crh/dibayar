@@ -205,7 +205,27 @@ regression test (in `e2e/`) before the fix is promoted.
 |---|---|---|---|---|---|---|---|
 | 2026-09-30 | MAN-AUTH-01 steps 1–2 (sign-in round trip; sign-out not recorded) | see receipt | desktop browser, Chris's consented Google account | id | `cab167f` | PASS | `docs/receipts/DIBAYAR-HOBBY-STAGING-ACTIVATION-2026-09-29.md` §Smoke |
 
-No run is logged for the 2026-10-11 E2E autopilot's changes: the machine it
-ran on had no phone and could not complete a Google sign-in. Every check
-above is still pending for that candidate. The work order for the person
-with the devices is `docs/receipts/DIBAYAR-E2E-REAL-DEVICE-HANDOFF-2026-10-11.md`.
+No run is logged for the 2026-10-11 release candidate. The candidate is
+`origin/staging` = `fe012816bf3691941600d605dcea589187923d1a` (PR #45's merge
+commit, carrying #41–#44), deployed to the staging alias as
+`dpl_2gyAk5xL9tmoiM1kPwVx2K4BRohd` (verified 2026-10-11). Every check above
+is still pending for it: the machine that validated it had no phone, and no
+Google sign-in or sign-out was performed. The work order is
+`docs/receipts/DIBAYAR-E2E-REAL-DEVICE-HANDOFF-2026-10-11.md`.
+
+Rows to fill in for that candidate. They are **not results**: copy a row into
+the run log above only when the check has been run, with every field filled.
+If the staging deployment no longer reads `fe01281`, write the SHA it does read.
+
+| Date (WIB) | Check | Tester | Device / OS / Browser | Lang | Staging SHA | Result | Evidence / notes |
+|---|---|---|---|---|---|---|---|
+| | MAN-AUTH-01 steps 1–3 (sign-in **and** sign-out, then `/deal` asks to sign in) — blocks a release | | desktop Chrome, private window | id | `fe01281` | | |
+| | MAN-DUE-01 steps 1–9 — blocks a release | | Android phone / Chrome | id + en | `fe01281` | | |
+| | MAN-DUE-01 steps 1–10 (incl. fast wheel) — blocks a release | | iPhone / Safari | id + en | `fe01281` | | |
+| | MAN-REL-01 steps 1–3 (incl. link revoke) — blocks a release | | phone (FAB) + desktop | id | `fe01281` | | |
+| | MAN-DUE-01 steps 1–9 | | desktop Chrome; desktop Safari or Firefox | id | `fe01281` | | |
+| | MAN-DEAL-01 | | Android, iPhone | id | `fe01281` | | |
+| | MAN-WA-01 | | Android, iPhone, desktop (popups blocked) | id | `fe01281` | | |
+| | MAN-PDF-01 | | Android, iPhone, desktop Safari or Firefox | id | `fe01281` | | |
+| | MAN-SHARE-01 | | Android, iPhone | id | `fe01281` | | |
+| | MAN-A11Y-01 | | TalkBack or VoiceOver | id | `fe01281` | | |
