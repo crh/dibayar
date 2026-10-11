@@ -19,7 +19,7 @@ import { expect, test } from "../support/test";
 import { E2E_FIXTURE_PREFIX } from "../support/fixture-ids";
 import { loadFixtureManifest } from "../support/manifest";
 import { reseedFixtures } from "../support/reseed";
-import { press, responseTo } from "../support/journey";
+import { press, responseTo, watchPageHealth } from "../support/journey";
 
 const STATUS_ERROR = "Status invoice belum bisa diperbarui.";
 
@@ -53,10 +53,13 @@ test.describe("failed invoice status update", { tag: "@critical" }, () => {
 
     // The same owner, in a second tab, marks it paid.
     const otherTab = await context.newPage();
+    // The health guard watches only `page`.
+    const expectOtherTabHealthy = watchPageHealth(otherTab, "the second tab");
     await openSentInvoiceFromList(otherTab, isMobile);
     const paid = await responseTo(otherTab, "PATCH", path, () => press(action(otherTab, "Tandai lunas"), isMobile));
     expect(paid.ok()).toBe(true);
     await expect(chip(otherTab, "Lunas ✓")).toBeVisible();
+    expectOtherTabHealthy();
     await otherTab.close();
 
     // The first tab still shows what it loaded, and offers a move that is no

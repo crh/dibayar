@@ -70,6 +70,14 @@ test.describe("resetting a WhatsApp template", { tag: "@critical" }, () => {
     await page.reload();
     await expect(t.send).toHaveValue(CUSTOM_SEND);
     await expect(t.chase).toHaveValue(CUSTOM_CHASE);
+    // A reloaded page shows its values before React has attached to it, and a
+    // click in that moment does nothing. Come back through the navigation so
+    // the form is one the browser rendered itself.
+    await press(primaryNav(page).getByRole("link", { name: "Beranda", exact: true }), isMobile);
+    await expect(page).toHaveURL(/\/$/);
+    await press(primaryNav(page).getByRole("link", { name: "Pengaturan", exact: true }), isMobile);
+    await expect(page).toHaveURL(/\/pengaturan$/);
+    await expect(t.send).toHaveValue(CUSTOM_SEND);
 
     // Reset the send template only. The button saves by itself.
     const reset = await responseTo(page, "PATCH", "/api/me/settings", () => press(t.resetSend, isMobile));
@@ -96,11 +104,13 @@ test.describe("resetting a WhatsApp template", { tag: "@critical" }, () => {
     const message = parseWhatsAppLink(popup.url()).text ?? "";
     await popup.close();
     await expect(send).toBeEnabled();
-    const link = `${escapeRegExp(new URL(page.url()).origin)}/i/[A-Za-z0-9_-]{20,}`;
-    expect(message).toMatch(new RegExp(
-      `^Halo ${escapeRegExp(brand)}, berikut invoice E2E/SENT/001 sebesar ${escapeRegExp(rupiah(6_000_000))}\\.\\nJatuh tempo 31 Des 2099\\.\\nDetail dan unduh PDF: ${link}\\nTerima kasih!$`,
-    ));
-    expect(message).not.toContain("UJI-RESET");
+    // The share link is taken out before comparing, so a failure prints the
+    // message without it.
+    const link = new RegExp(`${escapeRegExp(new URL(page.url()).origin)}/i/[A-Za-z0-9_-]{20,}`, "g");
+    expect(message.match(link)?.length, "the message carries exactly one public invoice link").toBe(1);
+    expect(message.replace(link, "<tautan>")).toBe(
+      `Halo ${brand}, berikut invoice E2E/SENT/001 sebesar ${rupiah(6_000_000)}.\nJatuh tempo 31 Des 2099.\nDetail dan unduh PDF: <tautan>\nTerima kasih!`,
+    );
 
     // The reminder template resets the same way.
     await press(primaryNav(page).getByRole("link", { name: "Pengaturan", exact: true }), isMobile);

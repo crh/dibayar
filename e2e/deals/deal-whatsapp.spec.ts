@@ -8,10 +8,12 @@
 // WhatsApp app itself and a real phone's hand-off stay MAN-WA-01.
 //
 // A base-seed deal, reached the way a person reaches it (board card -> menu
-// -> Lihat detail). Nothing is stored, so there is no reseed.
+// -> Lihat detail). The test stores nothing; it reseeds first only so that it
+// does not depend on which spec ran before it.
 import type { Page } from "@playwright/test";
 import { expect, test } from "../support/test";
 import { loadFixtureManifest } from "../support/manifest";
+import { reseedFixtures } from "../support/reseed";
 import { keepWhatsAppLocal, trackOpenedPages } from "../support/follow-up";
 import { press } from "../support/journey";
 
@@ -25,6 +27,8 @@ async function openDealFromBoard(page: Page, brand: string, dealId: string, isMo
 }
 
 test.describe("WhatsApp from deal detail", { tag: "@critical" }, () => {
+  test.beforeEach(reseedFixtures);
+
   test("Buka WhatsApp on deal detail opens one chat with the deal's own number", async ({ page, context, isMobile }) => {
     const manifest = loadFixtureManifest();
     const dealId = manifest.deals.nego;

@@ -464,4 +464,23 @@ Local, on the PR branch (ALPHA, 2026-10-11):
 | full `test:e2e`, both projects | 259 passed, 0 failed, 25 skipped |
 | `coverage:journeys -- --results` on that run | 141 real claims passed; 4 not exercised (the ux-audit ones) |
 
-CI and review: pending, filled in below.
+### Independent review (PR #43, head `5e0bc37`)
+
+A separate read-only reviewer agent. Verdict: **approve with nits**, no P1.
+It confirmed the stub-free claims, the fixture action's guards, the title
+references and the counts, and that the added settings saves (10 per project,
+up from 4) stay under the 20-per-minute limiter.
+
+| # | Sev. | Finding | Disposition |
+|---|---|---|---|
+| P2-1 | P2 | After `page.reload()`, `template-reset` clicked and `save-failure` typed before React could have attached (a hang or a lost value, not a false pass) | Fixed: both re-enter Pengaturan through the navigation before the next interaction |
+| P2-2 | P2 | A11Y-04 as real is borderline; `getAnimations()` cannot see an animation that already finished, the comment claimed it could, and the control did not cover that leg | Kept real, strengthened: every page now records the browser's `animationend` / `transitionend` events with how long each ran. Under the preference the menu's animation must be seen to end and nothing may have run longer than 0.01 ms; the control must see one that ran 200 ms. Comment corrected. The classification stays a disclosed judgement call |
+| P3 | P3 | The second tab of the 409 test was outside the health guard | Fixed: `watchPageHealth()` |
+| P3 | P3 | `template-reset` could print the message, share link included, on failure | Fixed: the link is replaced before the comparison |
+| P3 | P3 | `deal-whatsapp` relied on spec order | Fixed: reseeds first |
+| P3 | P3 | Clicks right after `goto` could land before hydration (unconfirmed; same pattern as existing specs) | Not changed; passed 64/64 below |
+
+After the fixes: the five touched files 64/64 over two repeats in chromium,
+chromium-mobile, firefox and webkit.
+
+CI: pending, filled in below.

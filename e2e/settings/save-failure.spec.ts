@@ -78,6 +78,13 @@ test.describe("failed settings save", { tag: "@critical" }, () => {
 
     // None of it was stored, including the fields that were valid.
     await expectSeededAfterReload(page);
+    // Back through the navigation before typing again: a field filled on a
+    // freshly reloaded page can be reset when React attaches to it.
+    await press(primaryNav(page).getByRole("link", { name: "Beranda", exact: true }), isMobile);
+    await expect(page).toHaveURL(/\/$/);
+    await press(primaryNav(page).getByRole("link", { name: "Pengaturan", exact: true }), isMobile);
+    await expect(page).toHaveURL(/\/pengaturan$/);
+    await expect(f.issuerName).toHaveValue(SEEDED.issuerName);
 
     // Corrected, the same edit saves.
     await f.issuerName.fill(TYPED.issuerName);
