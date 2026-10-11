@@ -23,6 +23,9 @@ a positive one.
 | 7 | FIND-07 (medium): invoice detail showed an expired share as "Tautan aktif sampai <past date>" and its WhatsApp action sent that expired link | INV-STATUS-06, INV-WA-01, SHARE-01, SHARE-02 | **Fixed** by PR #31 (squash merge `979c3ec`, staging). The owner's share state is now inactive / active / expired; invoice detail shows an expired state with **Buat tautan baru** and sends through `POST /share/ensure`. Regression: `e2e/invoices/expired-share.spec.ts`. |
 | 8 | FIND-08 (low): the recipient's invoice page and PDF print the due date only inside the payment-terms block, so a deal without payment terms shows the recipient no due date | INV-DUE-05, PUB-01, PUB-05, PUB-06 | **Fixed** by PR #35 (staging). Chris's decision: a due date is shown to the recipient whenever it exists, with or without payment terms; no payment-terms text is invented. Payment terms and the due date are independent in the canonical document model. Regression: `e2e/public/due-date-without-terms.spec.ts`, and the four-combination tests in `src/components/documents/invoice-document/`. |
 | 9 | FIND-09 (low): the invoice document prints `Tanggal terbit` as the UTC day of `createdAt`, so an invoice created between 00:00 and 06:59 WIB shows the previous day | PUB-01, INV-PDF-01 | Open, noticed 2026-10-10 during the FIND-08 work. Not changed; needs a product decision. No browser test asserts either behaviour. |
+| 10 | FIND-10 (high): every change to a deal that named no stage (contact name, repaired WhatsApp number on deal detail, invoice detail or Beranda) also moved the deal back to Masuk and wrote a `<stage> → Masuk` history entry | DEAL-DETAIL-02, DEAL-DETAIL-03, INV-WA-03, HOME-04 | **Fixed** on `fix/deal-patch-keeps-stage-2026-10-11` (staging). The PATCH schema was the create schema made `partial()`, which keeps its `status: "MASUK"` default; it now has no status default. On `main`/Production (schema line 2026-07-14; first screen to trigger it 2026-08-09). Regression: `src/lib/deal-validation.test.ts`, `src/lib/deals.test.ts`, `e2e/deals/patch-keeps-stage.spec.ts`, `e2e/deals/contact-repair.spec.ts`. **Still open for Chris:** a read-only Production count of `→ Masuk` transitions that coincide with a contact edit (a lower bound: a Beranda repair before the stage history existed, 2026-08-23, left no entry); stored rows are not repaired. The Beranda repair has no browser regression (HOME-04). |
+| 11 | FIND-11 (low): a saved contact name cannot be removed on deal detail (emptying the field sends an empty PATCH, the page says saved and puts the old name back) | DEAL-DETAIL-02 | Open, noticed 2026-10-11, **triaged 2026-10-11: recommended P3, after the release, not a release blocker.** Nothing is lost and nothing reaches a recipient; the cost is a name the owner cannot remove and a "Nama kontak disimpan" message that is not true. Recommended fix: an emptied field clears the name (`contactName: null`, accepted by `dealPatchSchema`), with a browser regression that reads the cleared value after a reload. Repro: deal detail of a deal with a contact name → empty **Nama kontak** → **Simpan** → "Nama kontak disimpan" → the old name is back, also after a reload. Not changed; Chris decides. No browser test asserts either behaviour. |
+| 12 | FIND-12 (medium): the error card's **Coba lagi** never recovered from a failed server render; it called `reset()`, which re-renders the failure the browser already holds | NAV-08 | **Fixed** on `fix/route-error-retry-2026-10-11` (PR into `staging`, unmerged when written): `src/app/(app)/error.tsx` uses `retry()`. Regression: `e2e/smoke/route-error-retry.spec.ts`, `src/app/(app)/error.test.tsx`. |
 
 ## Batch 1 — P0/P1 gaps with existing fixtures (done, Zero Routine Phase 1)
 
@@ -133,9 +136,10 @@ changed status.
 - DEAL-CREATE-07 deadline and INV-DUE-03 on real phones (MAN-DEAL-01,
   MAN-DUE-01); MAN-PDF-01 for phone PDF viewers.
 - A11Y-01: deal detail, the expired-share and contact-repair states of
-  invoice detail, Settings validation errors.
+  invoice detail, Settings validation errors. (Scanned since the
+  release-readiness follow-up, 2026-10-11.)
 - AUTH-02: the English landing CTA.
-- Decisions (Chris): FIND-09. (FIND-01 and FIND-06 were decided and fixed
+- Decisions (Chris): FIND-09, FIND-11. (FIND-01 and FIND-06 were decided and fixed
   on `fix/invoice-status-consistency-2026-10-09`; FIND-08 on
   `fix/recipient-due-date-without-payment-terms-2026-10-09`.)
 
@@ -162,12 +166,85 @@ in `chromium` and `chromium-mobile`.
   follow-up row and every deal-terdekat row opens its own record; both
   **Lihat semua** links.
 
+### Batch D — long cross-page journeys (done, one-shot autopilot, 2026-10-11)
+
+Delivered on `test/creator-cross-page-journeys-2026-10-11` (receipt:
+`docs/receipts/DIBAYAR-E2E-AUTOPILOT-ONE-SHOT-2026-10-11.md`). Tests, one
+helper file and docs only; no application code, fixture, inventory status or
+CI change. All three are `@critical` and run in `chromium` and
+`chromium-mobile`; `docs/testing/E2E.md` lists their checkpoints and
+`JOURNEY-GRAPHS.md` §7 the graph edges each one walks.
+
+- `e2e/journeys/deal-to-paid.spec.ts` -- deal → every stage → invoice → sent
+  → share → WhatsApp (local stub) → recipient page and PDF → paid → list,
+  board and Beranda.
+- `e2e/journeys/settings-to-recipient.spec.ts` -- issuer, bank and send
+  template → WhatsApp message, owner PDF, recipient page and PDF.
+- `e2e/journeys/resilience-permissions.spec.ts` -- session expiry while a deal
+  is being edited, the reused token, the second user, and a link revoked
+  while the recipient has it open.
+
+They are not inventory evidence: no action's status or test list changed.
+
 ### Still open
 
-DEAL-DETAIL-02, DEAL-DETAIL-04, SET-05, SET-07, SET-08,
-INV-STATUS-07 (`page.route` failure injection is acceptable here: the
-interaction is real, and only the server response is stubbed), A11Y-04.
-NAV-08 waits for a safe failure-injection seam.
+Nothing: no action is `not_covered` since 2026-10-11. NAV-08 became real with
+the FIND-12 fix (`e2e/smoke/route-error-retry.spec.ts`), on a new guarded
+fixture action that makes a query really fail (`invoice-table-outage`).
+INV-DUE-06 could now get a stub-free failure the same way; done in the
+release-readiness follow-up below, with a narrower seam.
+
+### Release-readiness follow-up (2026-10-11)
+
+Receipt: `docs/receipts/DIBAYAR-STAGING-RELEASE-READINESS-2026-10-11.md`.
+Tests, one fixture action pair (`invoice-write-refusal`), one option of the
+browser-health guard (`status` on `expectedErrorResponses`), inventory and
+docs; no application code.
+
+- INV-DUE-06 is **real** (chromium and chromium-mobile):
+  `e2e/invoices/due-date-integrity.spec.ts`, "saves the database refuses".
+  The test database rejects the write, the app answers 500 itself, the page
+  shows the error and the stored date, a reload shows the same, and the save
+  works once the cause is gone. The two `page.route` tests stay, as partial.
+- A11Y-04 is **partial** again (was real): the preference is emulated and
+  the outcome is read from styles and events, which the classification rule
+  does not accept as a person's control and a user-observable outcome. The
+  test itself is unchanged apart from also recording cancelled motion.
+- A11Y-01 stays partial by rule; scans added for deal detail, the repair,
+  expired-share and Settings-error states, the English interface and the
+  phone layout (`e2e/smoke/accessibility-states.spec.ts`), with a
+  keyboard-only journey and a control for the scan itself. No serious or
+  critical finding; nothing excluded.
+- DEAL-CREATE-07 stays partial: the deadline is now typed with the keyboard
+  on desktop Chromium, through to the invoice's default due date. The phone's
+  date picker is still MAN-DEAL-01.
+- Real-interaction coverage is unchanged at 82/93 (one up, one down);
+  outstanding P0/P1 actions: 3 (INV-DUE-03, DEAL-CREATE-07, A11Y-01).
+
+### Phase 2 of the one-shot autopilot (done, 2026-10-11)
+
+Delivered on `test/p2-detail-settings-status-a11y-2026-10-11` (receipt:
+`docs/receipts/DIBAYAR-E2E-AUTOPILOT-ONE-SHOT-2026-10-11.md` §6). Tests, one
+fixture action (`incomplete-issuer-settings`), inventory and docs; no
+application code. All six are real in `chromium` and `chromium-mobile`;
+DEAL-DETAIL-02 became real with the FIND-10 fix.
+
+- DEAL-DETAIL-04: `e2e/deals/deal-whatsapp.spec.ts` -- **Buka WhatsApp** on
+  deal detail: one tab, the deal's number, no Referer, no opener.
+- INV-STATUS-07: `e2e/invoices/status-failure.spec.ts` -- a real 409 (the
+  invoice was paid in another tab, then **Tandai jatuh tempo** in the stale
+  one), plus a `page.route` failure with retry, which is partial by rule.
+- SET-05: `e2e/settings/template-reset.spec.ts` -- **Kembalikan ke bawaan**
+  for each template, reload, and the next WhatsApp message.
+- SET-07: `e2e/settings/incomplete-issuer.spec.ts` -- the notice on invoice
+  detail, in Pengaturan and on the recipient page, until the details are
+  saved.
+- SET-08: `e2e/settings/save-failure.spec.ts` -- a real 400 (a WhatsApp
+  number the form accepts and the server rejects), plus a `page.route`
+  failure with retry (partial by rule).
+- A11Y-04: `e2e/smoke/reduced-motion.spec.ts` -- menus, dialog and **Tandai
+  lunas** under `prefers-reduced-motion: reduce`, with motion measured after
+  every step, and a control without the preference.
 
 ## Next phase — Zero Routine Manual Regression Testing
 
@@ -194,7 +271,10 @@ repeated here; these are the program-level steps around them.
    automate every edge marked UNTESTED: forward, back, reload, and
    browser-history on each. Failure-injection edges use `page.route` as in
    Batch 3 (the interaction stays real).
-4. **Critical journeys end to end.** Two or three long journeys (deal →
+4. **Critical journeys end to end.** (Done 2026-10-11, Batch D: three long
+   journeys in `e2e/journeys/`, `chromium` and `chromium-mobile`, see "Batch D"
+   above.)
+   Two or three long journeys (deal →
    invoice → share → recipient → paid; settings change visible on the
    recipient page) that cross pages and reloads, in `chromium` and
    `chromium-mobile`.

@@ -17,7 +17,21 @@ type BrowserDiagnostics = {
 // this shared fixture's always-on behavior. Match narrowly (method +
 // pathname), same reasoning as the /i/ case: a 4xx anywhere else stays a
 // real, actionable diagnostic.
-type ExpectedErrorResponse = { method: string; pathname: string };
+//
+// `status` narrows the opt-in to that one status and is the only way to
+// expect a 5xx: a spec that makes the server itself fail on purpose (a write
+// the test database refuses) names the exact 500 it causes. Without `status`
+// the opt-in covers 4xx only, so a 5xx on an opted-in address still fails.
+type ExpectedErrorResponse = { method: string; pathname: string; status?: number };
+
+// Opt-in for a test that deliberately makes the app itself report an error
+// to the console -- today only the route-error-boundary journey, where a
+// server component really throws and React logs that it did. Like
+// expectedErrorResponses this is per test (`test.use(...)`). It is one
+// pattern for the message, so any other console error in the same test is
+// still a failure. (One RegExp, not a list: Playwright reads a two-element
+// array option as its own [value, options] form.)
+type ExpectedConsoleError = RegExp | null;
 
 // How each engine reports a request it cancelled itself: Chromium, Firefox,
 // WebKit.
@@ -35,10 +49,12 @@ function errorMessage(error: Error): string {
 export const test = base.extend<{
   browserDiagnostics: BrowserDiagnostics;
   expectedErrorResponses: ExpectedErrorResponse[];
+  expectedConsoleError: ExpectedConsoleError;
 }>({
   expectedErrorResponses: [[], { option: true }],
+  expectedConsoleError: [null, { option: true }],
   browserDiagnostics: [
-    async ({ page, expectedErrorResponses }, useFixture, testInfo) => {
+    async ({ page, expectedErrorResponses, expectedConsoleError }, useFixture, testInfo) => {
       const diagnostics: BrowserDiagnostics = {
         pageErrors: [],
         consoleErrors: [],
@@ -107,6 +123,7 @@ export const test = base.extend<{
               return;
             }
           }
+          if (expectedConsoleError?.test(message.text())) return;
           diagnostics.consoleErrors.push(message.text());
         }
       };
@@ -123,6 +140,13 @@ export const test = base.extend<{
         // confirmed via repeated local e2e-cross-browser Firefox+WebKit
         // runs surfacing this exact race under load).
         if (ABORTED_ERROR_TEXTS.has(errorText) && url.searchParams.has("_rsc")) return;
+        // The tab icon is fetched by the browser itself, not by the page, and
+        // Firefox cancels that fetch when a navigation starts before it has
+        // finished (seen as "favicon.ico?<hash> — NS_BINDING_ABORTED" in
+        // roughly one run in eight of journeys that click a link right after
+        // a page load). Only a cancelled favicon is dropped; a favicon that
+        // fails any other way, or answers 5xx, is still reported.
+        if (ABORTED_ERROR_TEXTS.has(errorText) && url.pathname === "/favicon.ico") return;
         // A link whose response is a file (Content-Disposition: attachment,
         // e.g. Unduh PDF) starts as a navigation that the browser then turns
         // into a download, and reports the navigation request as failed.
@@ -139,17 +163,24 @@ export const test = base.extend<{
         downloadedUrls.add(download.url());
       };
       const onResponse = (response: { status(): number; url(): string; request(): { method(): string } }) => {
-        if (response.status() >= 500) diagnostics.serverErrors.push(`${response.status()} ${response.url()}`);
-        if (response.status() < 400 || response.status() >= 500) return;
+        const status = response.status();
+        if (status < 400) return;
 
         const url = new URL(response.url());
+        const isOptedIn = expectedErrorResponses.some(
+          (expected) =>
+            expected.method === response.request().method()
+            && expected.pathname === url.pathname
+            && (expected.status === undefined ? status < 500 : expected.status === status),
+        );
+        if (status >= 500 && !isOptedIn) {
+          diagnostics.serverErrors.push(`${status} ${response.url()}`);
+          return;
+        }
         // The invalid-token journey's own 404 -- see the onConsole comment
         // above. Only /i/ paths qualify: a 404 anywhere else in the app
         // stays a real, actionable diagnostic.
-        const isPublicInvalidTokenNotFound = response.status() === 404 && url.pathname.startsWith("/i/");
-        const isOptedIn = expectedErrorResponses.some(
-          (expected) => expected.method === response.request().method() && expected.pathname === url.pathname,
-        );
+        const isPublicInvalidTokenNotFound = status === 404 && url.pathname.startsWith("/i/");
         // Keyed by the exact URL, not just counted, so a pending entry for
         // one URL can never be consumed by a console message about a
         // different one.

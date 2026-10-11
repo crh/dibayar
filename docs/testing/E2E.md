@@ -215,6 +215,117 @@ invoice detail page, wait for its WhatsApp action to be enabled: that is when
 its contact and share fetches have settled, and leaving earlier reports them
 as failed requests.
 
+The route error boundary (NAV-08; FIND-12, fixed):
+`e2e/smoke/route-error-retry.spec.ts` makes the invoice list's query fail for
+real (`startInvoiceTableOutage()`), reaches `/invoice` through the nav and by
+reload, and presses **Coba lagi** while the failure lasts (the card stays)
+and after it ends (the list appears). No request is intercepted. Rules for a
+spec that uses the outage: end it in a `finally` and again in `afterEach`,
+keep it `workers: 1`, and never leave a page fetch in flight when it starts.
+Unlike every other fixture action it affects the whole test database, not
+only the fixture owner: nothing else may use `dibayar_test` while such a
+spec runs (no `ux:audit`, no second worktree's E2E run, no dev server on
+it), and a fixture action run by another process would end the outage early.
+A thrown server component makes React log one console error; the spec opts
+in with `expectedConsoleError` (one pattern, per test), and every other
+diagnostic still fails it. The server log shows `TableDoesNotExist` during
+these tests; that is the injected failure, not a problem.
+
+Failures without a stub: where the server can be made to refuse a request
+through the UI alone, the failure test uses that and counts as real
+evidence. `e2e/invoices/status-failure.spec.ts` marks an invoice paid in a
+second tab and then presses **Tandai jatuh tempo** in the first (the server
+answers 409); `e2e/settings/save-failure.spec.ts` saves an issuer WhatsApp
+number of 33 characters, which the form allows and the server rejects (400).
+Each file also has a `page.route` version with a retry; that one is partial
+by the inventory's rules, like the due-date `page.route` tests. A test that
+expects a 4xx opts in with `expectedErrorResponses` for that one request.
+
+A save the server fails to store (INV-DUE-06): no screen can make the
+due-date PATCH fail on its own, so `e2e/invoices/due-date-integrity.spec.ts`
+("saves the database refuses") uses a second guarded fixture action,
+`startInvoiceWriteRefusal()`. It adds a row trigger to the test database
+that rejects every UPDATE of the one seeded SENT invoice. The request is not
+intercepted: it reaches the app's handler, the handler reaches the database,
+the write fails there and the handler answers 500. The tests then check the
+error, the stored date back in the field, the same after a reload, and a
+successful save once `endInvoiceWriteRefusal()` has removed the trigger.
+Compared with the table outage it is narrow on purpose: one row, writes
+only, nothing renamed, reads and every other row untouched, so it cannot
+fail a spec that does not update that invoice. The same rules still apply
+(end it in a `finally` and in `afterEach`; `workers: 1`); every other
+fixture action removes a left-over trigger first, and removing it takes no
+lock when there is none. A 5xx normally fails any test; a spec that causes
+one on purpose names it exactly, with `status`:
+`expectedErrorResponses: [{ method, pathname, status: 500 }]`. Without
+`status` the opt-in covers 4xx only. List one entry per `test.use`
+(Playwright reads a two-element array option as `[value, options]`).
+The server log shows the trigger's `e2e write refusal` error during these
+tests; that is the injected failure.
+
+Reduced motion (`e2e/smoke/reduced-motion.spec.ts`): the context is created
+with `reducedMotion: "reduce"`, and after each real interaction the test
+reads `document.getAnimations()` and the computed animation and transition
+durations of every element; nothing may exceed the 0.01 ms the rule in
+`globals.css` sets. A control test without the preference must report the
+account menu's 200 ms animation, so the measurement is known to see motion.
+In the inventory this is partial evidence (A11Y-04): the preference is
+emulated, not the OS setting, and the outcome is measured, not seen.
+
+Accessibility beyond the base scans (`e2e/smoke/accessibility-states.spec.ts`,
+`@a11y`, desktop Chromium like the base spec): deal detail, the number-repair
+form on deal and invoice detail, an expired share, Settings with field
+errors, the main pages in English, and the phone layout at 390px. Each state
+is reached through the visible controls and scanned whole with the same
+helper and threshold; nothing is excluded. One test uses the keyboard alone
+(Tab, Enter, typing) to add a deal and open it, and one is the scan's own
+control on synthetic content. None of this operates a screen reader
+(MAN-A11Y-01), and 390px in desktop Chromium is not a phone.
+
+A deal's stage after a contact edit (FIND-10, fixed): a PATCH that names no
+stage must not move the deal. `e2e/deals/patch-keeps-stage.spec.ts` saves a
+contact name on a Nego deal and repairs a WhatsApp number from invoice detail
+on an Invoice deal, and reads the stage, the stage history and the board
+column after a reload; `e2e/deals/contact-repair.spec.ts` does the same for
+the repair on deal detail. The page shows the stage it loaded with until the
+next load, so a test that edits a deal should reload before trusting its
+stage, and should not use a deal at Masuk (the value the bug wrote).
+
+Long cross-page journeys (`e2e/journeys/`, all `@critical`, `chromium` and
+`chromium-mobile`): three tests that each walk one person's whole workflow
+across pages, reloads and browser contexts, with a `test.step` per
+checkpoint. They add no action to the inventory and change no
+classification; the short specs remain the per-action evidence.
+
+- `deal-to-paid.spec.ts`: Beranda → **+ Deal** (floating button on the phone,
+  top bar on desktop) → the deal through every stage → **Buat invoice** →
+  **Tandai sudah dikirim** → **Buat tautan berbagi** → **Kirim lewat
+  WhatsApp** (local stub) → a session-less `recipient` reads the page and
+  downloads the PDF → **Tandai lunas** → invoice list, deal board, Beranda's
+  monthly total. The `chromium` project types a due date with the keyboard and
+  the recipient must see it; every other project sets none (a native picker
+  cannot be driven, MAN-DUE-01, and segment typing differs per engine) and
+  the recipient must see no due date.
+- `settings-to-recipient.spec.ts`: issuer identity, bank account and the send
+  template rewritten in Pengaturan → reload → the WhatsApp message from the
+  seeded sent invoice → the owner's PDF → the recipient's page and PDF (text
+  equal to the owner's), and none of the old values anywhere.
+- `resilience-permissions.spec.ts`: a deal half edited when the disposable
+  session expires (`expireDisposableOwnerSession()`): **Simpan** and
+  **Lanjut ke Deal** answer 401 with a visible error, a nav link, Back,
+  Forward and a reload end at sign-in, the same token is refused from a fresh
+  browser, the valid session shows nothing was stored, and a second user sees
+  none of it. Then a recipient with an expired link and a valid one that the
+  owner revokes: reload, Back, Forward and the PDF never show the invoice
+  again.
+
+Each one reseeds before and after. Their preconditions are base-seed rows
+only; everything asserted about new data is created through the UI. Shared
+helpers are in `e2e/support/journey.ts` (`press()` taps on the phone project
+and clicks on desktop, `typeInto()`, `responseTo()`, `expectNoOwnerControls()`).
+Use `page.locator('p[role="alert"]')` for "no error is shown": Next.js adds
+its own empty route announcer with `role="alert"` to every page.
+
 Specs that change per-user state every other test depends on
 (`settings/language.spec.ts` changes `User.language`,
 `settings/bank-details.spec.ts` changes `UserSettings`) reseed in an
@@ -235,6 +346,9 @@ prints the share token.
 | `npm run e2e:fixtures -- income-boundaries` | On top of a fresh `seed`: four invoices on the edges of Beranda's monthly total (a draft, one created 1 ms before this Jakarta month, one at its first instant, one at the first instant of next month). Used by `e2e/home/monthly-income.spec.ts` via `applyIncomeBoundaries()`. The next `seed` removes them |
 | `npm run e2e:fixtures -- status-consistency` | On top of `follow-up-states`: five invoices whose stored status and due date disagree (stored DUE due yesterday, legacy stored OVERDUE due in 8 days and with no due date, DRAFT and PAID due yesterday). Used by `e2e/invoices/status-consistency.spec.ts` via `applyStatusConsistency()`; refuses to run twice. The next `seed` removes them |
 | `npm run e2e:fixtures -- expire-disposable-session` | Sets the owner's disposable session's `expires` one minute into the past (the row stays). Used mid-test by `e2e/auth/session-expiry.spec.ts` via `expireDisposableOwnerSession()`; the shared owner session is not touched. The next `seed` restores it |
+| `npm run e2e:fixtures -- incomplete-issuer-settings` | Removes the owner's `UserSettings` row: an account that never saved Pengaturan (the form cannot produce that state). Used by `e2e/settings/incomplete-issuer.spec.ts` via `applyIncompleteIssuerSettings()`. The next `seed` restores the settings |
+| `npm run e2e:fixtures -- invoice-write-refusal` / `end-invoice-write-refusal` | Adds, and removes, a row trigger that makes the test database reject every UPDATE of the seeded SENT invoice, so the app's own save really fails (HTTP 500). One row, writes only; nothing is renamed or deleted. Used mid-test by `e2e/invoices/due-date-integrity.spec.ts` via `startInvoiceWriteRefusal()` / `endInvoiceWriteRefusal()`. Every other action of the script removes a left-over trigger before doing anything else |
+| `npm run e2e:fixtures -- invoice-table-outage` / `end-invoice-table-outage` | Renames the `Invoice` table of the test database away, and back. While it is away every query on it fails, so a server component that reads invoices really throws. Nothing is deleted. Used mid-test by `e2e/smoke/route-error-retry.spec.ts` via `startInvoiceTableOutage()` / `endInvoiceTableOutage()`. Every other action of the script ends a left-over outage before doing anything else |
 | `npm run e2e:build` | Reproducible webpack production build, needed before any `test:e2e*` run |
 | `npm run test:e2e` | Semantic journey suite, chromium + chromium-mobile; visual snapshots are separate |
 | `npm run test:e2e:critical` | `@critical`-tagged tests only, chromium + chromium-mobile -- the PR gate |

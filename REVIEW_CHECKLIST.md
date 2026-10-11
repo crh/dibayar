@@ -54,12 +54,12 @@
 - [ ] Current `docs/testing/JOURNEY-COVERAGE.md` "Outstanding P0/P1 actions" and "Exception register" pasted into the PR
 - [ ] Every outstanding **P0** is fixed, signed off under F2, or explicitly accepted by Chris
 - [ ] Every "Product decision" register entry (today: none) is decided, or Chris explicitly accepts shipping the current behaviour
-- [ ] "Partial by classification rule" entries (today: A11Y-01, INV-DUE-06) need no acceptance while their tests are green under F1; say so, do not report them as covered
+- [ ] "Partial by classification rule" entries (today: A11Y-01) need no acceptance while their tests are green under F1; say so, do not report them as covered
 
 **F4 — Informational (linked, never a blocker by themselves)**
 - [ ] Latest scheduled `e2e-cross-browser` result (workflow `CI`) linked
 - [ ] Latest `Journey coverage (full)` run for the release head linked, with its summary (commit, real-claim count, not exercised); dispatch one if the head has none (`docs/testing/E2E.md`). Not a release gate yet
-- [ ] Open low-severity findings (today: FIND-09) and findings fixed on `staging` but still awaiting real-device UAT or a Production data check (e.g. FIND-02/FIND-03: MAN-DUE-01, out-of-range due-date count) listed with their status, not reported as closed
+- [ ] Open low-severity findings (today: FIND-09, FIND-11) and findings fixed on `staging` but still awaiting real-device UAT or a Production data check (e.g. FIND-02/FIND-03: MAN-DUE-01, out-of-range due-date count; FIND-10: count of deals moved back to Masuk by a contact edit) listed with their status, not reported as closed
 
 ## Stop rules
 - Any Gate A–C failure after 2 fix attempts → do not commit; log blocker in STATE.md.

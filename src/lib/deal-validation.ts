@@ -20,7 +20,11 @@ export const dealInputSchema = z.object({
   status: z.enum(DEAL_STATUSES).default("MASUK"),
 });
 
-export const dealPatchSchema = dealInputSchema.partial();
+// A patch changes only what it names. partial() alone keeps the create
+// schema's `status` default, so a patch without a status (a contact name, a
+// repaired WhatsApp number) came back with status "MASUK" and moved the deal
+// to the first stage (FIND-10). Here status has no default.
+export const dealPatchSchema = dealInputSchema.extend({ status: z.enum(DEAL_STATUSES) }).partial();
 
 export type DealInput = z.infer<typeof dealInputSchema>;
 export type DealPatch = z.infer<typeof dealPatchSchema>;

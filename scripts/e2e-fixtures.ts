@@ -27,8 +27,8 @@ import { getJakartaCalendarDate } from "../src/lib/invoice-date-status";
 import { encryptShareToken } from "../src/lib/share-token-crypto";
 
 const action = process.argv[2];
-if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states", "follow-up-expired-share", "income-boundaries", "status-consistency", "expire-disposable-session"].includes(action ?? "")) {
-  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states|follow-up-expired-share|income-boundaries|status-consistency|expire-disposable-session");
+if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states", "follow-up-expired-share", "income-boundaries", "status-consistency", "expire-disposable-session", "incomplete-issuer-settings", "invoice-table-outage", "end-invoice-table-outage", "invoice-write-refusal", "end-invoice-write-refusal"].includes(action ?? "")) {
+  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states|follow-up-expired-share|income-boundaries|status-consistency|expire-disposable-session|incomplete-issuer-settings|invoice-table-outage|end-invoice-table-outage|invoice-write-refusal|end-invoice-write-refusal");
 }
 
 const connectionString = process.env.DATABASE_URL;
@@ -552,8 +552,127 @@ async function expireDisposableSession() {
   console.log(JSON.stringify({ action: "expire-disposable-session", host: normalizedHost, prefix, updated: result.count }));
 }
 
+// Removes the fixture owner's UserSettings row: the state of an account that
+// has never saved Pengaturan (no issuer name, no bank account). The settings
+// form cannot produce it, because it refuses to save an empty required
+// field. Only this owner's row on the guarded disposable target; the next
+// `seed` restores the complete settings.
+async function incompleteIssuerSettings() {
+  const result = await prisma.userSettings.deleteMany({ where: { userId: ids.owner } });
+  if (result.count !== 1) throw new Error(`E2E incomplete-issuer overlay expected 1 settings row, removed ${result.count}`);
+  console.log(JSON.stringify({ action: "incomplete-issuer-settings", host: normalizedHost, prefix, removed: result.count }));
+}
+
+// A database failure the app can really hit, on the disposable test database
+// only: while the outage lasts, the Invoice table is not where the app looks
+// for it, so every query on it fails the way a missing relation does and the
+// server component that ran it throws. Nothing is deleted; the table is
+// renamed and renamed back, rows, indexes and foreign keys included.
+//
+// There is no production code path behind this and no request is stubbed: it
+// is the failure-injection seam for the route error boundary (NAV-08).
+// Because a broken table would fail every later spec, the outage is ended in
+// three places: by the test, by its afterEach, and by every other action of
+// this script before it does anything else (endInvoiceTableOutage below).
+const OUTAGE_TABLE = "Invoice__e2e_outage";
+
+// A rename needs an exclusive lock; give up after five seconds instead of
+// waiting for another session forever.
+const RENAME_LOCK_TIMEOUT = "SET lock_timeout = '5s'";
+
+async function invoiceTableOutage() {
+  await prisma.$executeRawUnsafe(RENAME_LOCK_TIMEOUT);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Invoice" RENAME TO "${OUTAGE_TABLE}"`);
+  console.log(JSON.stringify({ action: "invoice-table-outage", host: normalizedHost, prefix, table: "Invoice", available: false }));
+}
+
+// Idempotent: does nothing when there is no outage.
+async function endInvoiceTableOutage(): Promise<boolean> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
+    `SELECT to_regclass('public."${OUTAGE_TABLE}"') IS NOT NULL AS "exists"`,
+  );
+  if (!rows[0]?.exists) return false;
+  const current = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
+    `SELECT to_regclass('public."Invoice"') IS NOT NULL AS "exists"`,
+  );
+  if (current[0]?.exists) {
+    throw new Error(`Both "Invoice" and "${OUTAGE_TABLE}" exist in the test database (a schema change ran during a left-over outage?). Drop the one that should not be there by hand; no fixture action will run until then.`);
+  }
+  await prisma.$executeRawUnsafe(RENAME_LOCK_TIMEOUT);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "${OUTAGE_TABLE}" RENAME TO "Invoice"`);
+  return true;
+}
+
+// A failed write the app can really hit, on the disposable test database
+// only, and on one row only: while the refusal lasts, the database rejects
+// every UPDATE of the fixture owner's SENT invoice (a row trigger that raises
+// an error), so the app's own PATCH handler reaches the database, fails
+// there, and answers 500. Reads of that invoice, and reads and writes of
+// every other row, are untouched; nothing is renamed, deleted or changed.
+//
+// Like the outage above, there is no production code path behind this and no
+// request is stubbed: it is the failure-injection seam for a save that fails
+// on the server (INV-DUE-06). It is narrower than the outage on purpose (one
+// row, writes only), so a left-over refusal cannot fail a spec that does not
+// update that invoice. It is still ended in three places: by the test, by its
+// afterEach, and by every other action of this script before it does
+// anything else.
+const REFUSAL_TRIGGER = "e2e_refuse_invoice_write";
+const REFUSED_INVOICE_ID = `${prefix}-invoice-sent`;
+
+async function refusalTriggerExists(): Promise<boolean> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
+    `SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = '${REFUSAL_TRIGGER}' AND NOT tgisinternal) AS "exists"`,
+  );
+  return Boolean(rows[0]?.exists);
+}
+
+async function invoiceWriteRefusal() {
+  // The id goes into DDL, which takes no parameters.
+  if (!/^[A-Za-z0-9-]+$/.test(REFUSED_INVOICE_ID)) throw new Error("E2E write refusal: unexpected fixture invoice id");
+  await prisma.$executeRawUnsafe(
+    `CREATE OR REPLACE FUNCTION public.${REFUSAL_TRIGGER}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'e2e write refusal: invoice % is read-only for this test', OLD.id; END $$`,
+  );
+  // CREATE TRIGGER waits for writers of the table; DROP TRIGGER (below) for
+  // readers too. Give up after five seconds instead of waiting forever.
+  await prisma.$executeRawUnsafe(RENAME_LOCK_TIMEOUT);
+  await prisma.$executeRawUnsafe(
+    `CREATE TRIGGER ${REFUSAL_TRIGGER} BEFORE UPDATE ON public."Invoice" FOR EACH ROW WHEN (OLD.id = '${REFUSED_INVOICE_ID}') EXECUTE FUNCTION public.${REFUSAL_TRIGGER}()`,
+  );
+  console.log(JSON.stringify({ action: "invoice-write-refusal", host: normalizedHost, prefix, invoice: "sent", writable: false }));
+}
+
+// Idempotent: does nothing (and takes no lock) when there is no refusal.
+async function endInvoiceWriteRefusal(): Promise<boolean> {
+  if (!(await refusalTriggerExists())) return false;
+  await prisma.$executeRawUnsafe(RENAME_LOCK_TIMEOUT);
+  await prisma.$executeRawUnsafe(`DROP TRIGGER IF EXISTS ${REFUSAL_TRIGGER} ON public."Invoice"`);
+  await prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS public.${REFUSAL_TRIGGER}()`);
+  return true;
+}
+
 async function main() {
   try {
+    if (action === "invoice-table-outage") {
+      await invoiceTableOutage();
+      return;
+    }
+    // Every other action first makes sure no outage was left behind.
+    const ended = await endInvoiceTableOutage();
+    if (action === "end-invoice-table-outage") {
+      console.log(JSON.stringify({ action: "end-invoice-table-outage", host: normalizedHost, prefix, table: "Invoice", available: true, wasOut: ended }));
+      return;
+    }
+    // ...and no write refusal either.
+    const refusalEnded = await endInvoiceWriteRefusal();
+    if (action === "end-invoice-write-refusal") {
+      console.log(JSON.stringify({ action: "end-invoice-write-refusal", host: normalizedHost, prefix, invoice: "sent", writable: true, wasRefusing: refusalEnded }));
+      return;
+    }
+    if (action === "invoice-write-refusal") {
+      await invoiceWriteRefusal();
+      return;
+    }
     if (action === "seed") await seed();
     else if (action === "verify") await verify();
     else if (action === "legacy-due-date") await legacyDueDate();
@@ -562,6 +681,7 @@ async function main() {
     else if (action === "income-boundaries") await applyIncomeBoundaries();
     else if (action === "status-consistency") await applyStatusConsistency();
     else if (action === "expire-disposable-session") await expireDisposableSession();
+    else if (action === "incomplete-issuer-settings") await incompleteIssuerSettings();
     else await cleanup();
   } finally {
     await prisma.$disconnect();

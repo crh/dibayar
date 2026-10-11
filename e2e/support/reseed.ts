@@ -10,11 +10,14 @@
 // no reseed -- they never mutate fixture rows.
 import { execFileSync } from "node:child_process";
 
-function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states" | "follow-up-expired-share" | "income-boundaries" | "status-consistency" | "expire-disposable-session"): void {
+function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states" | "follow-up-expired-share" | "income-boundaries" | "status-consistency" | "expire-disposable-session" | "incomplete-issuer-settings" | "invoice-table-outage" | "end-invoice-table-outage" | "invoice-write-refusal" | "end-invoice-write-refusal"): void {
   const env = { ...process.env, E2E_FIXTURE_CONFIRM: "non-production" };
   execFileSync("npx", ["tsx", "--env-file-if-exists=.env.local", "scripts/e2e-fixtures.ts", action], {
     stdio: "inherit",
     env,
+    // execFileSync blocks the worker, so Playwright's own timeout cannot end
+    // a fixture action that hangs (a lock, a dead database).
+    timeout: 60_000,
   });
 }
 
@@ -72,4 +75,40 @@ export function applyStatusConsistency(): void {
 // seed.
 export function expireDisposableOwnerSession(): void {
   runFixtureAction("expire-disposable-session");
+}
+
+// Reseeds, then removes the owner's UserSettings row (scripts/e2e-fixtures.ts
+// incompleteIssuerSettings): an account that never saved Pengaturan. Reseed
+// afterwards, like every overlay.
+export function applyIncompleteIssuerSettings(): void {
+  runFixtureAction("seed");
+  runFixtureAction("incomplete-issuer-settings");
+}
+
+// Makes the Invoice table unavailable to the app (scripts/e2e-fixtures.ts
+// invoiceTableOutage): every query on it fails until the outage ends. Called
+// mid-test with a page open; does not reseed. Always pair it with
+// endInvoiceTableOutage() in the test and in afterEach -- every other fixture
+// action ends a left-over outage too, but a spec must not rely on that.
+export function startInvoiceTableOutage(): void {
+  runFixtureAction("invoice-table-outage");
+}
+
+// Ends the outage; safe to call when there is none.
+export function endInvoiceTableOutage(): void {
+  runFixtureAction("end-invoice-table-outage");
+}
+
+// Makes the database refuse every write to the seeded SENT invoice
+// (scripts/e2e-fixtures.ts invoiceWriteRefusal): the app's own save reaches
+// the database and fails there. One row, writes only; reads and every other
+// row are untouched. Called mid-test with a page open; does not reseed.
+// Always pair it with endInvoiceWriteRefusal() in the test and in afterEach.
+export function startInvoiceWriteRefusal(): void {
+  runFixtureAction("invoice-write-refusal");
+}
+
+// Ends the refusal; safe to call when there is none.
+export function endInvoiceWriteRefusal(): void {
+  runFixtureAction("end-invoice-write-refusal");
 }

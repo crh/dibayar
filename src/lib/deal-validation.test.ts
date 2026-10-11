@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dealInputSchema } from "./deal-validation";
+import { dealInputSchema, dealPatchSchema } from "./deal-validation";
 
 describe("dealInputSchema", () => {
   it("accepts the minimum deal capture fields", () => {
@@ -60,5 +60,26 @@ describe("dealInputSchema", () => {
       feeIdr: 500000,
     });
     expect(withoutName.contactName).toBeUndefined();
+  });
+});
+
+describe("dealPatchSchema", () => {
+  // FIND-10: partial() keeps a field's default, so a patch without a status
+  // used to come back with status "MASUK" and move the deal there.
+  it("adds no status to a patch that does not send one", () => {
+    expect(dealPatchSchema.parse({ contactName: "Budi Santoso" })).toEqual({ contactName: "Budi Santoso" });
+    expect(dealPatchSchema.parse({ contactWa: "628123456789" })).toEqual({ contactWa: "628123456789" });
+    expect(dealPatchSchema.parse({})).toEqual({});
+  });
+
+  it("still accepts a status, and still rejects an unknown one", () => {
+    expect(dealPatchSchema.parse({ status: "NEGO" })).toEqual({ status: "NEGO" });
+    expect(dealPatchSchema.safeParse({ status: "RANDOM" }).success).toBe(false);
+  });
+
+  it("keeps every other rule of the create schema", () => {
+    expect(dealPatchSchema.safeParse({ contactWa: "12345" }).success).toBe(false);
+    expect(dealPatchSchema.safeParse({ brand: "" }).success).toBe(false);
+    expect(dealPatchSchema.safeParse({ feeIdr: -1 }).success).toBe(false);
   });
 });

@@ -79,7 +79,7 @@ stateDiagram-v2
     Draft --> Draft: incomplete or out-of-range on leave, hint, no PATCH (INV-DUE-04)
     Draft --> Set: Escape restores the saved date (INV-DUE-04)
     Set --> Empty: Kosongkan (INV-DUE-01)
-    Set --> SaveError: PATCH fails, field reverts to the saved date (INV-DUE-06, partial)
+    Set --> SaveError: PATCH fails, field reverts to the saved date (INV-DUE-06)
     LegacyInvalid --> Empty: Kosongkan
     LegacyInvalid --> Set: type a new date
 ```
@@ -90,7 +90,7 @@ stateDiagram-v2
 | Empty/Set → picker opens (click/tap on visible text) | INV-DUE-02 | real, Chromium desktop + 390px mobile emulation (`due-date-integrity.spec.ts`); Firefox/WebKit pass but are feature-detected, so not claimed; real phones **MANUAL** MAN-DUE-01 |
 | picker → date chosen → saved → reload | INV-DUE-03 | **MANUAL** MAN-DUE-01; server persistence partial via `fill()` (desktop only) |
 | Empty → keyboard typed → Enter → reload → cleared | INV-DUE-04 | real, desktop Chromium: zero PATCHes while typing (through `0002-01-15`), one on Enter, out-of-range refused, Escape restores |
-| save failure → revert + retry | INV-DUE-06 | partial: component test plus browser journeys whose failure is injected with `page.route` |
+| save failure → revert + retry | INV-DUE-06 | real: the test database refuses the write and the app answers 500 (Kosongkan in both projects, a typed date on desktop Chromium); the `page.route` journeys and the component test remain as partial evidence |
 | legacy out-of-range row → page usable, correctable | (FIND-03 regression) | real, `due-date-integrity.spec.ts`; not a separate inventory action |
 | consistent display across header/list/queue/WhatsApp | INV-DUE-05 | real (desktop Chromium; Asia/Jakarta and Pacific/Honolulu browsers) |
 | due date on the recipient's page and PDF, deal with no payment terms | INV-DUE-05, PUB-01, PUB-05, PUB-06 (FIND-08 regression) | real, desktop + mobile, both timezones (`e2e/public/due-date-without-terms.spec.ts`) |
@@ -169,6 +169,7 @@ moves are offered (card menu, deal detail, desktop drag).
 | drag between columns (desktop) | drag and drop | DEAL-STAGE-04 | real (ux-audit) |
 | keyboard move | Tab, Enter, menu | DEAL-STAGE-05 | real (ux-audit) |
 | INVOICE → invoice | Buat invoice | DEAL-INV-01, DEAL-DETAIL-05 | real |
+| no move: contact name or WhatsApp number saved | Simpan, Simpan nomor, Simpan & kirim | DEAL-DETAIL-02, DEAL-DETAIL-03 | real + reload (the stage and its history stay; FIND-10, fixed) |
 
 ## 5. Permissions
 
@@ -179,6 +180,14 @@ moves are offered (card menu, deal detail, desktop drag).
 | Recipient (no session) | — | — | view only, no owner controls (PUB-01, real) | redirect to sign-in (AUTH-01, real) |
 | Expired session | no data: reload, Back and in-app links end on sign-in; a change is answered 401, shown as an error, nothing stored (AUTH-07, real) | — | view | redirect (AUTH-07, real) |
 | Signed-out session (after **Keluar**) | — | — | view | redirect; the old token is refused from a fresh browser too (AUTH-05, AUTH-06, real) |
+
+### Route error
+
+| State | Control | Action | Status |
+|---|---|---|---|
+| page data fails → error card inside the app shell | nav link, reload | NAV-08 | real |
+| error card → still failing | Coba lagi | NAV-08 | real (the server is asked again, the card stays) |
+| error card → page | Coba lagi | NAV-08 | real (FIND-12, fixed) |
 
 ## 6. Combination policy (no Cartesian products)
 
@@ -194,3 +203,21 @@ moves are offered (card menu, deal detail, desktop drag).
 - **No duplicate E2E for pure calculations** that unit tests already prove
   (income summary, due-date derivation, invoice numbering). Keep E2E where
   routing, permissions, persistence or the visible control matter.
+
+## 7. Long journeys: the edges one test walks in sequence
+
+The graphs above are covered edge by edge in the short specs. The three long
+journeys in `e2e/journeys/` (`chromium` and `chromium-mobile`) each walk a
+path through several graphs in one sitting, so an edge that works alone but
+breaks the next one is caught. They are extra evidence for edges that are
+already real; they change no status above.
+
+| Journey | Path | Actions on the path |
+|---|---|---|
+| `deal-to-paid.spec.ts` | create deal → `MASUK → NEGO` (card menu) → `NEGO → DEAL → KONTEN → INVOICE` (detail) → Buat invoice → `DRAFT → SENT` → no share → active share → WhatsApp send (link reused) → recipient page + PDF → `SENT → PAID` → `INVOICE → DIBAYAR` (card menu) → Beranda total | DEAL-CREATE-01, DEAL-CREATE-02, DEAL-STAGE-01, DEAL-STAGE-03, DEAL-DETAIL-05, INV-STATUS-01, INV-STATUS-03, SHARE-01, INV-WA-01, PUB-01, PUB-05, PUB-06, INV-PDF-01, HOME-01 |
+| `settings-to-recipient.spec.ts` | Pengaturan save → reload → invoice detail → WhatsApp send (saved template, link reused) → owner PDF → recipient page + PDF → Pengaturan, Back, Forward | SET-03, SET-04, INV-WA-01, INV-PDF-01, PUB-01, PUB-05, PUB-06 |
+| `resilience-permissions.spec.ts` | deal detail edit in progress → session expires → refused save and stage move → nav link, Back, Forward, reload → reused token → valid session unchanged → second owner → expired link → active link → revoke → reload, Back, Forward, PDF | AUTH-07, AUTH-01, INV-OWN-01 (reads only), PUB-02, PUB-03, PUB-04, SHARE-03 |
+
+Not on any long journey: `SENT → DUE`, the PAID undo, regenerate, the
+due-date picker (MAN-DUE-01; the desktop project types the date, the phone
+project sets none), English, Firefox and WebKit.
