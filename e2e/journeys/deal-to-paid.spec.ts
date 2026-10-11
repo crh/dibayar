@@ -15,7 +15,7 @@
 //   3. Masuk -> Nego from the board card's menu, then Deal, Konten, Invoice on
 //      deal detail; the stage history lists every move after a reload
 //   4. Buat invoice on deal detail -> the invoice opens as a draft
-//   5. desktop only: a due date typed with the keyboard (see below)
+//   5. desktop Chromium only: a due date typed with the keyboard (see below)
 //   6. Tandai sudah dikirim, kept after a reload
 //   7. Buat tautan berbagi, then Kirim lewat WhatsApp (answered locally)
 //   8. the brand, in a browser with no session: page, PDF, no owner controls
@@ -30,9 +30,13 @@
 //
 // Due date: a phone has no way to type one, and choosing a date inside a
 // native picker cannot be driven from Playwright (MAN-DUE-01). So the desktop
-// project types it through the real keyboard and the brand must then see it;
-// the phone project sets none and the brand must see no due date at all.
-// Nothing is filled into the hidden date input.
+// Chromium project types it through the real keyboard and the brand must then
+// see it; every other project sets none and the brand must see no due date at
+// all. Typing is limited to `chromium` for the reason
+// invoices/due-date-integrity.spec.ts gives: the segment order of a native
+// date input differs per engine, so the same keys mean another date (or
+// none) in Firefox and WebKit, where the scheduled cross-browser run also
+// executes this journey. Nothing is filled into the hidden date input.
 //
 // WhatsApp never leaves the machine (keepWhatsAppLocal()). The share link is
 // a bearer token of the disposable test database: assertions about it compare
@@ -43,7 +47,7 @@ import { expect } from "../support/test";
 import { primaryNav } from "../support/nav";
 import { reseedFixtures } from "../support/reseed";
 import { focusFieldForTyping, visibleDisplay } from "../support/due-date";
-import { expectSameJakartaDay, jakartaToday, keepWhatsAppLocal, parseWhatsAppLink, trackOpenedPages } from "../support/follow-up";
+import { jakartaToday, keepWhatsAppLocal, parseWhatsAppLink, trackOpenedPages } from "../support/follow-up";
 import { downloadPdfByClick } from "../support/pdf";
 import { shareTest as test, shownShareLink, trackShareMutations } from "../support/share-links";
 import { escapeRegExp, expectNoOwnerControls, press, responseTo, rupiah, typeInto, watchPageHealth } from "../support/journey";
@@ -81,7 +85,13 @@ test.describe("journey: deal to paid invoice", { tag: "@critical" }, () => {
 
   test("a deal created from Beranda becomes an invoice the brand can read and download, and is then marked paid", async ({ page, context, recipient, isMobile }, testInfo) => {
     test.setTimeout(150_000);
-    const startedOn = jakartaToday();
+    // Beranda's total is this Asia/Jakarta month's; a run that crosses into
+    // the next month would compare against the wrong one. (A midnight inside
+    // the month changes nothing here: no assertion depends on the day.)
+    const startedIn = jakartaToday().slice(0, 7);
+    const expectSameJakartaMonth = () =>
+      expect(jakartaToday().slice(0, 7), "test crossed an Asia/Jakarta month boundary; Beranda's monthly total no longer matches").toBe(startedIn);
+    const typesDueDate = testInfo.project.name === "chromium";
     const fee = rupiah(DEAL.feeIdr);
     const whatsAppRequests = await keepWhatsAppLocal(context);
     const expectRecipientHealthy = watchPageHealth(recipient, "the recipient's page");
@@ -186,8 +196,8 @@ test.describe("journey: deal to paid invoice", { tag: "@critical" }, () => {
       await expect(page.getByText("Belum ada tautan berbagi untuk invoice ini.")).toBeVisible();
     });
 
-    if (!isMobile) {
-      await test.step("desktop: a due date typed with the keyboard is saved", async () => {
+    if (typesDueDate) {
+      await test.step("desktop Chromium: a due date typed with the keyboard is saved", async () => {
         const input = page.getByLabel("Tanggal jatuh tempo");
         await focusFieldForTyping(page, visibleDisplay(page, "Belum ditentukan"));
         for (const digit of DUE_DATE.typed) await page.keyboard.press(digit);
@@ -207,7 +217,7 @@ test.describe("journey: deal to paid invoice", { tag: "@critical" }, () => {
       await expect(statusChip(page, "Terkirim")).toBeVisible();
       await expect(statusAction(page, "Tandai lunas")).toBeVisible();
       await expect(statusAction(page, "Tandai sudah dikirim")).toHaveCount(0);
-      await expect(page.getByText(`Jatuh tempo: ${isMobile ? "Belum ditentukan" : DUE_DATE.short}`)).toBeVisible();
+      await expect(page.getByText(`Jatuh tempo: ${typesDueDate ? DUE_DATE.short : "Belum ditentukan"}`)).toBeVisible();
       await expect(page.getByRole("button", { name: "Kirim lewat WhatsApp" })).toBeEnabled();
     });
 
@@ -257,8 +267,8 @@ test.describe("journey: deal to paid invoice", { tag: "@critical" }, () => {
       await expect(total).toHaveText(fee);
       expect(await total.textContent()).toBe(fee);
       await expect(invoiceDoc.getByText(DEAL.paymentTerms, { exact: true })).toBeVisible();
-      if (isMobile) await expect(invoiceDoc.getByText("Jatuh tempo:")).toHaveCount(0);
-      else await expect(invoiceDoc.getByText(`Jatuh tempo: ${DUE_DATE.long}`)).toBeVisible();
+      if (typesDueDate) await expect(invoiceDoc.getByText(`Jatuh tempo: ${DUE_DATE.long}`)).toBeVisible();
+      else await expect(invoiceDoc.getByText("Jatuh tempo:")).toHaveCount(0);
       // Where to pay: the owner's seeded bank details, complete.
       const payment = recipient.locator("div", { has: recipient.getByRole("heading", { name: "Pembayaran ke" }) }).last();
       await expect(payment).toContainText("Bank: Bank E2E Fixture");
@@ -287,8 +297,8 @@ test.describe("journey: deal to paid invoice", { tag: "@critical" }, () => {
         expect(lines, `the PDF has the line "${expected}"`).toContain(expected);
       }
       expect(received.text).toContain(DEAL.contactName);
-      if (isMobile) expect(received.text).not.toContain("Jatuh tempo");
-      else expect(lines).toContain(`Jatuh tempo: ${DUE_DATE.long}`);
+      if (typesDueDate) expect(lines).toContain(`Jatuh tempo: ${DUE_DATE.long}`);
+      else expect(received.text).not.toContain("Jatuh tempo");
       await expect(recipient).toHaveURL(/\/i\/[^/]+$/);
 
       // The link is all the brand has: the owner's own pages ask them to sign in.
@@ -322,8 +332,7 @@ test.describe("journey: deal to paid invoice", { tag: "@critical" }, () => {
     });
 
     await test.step("the invoice list, the deal board and Beranda agree", async () => {
-      // Beranda's total is this Jakarta month's; say so if the run crossed it.
-      expectSameJakartaDay(startedOn);
+      expectSameJakartaMonth();
       await press(primaryNav(page).getByRole("link", { name: "Invoice", exact: true }), isMobile);
       await expect(page).toHaveURL(/\/invoice$/);
       const row = page.getByRole("region", { name: "Lunas" }).getByRole("link", { name: new RegExp(escapeRegExp(DEAL.brand)) });
@@ -363,6 +372,6 @@ test.describe("journey: deal to paid invoice", { tag: "@critical" }, () => {
     });
 
     expectRecipientHealthy();
-    expectSameJakartaDay(startedOn);
+    expectSameJakartaMonth();
   });
 });

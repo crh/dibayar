@@ -106,11 +106,13 @@ recipient to sign-in → the owner's PDF text equals the recipient's →
 (**Lanjut ke Dibayar**, reload) → Beranda Rp 15.200.000, "2 invoice lunas" →
 the recipient's link still works.
 
-Due date in B1: the desktop project types `15 Jan 2030` with the keyboard
+Due date in B1: the `chromium` project types `15 Jan 2030` with the keyboard
 (`focusFieldForTyping`, no `fill()` on the hidden input) and the recipient
-page and PDF must print `Jatuh tempo: 15 Januari 2030`. The phone project
-sets no due date, because choosing a date in a native picker cannot be driven
-(MAN-DUE-01), and the recipient page and PDF must print no due date at all.
+page and PDF must print `Jatuh tempo: 15 Januari 2030`. Every other project
+(the phone project, and Firefox and WebKit in the scheduled tier) sets no due
+date, because choosing a date in a native picker cannot be driven
+(MAN-DUE-01) and segment typing differs per engine, and the recipient page
+and PDF must print no due date at all.
 No fixture stands in for the picker and no picker interaction is claimed.
 
 **B2, settings to recipient.** Beranda → **Pengaturan** → issuer name,
@@ -163,8 +165,9 @@ All three passed again on the reverted build.
 
 - Not inventory evidence. No action's status or test list changed; the
   numerator is 74/93 before and after PR 1.
-- Not Firefox or WebKit evidence (they run there only in the scheduled
-  `e2e-cross-browser` job, which this PR does not trigger).
+- Not CI evidence for Firefox or WebKit: the scheduled `e2e-cross-browser`
+  job runs them there and this PR does not trigger it. They passed there
+  locally (3/3 in each engine) after the Codex fix.
 - Not real-device evidence, not real WhatsApp, not real Google sign-in.
 
 ### Validation
@@ -208,5 +211,17 @@ no P1.
 
 After the fixes: typecheck 0, lint 0, the three journeys 12/12 over two
 repeats in both projects.
+
+### Codex review (the repository's GitHub reviewer, on `a515f2d`)
+
+Two inline threads, both accepted:
+
+| Sev. | Finding | Disposition |
+|---|---|---|
+| P1 | B1 typed Chromium's date-segment sequence whenever `isMobile` was false, so the scheduled Firefox/WebKit run would type the wrong date | Fixed: typing and every assertion that depends on it are gated on the `chromium` project, as `due-date-integrity.spec.ts` does. Verified by running the three journeys in `firefox` and `webkit` locally: 12/12 across the four projects |
+| P2 | The Jakarta-midnight guard could fail a run that crossed an ordinary midnight, although nothing in B1 depends on the day | Fixed: replaced by a month-boundary guard, the only boundary Beranda's monthly total depends on |
+
+This also corrects the "what these journeys are not" list below: they do run
+in Firefox and WebKit in the scheduled tier, and were run there locally once.
 
 CI: pending, filled in below.

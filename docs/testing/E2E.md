@@ -226,9 +226,10 @@ classification; the short specs remain the per-action evidence.
   **Tandai sudah dikirim** → **Buat tautan berbagi** → **Kirim lewat
   WhatsApp** (local stub) → a session-less `recipient` reads the page and
   downloads the PDF → **Tandai lunas** → invoice list, deal board, Beranda's
-  monthly total. The desktop project types a due date with the keyboard and
-  the recipient must see it; the phone project sets none (a native picker
-  cannot be driven, MAN-DUE-01) and the recipient must see no due date.
+  monthly total. The `chromium` project types a due date with the keyboard and
+  the recipient must see it; every other project sets none (a native picker
+  cannot be driven, MAN-DUE-01, and segment typing differs per engine) and
+  the recipient must see no due date.
 - `settings-to-recipient.spec.ts`: issuer identity, bank account and the send
   template rewritten in Pengaturan → reload → the WhatsApp message from the
   seeded sent invoice → the owner's PDF → the recipient's page and PDF (text
