@@ -267,6 +267,28 @@ describe("deal stage history (T-17)", () => {
     expect(db.dealStageTransition.create).not.toHaveBeenCalled();
   });
 
+  // FIND-10: `existing` sits at MASUK, the schema's default, so the test
+  // above could not see a patch quietly carrying that default. A deal further
+  // along the pipeline can.
+  it.each([
+    ["a contact name", { contactName: "Budi Santoso" }],
+    ["a WhatsApp number", { contactWa: "0812-3456-7890" }],
+    ["a brand", { brand: "Brand Baru" }],
+    ["nothing at all", {}],
+  ])("keeps the deal's stage and records no transition when a patch carries %s but no status", async (_label, patch) => {
+    for (const status of ["NEGO", "DEAL", "KONTEN", "INVOICE", "DIBAYAR"] as const) {
+      const db = makeDb([{ ...existing, status }]);
+
+      const updated = await updateDeal(db, "deal-1", "user-1", patch);
+
+      expect(updated?.status).toBe(status);
+      expect((await getOwnedDeal(db, "deal-1", "user-1"))?.status).toBe(status);
+      expect(db.dealStageTransition.create).not.toHaveBeenCalled();
+      const [{ data }] = vi.mocked(db.deal.update).mock.calls[0];
+      expect(data).not.toHaveProperty("status");
+    }
+  });
+
   it("does not record a transition when the status patch matches the current status", async () => {
     const db = makeDb([existing]);
 

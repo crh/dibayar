@@ -63,6 +63,11 @@ test.describe("deal WhatsApp number repair", { tag: "@critical" }, () => {
 
     await page.reload();
     await expect(contact).toHaveText("+62 812-3456-7890");
+    // Repairing the number is not a stage move (FIND-10): the deal is where
+    // it was, and its history has no new entry.
+    await expect(page.getByText("Tahap saat ini: Nego")).toBeVisible();
+    await expect(page.getByText("Deal dibuat langsung di tahap Nego")).toBeVisible();
+    await expect(page.getByText("→ Masuk")).toHaveCount(0);
     await expect(page.getByRole("alert").filter({ hasText: "Nomor WhatsApp belum valid" })).toHaveCount(0);
 
     // The next action uses the saved number.
