@@ -123,6 +123,13 @@ export const test = base.extend<{
         // confirmed via repeated local e2e-cross-browser Firefox+WebKit
         // runs surfacing this exact race under load).
         if (ABORTED_ERROR_TEXTS.has(errorText) && url.searchParams.has("_rsc")) return;
+        // The tab icon is fetched by the browser itself, not by the page, and
+        // Firefox cancels that fetch when a navigation starts before it has
+        // finished (seen as "favicon.ico?<hash> — NS_BINDING_ABORTED" in
+        // roughly one run in eight of journeys that click a link right after
+        // a page load). Only a cancelled favicon is dropped; a favicon that
+        // fails any other way, or answers 5xx, is still reported.
+        if (ABORTED_ERROR_TEXTS.has(errorText) && url.pathname === "/favicon.ico") return;
         // A link whose response is a file (Content-Disposition: attachment,
         // e.g. Unduh PDF) starts as a navigation that the browser then turns
         // into a download, and reports the navigation request as failed.

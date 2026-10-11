@@ -18,7 +18,7 @@
 //   leave the Invoice column while its invoice stays).
 //
 // The second test's deal starts with a number the API accepts but WhatsApp
-// cannot use ("12345678"), typed into the add-deal dialog like any other.
+// cannot use ("12345678"), entered in the add-deal dialog like any other.
 // WhatsApp never leaves the machine (keepWhatsAppLocal()).
 import type { Page } from "@playwright/test";
 import { expect, test } from "../support/test";
@@ -110,8 +110,14 @@ test.describe("changing a deal's contact keeps its stage (FIND-10)", { tag: "@cr
     await keepWhatsAppLocal(context);
 
     // A deal whose number WhatsApp cannot use, taken to Invoice and invoiced.
-    await page.goto("/deal?tambah=1");
+    // Through the visible + Deal from Beranda, not a direct address: the
+    // dialog then opens on a page that has already hydrated. (Opened directly,
+    // WebKit could fill the form before React attached to it and the save
+    // never left the browser, about every second run.)
+    await page.goto("/");
+    await press(isMobile ? page.getByRole("link", { name: "+ Deal", exact: true }) : page.getByTestId("top-bar").getByRole("link", { name: "+ Deal", exact: true }), isMobile);
     const dialog = page.getByRole("dialog", { name: "Tambah deal" });
+    await expect(dialog).toBeVisible();
     await dialog.getByLabel("Nama brand").fill(brand);
     await dialog.getByLabel("Kontak WhatsApp").fill("12345678");
     await dialog.getByLabel("Scope pekerjaan").fill("Satu video");

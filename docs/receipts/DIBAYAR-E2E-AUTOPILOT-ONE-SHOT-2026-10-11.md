@@ -354,4 +354,25 @@ other schema has the pattern.
 | P3-c | P3 | The second E2E test had no timeout headroom | Fixed: `test.setTimeout(60_000)` |
 | P3-e | P3 | This section said "pending" | This table |
 
+Checking the reviewer's "nothing Chromium-only, by reading" in the browsers
+themselves found two more things, both fixed before the push:
+
+- WebKit, about every second run: the invoice-detail repair test opened the
+  add-deal dialog by address (`/deal?tambah=1`) and filled it before React
+  had attached, so **Simpan deal** sent nothing and the test timed out. It
+  now opens the dialog through the visible **+ Deal** from Beranda. (A test
+  problem, not the product's: a person cannot type that fast.)
+- Firefox, about one run in eight: the browser cancels its own
+  `favicon.ico` fetch when a link is clicked right after a page load, and
+  the browser-health guard reported it as a failed request. The guard
+  (`e2e/support/test.ts`) now drops a *cancelled* favicon fetch only; any
+  other favicon failure and every 5xx are still reported, and
+  `npm run test:diagnostics-selftest` still passes.
+
+After that: the two regression tests 32/32 over four repeats in chromium,
+chromium-mobile, firefox and webkit, and 20/20 over ten more in Firefox.
+
+CI on the first head `a4c0e60`: `CI` `38111441524` and
+`Journey coverage (full)` `38111441540`, both success.
+
 CI: pending, filled in below.
