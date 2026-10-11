@@ -148,7 +148,7 @@ Test kinds: **R** = real interaction, **P** = partial (URL entry, `fill()` on a 
 | INV-DUE-03 | P0 | `manual_pending` | Pick a date in the native picker -> saved -> reload | manual: Android Chrome, iOS Safari, desktop Chrome/Safari/Firefox | P: `invoices/invoice-journeys.spec.ts` |
 | INV-DUE-04 | P1 | `automated_real_interaction` | Desktop keyboard date entry after clicking the visible field | chromium | R: `invoices/due-date-integrity.spec.ts` |
 | INV-DUE-05 | P1 | `automated_real_interaction` | Due date shown consistently in header, list, queue and WhatsApp message | chromium, unit | R: `invoices/due-date-consistency.spec.ts`<br>R: `public/due-date-without-terms.spec.ts`<br>P: `src/lib/invoice-date-status.test.ts` |
-| INV-DUE-06 | P1 | `automated_real_interaction` | Due-date save failure shows an error | unit, chromium, chromium-mobile | R: `invoices/due-date-integrity.spec.ts`<br>P: `src/components/date-field.test.tsx`<br>P: `invoices/due-date-integrity.spec.ts` |
+| INV-DUE-06 | P1 | `automated_real_interaction` | Due-date save failure shows an error | unit, chromium, chromium-mobile | R: `invoices/due-date-integrity.spec.ts`<br>P: `invoices/due-date-integrity.spec.ts`<br>P: `src/components/date-field.test.tsx` |
 | INV-STATUS-01 | P0 | `automated_real_interaction` | Mark a DRAFT invoice as sent | chromium, chromium-mobile | R: `invoices/status-lifecycle.spec.ts` |
 | INV-STATUS-02 | P1 | `automated_real_interaction` | Mark a SENT invoice as due | chromium, chromium-mobile | R: `invoices/status-lifecycle.spec.ts` |
 | INV-STATUS-03 | P0 | `automated_real_interaction` | Mark an invoice as paid (from SENT or DUE) | chromium, chromium-mobile | R: `invoices/status-lifecycle.spec.ts`<br>P: `invoices/invoice-journeys.spec.ts` |

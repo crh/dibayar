@@ -23,6 +23,20 @@ INV-DUE-03 stays `manual_pending` until then. The 2026-09-30 MAN-AUTH-01 entry
 covers sign-in only, on commit `cab167f`; it is not a sign-out PASS and not
 evidence for this candidate.
 
+**Update, release-readiness session, 2026-10-11 (later the same day).**
+Still `PENDING`, all eight checks. Rechecked on ALPHA: no `adb`, no phone on
+USB, no iPhone reachable (`idevice_id` lists none); no Google sign-in was
+attempted. The staging alias was verified read-only (GitHub deployment record
+and `vercel inspect`): it serves deployment `dibayar-339v892gv`, built from
+`390bc38c278c04b7b3062ac6c5caeb544b380705`, with Vercel SSO on. That is
+`staging` from **before** the autopilot's work, because PRs #41–#44 and the
+follow-up #45 are still unmerged (the session's permission check refused the
+merge). So there is no deployed release candidate yet, and a run on today's
+staging deployment is not evidence for it. Order of work: Chris merges #44
+(merge commit; it carries #41–#43) and then #45 → wait for the `staging`
+deployment → note its commit SHA → run §2 and §3 below. Nothing else in this
+file changed. Receipt: `DIBAYAR-STAGING-RELEASE-READINESS-2026-10-11.md`.
+
 ## 1. What to test, and on what
 
 | | |

@@ -1759,8 +1759,8 @@
         {
           "file": "e2e/invoices/due-date-integrity.spec.ts",
           "title": "a typed date (Enter) the server fails to store shows the stored date again with an error, stores nothing, and retyping saves it once the server can",
-          "kind": "real",
-          "note": "Desktop chromium only (keyboard path); same database-refused write"
+          "kind": "partial",
+          "note": "Desktop chromium only (keyboard path); the same database-refused write, nothing stubbed. Listed as partial only because it is skipped on chromium-mobile and a real reference must pass in every claimed project"
         },
         {
           "file": "src/components/date-field.test.tsx",
