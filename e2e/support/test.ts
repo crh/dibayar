@@ -147,6 +147,19 @@ export const test = base.extend<{
         // a page load). Only a cancelled favicon is dropped; a favicon that
         // fails any other way, or answers 5xx, is still reported.
         if (ABORTED_ERROR_TEXTS.has(errorText) && url.pathname === "/favicon.ico") return;
+        // Auth.js's built-in sign-in page shows each provider's logo from
+        // authjs.dev (for Google, /img/providers/google.svg). A test that
+        // lands on sign-in and moves on before that image has loaded makes
+        // Firefox and WebKit report the cancelled image; Chromium does not.
+        // It failed seven sign-out/expired-session tests in the first
+        // e2e-cross-browser run that included them (CI run 38132454448).
+        // Only a cancelled provider logo from that host is dropped; one that
+        // fails any other way is still reported.
+        if (
+          ABORTED_ERROR_TEXTS.has(errorText)
+          && url.origin === "https://authjs.dev"
+          && url.pathname.startsWith("/img/providers/")
+        ) return;
         // A link whose response is a file (Content-Disposition: attachment,
         // e.g. Unduh PDF) starts as a navigation that the browser then turns
         // into a download, and reports the navigation request as failed.
