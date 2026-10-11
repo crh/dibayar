@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "inventoryDate": "2026-10-10",
-  "baseline": "origin/staging 794d34d (PR #35 merged) + branch chore/journey-batch-a-nav-session-2026-10-10 (Batch A: P2 navigation and session resilience)",
+  "inventoryDate": "2026-10-11",
+  "baseline": "origin/staging 390bc38 (PR #36 merged) + one-shot autopilot 2026-10-11 (PR #41 long journeys; FIND-10 fix with DEAL-DETAIL-02)",
   "classificationRules": [
     "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
     "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
@@ -1267,17 +1267,25 @@
       "action": "Edit and save contact name",
       "persona": "owner",
       "preconditions": "On detail",
-      "interaction": "Type name, Simpan, reload",
-      "expected": "Saved message, persists",
+      "interaction": "Board card menu -> Lihat detail; type the name in Nama kontak; Simpan; reload",
+      "expected": "Nama kontak disimpan; the name persists after reload; the deal stays in its stage and gains no history entry",
       "persisted": "Deal.contactName",
-      "alternates": "Save error",
+      "alternates": "Save error (a 401 after session expiry is exercised in e2e/journeys/resilience-permissions.spec.ts); clearing a saved name (FIND-11, open)",
       "scope": [
         "chromium",
         "chromium-mobile"
       ],
       "priority": "P2",
-      "status": "not_covered",
-      "followUp": "Batch 2"
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/patch-keeps-stage.spec.ts",
+          "title": "a contact name typed on deal detail is saved, survives a reload, and leaves the deal's stage and history alone",
+          "kind": "real",
+          "note": "Base-seed Nego deal reached through the board card menu; fill() into the visible text field, Simpan clicked/tapped; value, stage, history and board column asserted after reload. Also the FIND-10 regression"
+        }
+      ],
+      "evidence": "One-shot autopilot 2026-10-11 (FIND-10 fix PR)"
     },
     {
       "id": "DEAL-DETAIL-03",
@@ -1287,7 +1295,7 @@
       "persona": "owner",
       "preconditions": "Deal with invalid number",
       "interaction": "Board card menu -> Lihat detail; click Buka WhatsApp; type the number in Perbaiki nomor WhatsApp; Simpan nomor; reload; Buka WhatsApp",
-      "expected": "Invalid number: no chat opens, the repair field appears focused; after save: number shown formatted (+62 ...), form gone; after reload Buka WhatsApp opens wa.me/<saved normalized number>",
+      "expected": "Invalid number: no chat opens, the repair field appears focused; after save: number shown formatted (+62 ...), form gone; after reload Buka WhatsApp opens wa.me/<saved normalized number>; the deal stays in its stage with no new history entry (FIND-10)",
       "persisted": "Deal.contactWa",
       "alternates": "Still-invalid input",
       "scope": [
@@ -1302,6 +1310,12 @@
           "title": "an invalid number opens the repair form; the repaired number is saved, survives reload, and is used by Buka WhatsApp",
           "kind": "real",
           "note": "Follow-up overlay deal with contactWa 12345678; wa.me stubbed locally"
+        },
+        {
+          "file": "e2e/deals/patch-keeps-stage.spec.ts",
+          "title": "a WhatsApp number repaired from invoice detail leaves the deal at Invoice",
+          "kind": "real",
+          "note": "The same repair from invoice detail (Simpan & kirim) on a deal at Invoice with an invoice; FIND-10 regression"
         }
       ],
       "evidence": "Added 2026-10-04 (Zero Routine Phase 2A, follow-up overlay)"
@@ -3027,6 +3041,25 @@
       "actions": [
         "PUB-01",
         "INV-PDF-01"
+      ]
+    },
+    {
+      "id": "FIND-10",
+      "severity": "high",
+      "summary": "Any change to a deal that did not itself name a stage moved the deal back to Masuk and wrote a '<stage> → Masuk' entry into its history: saving the contact name on deal detail, and repairing the WhatsApp number on deal detail, on invoice detail (Simpan & kirim) or in the Beranda queue. Cause: dealPatchSchema was dealInputSchema.partial(), and zod's partial() keeps the create schema's status default ('MASUK'), so every PATCH /api/deals/:id without a status carried status MASUK. The page kept showing the old stage until its next load. Present since the M1 slice (65393b6, 2026-07-14), so it is on main/Production. Found 2026-10-11 by the first DEAL-DETAIL-02 journey (stage read after a reload on a Nego deal); the earlier unit test used a deal already at Masuk and the contact-repair journey did not read the stage.",
+      "status": "fixed: fix/deal-patch-keeps-stage-2026-10-11 (into staging; not yet on main/Production). The patch schema now has no status default, so a patch changes only what it names. Regression: src/lib/deal-validation.test.ts, src/lib/deals.test.ts (every non-Masuk stage x four patch shapes), e2e/deals/patch-keeps-stage.spec.ts (contact name on a Nego deal; number repaired from invoice detail on an Invoice deal), e2e/deals/contact-repair.spec.ts (stage and history asserted). Stored rows are not repaired: deals already moved to Masuk this way stay there, and their history shows the '→ Masuk' entry at the time of the edit. A read-only Production count of such transitions needs Chris.",
+      "actions": [
+        "DEAL-DETAIL-02",
+        "DEAL-DETAIL-03"
+      ]
+    },
+    {
+      "id": "FIND-11",
+      "severity": "low",
+      "summary": "A saved contact name cannot be removed on deal detail. Emptying the field and pressing Simpan sends an empty PATCH body (contactName || undefined), the page answers 'Nama kontak disimpan', and the old name is put back in the field and is still there after a reload. Verified in the browser 2026-10-11.",
+      "status": "open: not changed (outside the FIND-10 fix). Needs a small decision: let an empty name clear it, or say that it cannot be cleared. No browser test asserts either behaviour.",
+      "actions": [
+        "DEAL-DETAIL-02"
       ]
     }
   ]

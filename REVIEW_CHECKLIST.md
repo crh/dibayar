@@ -59,7 +59,7 @@
 **F4 — Informational (linked, never a blocker by themselves)**
 - [ ] Latest scheduled `e2e-cross-browser` result (workflow `CI`) linked
 - [ ] Latest `Journey coverage (full)` run for the release head linked, with its summary (commit, real-claim count, not exercised); dispatch one if the head has none (`docs/testing/E2E.md`). Not a release gate yet
-- [ ] Open low-severity findings (today: FIND-09) and findings fixed on `staging` but still awaiting real-device UAT or a Production data check (e.g. FIND-02/FIND-03: MAN-DUE-01, out-of-range due-date count) listed with their status, not reported as closed
+- [ ] Open low-severity findings (today: FIND-09, FIND-11) and findings fixed on `staging` but still awaiting real-device UAT or a Production data check (e.g. FIND-02/FIND-03: MAN-DUE-01, out-of-range due-date count; FIND-10: count of deals moved back to Masuk by a contact edit) listed with their status, not reported as closed
 
 ## Stop rules
 - Any Gate A–C failure after 2 fix attempts → do not commit; log blocker in STATE.md.

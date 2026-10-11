@@ -23,6 +23,8 @@ a positive one.
 | 7 | FIND-07 (medium): invoice detail showed an expired share as "Tautan aktif sampai <past date>" and its WhatsApp action sent that expired link | INV-STATUS-06, INV-WA-01, SHARE-01, SHARE-02 | **Fixed** by PR #31 (squash merge `979c3ec`, staging). The owner's share state is now inactive / active / expired; invoice detail shows an expired state with **Buat tautan baru** and sends through `POST /share/ensure`. Regression: `e2e/invoices/expired-share.spec.ts`. |
 | 8 | FIND-08 (low): the recipient's invoice page and PDF print the due date only inside the payment-terms block, so a deal without payment terms shows the recipient no due date | INV-DUE-05, PUB-01, PUB-05, PUB-06 | **Fixed** by PR #35 (staging). Chris's decision: a due date is shown to the recipient whenever it exists, with or without payment terms; no payment-terms text is invented. Payment terms and the due date are independent in the canonical document model. Regression: `e2e/public/due-date-without-terms.spec.ts`, and the four-combination tests in `src/components/documents/invoice-document/`. |
 | 9 | FIND-09 (low): the invoice document prints `Tanggal terbit` as the UTC day of `createdAt`, so an invoice created between 00:00 and 06:59 WIB shows the previous day | PUB-01, INV-PDF-01 | Open, noticed 2026-10-10 during the FIND-08 work. Not changed; needs a product decision. No browser test asserts either behaviour. |
+| 10 | FIND-10 (high): every change to a deal that named no stage (contact name, repaired WhatsApp number on deal detail, invoice detail or Beranda) also moved the deal back to Masuk and wrote a `<stage> → Masuk` history entry | DEAL-DETAIL-02, DEAL-DETAIL-03 | **Fixed** on `fix/deal-patch-keeps-stage-2026-10-11` (staging). The PATCH schema was the create schema made `partial()`, which keeps its `status: "MASUK"` default; it now has no status default. On `main`/Production since 2026-07-14. Regression: `src/lib/deal-validation.test.ts`, `src/lib/deals.test.ts`, `e2e/deals/patch-keeps-stage.spec.ts`, `e2e/deals/contact-repair.spec.ts`. **Still open for Chris:** a read-only Production count of `→ Masuk` transitions that coincide with a contact edit; stored rows are not repaired. |
+| 11 | FIND-11 (low): a saved contact name cannot be removed on deal detail (emptying the field sends an empty PATCH, the page says saved and puts the old name back) | DEAL-DETAIL-02 | Open, noticed 2026-10-11. Not changed; needs a small decision. No browser test asserts either behaviour. |
 
 ## Batch 1 — P0/P1 gaps with existing fixtures (done, Zero Routine Phase 1)
 
@@ -135,7 +137,7 @@ changed status.
 - A11Y-01: deal detail, the expired-share and contact-repair states of
   invoice detail, Settings validation errors.
 - AUTH-02: the English landing CTA.
-- Decisions (Chris): FIND-09. (FIND-01 and FIND-06 were decided and fixed
+- Decisions (Chris): FIND-09, FIND-11. (FIND-01 and FIND-06 were decided and fixed
   on `fix/invoice-status-consistency-2026-10-09`; FIND-08 on
   `fix/recipient-due-date-without-payment-terms-2026-10-09`.)
 
@@ -184,10 +186,11 @@ They are not inventory evidence: no action's status or test list changed.
 
 ### Still open
 
-DEAL-DETAIL-02, DEAL-DETAIL-04, SET-05, SET-07, SET-08,
+DEAL-DETAIL-04, SET-05, SET-07, SET-08,
 INV-STATUS-07 (`page.route` failure injection is acceptable here: the
 interaction is real, and only the server response is stubbed), A11Y-04.
-NAV-08 waits for a safe failure-injection seam.
+NAV-08 waits for a safe failure-injection seam. (DEAL-DETAIL-02 is real since
+the FIND-10 fix, 2026-10-11: `e2e/deals/patch-keeps-stage.spec.ts`.)
 
 ## Next phase — Zero Routine Manual Regression Testing
 

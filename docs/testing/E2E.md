@@ -215,6 +215,15 @@ invoice detail page, wait for its WhatsApp action to be enabled: that is when
 its contact and share fetches have settled, and leaving earlier reports them
 as failed requests.
 
+A deal's stage after a contact edit (FIND-10, fixed): a PATCH that names no
+stage must not move the deal. `e2e/deals/patch-keeps-stage.spec.ts` saves a
+contact name on a Nego deal and repairs a WhatsApp number from invoice detail
+on an Invoice deal, and reads the stage, the stage history and the board
+column after a reload; `e2e/deals/contact-repair.spec.ts` does the same for
+the repair on deal detail. The page shows the stage it loaded with until the
+next load, so a test that edits a deal should reload before trusting its
+stage, and should not use a deal at Masuk (the value the bug wrote).
+
 Long cross-page journeys (`e2e/journeys/`, all `@critical`, `chromium` and
 `chromium-mobile`): three tests that each walk one person's whole workflow
 across pages, reloads and browser contexts, with a `test.step` per

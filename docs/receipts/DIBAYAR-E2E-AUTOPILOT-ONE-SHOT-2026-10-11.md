@@ -35,7 +35,7 @@ Statuses: TODO / IN_PROGRESS / DONE / BLOCKED. Updated per PR.
 | B2 | Long journey: settings → recipient | DONE | PR 1, `e2e/journeys/settings-to-recipient.spec.ts` |
 | B3 | Long journey: resilience and permissions | DONE | PR 1, `e2e/journeys/resilience-permissions.spec.ts` |
 | C1 | NAV-08 route error boundary | TODO | Phase 2 |
-| C2 | DEAL-DETAIL-02 contact name | TODO | Phase 2 |
+| C2 | DEAL-DETAIL-02 contact name | DONE (real, both projects) | PR 2 (FIND-10 fix), `e2e/deals/patch-keeps-stage.spec.ts` |
 | C3 | DEAL-DETAIL-04 WhatsApp from deal detail | TODO | Phase 2 |
 | C4 | INV-STATUS-07 failed status update | TODO | Phase 2 |
 | C5 | SET-05 reset template | TODO | Phase 2 |
@@ -224,4 +224,104 @@ Two inline threads, both accepted:
 This also corrects the "what these journeys are not" list below: they do run
 in Firefox and WebKit in the scheduled tier, and were run there locally once.
 
-CI: pending, filled in below.
+### CI on PR #41 (final head `d7daa53877c64c0df3c310086d40d01acc630ad8`)
+
+| Run | Workflow | Result |
+|---|---|---|
+| `38110369609` | `CI` (pull_request) | success: `lint-typecheck-test`, `e2e-critical`, `e2e-a11y`, `ux-audit` all green; `e2e-cross-browser` skipped by design |
+| `38110372060` | `Journey coverage (full)` (dispatched on the branch) | **PASS**: 131 of 131 real claims; E2E 237 passed / 0 failed / 0 flaky / 25 skipped; ux-audit 69 passed |
+
+Earlier heads: `a515f2d` (`38108254227`, `38108254433`) and `898d651`
+(`38108960056`, `38108962139`), all success. Both Codex threads resolved.
+
+### Merge: not done
+
+`gh pr merge 41 --squash --match-head-commit d7daa53…` was refused by this
+session's permission classifier ("Merge Without Review"). It was tried once
+and not worked around. PR #41 is therefore green, reviewed and **unmerged**;
+`origin/staging` is still `390bc38`. The later PRs of this mission are
+stacked on it (each contains the commits of the one before) and are meant to
+be merged in order, with **Create a merge commit**, by Chris or by a session
+that is allowed to merge.
+
+## 5. PR 2 — FIND-10: a contact edit moved the deal back to Masuk (product fix)
+
+Branch `fix/deal-patch-keeps-stage-2026-10-11`. Found while writing the
+DEAL-DETAIL-02 journey; fixed here on its own, as the brief asks for a
+product defect. No migration, no data change, no new policy: a PATCH now
+changes only what it names.
+
+### The defect
+
+Saving a deal's contact name, or repairing its WhatsApp number (on deal
+detail, on invoice detail with **Simpan & kirim**, or in the Beranda queue),
+also set the deal's stage to **Masuk** and wrote a `<stage> → Masuk` entry
+into its history. The page kept showing the old stage until its next load, so
+nothing looked wrong when saving.
+
+Cause: `dealPatchSchema` was `dealInputSchema.partial()`. zod's `partial()`
+keeps a field's default, so every `PATCH /api/deals/:id` without a `status`
+was parsed as `status: "MASUK"`. Present since the M1 slice (`65393b6`,
+2026-07-14); `git branch -r --contains` lists `origin/main`, so it is on
+Production.
+
+Why nothing caught it: the unit test for "a non-status update records no
+transition" used a deal already at Masuk, and the contact-repair journey
+never read the stage after saving.
+
+### The fix
+
+`src/lib/deal-validation.ts`: the patch schema overrides `status` with a
+plain enum before `partial()`, so it has no default. One line and its
+comment. No other application file changed.
+
+### Regression tests
+
+| Test | Proves | Red before the fix |
+|---|---|---|
+| `src/lib/deal-validation.test.ts`, `dealPatchSchema` (3 tests) | a patch without a status parses without one; a sent status still works; other rules kept | yes (1 of 3) |
+| `src/lib/deals.test.ts`, "keeps the deal's stage and records no transition when a patch carries … but no status" (4 patch shapes × 5 non-Masuk stages) | `updateDeal` neither changes the stage nor records a transition | yes (4 of 4) |
+| `e2e/deals/patch-keeps-stage.spec.ts`, "a contact name typed on deal detail is saved, survives a reload, and leaves the deal's stage and history alone" | DEAL-DETAIL-02 and the bug on a Nego deal: value, stage, history list, board column after reload | yes: PATCH answered `status: "MASUK"` |
+| same file, "a WhatsApp number repaired from invoice detail leaves the deal at Invoice" | the costliest path: an invoiced deal at Invoice | yes: `"MASUK"` |
+| `e2e/deals/contact-repair.spec.ts` (existing, now also reads stage and history) | the repair on deal detail | yes |
+
+The E2E "red" runs were made against a build of the unfixed schema (fix
+stashed, `npm run e2e:build`, 3 of 3 failed), then the fix was restored and
+rebuilt: 12 of 12 over two repeats in both projects.
+
+### Inventory
+
+- DEAL-DETAIL-02: `not_covered` → `automated_real_interaction`, `chromium` and
+  `chromium-mobile`. Visible control: the **Nama kontak** field and
+  **Simpan** on deal detail, reached through the board card menu. Outcome:
+  "Nama kontak disimpan". Persistence: value after reload and after
+  re-entering from the board; stage, history and board column unchanged.
+  Negative control: the unfixed build (above).
+- DEAL-DETAIL-03: second test reference added; status unchanged.
+- FIND-10 (high, fixed) and FIND-11 (low, open) added.
+- Real: 75/93 (80.6%), was 74/93. P0 28/30, outstanding P0/P1 4, unchanged.
+
+### Not done, on purpose
+
+- No stored row is repaired. Deals already moved to Masuk this way stay
+  there; each has a `→ Masuk` history entry at the time of the contact edit.
+  A read-only Production count of those needs Chris.
+- FIND-11 (low, open): a saved contact name cannot be removed. Emptying the
+  field sends an empty PATCH, the page says "Nama kontak disimpan" and puts
+  the old name back (verified in the browser). Needs a small decision.
+
+### Validation
+
+Local, on the PR branch (ALPHA, 2026-10-11), with the fix:
+
+| Gate | Result |
+|---|---|
+| lint / typecheck | 0 / 0 |
+| `npm test` | 987 / 987 (980 before; +3 schema tests, +4 repository tests) |
+| build and e2e:build | 0 |
+| journey self-test, `coverage:journeys` | 37 / 37; OK, real 80.6%, P0 real 93.3%, 4 outstanding P0/P1 |
+| the three regression E2E tests, two repeats, both projects | 12 / 12 |
+| full `test:e2e`, both projects | 241 passed, 0 failed, 25 skipped |
+| `coverage:journeys -- --results` on that run | 129 real claims passed; 4 not exercised (the ux-audit ones) |
+
+CI and review: pending, filled in below.

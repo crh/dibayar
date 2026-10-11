@@ -169,6 +169,7 @@ moves are offered (card menu, deal detail, desktop drag).
 | drag between columns (desktop) | drag and drop | DEAL-STAGE-04 | real (ux-audit) |
 | keyboard move | Tab, Enter, menu | DEAL-STAGE-05 | real (ux-audit) |
 | INVOICE → invoice | Buat invoice | DEAL-INV-01, DEAL-DETAIL-05 | real |
+| no move: contact name or WhatsApp number saved | Simpan, Simpan nomor, Simpan & kirim | DEAL-DETAIL-02, DEAL-DETAIL-03 | real + reload (the stage and its history stay; FIND-10, fixed) |
 
 ## 5. Permissions
 
