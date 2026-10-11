@@ -116,4 +116,19 @@ test("browserDiagnostics negative control: fixture fails on a real pageerror and
   const optedInSpec = byTitle["suppresses a deliberate 400 matching expectedErrorResponses (control)"];
   assert.ok(optedInSpec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
   assert.equal(optedInSpec.ok, true, "an opted-in 400 must still pass (suppressed)");
+  // The `status` form of expectedErrorResponses: only the named 5xx is
+  // suppressed.
+  const optedIn500Spec = byTitle["suppresses a deliberate 500 matching an expectedErrorResponses status (control)"];
+  assert.ok(optedIn500Spec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
+  assert.equal(optedIn500Spec.ok, true, "an opted-in 500 must pass (suppressed)");
+
+  const statuslessSpec = byTitle["fails a test on a 500 at an address opted in without a status"];
+  assert.ok(statuslessSpec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
+  assert.equal(statuslessSpec.ok, false, "a 500 must still fail when the opt-in names no status");
+  assert.match(specErrorText(statuslessSpec), /500 https:\/\/example\.invalid\/synthetic-500-statusless-optin/);
+
+  const otherStatusSpec = byTitle["fails a test on a 503 at an address opted in for a 500"];
+  assert.ok(otherStatusSpec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
+  assert.equal(otherStatusSpec.ok, false, "a 5xx other than the named one must still fail");
+  assert.match(specErrorText(otherStatusSpec), /503 https:\/\/example\.invalid\/synthetic-500-opted-in/);
 });

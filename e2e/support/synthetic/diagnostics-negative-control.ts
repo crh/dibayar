@@ -104,4 +104,40 @@ test.describe("browserDiagnostics negative control (synthetic, no application co
       await page.evaluate(() => fetch("https://example.invalid/synthetic-400-opted-in").catch(() => {}));
     });
   });
+  // Regression coverage for the `status` form of expectedErrorResponses (the
+  // only way to expect a 5xx; see ../test.ts). All three directions: the
+  // named 500 is suppressed; a 5xx on an address opted in without a status
+  // still fails; and a different 5xx on the opted-in address still fails.
+  test.describe("with expectedErrorResponses naming a 500", () => {
+    test.use({ expectedErrorResponses: [{ method: "GET", pathname: "/synthetic-500-opted-in", status: 500 }] });
+
+    test("suppresses a deliberate 500 matching an expectedErrorResponses status (control)", async ({ page }) => {
+      await page.route("https://example.invalid/synthetic-500-opted-in", (route) =>
+        route.fulfill({ status: 500, contentType: "text/plain", body: "synthetic-500-opted-in-selftest" }),
+      );
+      await page.setContent("<html></html>");
+      await page.evaluate(() => fetch("https://example.invalid/synthetic-500-opted-in").catch(() => {}));
+    });
+
+    test("fails a test on a 503 at an address opted in for a 500", async ({ page }) => {
+      await page.route("https://example.invalid/synthetic-500-opted-in", (route) =>
+        route.fulfill({ status: 503, contentType: "text/plain", body: "synthetic-503-selftest" }),
+      );
+      await page.setContent("<html></html>");
+      await page.evaluate(() => fetch("https://example.invalid/synthetic-500-opted-in").catch(() => {}));
+    });
+  });
+  // (A describe of its own: Playwright reads a two-element array option as
+  // its [value, options] form, so each test.use here lists one entry.)
+  test.describe("with expectedErrorResponses naming no status", () => {
+    test.use({ expectedErrorResponses: [{ method: "GET", pathname: "/synthetic-500-statusless-optin" }] });
+
+    test("fails a test on a 500 at an address opted in without a status", async ({ page }) => {
+      await page.route("https://example.invalid/synthetic-500-statusless-optin", (route) =>
+        route.fulfill({ status: 500, contentType: "text/plain", body: "synthetic-500-statusless-selftest" }),
+      );
+      await page.setContent("<html></html>");
+      await page.evaluate(() => fetch("https://example.invalid/synthetic-500-statusless-optin").catch(() => {}));
+    });
+  });
 });

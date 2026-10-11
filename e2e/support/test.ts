@@ -17,7 +17,12 @@ type BrowserDiagnostics = {
 // this shared fixture's always-on behavior. Match narrowly (method +
 // pathname), same reasoning as the /i/ case: a 4xx anywhere else stays a
 // real, actionable diagnostic.
-type ExpectedErrorResponse = { method: string; pathname: string };
+//
+// `status` narrows the opt-in to that one status and is the only way to
+// expect a 5xx: a spec that makes the server itself fail on purpose (a write
+// the test database refuses) names the exact 500 it causes. Without `status`
+// the opt-in covers 4xx only, so a 5xx on an opted-in address still fails.
+type ExpectedErrorResponse = { method: string; pathname: string; status?: number };
 
 // Opt-in for a test that deliberately makes the app itself report an error
 // to the console -- today only the route-error-boundary journey, where a
@@ -158,17 +163,24 @@ export const test = base.extend<{
         downloadedUrls.add(download.url());
       };
       const onResponse = (response: { status(): number; url(): string; request(): { method(): string } }) => {
-        if (response.status() >= 500) diagnostics.serverErrors.push(`${response.status()} ${response.url()}`);
-        if (response.status() < 400 || response.status() >= 500) return;
+        const status = response.status();
+        if (status < 400) return;
 
         const url = new URL(response.url());
+        const isOptedIn = expectedErrorResponses.some(
+          (expected) =>
+            expected.method === response.request().method()
+            && expected.pathname === url.pathname
+            && (expected.status === undefined ? status < 500 : expected.status === status),
+        );
+        if (status >= 500 && !isOptedIn) {
+          diagnostics.serverErrors.push(`${status} ${response.url()}`);
+          return;
+        }
         // The invalid-token journey's own 404 -- see the onConsole comment
         // above. Only /i/ paths qualify: a 404 anywhere else in the app
         // stays a real, actionable diagnostic.
-        const isPublicInvalidTokenNotFound = response.status() === 404 && url.pathname.startsWith("/i/");
-        const isOptedIn = expectedErrorResponses.some(
-          (expected) => expected.method === response.request().method() && expected.pathname === url.pathname,
-        );
+        const isPublicInvalidTokenNotFound = status === 404 && url.pathname.startsWith("/i/");
         // Keyed by the exact URL, not just counted, so a pending entry for
         // one URL can never be consumed by a console message about a
         // different one.

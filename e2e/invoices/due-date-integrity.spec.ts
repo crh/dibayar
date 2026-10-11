@@ -26,7 +26,8 @@
 import type { Locator, Page, Request } from "@playwright/test";
 import { expect, test } from "../support/test";
 import { loadFixtureManifest } from "../support/manifest";
-import { reseedFixtures, seedLegacyInvalidDueDate } from "../support/reseed";
+import { endInvoiceWriteRefusal, reseedFixtures, seedLegacyInvalidDueDate, startInvoiceWriteRefusal } from "../support/reseed";
+import { press, responseTo } from "../support/journey";
 import { E2E_FIXTURE_PREFIX } from "../support/fixture-ids";
 import { activateVisibleText, DUE_DATE_FIELD_LABEL as FIELD_LABEL, focusFieldForTyping, visibleDisplay } from "../support/due-date";
 
@@ -360,6 +361,124 @@ test.describe("invoice due-date integrity (FIND-02, FIND-03)", { tag: "@critical
       expect(sent).toEqual(["2030-01-15", "2030-01-15"]);
 
       await page.reload();
+      await expect(input).toHaveValue("2030-01-15");
+    });
+  });
+
+  // INV-DUE-06 with nothing stubbed. The two tests above answer the PATCH in
+  // the browser, so by the inventory's rules they are partial evidence. Here
+  // the request reaches the app's own handler, which reaches the database,
+  // and the database refuses the write (scripts/e2e-fixtures.ts
+  // invoiceWriteRefusal: one row of the disposable test database, writes
+  // only). The handler answers 500 itself. The stored date is read back the
+  // way a person reads it: by reloading the page.
+  test.describe("saves the database refuses", () => {
+    // The one 500 this causes; any other 5xx still fails the test.
+    test.use({ expectedErrorResponses: [{ method: "PATCH", pathname: `/api/invoices/${E2E_FIXTURE_PREFIX}-invoice-sent`, status: 500 }] });
+    test.afterEach(() => {
+      endInvoiceWriteRefusal();
+      reseedFixtures();
+    });
+
+    async function openSentInvoiceFromList(page: Page, isMobile: boolean) {
+      const { invoices, brands, deals } = loadFixtureManifest();
+      expect(invoices.sent).toBe(`${E2E_FIXTURE_PREFIX}-invoice-sent`);
+      await page.goto("/invoice");
+      await press(page.getByRole("link", { name: new RegExp(brands[deals.invoiceSent]) }), isMobile);
+      await expect(page).toHaveURL(new RegExp(`/invoice/${invoices.sent}$`));
+      await expect(visibleDisplay(page, SEEDED_DISPLAY)).toBeVisible();
+      // Hydrated, and the page's own fetches have settled.
+      await expect(page.getByRole("button", { name: "Kirim lewat WhatsApp" })).toBeEnabled();
+      return invoices.sent;
+    }
+
+    async function expectStoredDateShownWithError(page: Page) {
+      await expect(page.getByText(SAVE_ERROR)).toBeVisible();
+      await expect(visibleDisplay(page, SEEDED_DISPLAY)).toBeVisible();
+      await expect(page.getByLabel(FIELD_LABEL)).toHaveValue("2099-12-31");
+      await expect(page.getByText("Tersimpan", { exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Kosongkan" })).toBeEnabled();
+    }
+
+    async function expectStoredDateAfterReload(page: Page) {
+      await page.reload();
+      await expect(visibleDisplay(page, SEEDED_DISPLAY)).toBeVisible();
+      await expect(page.getByLabel(FIELD_LABEL)).toHaveValue("2099-12-31");
+      await expect(page.getByText(SAVE_ERROR)).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Kirim lewat WhatsApp" })).toBeEnabled();
+    }
+
+    test("a Kosongkan the server fails to store shows the stored date again with an error, stores nothing, and clears once the server can store it", async ({ page, isMobile }) => {
+      const invoiceId = await openSentInvoiceFromList(page, isMobile);
+      const path = `/api/invoices/${invoiceId}`;
+      const clear = page.getByRole("button", { name: "Kosongkan" });
+
+      try {
+        startInvoiceWriteRefusal();
+        const failed = await responseTo(page, "PATCH", path, () => press(clear, isMobile));
+        expect(failed.status()).toBe(500);
+        // The app's own handler answered, not a proxy or the test.
+        expect(await failed.json()).toEqual({ error: expect.stringContaining("Coba lagi") });
+        await expectStoredDateShownWithError(page);
+        await expect(visibleDisplay(page, EMPTY_LABEL)).toHaveCount(0);
+
+        // Still refused: a second try fails the same way and the page says so again.
+        const failedAgain = await responseTo(page, "PATCH", path, () => press(clear, isMobile));
+        expect(failedAgain.status()).toBe(500);
+        await expectStoredDateShownWithError(page);
+
+        // Nothing was stored, and the reloaded page works.
+        await expectStoredDateAfterReload(page);
+      } finally {
+        endInvoiceWriteRefusal();
+      }
+
+      // The cause is gone; the same button now clears the date for good.
+      const cleared = await responseTo(page, "PATCH", path, () => press(clear, isMobile));
+      expect(cleared.ok()).toBe(true);
+      await expect(visibleDisplay(page, EMPTY_LABEL)).toBeVisible();
+      await expect(page.getByText(SAVE_ERROR)).toHaveCount(0);
+      await page.reload();
+      await expect(visibleDisplay(page, EMPTY_LABEL)).toBeVisible();
+      await expect(page.getByLabel(FIELD_LABEL)).toHaveValue("");
+    });
+
+    test("a typed date (Enter) the server fails to store shows the stored date again with an error, stores nothing, and retyping saves it once the server can", async ({ page, isMobile }, testInfo) => {
+      test.skip(testInfo.project.name !== "chromium", "desktop Chromium keyboard path");
+      const invoiceId = await openSentInvoiceFromList(page, isMobile);
+      const path = `/api/invoices/${invoiceId}`;
+      const input = page.getByLabel(FIELD_LABEL);
+      const sent = recordDueDatePatches(page, invoiceId);
+
+      try {
+        startInvoiceWriteRefusal();
+        await focusFieldForTyping(page, visibleDisplay(page, SEEDED_DISPLAY));
+        await page.keyboard.type("01152030", { delay: 30 });
+        await expect(input).toHaveValue("2030-01-15");
+        const failed = await responseTo(page, "PATCH", path, () => page.keyboard.press("Enter"));
+        expect(failed.status()).toBe(500);
+        await expectStoredDateShownWithError(page);
+        // The attempted date is not left on screen as if it were saved.
+        await expect(visibleDisplay(page, "15 Jan 2030")).toHaveCount(0);
+        expect(sent).toEqual(["2030-01-15"]);
+
+        await expectStoredDateAfterReload(page);
+      } finally {
+        endInvoiceWriteRefusal();
+      }
+
+      await focusFieldForTyping(page, visibleDisplay(page, SEEDED_DISPLAY));
+      await page.keyboard.type("01152030", { delay: 30 });
+      const saved = await responseTo(page, "PATCH", path, () => page.keyboard.press("Enter"));
+      expect(saved.ok()).toBe(true);
+      await expect(visibleDisplay(page, "15 Jan 2030")).toBeVisible();
+      await expect(page.getByText(SAVE_ERROR)).toHaveCount(0);
+      await leaveFieldWithTab(page);
+      await page.waitForLoadState("networkidle");
+      expect(sent).toEqual(["2030-01-15", "2030-01-15"]);
+
+      await page.reload();
+      await expect(visibleDisplay(page, "15 Jan 2030")).toBeVisible();
       await expect(input).toHaveValue("2030-01-15");
     });
   });

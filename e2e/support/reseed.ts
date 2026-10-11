@@ -10,7 +10,7 @@
 // no reseed -- they never mutate fixture rows.
 import { execFileSync } from "node:child_process";
 
-function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states" | "follow-up-expired-share" | "income-boundaries" | "status-consistency" | "expire-disposable-session" | "incomplete-issuer-settings" | "invoice-table-outage" | "end-invoice-table-outage"): void {
+function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states" | "follow-up-expired-share" | "income-boundaries" | "status-consistency" | "expire-disposable-session" | "incomplete-issuer-settings" | "invoice-table-outage" | "end-invoice-table-outage" | "invoice-write-refusal" | "end-invoice-write-refusal"): void {
   const env = { ...process.env, E2E_FIXTURE_CONFIRM: "non-production" };
   execFileSync("npx", ["tsx", "--env-file-if-exists=.env.local", "scripts/e2e-fixtures.ts", action], {
     stdio: "inherit",
@@ -97,4 +97,18 @@ export function startInvoiceTableOutage(): void {
 // Ends the outage; safe to call when there is none.
 export function endInvoiceTableOutage(): void {
   runFixtureAction("end-invoice-table-outage");
+}
+
+// Makes the database refuse every write to the seeded SENT invoice
+// (scripts/e2e-fixtures.ts invoiceWriteRefusal): the app's own save reaches
+// the database and fails there. One row, writes only; reads and every other
+// row are untouched. Called mid-test with a page open; does not reseed.
+// Always pair it with endInvoiceWriteRefusal() in the test and in afterEach.
+export function startInvoiceWriteRefusal(): void {
+  runFixtureAction("invoice-write-refusal");
+}
+
+// Ends the refusal; safe to call when there is none.
+export function endInvoiceWriteRefusal(): void {
+  runFixtureAction("end-invoice-write-refusal");
 }

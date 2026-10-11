@@ -44,7 +44,9 @@ async function recordFinishedMotion(page: Page) {
   await page.addInitScript(() => {
     const finished: Array<{ type: string; ms: number }> = [];
     (window as unknown as { __finishedMotion: typeof finished }).__finishedMotion = finished;
-    for (const type of ["animationend", "transitionend"] as const) {
+    // The cancel events too: motion cut short (its element removed, the
+    // property changed again) reports how long it had run the same way.
+    for (const type of ["animationend", "transitionend", "animationcancel", "transitioncancel"] as const) {
       document.addEventListener(type, (event) => finished.push({ type, ms: (event as AnimationEvent | TransitionEvent).elapsedTime * 1000 }), true);
     }
   });

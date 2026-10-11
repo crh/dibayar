@@ -27,8 +27,8 @@ import { getJakartaCalendarDate } from "../src/lib/invoice-date-status";
 import { encryptShareToken } from "../src/lib/share-token-crypto";
 
 const action = process.argv[2];
-if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states", "follow-up-expired-share", "income-boundaries", "status-consistency", "expire-disposable-session", "incomplete-issuer-settings", "invoice-table-outage", "end-invoice-table-outage"].includes(action ?? "")) {
-  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states|follow-up-expired-share|income-boundaries|status-consistency|expire-disposable-session|incomplete-issuer-settings|invoice-table-outage|end-invoice-table-outage");
+if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states", "follow-up-expired-share", "income-boundaries", "status-consistency", "expire-disposable-session", "incomplete-issuer-settings", "invoice-table-outage", "end-invoice-table-outage", "invoice-write-refusal", "end-invoice-write-refusal"].includes(action ?? "")) {
+  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states|follow-up-expired-share|income-boundaries|status-consistency|expire-disposable-session|incomplete-issuer-settings|invoice-table-outage|end-invoice-table-outage|invoice-write-refusal|end-invoice-write-refusal");
 }
 
 const connectionString = process.env.DATABASE_URL;
@@ -603,6 +603,54 @@ async function endInvoiceTableOutage(): Promise<boolean> {
   return true;
 }
 
+// A failed write the app can really hit, on the disposable test database
+// only, and on one row only: while the refusal lasts, the database rejects
+// every UPDATE of the fixture owner's SENT invoice (a row trigger that raises
+// an error), so the app's own PATCH handler reaches the database, fails
+// there, and answers 500. Reads of that invoice, and reads and writes of
+// every other row, are untouched; nothing is renamed, deleted or changed.
+//
+// Like the outage above, there is no production code path behind this and no
+// request is stubbed: it is the failure-injection seam for a save that fails
+// on the server (INV-DUE-06). It is narrower than the outage on purpose (one
+// row, writes only), so a left-over refusal cannot fail a spec that does not
+// update that invoice. It is still ended in three places: by the test, by its
+// afterEach, and by every other action of this script before it does
+// anything else.
+const REFUSAL_TRIGGER = "e2e_refuse_invoice_write";
+const REFUSED_INVOICE_ID = `${prefix}-invoice-sent`;
+
+async function refusalTriggerExists(): Promise<boolean> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
+    `SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = '${REFUSAL_TRIGGER}' AND NOT tgisinternal) AS "exists"`,
+  );
+  return Boolean(rows[0]?.exists);
+}
+
+async function invoiceWriteRefusal() {
+  // The id goes into DDL, which takes no parameters.
+  if (!/^[A-Za-z0-9-]+$/.test(REFUSED_INVOICE_ID)) throw new Error("E2E write refusal: unexpected fixture invoice id");
+  await prisma.$executeRawUnsafe(
+    `CREATE OR REPLACE FUNCTION public.${REFUSAL_TRIGGER}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'e2e write refusal: invoice % is read-only for this test', OLD.id; END $$`,
+  );
+  // CREATE TRIGGER waits for writers of the table; DROP TRIGGER (below) for
+  // readers too. Give up after five seconds instead of waiting forever.
+  await prisma.$executeRawUnsafe(RENAME_LOCK_TIMEOUT);
+  await prisma.$executeRawUnsafe(
+    `CREATE TRIGGER ${REFUSAL_TRIGGER} BEFORE UPDATE ON public."Invoice" FOR EACH ROW WHEN (OLD.id = '${REFUSED_INVOICE_ID}') EXECUTE FUNCTION public.${REFUSAL_TRIGGER}()`,
+  );
+  console.log(JSON.stringify({ action: "invoice-write-refusal", host: normalizedHost, prefix, invoice: "sent", writable: false }));
+}
+
+// Idempotent: does nothing (and takes no lock) when there is no refusal.
+async function endInvoiceWriteRefusal(): Promise<boolean> {
+  if (!(await refusalTriggerExists())) return false;
+  await prisma.$executeRawUnsafe(RENAME_LOCK_TIMEOUT);
+  await prisma.$executeRawUnsafe(`DROP TRIGGER IF EXISTS ${REFUSAL_TRIGGER} ON public."Invoice"`);
+  await prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS public.${REFUSAL_TRIGGER}()`);
+  return true;
+}
+
 async function main() {
   try {
     if (action === "invoice-table-outage") {
@@ -613,6 +661,16 @@ async function main() {
     const ended = await endInvoiceTableOutage();
     if (action === "end-invoice-table-outage") {
       console.log(JSON.stringify({ action: "end-invoice-table-outage", host: normalizedHost, prefix, table: "Invoice", available: true, wasOut: ended }));
+      return;
+    }
+    // ...and no write refusal either.
+    const refusalEnded = await endInvoiceWriteRefusal();
+    if (action === "end-invoice-write-refusal") {
+      console.log(JSON.stringify({ action: "end-invoice-write-refusal", host: normalizedHost, prefix, invoice: "sent", writable: true, wasRefusing: refusalEnded }));
+      return;
+    }
+    if (action === "invoice-write-refusal") {
+      await invoiceWriteRefusal();
       return;
     }
     if (action === "seed") await seed();
