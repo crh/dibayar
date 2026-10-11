@@ -79,7 +79,7 @@ stateDiagram-v2
     Draft --> Draft: incomplete or out-of-range on leave, hint, no PATCH (INV-DUE-04)
     Draft --> Set: Escape restores the saved date (INV-DUE-04)
     Set --> Empty: Kosongkan (INV-DUE-01)
-    Set --> SaveError: PATCH fails, field reverts to the saved date (INV-DUE-06, partial)
+    Set --> SaveError: PATCH fails, field reverts to the saved date (INV-DUE-06)
     LegacyInvalid --> Empty: Kosongkan
     LegacyInvalid --> Set: type a new date
 ```
@@ -90,7 +90,7 @@ stateDiagram-v2
 | Empty/Set → picker opens (click/tap on visible text) | INV-DUE-02 | real, Chromium desktop + 390px mobile emulation (`due-date-integrity.spec.ts`); Firefox/WebKit pass but are feature-detected, so not claimed; real phones **MANUAL** MAN-DUE-01 |
 | picker → date chosen → saved → reload | INV-DUE-03 | **MANUAL** MAN-DUE-01; server persistence partial via `fill()` (desktop only) |
 | Empty → keyboard typed → Enter → reload → cleared | INV-DUE-04 | real, desktop Chromium: zero PATCHes while typing (through `0002-01-15`), one on Enter, out-of-range refused, Escape restores |
-| save failure → revert + retry | INV-DUE-06 | partial: component test plus browser journeys whose failure is injected with `page.route` |
+| save failure → revert + retry | INV-DUE-06 | real: the test database refuses the write and the app answers 500 (Kosongkan in both projects, a typed date on desktop Chromium); the `page.route` journeys and the component test remain as partial evidence |
 | legacy out-of-range row → page usable, correctable | (FIND-03 regression) | real, `due-date-integrity.spec.ts`; not a separate inventory action |
 | consistent display across header/list/queue/WhatsApp | INV-DUE-05 | real (desktop Chromium; Asia/Jakarta and Pacific/Honolulu browsers) |
 | due date on the recipient's page and PDF, deal with no payment terms | INV-DUE-05, PUB-01, PUB-05, PUB-06 (FIND-08 regression) | real, desktop + mobile, both timezones (`e2e/public/due-date-without-terms.spec.ts`) |

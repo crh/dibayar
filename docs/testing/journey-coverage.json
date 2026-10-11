@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "inventoryDate": "2026-10-11",
-  "baseline": "origin/staging 390bc38 (PR #36 merged) + one-shot autopilot 2026-10-11 (PR #41 long journeys; PR #42 FIND-10 fix with DEAL-DETAIL-02; PR #43 six P2 actions; FIND-12 fix with NAV-08)",
+  "baseline": "origin/staging 390bc38 (PR #36 merged) + one-shot autopilot 2026-10-11 (PR #41 long journeys; PR #42 FIND-10 fix with DEAL-DETAIL-02; PR #43 six P2 actions; FIND-12 fix with NAV-08); release-readiness follow-up 2026-10-11 (INV-DUE-06 real through a database-refused write; A11Y-04 reclassified to partial; A11Y-01 and DEAL-CREATE-07 widened, both still partial)",
   "classificationRules": [
     "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
     "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
@@ -1108,19 +1108,32 @@
       "priority": "P1",
       "status": "automated_partial",
       "manualCheck": "MAN-DEAL-01",
-      "followUp": "Text fields automated in Phase 2B on both projects. The deadline's native date picker is not driven, so the action as a whole stays partial; MAN-DEAL-01 on a real phone still pending",
-      "evidence": "Zero Routine Phase 2B, 2026-10-08",
+      "followUp": "Text fields automated in Phase 2B on both projects. 2026-10-11: the deadline is now typed with the keyboard on desktop Chromium (saved, shown on card and detail after reload, becomes the new invoice's due date; a second value; and no deadline -> no due date). The action stays partial: on a phone the deadline can only be chosen in the OS date picker, which no test drives, and MAN-DEAL-01 on a real phone is still pending",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08; release-readiness follow-up 2026-10-11",
       "tests": [
         {
           "file": "e2e/deals/create-validation.spec.ts",
           "title": "optional contact name and payment terms are saved and shown on the deal's detail page after reload",
           "kind": "partial",
-          "note": "Real typing and real navigation for contact name and payment terms (saved, shown on detail, survive reload). Partial only because the action also includes picking a deadline, which no test drives"
+          "note": "Real typing and real navigation for contact name and payment terms (saved, shown on detail, survive reload), both projects. Partial only because the action also includes the deadline, which this test does not set"
         },
         {
           "file": "e2e/deals/create-validation.spec.ts",
           "title": "a deal saved without the optional fields shows them as empty, not as leftover text",
-          "kind": "partial"
+          "kind": "partial",
+          "note": "Also asserts 'Tanpa tenggat' on the card and detail and 'Tidak ditentukan' for payment terms"
+        },
+        {
+          "file": "e2e/deals/create-validation.spec.ts",
+          "title": "a deadline typed on the keyboard is saved, shown on the card and the detail page after reload, and becomes the new invoice's due date",
+          "kind": "partial",
+          "note": "Desktop chromium only: real keys into the native date input's segments, real navigation, reloads. Listed as partial because the action's phone path (the OS date picker) is not driven; skipped on chromium-mobile"
+        },
+        {
+          "file": "e2e/deals/create-validation.spec.ts",
+          "title": "a different typed deadline (a leap day) is the one stored, and a deal without one starts its invoice with no due date",
+          "kind": "partial",
+          "note": "Desktop chromium only; alternate value and the no-deadline default"
         }
       ]
     },
@@ -1724,19 +1737,31 @@
       "route": "/invoice/[id]",
       "action": "Due-date save failure shows an error",
       "persona": "owner",
-      "preconditions": "PATCH fails",
-      "interaction": "Change the date",
+      "preconditions": "The server cannot store the change (the database refuses the write)",
+      "interaction": "Kosongkan (desktop and phone layout); type a new date and press Enter (desktop keyboard)",
       "expected": "Error alert; the field reverts to the last saved date (not the attempted one); retry saves",
       "persisted": "Unchanged",
-      "alternates": "",
+      "alternates": "A second try while the cause persists; reload while it persists. Choosing a date in a phone's native picker is INV-DUE-03 (MAN-DUE-01)",
       "scope": [
         "unit",
         "chromium",
         "chromium-mobile"
       ],
       "priority": "P1",
-      "status": "automated_partial",
+      "status": "automated_real_interaction",
       "tests": [
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "a Kosongkan the server fails to store shows the stored date again with an error, stores nothing, and clears once the server can store it",
+          "kind": "real",
+          "note": "Nothing is stubbed: the PATCH reaches the app's handler and the test database refuses the write (scripts/e2e-fixtures.ts invoiceWriteRefusal, a row trigger on the one fixture invoice), so the handler answers 500 itself. Entered from the invoice list; the stored date is read back by reloading the page. Both projects"
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "a typed date (Enter) the server fails to store shows the stored date again with an error, stores nothing, and retyping saves it once the server can",
+          "kind": "real",
+          "note": "Desktop chromium only (keyboard path); same database-refused write"
+        },
         {
           "file": "src/components/date-field.test.tsx",
           "title": "",
@@ -1747,7 +1772,7 @@
           "file": "e2e/invoices/due-date-integrity.spec.ts",
           "title": "a failed Kosongkan shows the stored date again with an error, and a retry clears it",
           "kind": "partial",
-          "note": "Real clicks and reload, but the failure itself is injected with page.route (a stub), so by rule it is partial"
+          "note": "Kept: the failure is injected with page.route (a stub), so by rule it is partial"
         },
         {
           "file": "e2e/invoices/due-date-integrity.spec.ts",
@@ -1756,7 +1781,8 @@
           "note": "Desktop chromium; failure injected with page.route"
         }
       ],
-      "followUp": "Assessed in Phase 2B, left partial: the only browser way to make the save fail is to intercept the PATCH (a stub), which the rules class as partial. A stub-free failure would need the server itself to fail on demand (the invoice-table-outage fixture action added for NAV-08 on 2026-10-11 can do that; not yet used here)"
+      "followUp": "Real since 2026-10-11 for a save the server fails to store (HTTP 500). Not covered: a save that never reaches the server (offline, timeout) other than through the page.route tests above, which stay partial. On the phone project the failing change is Kosongkan; a date chosen in the native picker is not drivable (INV-DUE-03)",
+      "evidence": "Release-readiness follow-up 2026-10-11"
     },
     {
       "id": "INV-STATUS-01",
@@ -2795,14 +2821,14 @@
     {
       "id": "A11Y-01",
       "domain": "accessibility",
-      "route": "/, /deal, /invoice, /invoice/[id], /pengaturan, /i/[token], add-deal dialog",
+      "route": "/, /deal, /deal/[id], /invoice, /invoice/[id], /pengaturan, /i/[token], add-deal dialog",
       "action": "No serious/critical automatically detectable violations",
       "persona": "assistive-technology user",
       "preconditions": "",
       "interaction": "Page load + axe scan",
       "expected": "Zero serious/critical",
       "persisted": "n/a",
-      "alternates": "",
+      "alternates": "Error states (number repair on deal and invoice detail, expired share, Settings field errors); English interface; phone layout (390px, desktop Chromium); keyboard-only use",
       "scope": [
         "chromium"
       ],
@@ -2853,10 +2879,91 @@
           "title": "valid share link renders recipient-safe invoice content and PDF action",
           "kind": "partial",
           "note": "Includes the axe scan of the public /i/ page; already ran, now listed here"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Deal detail has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial",
+          "note": "Added 2026-10-11; reached from the board card's menu"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Deal detail of an invoiced deal has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Deal detail with the WhatsApp number repair form open has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial",
+          "note": "The error state after Buka WhatsApp on an unusable number"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Invoice detail with the WhatsApp number repair form open has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Invoice detail with an expired share link has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Pengaturan with field errors showing has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "the English interface has no automatically-detectable serious/critical a11y violations on the main pages",
+          "kind": "partial",
+          "note": "Language switched with the Settings button; Settings, Home, Deals, Invoices and invoice detail scanned in English; html lang checked"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Beranda in the phone layout has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial",
+          "note": "Desktop Chromium at 390x844: the app's phone layout, not a phone"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Deal board in the phone layout has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Invoice list in the phone layout has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Pengaturan in the phone layout has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Invoice detail in the phone layout has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "the Add Deal dialog in the phone layout has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "a deal can be added, found and opened with the keyboard alone, and the dialog keeps the focus inside",
+          "kind": "partial",
+          "note": "Keyboard only (Tab, Enter, typing): top-bar + Deal, the dialog's fields in order, forward focus wrap, save, the card menu, Lihat detail. An interaction, but it does not make the action real: the action is the scan"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "control: the scan reports a field without a label and low-contrast text",
+          "kind": "partial",
+          "note": "The scan helper's own control, on synthetic content"
         }
       ],
-      "followUp": "Stays partial by rule: an axe scan is rendering evidence, not an interaction. Not scanned: deal detail, the expired-share and contact-repair states of invoice detail, Settings validation errors",
-      "evidence": "Zero Routine Phase 2B, 2026-10-08"
+      "followUp": "Stays partial by rule: an axe scan is rendering evidence, not an interaction. Widened 2026-10-11 to deal detail, the repair, expired-share and Settings-error states, the English interface and the phone layout; zero serious or critical findings, nothing excluded. Not scanned: the regenerate/revoke confirmations in the phone layout, the public page in English. Screen-reader behaviour is not automated at all (MAN-A11Y-01)",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08; release-readiness follow-up 2026-10-11"
     },
     {
       "id": "A11Y-02",
@@ -2916,14 +3023,14 @@
         "chromium-mobile"
       ],
       "priority": "P2",
-      "status": "automated_real_interaction",
-      "evidence": "One-shot autopilot 2026-10-11 (Phase 2)",
+      "status": "automated_partial",
+      "evidence": "One-shot autopilot 2026-10-11 (Phase 2); reclassified in the release-readiness follow-up 2026-10-11",
       "tests": [
         {
           "file": "e2e/smoke/reduced-motion.spec.ts",
           "title": "opening the account menu and the add-deal dialog, and marking an invoice paid, all work with no motion",
-          "kind": "real",
-          "note": "Context option reducedMotion: 'reduce'. The outcome is measured motion, not a screenshot: running animations and the computed animation/transition duration of every element after each real interaction"
+          "kind": "partial",
+          "note": "Context option reducedMotion: 'reduce'. Real clicks and taps, and motion measured from the browser (end and cancel events, running animations, computed durations of every element). Partial by rule on two counts: the preference is switched by Playwright's media emulation, not by the OS setting a person uses, and the outcome is read from styles and events with page.evaluate rather than seen"
         },
         {
           "file": "e2e/smoke/reduced-motion.spec.ts",
@@ -2931,7 +3038,8 @@
           "kind": "partial",
           "note": "The measurement's own control: without the preference it reports the menu's 200 ms animation and transitions of at least 150 ms"
         }
-      ]
+      ],
+      "followUp": "Reclassified from automated_real_interaction on 2026-10-11 (review of the borderline claim the one-shot autopilot disclosed). The rule asks for the control a person uses and a user-observable outcome; here the preference is emulated and 'nothing moves' is inferred from computed durations and animation events. The measurement has a negative control and found no defect: one global rule (globals.css) cuts every animation and transition to 0.01 ms, sets iteration count 1 and scroll-behavior auto, and the app has no script-driven motion. Not exercised: the Beranda loading skeletons and the reminder spinner (present only while loading), and a real device with the OS setting on"
     }
   ],
   "exceptions": [
@@ -2970,9 +3078,9 @@
       ],
       "category": "physical_device",
       "manualCheck": "MAN-DEAL-01",
-      "reason": "The deadline field is a native date input, so choosing the date has the same limit as INV-DUE-03. The other optional fields (contact name, payment terms) are driven for real in both projects.",
+      "reason": "The deadline field is a native date input. On desktop it is typed with the keyboard and that path is driven for real (desktop Chromium, since 2026-10-11); on a phone the only way in is the OS date picker, which has the same limit as INV-DUE-03. The other optional fields (contact name, payment terms) are driven for real in both projects.",
       "blocksRelease": false,
-      "releaseEvidence": "The two create-validation journeys green in CI on the release head. MAN-DEAL-01 run on a phone and logged; if it was not run, the release PR says so.",
+      "releaseEvidence": "The create-validation journeys green in CI on the release head. MAN-DEAL-01 run on a phone and logged; if it was not run, the release PR says so.",
       "futureAutomation": {
         "exists": true,
         "strategy": "A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built."
@@ -3028,25 +3136,12 @@
         "A11Y-01"
       ],
       "category": "partial_by_rule",
-      "reason": "An axe scan is rendering evidence, not an interaction, so the classification rules cap this action at partial however many pages are scanned. Not scanned yet: deal detail, the expired-share and contact-repair states of invoice detail, Settings validation errors.",
+      "reason": "An axe scan is rendering evidence, not an interaction, so the classification rules cap this action at partial however many pages are scanned. Since 2026-10-11 the scans cover deal detail, the repair, expired-share and Settings-error states, the English interface and the phone layout (390px, desktop Chromium), plus one keyboard-only journey. No scan operates a screen reader.",
       "blocksRelease": false,
-      "releaseEvidence": "CI job e2e-a11y green on the release head (it runs on every PR and push). No manual sign-off.",
+      "releaseEvidence": "CI job e2e-a11y green on the release head (it runs on every PR and push; it includes e2e/smoke/accessibility-states.spec.ts). No manual sign-off.",
       "futureAutomation": {
         "exists": false,
-        "strategy": "It cannot become automated_real_interaction under the current rules. The scan can be widened to the unscanned states; screen-reader behaviour is MAN-A11Y-01 (P2)."
-      }
-    },
-    {
-      "actions": [
-        "INV-DUE-06"
-      ],
-      "category": "partial_by_rule",
-      "reason": "The clicks, typing and reload are real, but the only browser way to make the save fail is to intercept the PATCH with page.route, and the rules class a stubbed response as partial.",
-      "blocksRelease": false,
-      "releaseEvidence": "The two failed-save journeys in e2e/invoices/due-date-integrity.spec.ts green in CI job e2e-critical on the release head. No manual sign-off.",
-      "futureAutomation": {
-        "exists": false,
-        "strategy": "A stub-free failure needs a way to make the server itself fail on demand in tests (the same seam NAV-08 waits for). None is designed."
+        "strategy": "It cannot become automated_real_interaction under the current rules. Screen-reader behaviour is MAN-A11Y-01 (P2), on real devices."
       }
     }
   ],
@@ -3161,7 +3256,7 @@
       "id": "FIND-11",
       "severity": "low",
       "summary": "A saved contact name cannot be removed on deal detail. Emptying the field and pressing Simpan sends an empty PATCH body (contactName || undefined), the page answers 'Nama kontak disimpan', and the old name is put back in the field and is still there after a reload. Verified in the browser 2026-10-11.",
-      "status": "open: not changed (outside the FIND-10 fix). Needs a small decision: let an empty name clear it, or say that it cannot be cleared. No browser test asserts either behaviour.",
+      "status": "open, triaged 2026-10-11: recommended P3 (low), fix after the release, not a release blocker. Nothing is lost or corrupted and nothing is shown to a recipient; the cost is a wrong name the owner cannot remove and a 'Nama kontak disimpan' message that is not true. Recommended behaviour: an emptied field clears the name (send contactName: null and accept null in dealPatchSchema), with a browser regression test asserting the cleared value after reload. Repro: deal detail of any deal with a contact name -> empty 'Nama kontak' -> Simpan -> 'Nama kontak disimpan' -> the old name is back in the field and after a reload. Not changed here (outside this work's scope). No browser test asserts either behaviour.",
       "actions": [
         "DEAL-DETAIL-02"
       ]

@@ -54,7 +54,7 @@
 - [ ] Current `docs/testing/JOURNEY-COVERAGE.md` "Outstanding P0/P1 actions" and "Exception register" pasted into the PR
 - [ ] Every outstanding **P0** is fixed, signed off under F2, or explicitly accepted by Chris
 - [ ] Every "Product decision" register entry (today: none) is decided, or Chris explicitly accepts shipping the current behaviour
-- [ ] "Partial by classification rule" entries (today: A11Y-01, INV-DUE-06) need no acceptance while their tests are green under F1; say so, do not report them as covered
+- [ ] "Partial by classification rule" entries (today: A11Y-01) need no acceptance while their tests are green under F1; say so, do not report them as covered
 
 **F4 — Informational (linked, never a blocker by themselves)**
 - [ ] Latest scheduled `e2e-cross-browser` result (workflow `CI`) linked
