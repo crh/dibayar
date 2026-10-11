@@ -215,6 +215,40 @@ invoice detail page, wait for its WhatsApp action to be enabled: that is when
 its contact and share fetches have settled, and leaving earlier reports them
 as failed requests.
 
+Long cross-page journeys (`e2e/journeys/`, all `@critical`, `chromium` and
+`chromium-mobile`): three tests that each walk one person's whole workflow
+across pages, reloads and browser contexts, with a `test.step` per
+checkpoint. They add no action to the inventory and change no
+classification; the short specs remain the per-action evidence.
+
+- `deal-to-paid.spec.ts`: Beranda → **+ Deal** (floating button on the phone,
+  top bar on desktop) → the deal through every stage → **Buat invoice** →
+  **Tandai sudah dikirim** → **Buat tautan berbagi** → **Kirim lewat
+  WhatsApp** (local stub) → a session-less `recipient` reads the page and
+  downloads the PDF → **Tandai lunas** → invoice list, deal board, Beranda's
+  monthly total. The desktop project types a due date with the keyboard and
+  the recipient must see it; the phone project sets none (a native picker
+  cannot be driven, MAN-DUE-01) and the recipient must see no due date.
+- `settings-to-recipient.spec.ts`: issuer identity, bank account and the send
+  template rewritten in Pengaturan → reload → the WhatsApp message from the
+  seeded sent invoice → the owner's PDF → the recipient's page and PDF (text
+  equal to the owner's), and none of the old values anywhere.
+- `resilience-permissions.spec.ts`: a deal half edited when the disposable
+  session expires (`expireDisposableOwnerSession()`): **Simpan** and
+  **Lanjut ke Deal** answer 401 with a visible error, a nav link, Back,
+  Forward and a reload end at sign-in, the same token is refused from a fresh
+  browser, the valid session shows nothing was stored, and a second user sees
+  none of it. Then a recipient with an expired link and a valid one that the
+  owner revokes: reload, Back, Forward and the PDF never show the invoice
+  again.
+
+Each one reseeds before and after. Their preconditions are base-seed rows
+only; everything asserted about new data is created through the UI. Shared
+helpers are in `e2e/support/journey.ts` (`press()` taps on the phone project
+and clicks on desktop, `typeInto()`, `responseTo()`, `expectNoOwnerControls()`).
+Use `page.locator('p[role="alert"]')` for "no error is shown": Next.js adds
+its own empty route announcer with `role="alert"` to every page.
+
 Specs that change per-user state every other test depends on
 (`settings/language.spec.ts` changes `User.language`,
 `settings/bank-details.spec.ts` changes `UserSettings`) reseed in an

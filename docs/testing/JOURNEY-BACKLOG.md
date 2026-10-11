@@ -162,6 +162,26 @@ in `chromium` and `chromium-mobile`.
   follow-up row and every deal-terdekat row opens its own record; both
   **Lihat semua** links.
 
+### Batch D — long cross-page journeys (done, one-shot autopilot, 2026-10-11)
+
+Delivered on `test/creator-cross-page-journeys-2026-10-11` (receipt:
+`docs/receipts/DIBAYAR-E2E-AUTOPILOT-ONE-SHOT-2026-10-11.md`). Tests, one
+helper file and docs only; no application code, fixture, inventory status or
+CI change. All three are `@critical` and run in `chromium` and
+`chromium-mobile`; `docs/testing/E2E.md` lists their checkpoints and
+`JOURNEY-GRAPHS.md` §7 the graph edges each one walks.
+
+- `e2e/journeys/deal-to-paid.spec.ts` -- deal → every stage → invoice → sent
+  → share → WhatsApp (local stub) → recipient page and PDF → paid → list,
+  board and Beranda.
+- `e2e/journeys/settings-to-recipient.spec.ts` -- issuer, bank and send
+  template → WhatsApp message, owner PDF, recipient page and PDF.
+- `e2e/journeys/resilience-permissions.spec.ts` -- session expiry while a deal
+  is being edited, the reused token, the second user, and a link revoked
+  while the recipient has it open.
+
+They are not inventory evidence: no action's status or test list changed.
+
 ### Still open
 
 DEAL-DETAIL-02, DEAL-DETAIL-04, SET-05, SET-07, SET-08,
@@ -194,7 +214,9 @@ repeated here; these are the program-level steps around them.
    automate every edge marked UNTESTED: forward, back, reload, and
    browser-history on each. Failure-injection edges use `page.route` as in
    Batch 3 (the interaction stays real).
-4. **Critical journeys end to end.** Two or three long journeys (deal →
+4. **Critical journeys end to end.** (Done 2026-10-11, Batch D: three long
+   journeys in `e2e/journeys/`, `chromium` and `chromium-mobile`, see below.)
+   Two or three long journeys (deal →
    invoice → share → recipient → paid; settings change visible on the
    recipient page) that cross pages and reloads, in `chromium` and
    `chromium-mobile`.
