@@ -27,8 +27,8 @@ import { getJakartaCalendarDate } from "../src/lib/invoice-date-status";
 import { encryptShareToken } from "../src/lib/share-token-crypto";
 
 const action = process.argv[2];
-if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states", "follow-up-expired-share", "income-boundaries", "status-consistency", "expire-disposable-session"].includes(action ?? "")) {
-  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states|follow-up-expired-share|income-boundaries|status-consistency|expire-disposable-session");
+if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states", "follow-up-expired-share", "income-boundaries", "status-consistency", "expire-disposable-session", "incomplete-issuer-settings"].includes(action ?? "")) {
+  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states|follow-up-expired-share|income-boundaries|status-consistency|expire-disposable-session|incomplete-issuer-settings");
 }
 
 const connectionString = process.env.DATABASE_URL;
@@ -552,6 +552,17 @@ async function expireDisposableSession() {
   console.log(JSON.stringify({ action: "expire-disposable-session", host: normalizedHost, prefix, updated: result.count }));
 }
 
+// Removes the fixture owner's UserSettings row: the state of an account that
+// has never saved Pengaturan (no issuer name, no bank account). The settings
+// form cannot produce it, because it refuses to save an empty required
+// field. Only this owner's row on the guarded disposable target; the next
+// `seed` restores the complete settings.
+async function incompleteIssuerSettings() {
+  const result = await prisma.userSettings.deleteMany({ where: { userId: ids.owner } });
+  if (result.count !== 1) throw new Error(`E2E incomplete-issuer overlay expected 1 settings row, removed ${result.count}`);
+  console.log(JSON.stringify({ action: "incomplete-issuer-settings", host: normalizedHost, prefix, removed: result.count }));
+}
+
 async function main() {
   try {
     if (action === "seed") await seed();
@@ -562,6 +573,7 @@ async function main() {
     else if (action === "income-boundaries") await applyIncomeBoundaries();
     else if (action === "status-consistency") await applyStatusConsistency();
     else if (action === "expire-disposable-session") await expireDisposableSession();
+    else if (action === "incomplete-issuer-settings") await incompleteIssuerSettings();
     else await cleanup();
   } finally {
     await prisma.$disconnect();

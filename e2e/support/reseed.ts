@@ -10,7 +10,7 @@
 // no reseed -- they never mutate fixture rows.
 import { execFileSync } from "node:child_process";
 
-function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states" | "follow-up-expired-share" | "income-boundaries" | "status-consistency" | "expire-disposable-session"): void {
+function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states" | "follow-up-expired-share" | "income-boundaries" | "status-consistency" | "expire-disposable-session" | "incomplete-issuer-settings"): void {
   const env = { ...process.env, E2E_FIXTURE_CONFIRM: "non-production" };
   execFileSync("npx", ["tsx", "--env-file-if-exists=.env.local", "scripts/e2e-fixtures.ts", action], {
     stdio: "inherit",
@@ -72,4 +72,12 @@ export function applyStatusConsistency(): void {
 // seed.
 export function expireDisposableOwnerSession(): void {
   runFixtureAction("expire-disposable-session");
+}
+
+// Reseeds, then removes the owner's UserSettings row (scripts/e2e-fixtures.ts
+// incompleteIssuerSettings): an account that never saved Pengaturan. Reseed
+// afterwards, like every overlay.
+export function applyIncompleteIssuerSettings(): void {
+  runFixtureAction("seed");
+  runFixtureAction("incomplete-issuer-settings");
 }
