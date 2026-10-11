@@ -27,7 +27,8 @@ were and are in no commit of this mission.
 
 ## 2. Task ledger
 
-Statuses: TODO / IN_PROGRESS / DONE / BLOCKED. Updated per PR.
+Statuses: TODO / IN_PROGRESS / DONE / BLOCKED. Updated per PR. "DONE" means done and green on its
+PR; **no PR of this mission is merged** (§4, §9).
 
 | Task | What | Status | Where |
 |---|---|---|---|
@@ -518,8 +519,13 @@ database itself:
 Risk that remains, stated plainly: a process killed between the two renames
 leaves the local test database without an `Invoice` table until the next
 `npm run e2e:fixtures -- <any action>` or E2E run; `tests/ux-audit` has its
-own fixture script, which does not heal it. CI databases are created per
-job, so this is a local-machine risk only.
+own fixture script, which does not heal it. And for the ten to twenty seconds
+of an outage the whole test database is affected, not only the fixture
+owner: anything else using `dibayar_test` at that moment (a `ux:audit` run,
+another worktree's E2E run) loses its invoice queries, and a fixture action
+run by another process ends the outage early and fails this spec. The spec
+needs the test database to itself. CI databases are created per job, so
+both are local-machine risks only.
 
 ### The defect it found (FIND-12, medium)
 
@@ -585,7 +591,31 @@ Local, on the PR branch (ALPHA, 2026-10-11):
 | `coverage:journeys -- --results` on that run | 145 real claims passed; 4 not exercised (the ux-audit ones) |
 | `Invoice` table after the run | present (`end-invoice-table-outage` reported nothing to end) |
 
-CI and review: pending when this was written; see the PR.
+### Independent review (PR #44, head `3d078c1`)
+
+A separate read-only reviewer agent. Verdict: **approve with nits**, no P1.
+It verified in Next's own source that `retry` is stable in 16.3.3 and is
+`refresh()` plus `reset()`, that this is the only error boundary, that the
+spec fails with `reset()`, that the fixture guards run before any SQL, that
+the SQL is constant, and that the heal-first logic covers every action.
+
+| # | Sev. | Finding | Disposition |
+|---|---|---|---|
+| 1 | P2 | The wait for "the retry reached the server" could be satisfied by the nav link's prefetch of the same address | Fixed: only a render request counts (`rsc: 1`, no prefetch header), and the response is awaited to its end |
+| 2 | P2 | "Back/Forward" was claimed, only Back was exercised | Fixed: Back, Forward, Back, each asserted |
+| 3 | P2 | The outage is database-wide; the disclosed risk covered only a killed process | Disclosed in the spec, E2E.md and above: the spec needs the test database to itself |
+| 4 | P3 | Both tables present would fail every action with a raw error | Fixed: detected, with an explicit message |
+| 5 | P3 | No lock timeout, no child-process timeout | Fixed: `lock_timeout` 5 s on the renames; 60 s on every fixture child process |
+| 6 | P3 | The console pattern accepted a bare "Error" in every engine | Fixed: the bare word only in Firefox |
+| 7 | P3 | Prop typing; no pending state on the button | Not changed (the typing matches the previous component; a pending state is a design change) |
+| 8 | P3 | Pre-existing: a failure in the app layout itself (session, language) is not caught by this boundary and there is no `global-error`; Beranda's inline retry reloads the page | Not changed; recorded here as observations |
+| 9 | P3 | Stale wording ("all green and reviewed", "(staging)" for unmerged work) | Fixed in STATE.md, the backlog and the handoff |
+
+After the fixes: `route-error-retry.spec.ts` 16/16 over two repeats in
+chromium, chromium-mobile, firefox and webkit; lint 0, typecheck 0. One
+thing learned on the way: Chromium never reports the end of a streamed
+render whose component threw, so the wait for the retry's answer is bounded
+at two seconds instead of awaiting `finished()`. CI: see the PR.
 
 ## 8. Workstream A — outcome
 
@@ -611,3 +641,132 @@ data, order of checks, expected results, what to keep out of captures, how
 to file the result). `docs/testing/MANUAL-UAT.md` points to it and has no new
 log row. No Production release PR was opened and no release gate was
 changed.
+
+## 9. Final status
+
+**`BLOCKED_PARTIAL`.**
+
+Everything the session could do on its own is done and green on four pull
+requests. It could not merge them, so the brief's merged end state does not
+exist: `origin/staging` is unchanged, there is no post-merge staging CI, and
+there is no full real-claim run on a final staging SHA. The manual release
+gates are also pending. `AUTONOMOUS_SCOPE_COMPLETED_WITH_MANUAL_GATES` would
+overstate it, because the merges were part of the autonomous scope.
+
+### SHAs
+
+| | Start | End |
+|---|---|---|
+| `origin/staging` | `390bc38c278c04b7b3062ac6c5caeb544b380705` | the same (nothing merged) |
+| `origin/main` | `308a339e7de817aa37378d263d51f25c78ea4f09` | the same (untouched) |
+
+No hosted system was touched: no Vercel, Neon or Google OAuth setting, no
+Production or hosted staging database, no deployment. The ruleset
+`24837655` was not changed or bypassed.
+
+### Pull requests (all into `staging`, stacked, unmerged)
+
+| PR | Branch | Content | Final head | CI | Full real-claim run | Review |
+|---|---|---|---|---|---|---|
+| #41 | `test/creator-cross-page-journeys-2026-10-11` | three long journeys | `d7daa53` | `38110369609` success | `38110372060` PASS 131/131 | reviewer agent + Codex, all resolved |
+| #42 | `fix/deal-patch-keeps-stage-2026-10-11` | FIND-10 fix, DEAL-DETAIL-02 | `709ba14` | `38114185424` success | `38114185458` success | reviewer agent, all addressed |
+| #43 | `test/p2-detail-settings-status-a11y-2026-10-11` | six P2 actions | `9415dd2` | `38115668118` success | `38115668099` success | reviewer agent, all addressed |
+| #44 | `fix/route-error-retry-2026-10-11` | FIND-12 fix, NAV-08, handoff | see the PR | see the PR | see the PR | reviewer agent, all addressed |
+
+Each later PR contains the commits of the earlier ones, so each CI run above
+proves the cumulative state up to that PR. Merge order #41, #42, #43, #44,
+each with **Create a merge commit** (a squash would make the next branch's
+copy of the same commits look new).
+
+Merge attempt: one, for #41, `gh pr merge 41 --squash --match-head-commit`,
+refused by the session's permission classifier ("Merge Without Review"). Not
+retried and not worked around.
+
+### Inventory, before and after (after = on #44's head, unmerged)
+
+| | Before | After |
+|---|---|---|
+| Actions / applicable | 95 / 93 | 95 / 93 |
+| `automated_real_interaction` | 74 (79.6%) | 82 (88.2%) |
+| `automated_partial` | 8 | 8 |
+| `not_covered` | 8 | 0 |
+| `manual_pending` / `manual_verified` | 2 / 1 | 2 / 1 |
+| P0 real | 28 / 30 | 28 / 30 |
+| Outstanding P0/P1 | INV-DUE-03, DEAL-CREATE-07, INV-DUE-06, A11Y-01 | the same four |
+
+Action coverage and test passes are different numbers. Tests, last full
+local run on #44's branch (chromium + chromium-mobile): 263 passed, 0
+failed, 25 skipped (231 at the start); unit 989 (980 at the start).
+
+The eight P2 targets:
+
+| Action | Result | Evidence |
+|---|---|---|
+| NAV-08 | real, both projects | §7; found and fixed FIND-12 |
+| DEAL-DETAIL-02 | real, both projects | §5; found and fixed FIND-10 |
+| DEAL-DETAIL-04 | real, both projects | §6 |
+| INV-STATUS-07 | real (stub-free 409), plus a partial stubbed test | §6 |
+| SET-05 | real, both projects | §6 |
+| SET-07 | real, both projects (fixture precondition) | §6 |
+| SET-08 | real (stub-free 400), plus a partial stubbed test | §6 |
+| A11Y-04 | real, both projects; a disclosed judgement call | §6 |
+
+### Full real-claim verification of the final staging SHA
+
+**NOT VERIFIED.** There is no final staging SHA: nothing is merged. What
+exists instead: the baseline run on `390bc38` (`38105931522`, PASS 131/131),
+and a green full real-claim run on each PR head, each of which is the
+cumulative state. After the merges, run
+`gh workflow run journey-coverage-full.yml --ref staging` and read its
+summary; until then the merged result is unproven.
+
+### Product defects found
+
+| Finding | Severity | State |
+|---|---|---|
+| FIND-10: a contact edit moved the deal back to Masuk | high, on Production since August | fixed in #42; stored rows not repaired; a read-only Production count needs Chris |
+| FIND-12: **Coba lagi** on the error card never recovered | medium, on Production | fixed in #44 |
+| FIND-11: a saved contact name cannot be removed | low | open, needs a decision |
+
+Observations recorded and not changed: the invoice settings notice is not a
+link; a template reset saves the whole form; the settings form does not
+limit the issuer WhatsApp length; `z.coerce` quirks in the deal patch schema
+(fee null → 0, deadline null → 1970) that no screen reaches; a failure in
+the app layout itself is not caught by the route boundary and there is no
+`global-error`.
+
+### Flake triage
+
+| Seen | Cause | Fix |
+|---|---|---|
+| B1 would type the wrong due date in Firefox/WebKit (Codex) | date-segment order differs per engine | typing gated on `chromium` |
+| WebKit, about 1 in 2: add-deal dialog filled before hydration | dialog opened by address in a test | opened through the visible **+ Deal** |
+| Firefox, about 1 in 8: `favicon.ico` reported as a failed request | the browser cancels its own favicon fetch on navigation | the health guard drops a cancelled favicon only |
+| WebKit: `Referer: ""` instead of none | engine difference | asserted as "no referring address" |
+| NAV-08 opt-in broke on its third run | Playwright reads a two-element array option as `[value, options]` | a single pattern |
+
+Skipped tests: the suite's 25 skips are pre-existing project-specific skips;
+this mission added none. No test was weakened, no check was waived, no
+classification rule was changed.
+
+### What blocks a Production release
+
+1. The four PRs are not on `staging`.
+2. MAN-REL-01, MAN-DUE-01 (real Android Chrome and real iPhone Safari) and
+   MAN-AUTH-01 (sign-in and sign-out) have no PASS for this candidate (§8).
+3. Gate F3: INV-DUE-03 is an outstanding P0 until MAN-DUE-01 passes or Chris
+   accepts the risk.
+
+### Next steps that need a person
+
+1. Chris: merge #41, #42, #43, #44 in that order with a merge commit (or
+   allow a session to), then `gh workflow run journey-coverage-full.yml
+   --ref staging` and check the staging push CI.
+2. Chris: a read-only Production count for FIND-10 (deals with a `→ Masuk`
+   history entry at the time of a contact edit; a lower bound).
+3. Someone with the phones: the handoff
+   (`DIBAYAR-E2E-REAL-DEVICE-HANDOFF-2026-10-11.md`), about 45 minutes.
+4. Chris: decide FIND-11, and whether A11Y-04 may stay `real`.
+5. Chris: the Production release, separately, in a `staging -> main` PR
+   with Gate F. Nothing here opened one.
+

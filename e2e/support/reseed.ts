@@ -15,6 +15,9 @@ function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states
   execFileSync("npx", ["tsx", "--env-file-if-exists=.env.local", "scripts/e2e-fixtures.ts", action], {
     stdio: "inherit",
     env,
+    // execFileSync blocks the worker, so Playwright's own timeout cannot end
+    // a fixture action that hangs (a lock, a dead database).
+    timeout: 60_000,
   });
 }
 

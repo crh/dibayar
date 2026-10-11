@@ -576,7 +576,12 @@ async function incompleteIssuerSettings() {
 // this script before it does anything else (endInvoiceTableOutage below).
 const OUTAGE_TABLE = "Invoice__e2e_outage";
 
+// A rename needs an exclusive lock; give up after five seconds instead of
+// waiting for another session forever.
+const RENAME_LOCK_TIMEOUT = "SET lock_timeout = '5s'";
+
 async function invoiceTableOutage() {
+  await prisma.$executeRawUnsafe(RENAME_LOCK_TIMEOUT);
   await prisma.$executeRawUnsafe(`ALTER TABLE "Invoice" RENAME TO "${OUTAGE_TABLE}"`);
   console.log(JSON.stringify({ action: "invoice-table-outage", host: normalizedHost, prefix, table: "Invoice", available: false }));
 }
@@ -587,6 +592,13 @@ async function endInvoiceTableOutage(): Promise<boolean> {
     `SELECT to_regclass('public."${OUTAGE_TABLE}"') IS NOT NULL AS "exists"`,
   );
   if (!rows[0]?.exists) return false;
+  const current = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
+    `SELECT to_regclass('public."Invoice"') IS NOT NULL AS "exists"`,
+  );
+  if (current[0]?.exists) {
+    throw new Error(`Both "Invoice" and "${OUTAGE_TABLE}" exist in the test database (a schema change ran during a left-over outage?). Drop the one that should not be there by hand; no fixture action will run until then.`);
+  }
+  await prisma.$executeRawUnsafe(RENAME_LOCK_TIMEOUT);
   await prisma.$executeRawUnsafe(`ALTER TABLE "${OUTAGE_TABLE}" RENAME TO "Invoice"`);
   return true;
 }

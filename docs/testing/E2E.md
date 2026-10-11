@@ -222,6 +222,10 @@ reload, and presses **Coba lagi** while the failure lasts (the card stays)
 and after it ends (the list appears). No request is intercepted. Rules for a
 spec that uses the outage: end it in a `finally` and again in `afterEach`,
 keep it `workers: 1`, and never leave a page fetch in flight when it starts.
+Unlike every other fixture action it affects the whole test database, not
+only the fixture owner: nothing else may use `dibayar_test` while such a
+spec runs (no `ux:audit`, no second worktree's E2E run, no dev server on
+it), and a fixture action run by another process would end the outage early.
 A thrown server component makes React log one console error; the spec opts
 in with `expectedConsoleError` (one pattern, per test), and every other
 diagnostic still fails it. The server log shows `TableDoesNotExist` during

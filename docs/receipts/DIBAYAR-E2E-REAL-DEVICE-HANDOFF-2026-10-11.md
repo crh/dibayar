@@ -70,8 +70,8 @@ only says where and adds what to watch for.
 | 7 | MAN-SHARE-01 | D1, D2 | 1–2. | No |
 | 8 | MAN-A11Y-01 | D1 (TalkBack) or D2 (VoiceOver) | 1–3. | No |
 
-Two things changed on staging during this autopilot that are worth a glance
-while you are there (neither is a manual check, both have automated
+Two things change on staging once this autopilot's PRs are merged that are
+worth a glance while you are there (neither is a manual check, both have automated
 regressions):
 
 - FIND-10 (fixed): after saving a deal's **Nama kontak**, reload the deal.

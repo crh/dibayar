@@ -13,7 +13,8 @@
 // the invoice list's own query fails and its server component throws. No
 // request is intercepted and no application code knows about the test. The
 // outage is ended by the test, by afterEach, and by every other fixture
-// action.
+// action. It affects the whole test database, not only the fixture owner, so
+// nothing else may be using that database while this spec runs.
 //
 // What the journey checks:
 //   1. Beranda is open and fine; the outage starts; the Invoice nav link
@@ -61,17 +62,38 @@ async function expectInvoiceList(page: Page) {
   await expect(retryButton(page)).toHaveCount(0);
 }
 
-// Clicks Coba lagi and waits for the server's answer to the retry.
+// Clicks Coba lagi and waits until the server has answered the retry in
+// full. The retry is a render request for /invoice (header `rsc: 1`). The
+// nav's own Invoice link is prefetched with the same address, so prefetches
+// are told apart by their headers and do not count.
 async function retryAndWaitForServer(page: Page, isMobile: boolean) {
-  const answered = page.waitForResponse((response) => new URL(response.url()).pathname === "/invoice" && response.request().method() === "GET");
+  const answered = page.waitForResponse((response) => {
+    const request = response.request();
+    const headers = request.headers();
+    return new URL(response.url()).pathname === "/invoice"
+      && request.method() === "GET"
+      && headers["rsc"] === "1"
+      && headers["next-router-prefetch"] === undefined
+      && headers["next-router-segment-prefetch"] === undefined;
+  });
   await press(retryButton(page), isMobile);
-  await answered;
+  const response = await answered;
+  // Let the answer arrive in full, so what the page shows next is the result
+  // of this retry and not the card from before it. Chromium never reports
+  // the end of a streamed render whose component threw (finished() stays
+  // pending and the body cannot be read), hence the two-second bound.
+  await Promise.race([response.finished().catch(() => null), page.waitForTimeout(2_000)]);
 }
 
 test.describe("route error boundary", { tag: "@critical" }, () => {
   // React logs the thrown server error as an Error object. Chromium and
-  // WebKit print its message; Firefox prints only the word "Error".
-  test.use({ expectedConsoleError: /^Error(: Minified React error #441;[\s\S]*)?$/ });
+  // WebKit print its message; Firefox prints only the word "Error", so the
+  // bare word is accepted there and nowhere else.
+  test.use({
+    expectedConsoleError: async ({ browserName }, provide) => {
+      await provide(browserName === "firefox" ? /^Error$/ : /^Error: Minified React error #441;/);
+    },
+  });
   test.beforeEach(reseedFixtures);
   test.afterEach(() => {
     endInvoiceTableOutage();
@@ -91,12 +113,17 @@ test.describe("route error boundary", { tag: "@critical" }, () => {
       await retryAndWaitForServer(page, isMobile);
       await expectErrorCard(page);
 
-      // A page that does not read invoices is not affected, and coming back
-      // (Back to Pengaturan, Forward to the invoice list) is the card again.
+      // A page that does not read invoices is not affected, and Back from it
+      // is the card again; Forward and Back once more behave the same.
       await press(primaryNav(page).getByRole("link", { name: "Pengaturan", exact: true }), isMobile);
       await expect(page).toHaveURL(/\/pengaturan$/);
       await expect(page.getByRole("heading", { level: 1, name: "Pengaturan" })).toBeVisible();
       await expect(errorCard(page)).toHaveCount(0);
+      await page.goBack();
+      await expectErrorCard(page);
+      await page.goForward();
+      await expect(page).toHaveURL(/\/pengaturan$/);
+      await expect(page.getByRole("heading", { level: 1, name: "Pengaturan" })).toBeVisible();
       await page.goBack();
       await expectErrorCard(page);
     } finally {
