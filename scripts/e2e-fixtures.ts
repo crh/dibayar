@@ -27,8 +27,8 @@ import { getJakartaCalendarDate } from "../src/lib/invoice-date-status";
 import { encryptShareToken } from "../src/lib/share-token-crypto";
 
 const action = process.argv[2];
-if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states", "follow-up-expired-share", "income-boundaries", "status-consistency", "expire-disposable-session", "incomplete-issuer-settings"].includes(action ?? "")) {
-  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states|follow-up-expired-share|income-boundaries|status-consistency|expire-disposable-session|incomplete-issuer-settings");
+if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states", "follow-up-expired-share", "income-boundaries", "status-consistency", "expire-disposable-session", "incomplete-issuer-settings", "invoice-table-outage", "end-invoice-table-outage"].includes(action ?? "")) {
+  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states|follow-up-expired-share|income-boundaries|status-consistency|expire-disposable-session|incomplete-issuer-settings|invoice-table-outage|end-invoice-table-outage");
 }
 
 const connectionString = process.env.DATABASE_URL;
@@ -563,8 +563,46 @@ async function incompleteIssuerSettings() {
   console.log(JSON.stringify({ action: "incomplete-issuer-settings", host: normalizedHost, prefix, removed: result.count }));
 }
 
+// A database failure the app can really hit, on the disposable test database
+// only: while the outage lasts, the Invoice table is not where the app looks
+// for it, so every query on it fails the way a missing relation does and the
+// server component that ran it throws. Nothing is deleted; the table is
+// renamed and renamed back, rows, indexes and foreign keys included.
+//
+// There is no production code path behind this and no request is stubbed: it
+// is the failure-injection seam for the route error boundary (NAV-08).
+// Because a broken table would fail every later spec, the outage is ended in
+// three places: by the test, by its afterEach, and by every other action of
+// this script before it does anything else (endInvoiceTableOutage below).
+const OUTAGE_TABLE = "Invoice__e2e_outage";
+
+async function invoiceTableOutage() {
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Invoice" RENAME TO "${OUTAGE_TABLE}"`);
+  console.log(JSON.stringify({ action: "invoice-table-outage", host: normalizedHost, prefix, table: "Invoice", available: false }));
+}
+
+// Idempotent: does nothing when there is no outage.
+async function endInvoiceTableOutage(): Promise<boolean> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
+    `SELECT to_regclass('public."${OUTAGE_TABLE}"') IS NOT NULL AS "exists"`,
+  );
+  if (!rows[0]?.exists) return false;
+  await prisma.$executeRawUnsafe(`ALTER TABLE "${OUTAGE_TABLE}" RENAME TO "Invoice"`);
+  return true;
+}
+
 async function main() {
   try {
+    if (action === "invoice-table-outage") {
+      await invoiceTableOutage();
+      return;
+    }
+    // Every other action first makes sure no outage was left behind.
+    const ended = await endInvoiceTableOutage();
+    if (action === "end-invoice-table-outage") {
+      console.log(JSON.stringify({ action: "end-invoice-table-outage", host: normalizedHost, prefix, table: "Invoice", available: true, wasOut: ended }));
+      return;
+    }
     if (action === "seed") await seed();
     else if (action === "verify") await verify();
     else if (action === "legacy-due-date") await legacyDueDate();

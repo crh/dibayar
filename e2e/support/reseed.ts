@@ -10,7 +10,7 @@
 // no reseed -- they never mutate fixture rows.
 import { execFileSync } from "node:child_process";
 
-function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states" | "follow-up-expired-share" | "income-boundaries" | "status-consistency" | "expire-disposable-session" | "incomplete-issuer-settings"): void {
+function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states" | "follow-up-expired-share" | "income-boundaries" | "status-consistency" | "expire-disposable-session" | "incomplete-issuer-settings" | "invoice-table-outage" | "end-invoice-table-outage"): void {
   const env = { ...process.env, E2E_FIXTURE_CONFIRM: "non-production" };
   execFileSync("npx", ["tsx", "--env-file-if-exists=.env.local", "scripts/e2e-fixtures.ts", action], {
     stdio: "inherit",
@@ -80,4 +80,18 @@ export function expireDisposableOwnerSession(): void {
 export function applyIncompleteIssuerSettings(): void {
   runFixtureAction("seed");
   runFixtureAction("incomplete-issuer-settings");
+}
+
+// Makes the Invoice table unavailable to the app (scripts/e2e-fixtures.ts
+// invoiceTableOutage): every query on it fails until the outage ends. Called
+// mid-test with a page open; does not reseed. Always pair it with
+// endInvoiceTableOutage() in the test and in afterEach -- every other fixture
+// action ends a left-over outage too, but a spec must not rely on that.
+export function startInvoiceTableOutage(): void {
+  runFixtureAction("invoice-table-outage");
+}
+
+// Ends the outage; safe to call when there is none.
+export function endInvoiceTableOutage(): void {
+  runFixtureAction("end-invoice-table-outage");
 }

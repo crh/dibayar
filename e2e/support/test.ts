@@ -19,6 +19,15 @@ type BrowserDiagnostics = {
 // real, actionable diagnostic.
 type ExpectedErrorResponse = { method: string; pathname: string };
 
+// Opt-in for a test that deliberately makes the app itself report an error
+// to the console -- today only the route-error-boundary journey, where a
+// server component really throws and React logs that it did. Like
+// expectedErrorResponses this is per test (`test.use(...)`). It is one
+// pattern for the message, so any other console error in the same test is
+// still a failure. (One RegExp, not a list: Playwright reads a two-element
+// array option as its own [value, options] form.)
+type ExpectedConsoleError = RegExp | null;
+
 // How each engine reports a request it cancelled itself: Chromium, Firefox,
 // WebKit.
 const ABORTED_ERROR_TEXTS = new Set(["net::ERR_ABORTED", "NS_BINDING_ABORTED", "Load request cancelled"]);
@@ -35,10 +44,12 @@ function errorMessage(error: Error): string {
 export const test = base.extend<{
   browserDiagnostics: BrowserDiagnostics;
   expectedErrorResponses: ExpectedErrorResponse[];
+  expectedConsoleError: ExpectedConsoleError;
 }>({
   expectedErrorResponses: [[], { option: true }],
+  expectedConsoleError: [null, { option: true }],
   browserDiagnostics: [
-    async ({ page, expectedErrorResponses }, useFixture, testInfo) => {
+    async ({ page, expectedErrorResponses, expectedConsoleError }, useFixture, testInfo) => {
       const diagnostics: BrowserDiagnostics = {
         pageErrors: [],
         consoleErrors: [],
@@ -107,6 +118,7 @@ export const test = base.extend<{
               return;
             }
           }
+          if (expectedConsoleError?.test(message.text())) return;
           diagnostics.consoleErrors.push(message.text());
         }
       };
