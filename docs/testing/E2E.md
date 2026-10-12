@@ -467,6 +467,17 @@ proves this mechanism itself still works — a synthetic subprocess run
 and a deliberate 5xx each still fail, and that a clean page doesn't
 false-positive, without touching application code.
 
+Most of that self-test runs in Chromium. The cases for the cancelled Auth.js
+provider logo run in Chromium, Firefox and WebKit, so it needs all three
+browsers installed (`npx playwright install chromium firefox webkit`). Each
+engine reports a request it cancelled in its own words (`net::ERR_ABORTED`,
+`NS_BINDING_ABORTED`, `Load request cancelled`), and the guard lists all
+three. In Firefox and WebKit the self-test makes the browser cancel the image
+for real, by leaving a page while its image is still loading, and checks the
+wording it got; removing one engine's wording from the guard fails the
+self-test in that engine. A browser that is not installed fails the self-test;
+it is not skipped.
+
 ## Cross-browser strategy
 
 Routine PR gate: `chromium` + `chromium-mobile` only, for speed and
