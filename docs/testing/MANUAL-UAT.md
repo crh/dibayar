@@ -174,8 +174,13 @@ Inventory: A11Y-03.
 1. Run MAN-AUTH-01 on desktop.
 2. Create a synthetic deal from the phone FAB, move it to Invoice, create
    the invoice, mark it sent, set a due date (MAN-DUE-01 steps 3–5), create a
-   share link, open it in a private window, then revoke it and reload the
-   private window (expected: not found).
+   share link, open it in a private window (expected: the invoice, without
+   signing in). Then revoke it on the owner's page: **Cabut tautan**, then
+   **Ya, cabut tautan** in the confirmation that opens. The first button
+   only asks; nothing is revoked until the second. Expected on the owner's
+   page: "Belum ada tautan berbagi untuk invoice ini." and **Buat tautan
+   berbagi** is offered again. Then
+   reload the private window (expected: "Tautan ini tidak ditemukan.").
 3. Confirm `npm run coverage:journeys` output and the outstanding P0/P1 list
    and exception register in `docs/testing/JOURNEY-COVERAGE.md` are attached
    to the release PR, with each open P0 explicitly accepted or fixed
@@ -249,3 +254,31 @@ is `NOT_RUN` for `eea298d` until a person runs it and fills in every field.
 | | MAN-SHARE-01 | | Android, iPhone | id | `eea298d` | | |
 | | MAN-A11Y-01 | | TalkBack or VoiceOver | id | `eea298d` | | |
 | | Reduce Motion: account menu appears in place, no slide (optional, not a register entry) | | iPhone / Safari, Reduce Motion on | id | `eea298d` | | |
+
+**2026-10-12 (afternoon): the candidate is not final yet.** PR #48 (tests),
+PR #49 (FIND-13 fix, application code) and PR #47 (documents) are open
+against `staging`, and each merge makes a new candidate SHA, a
+documentation-only merge included (`REVIEW_CHECKLIST.md` Gate F, "Release
+head"). The `eea298d` rows above were never filled in. Run the checks on the
+deployment the alias serves after those merges, and write **that** SHA in
+every row; the sheet with expected results is §7 of
+`docs/receipts/DIBAYAR-FIND13-PR47-PR48-RELEASE-READINESS-2026-10-12.md`. A
+row counts for the SHA it names. If `staging` moves after a check was run,
+rerun it, or Chris states in the release PR why it still applies.
+
+The rows below are **not results**. Every check is `NOT_RUN` until a person
+runs it and fills in every field.
+
+| Date (WIB) | Check | Tester | Device / OS / Browser | Lang | Staging SHA | Result | Evidence / notes |
+|---|---|---|---|---|---|---|---|
+| | MAN-AUTH-01 steps 1–3 (sign-in **and** sign-out, then `/deal` asks to sign in) — blocks a release | | desktop Chrome, private window | id | _deployed SHA_ | | |
+| | MAN-DUE-01 steps 1–9 — blocks a release | | Android phone / Chrome | id + en | _deployed SHA_ | | |
+| | MAN-DUE-01 steps 1–10 (incl. fast wheel) — blocks a release | | iPhone / Safari | id + en | _deployed SHA_ | | |
+| | MAN-REL-01 steps 1–3 (revoke with **Cabut tautan** → **Ya, cabut tautan**, then reload the private window) — blocks a release | | phone (FAB) + desktop | id | _deployed SHA_ | | |
+| | MAN-DEAL-01 | | Android, iPhone | id | _deployed SHA_ | | |
+| | MAN-WA-01 | | Android, iPhone, desktop (popups blocked) | id | _deployed SHA_ | | |
+| | MAN-PDF-01 | | Android, iPhone, desktop Safari or Firefox | id | _deployed SHA_ | | |
+| | MAN-SHARE-01 | | Android, iPhone | id | _deployed SHA_ | | |
+| | MAN-A11Y-01 | | TalkBack or VoiceOver | id | _deployed SHA_ | | |
+| | Reduce Motion: account menu appears in place, no slide (optional, not a register entry) | | iPhone / Safari, Reduce Motion on | id | _deployed SHA_ | | |
+| | FIND-13: on a slow connection open `/deal?tambah=1` and type the brand at once; the text and the keyboard stay, the deal saves once (optional, not a register entry; needs PR #49 deployed) | | phone | id | _deployed SHA_ | | |

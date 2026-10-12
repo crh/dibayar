@@ -15,6 +15,27 @@ which describes the earlier candidate `fe01281` and is kept as written.
 
 All times are WIB (UTC+7) unless a run ID's own UTC time is quoted.
 
+> **Status update, 2026-10-12 (afternoon).** This receipt records the
+> morning and is left as written. What has changed since, none of it merged:
+>
+> - **PR #48** has a new head, `6536661`: the guard self-test now runs its
+>   Auth.js logo controls in Chromium, Firefox and WebKit (§3.6 and §4.1
+>   below describe the earlier, Chromium-only version at `1f44c77`).
+> - **FIND-13** (§3.2, "Not changed, on purpose") now has a fix and a
+>   failing-first regression test in **PR #49**, open and **unmerged**. It is
+>   not on `staging`.
+> - §1 step 3 says a merge of #47 or #48 moves `staging` and that `CI` then
+>   runs by itself. That is true and not enough: the full journey run, the
+>   cross-browser run, the deployed SHA and the manual rows must also be
+>   shown for the new head (`REVIEW_CHECKLIST.md` Gate F, "Release head").
+> - Gate B's "Repo still private" (§8) has been replaced with a
+>   public-repository guardrail.
+> - Manual checks: still `NOT_RUN`. FIND-10 Production count: still
+>   `NOT_RUN`, impact unknown.
+>
+> Current status, merge order and the manual sheet:
+> `DIBAYAR-FIND13-PR47-PR48-RELEASE-READINESS-2026-10-12.md`.
+
 ## 1. What Chris has to do next
 
 1. Run **MAN-AUTH-01**, **MAN-DUE-01** (a real Android phone with Chrome and

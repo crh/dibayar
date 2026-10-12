@@ -23,6 +23,23 @@ explained in §3: the Firefox/WebKit run failed, for a test-harness reason.
 > "PR #46 is open" and "the alias serves `fe01281`" were true then and are
 > not true now. Current status, runs and deployment for `eea298d`:
 > `DIBAYAR-POST-PR46-RELEASE-READINESS-2026-10-12.md`.
+>
+> **Addendum, 2026-10-12 (afternoon), from the review of PR #47.** §1 below
+> is incomplete in one respect and is left as written so the record shows
+> it. Step 3 says the checks need a rerun after PR #46 merges; step 5 then
+> offers merging this documentation PR "when convenient" and says nothing
+> about evidence. That is wrong by omission: **merging the documentation PR
+> also moves `staging` to a new SHA**, and a release would then rest on
+> `CI`, full-journey, deployment and manual evidence for a commit that is no
+> longer the head. The rule, now written into `REVIEW_CHECKLIST.md` Gate F
+> ("Release head"): every merge into `staging` makes a new candidate,
+> documentation-only merges included; the runs and the deployed SHA must be
+> verified on the final head, and a manual row counts for the SHA it names.
+> If the head moves after a manual check, the check is rerun or Chris states
+> in the release PR why it still applies. Nothing was released on the
+> strength of §1, so no stale evidence was used. Merge order and the
+> evidence to refresh after each merge:
+> `DIBAYAR-FIND13-PR47-PR48-RELEASE-READINESS-2026-10-12.md` §9.
 
 ## 1. What a person has to do next
 

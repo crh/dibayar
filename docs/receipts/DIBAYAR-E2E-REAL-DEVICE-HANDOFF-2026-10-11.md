@@ -37,7 +37,26 @@ staging deployment is not evidence for it. Order of work: Chris merges #44
 deployment → note its commit SHA → run §2 and §3 below. Nothing else in this
 file changed. Receipt: `DIBAYAR-STAGING-RELEASE-READINESS-2026-10-11.md`.
 
-**Update, 2026-10-12, after PR #46 was merged. Read this one first.**
+**Update, 2026-10-12 (afternoon). Read this one first.** Two corrections
+from the review of PR #47, and where the current work order is.
+
+- The revoke step of MAN-REL-01 was incomplete as first written: **Cabut
+  tautan** only opens a confirmation, and the link is revoked by **Ya, cabut
+  tautan**. Reloading the recipient window before confirming leaves the link
+  working and would have looked like a failure. The steps below and
+  `docs/testing/MANUAL-UAT.md` now say so. No run was logged with the old
+  wording.
+- Which commit to test: the one the staging alias serves **when the release
+  PR is opened**. Every merge into `staging` makes a new candidate, a
+  documentation-only merge included (`REVIEW_CHECKLIST.md` Gate F, "Release
+  head"). `eea298d` is today's deployment; PR #48, PR #49 and PR #47 are
+  open and each will move it. Do step 0 below first and write the SHA you
+  find in every row.
+- The sheet to fill in for the final candidate, with expected results and
+  blank evidence cells, is §7 of
+  `DIBAYAR-FIND13-PR47-PR48-RELEASE-READINESS-2026-10-12.md`.
+
+**Update, 2026-10-12, after PR #46 was merged.**
 `staging` moved. The candidate to test is now **`eea298d`**, not `fe01281`.
 Still `PENDING`, all eight checks: nothing below has been run by a person
 on a device, and nothing recorded for an earlier SHA counts for this one.
@@ -113,7 +132,11 @@ with the optional checks is §3 below):
    - Phone: **+** → synthetic deal → **Lanjut ke …** until Invoice → **Buat
      invoice** → **Tandai sudah dikirim** → set a due date → **Buat tautan berbagi**.
    - Open the link in a private window. Expected: the invoice, without signing in.
-   - **Cabut tautan**, reload the private window. Expected: "Tautan ini tidak ditemukan."
+   - **Cabut tautan**, then **Ya, cabut tautan** in the confirmation that
+     opens (the first button only asks; the link is revoked by the second).
+     Expected on the owner's page: "Belum ada tautan berbagi untuk
+     invoice ini." and **Buat tautan berbagi** is offered again. Only then reload the private window.
+     Expected there: "Tautan ini tidak ditemukan."
    - While there (FIND-10, fixed): save the deal's **Nama kontak**, reload.
      Expected: the deal is still at Invoice, not back at Masuk.
    - Evidence: capture of the not-found page (crop the address bar: `/i/…` is a bearer token).
@@ -161,7 +184,7 @@ only says where and adds what to watch for.
 |---|---|---|---|---|
 | 1 | MAN-AUTH-01 | D3, private window | 1–3. Step 3 is the part never logged: sign out from the account menu, then open `/deal` and confirm it asks you to sign in again. | Yes |
 | 2 | MAN-DUE-01 | D1, D2, D3, D4 | 1–9 on each; step 10 on D2. Tap or click **on the words** `Belum ditentukan`, not the right edge. | Yes (D1 and D2) |
-| 3 | MAN-REL-01 | D1 (FAB) + D3 | 1–3. Steps 1 and 2 reuse checks 1 and 2 above; add the revoke: **Cabut tautan**, then reload the private window and expect "Tautan ini tidak ditemukan." | Yes |
+| 3 | MAN-REL-01 | D1 (FAB) + D3 | 1–3. Steps 1 and 2 reuse checks 1 and 2 above; add the revoke: **Cabut tautan**, then **Ya, cabut tautan** to confirm, then reload the private window and expect "Tautan ini tidak ditemukan." | Yes |
 | 4 | MAN-DEAL-01 | D1, D2 | 1–3 (deadline picker in the add-deal dialog; the invoice's due date must default to it). | No |
 | 5 | MAN-WA-01 | D1, D2, D3 | 1–4. Send only to yourself. | No |
 | 6 | MAN-PDF-01 | D1, D2, D4 | 1–3. | No |
