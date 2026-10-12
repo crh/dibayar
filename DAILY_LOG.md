@@ -1033,3 +1033,19 @@ Starting state verified fresh: `main` = `origin/main` = `a60dfdf`, no open PRs, 
 - Manual gates: none run (no `adb`, no iPhone). MAN-DUE-01, MAN-AUTH-01, MAN-REL-01 pending; handoff refreshed for `fe01281` with a three-check checklist; blank rows added under the `MANUAL-UAT.md` run log.
 - Release: **NO-GO — PENDING OPERATOR ACCEPTANCE.** No release PR opened; draft body in the receipt §7. Receipt: `docs/receipts/DIBAYAR-POST-MERGE-STAGING-ACCEPTANCE-2026-10-11.md`.
 - Not changed: `main`, `staging`, Production, Neon, Vercel settings, OAuth, SSO, the ruleset.
+
+## 2026-10-12 — Release readiness after PR #46 (candidate `eea298d`)
+
+- Reconciled: PR #46 merged by Chris 05:18 WIB; `origin/staging` = `eea298d94dbf71925a542a8e74d5a36ff4217734` (one test-support file on top of `fe01281`); `main` = `308a339`. PR #47 open. Ruleset 24837655 active, no bypass. Repo visibility is public; `REVIEW_CHECKLIST.md` Gate B still says "Repo still private" — reported, not changed.
+- `CI` on the staging SHA (push run 38179909526): success. Unit 989/989; `e2e-critical` 252 passed / 28 skipped / 0 flaky; `e2e-a11y` 29 passed / 1 skipped; `ux-audit` 69 passed. `e2e-cross-browser` skipped there by design.
+- `Journey coverage (full)` dispatched on `staging` (38199672597): success, **149/149 real claims**, 0 not exercised; 297 passed, 29 skipped, 0 flaky.
+- `CI` dispatched on `staging` (38199675216): `e2e-cross-browser` success, **581 passed, 0 failed, 2 flaky, 69 skipped**. The two flaky tests are new ones: WebKit `deals/deal-crud.spec.ts:13`, Firefox `security/ownership-denial.spec.ts:52` (ECONNRESET from the test runner's own request).
+- WebKit reduced-motion flake: cause proven with a 40-run probe (wait satisfied early by Beranda's placeholder animations; WebKit held the menu's animation at its first keyframe 118–235 ms in 3 runs). Test now waits for the menu's own `slideUp` end; assertions unchanged; 60/60 WebKit, 8/8 across four browsers. PR #48.
+- **FIND-13 (new, not changed):** text typed into `/deal?tambah=1`'s dialog before the page's scripts run is cleared when they run; proven in Chromium, Firefox and WebKit with the scripts held back. Reproduced the WebKit flake 1 of 40 locally. Application behaviour; left for Chris.
+- Firefox due-date viewport flake: 1 failure in about 79 local runs, only with other tests before it; cause not established; nothing changed. Firefox `NS_BASE_STREAM_CLOSED` on a superseded `_rsc` request: 2 of 19 local runs, never in CI; guard not widened, narrow proposal written.
+- Guard self-test: five cases added for the PR #46 rule (one control, four that must still fail); all behave as required. PR #48 (`1f44c77`): `CI` 38203661660 success; dispatched cross-browser 38203660931 success, 583 passed, 0 failed, 0 flaky.
+- Hosted staging: alias → `dpl_GiHE9tbkVA9uDmuNxXDcMVq4VuJR` → `eea298d`, Ready, 12 migrations, none pending, SSO on. Hosted pages **not opened**: no browser session signed in to Vercel; no sign-in attempted.
+- FIND-10 Production count: **not run**. Manual checks: **none run**; handoff and `MANUAL-UAT.md` rows now name `eea298d`.
+- Release: **NO-GO / BLOCKED_PENDING_OPERATOR.** No release PR opened; draft body in the receipt §8. Receipt: `docs/receipts/DIBAYAR-POST-PR46-RELEASE-READINESS-2026-10-12.md`.
+- Not changed: `main`, `staging`, Production, Neon, Vercel settings, OAuth, SSO, the ruleset, repo visibility. Nothing merged.
+- Rubric self-score: Evidence honesty 2/2 (what was not run, and the two unexplained flakes, are stated as such); shipped completeness 1/2 (automated work done; fix is in an open PR, manual and Production gates outstanding); security discipline 2/2.

@@ -229,3 +229,23 @@ If the staging deployment no longer reads `fe01281`, write the SHA it does read.
 | | MAN-PDF-01 | | Android, iPhone, desktop Safari or Firefox | id | `fe01281` | | |
 | | MAN-SHARE-01 | | Android, iPhone | id | `fe01281` | | |
 | | MAN-A11Y-01 | | TalkBack or VoiceOver | id | `fe01281` | | |
+
+**2026-10-12: `staging` moved to `eea298d`** (merge of PR #46, a test-support
+change only; deployed as `dpl_GiHE9tbkVA9uDmuNxXDcMVq4VuJR`, verified
+2026-10-12). The `fe01281` rows above were never filled in and are
+superseded: use the rows below. They are **not results** either. Every check
+is `NOT_RUN` for `eea298d` until a person runs it and fills in every field.
+
+| Date (WIB) | Check | Tester | Device / OS / Browser | Lang | Staging SHA | Result | Evidence / notes |
+|---|---|---|---|---|---|---|---|
+| | MAN-AUTH-01 steps 1–3 (sign-in **and** sign-out, then `/deal` asks to sign in) — blocks a release | | desktop Chrome, private window | id | `eea298d` | | |
+| | MAN-DUE-01 steps 1–9 — blocks a release | | Android phone / Chrome | id + en | `eea298d` | | |
+| | MAN-DUE-01 steps 1–10 (incl. fast wheel) — blocks a release | | iPhone / Safari | id + en | `eea298d` | | |
+| | MAN-REL-01 steps 1–3 (incl. link revoke, checked in a private window) — blocks a release | | phone (FAB) + desktop | id | `eea298d` | | |
+| | MAN-DUE-01 steps 1–9 | | desktop Chrome; desktop Safari or Firefox | id | `eea298d` | | |
+| | MAN-DEAL-01 | | Android, iPhone | id | `eea298d` | | |
+| | MAN-WA-01 | | Android, iPhone, desktop (popups blocked) | id | `eea298d` | | |
+| | MAN-PDF-01 | | Android, iPhone, desktop Safari or Firefox | id | `eea298d` | | |
+| | MAN-SHARE-01 | | Android, iPhone | id | `eea298d` | | |
+| | MAN-A11Y-01 | | TalkBack or VoiceOver | id | `eea298d` | | |
+| | Reduce Motion: account menu appears in place, no slide (optional, not a register entry) | | iPhone / Safari, Reduce Motion on | id | `eea298d` | | |

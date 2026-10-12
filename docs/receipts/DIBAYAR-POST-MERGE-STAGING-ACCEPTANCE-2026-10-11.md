@@ -16,6 +16,14 @@ explained in §3: the Firefox/WebKit run failed, for a test-harness reason.
 | Deployed on the staging alias | `fe01281`, deployment `dpl_2gyAk5xL9tmoiM1kPwVx2K4BRohd` (§4) |
 | Times | Asia/Jakarta unless marked UTC |
 
+> **Addendum, 2026-10-12.** This receipt is a record of 2026-10-11 and is
+> left as written. Since then PR #46 was merged (by Chris, 2026-10-12 05:18
+> WIB) and `staging` moved from `fe01281` to
+> `eea298d94dbf71925a542a8e74d5a36ff4217734`. Statements below such as
+> "PR #46 is open" and "the alias serves `fe01281`" were true then and are
+> not true now. Current status, runs and deployment for `eea298d`:
+> `DIBAYAR-POST-PR46-RELEASE-READINESS-2026-10-12.md`.
+
 ## 1. What a person has to do next
 
 1. **Run the three blocking manual checks** on the staging deployment

@@ -37,6 +37,34 @@ staging deployment is not evidence for it. Order of work: Chris merges #44
 deployment → note its commit SHA → run §2 and §3 below. Nothing else in this
 file changed. Receipt: `DIBAYAR-STAGING-RELEASE-READINESS-2026-10-11.md`.
 
+**Update, 2026-10-12, after PR #46 was merged. Read this one first.**
+`staging` moved. The candidate to test is now **`eea298d`**, not `fe01281`.
+Still `PENDING`, all eight checks: nothing below has been run by a person
+on a device, and nothing recorded for an earlier SHA counts for this one.
+
+| | |
+|---|---|
+| Candidate (`origin/staging`) | `eea298d94dbf71925a542a8e74d5a36ff4217734` — merge commit of PR #46, 2026-10-12 05:18 WIB. Compared with `fe01281` it changes one test-support file (`e2e/support/test.ts`); the application code is the same |
+| Staging alias | `https://dibayar-git-staging-kenji-iwakura.vercel.app` (Vercel SSO on) |
+| Deployment the alias serves | `dpl_GiHE9tbkVA9uDmuNxXDcMVq4VuJR`, `https://dibayar-nupuh3q1n-kenji-iwakura.vercel.app`, Ready, built from `eea298d` (build log: `Branch: staging, Commit: eea298d`), created 2026-10-12 05:18 WIB |
+| SHA to write in every run-log row | `eea298d` — unless `staging` has moved again; check first (step 0 below) |
+
+The three blocking checks and their steps are unchanged; they are the
+numbered list in the 2026-10-11 block below. Read `eea298d` wherever that
+list says `fe01281`. Blank rows for `eea298d` are at the end of
+`docs/testing/MANUAL-UAT.md`.
+
+Rechecked on ALPHA 2026-10-12: no phone attached, no browser session signed
+in to Vercel, so the hosted app was not opened at all this time. No Google
+sign-in or sign-out was attempted. Details:
+`DIBAYAR-POST-PR46-RELEASE-READINESS-2026-10-12.md`.
+
+One optional addition, if an iPhone is at hand: with **Reduce Motion** on
+(Settings → Accessibility → Motion), tap the account menu (⋮) on Beranda.
+Expected: the menu appears in place without sliding. Note whether it appears
+at once or after a visible pause. This is not a blocking check; it follows up
+a headless-WebKit measurement described in the 2026-10-12 receipt §3.
+
 **Update, post-merge staging acceptance, 2026-10-11 (evening).** The
 candidate now exists and is deployed. Still `PENDING`, all eight checks:
 nothing below has been run by a person on a device.
