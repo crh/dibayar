@@ -7,6 +7,7 @@
 // playwright.diagnostics-selftest.config.ts's explicit testMatch runs it,
 // driven by e2e/support/diagnostics-selftest.test.mjs via a subprocess so a
 // permanently-failing spec never lands in the normal suite's pass/fail count.
+import type { Page } from "@playwright/test";
 import { test, expect } from "../test";
 
 test.describe("browserDiagnostics negative control (synthetic, no application code)", () => {
@@ -139,5 +140,51 @@ test.describe("browserDiagnostics negative control (synthetic, no application co
       await page.setContent("<html></html>");
       await page.evaluate(() => fetch("https://example.invalid/synthetic-500-statusless-optin").catch(() => {}));
     });
+  });
+
+  // Regression coverage for the Auth.js provider-logo rule (PR #46, see
+  // onRequestFailed in ../test.ts): only a logo request the browser itself
+  // cancelled is dropped. The same logo failing any other way, answering
+  // 5xx, or a cancelled request to anything else on that host, still fails.
+  // Each image is requested by the page and awaited, so the request has
+  // really finished (or failed) before the test ends.
+  const loadImage = (page: Page, url: string) =>
+    page.evaluate((src) => new Promise<void>((resolve) => {
+      const image = new Image();
+      image.onload = () => resolve();
+      image.onerror = () => resolve();
+      image.src = src;
+    }), url);
+
+  test("suppresses a cancelled Auth.js provider logo (control)", async ({ page }) => {
+    await page.route("https://authjs.dev/img/providers/google.svg", (route) => route.abort("aborted"));
+    await page.setContent("<html></html>");
+    await loadImage(page, "https://authjs.dev/img/providers/google.svg");
+  });
+
+  test("fails a test on an Auth.js provider logo that fails without being cancelled", async ({ page }) => {
+    await page.route("https://authjs.dev/img/providers/google.svg", (route) => route.abort("connectionrefused"));
+    await page.setContent("<html></html>");
+    await loadImage(page, "https://authjs.dev/img/providers/google.svg");
+  });
+
+  test("fails a test on an Auth.js provider logo answered with a 5xx", async ({ page }) => {
+    await page.route("https://authjs.dev/img/providers/google.svg", (route) =>
+      route.fulfill({ status: 503, contentType: "text/plain", body: "synthetic-logo-503-selftest" }),
+    );
+    await page.setContent("<html></html>");
+    await loadImage(page, "https://authjs.dev/img/providers/google.svg");
+  });
+
+  test("fails a test on a cancelled authjs.dev request that is not a provider logo", async ({ page }) => {
+    await page.route("https://authjs.dev/img/synthetic-not-a-provider-logo.svg", (route) => route.abort("aborted"));
+    await page.setContent("<html></html>");
+    await loadImage(page, "https://authjs.dev/img/synthetic-not-a-provider-logo.svg");
+  });
+
+  test("fails a test on a cancelled provider-logo path on another host", async ({ page }) => {
+    await page.route("https://example.invalid/img/providers/google.svg", (route) => route.abort("aborted"));
+    await page.setContent("<html></html>");
+    await loadImage(page, "https://example.invalid/img/providers/google.svg");
   });
 });

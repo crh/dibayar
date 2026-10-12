@@ -131,4 +131,23 @@ test("browserDiagnostics negative control: fixture fails on a real pageerror and
   assert.ok(otherStatusSpec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
   assert.equal(otherStatusSpec.ok, false, "a 5xx other than the named one must still fail");
   assert.match(specErrorText(otherStatusSpec), /503 https:\/\/example\.invalid\/synthetic-500-opted-in/);
+
+  // The Auth.js provider-logo rule (PR #46): only the cancelled logo itself
+  // is dropped.
+  const cancelledLogoSpec = byTitle["suppresses a cancelled Auth.js provider logo (control)"];
+  assert.ok(cancelledLogoSpec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
+  assert.equal(cancelledLogoSpec.ok, true, "a cancelled Auth.js provider logo must pass (suppressed)");
+
+  for (const [title, expected] of [
+    ["fails a test on an Auth.js provider logo that fails without being cancelled", /authjs\.dev\/img\/providers\/google\.svg — net::ERR_CONNECTION_REFUSED/],
+    ["fails a test on an Auth.js provider logo answered with a 5xx", /503 https:\/\/authjs\.dev\/img\/providers\/google\.svg/],
+    ["fails a test on a cancelled authjs.dev request that is not a provider logo", /authjs\.dev\/img\/synthetic-not-a-provider-logo\.svg — net::ERR_ABORTED/],
+    ["fails a test on a cancelled provider-logo path on another host", /example\.invalid\/img\/providers\/google\.svg — net::ERR_ABORTED/],
+  ]) {
+    const spec = byTitle[title];
+    assert.ok(spec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
+    assert.equal(spec.ok, false, `"${title}" must be reported as failed`);
+    assert.match(specErrorText(spec), /Unexpected browser diagnostics/);
+    assert.match(specErrorText(spec), expected);
+  }
 });
