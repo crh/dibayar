@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { DealRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
@@ -8,7 +8,7 @@ import { useLanguage } from "@/components/language-switcher";
 import { DealBoard } from "@/components/deals/deal-board";
 import { StageFilter } from "@/components/deals/stage-filter";
 import { AddDealDialog } from "@/components/deals/add-deal-dialog";
-import { DealForm, EMPTY_DEAL_FORM, type DealFormState } from "@/components/deals/deal-form";
+import { DealForm, EMPTY_DEAL_FORM, readDealFormFields, type DealFormState } from "@/components/deals/deal-form";
 import { isStageValue } from "@/components/deals/deal-stages";
 
 type DealClientProps = {
@@ -108,6 +108,23 @@ export default function DealClient({
   const [isSaving, setIsSaving] = useState(false);
   const [pendingDealId, setPendingDealId] = useState<string | null>(null);
   const hasStrippedDialogParam = useRef(false);
+  const dealFormRef = useRef<HTMLFormElement>(null);
+
+  // FIND-13: ?tambah=1 arrives from the server with the dialog already open,
+  // so on a slow connection someone can type into it before this component's
+  // script has run. React leaves that text in the fields when it takes the
+  // page over, but `form` still says every field is empty, and the next
+  // render (the effect below causes one at once) would write that emptiness
+  // back over what was typed. So, once, before anything re-renders, take
+  // what the fields hold as the form's state. A layout effect, not an
+  // effect: it has to run before the effects below. When the dialog is
+  // opened from inside the app the fields were just created from `form`,
+  // and this changes nothing.
+  useLayoutEffect(() => {
+    const formElement = dealFormRef.current;
+    if (!formElement) return;
+    setForm((current) => readDealFormFields(formElement, current));
+  }, []);
 
   // The dialog-open URL flag (?tambah=1) from the global "+ Deal" action is a
   // one-shot trigger, not durable state: strip it once so reload/back don't
@@ -285,7 +302,7 @@ export default function DealClient({
         closeLabel={t("dashboard.close")}
       >
         {error && isDialogOpen ? <p role="alert" className="mb-3 ds-small text-overdue">{t(error)}</p> : null}
-        <DealForm formId="tambah-deal-form" form={form} onChange={setForm} onSubmit={handleSubmit} isSaving={isSaving} t={t} />
+        <DealForm formId="tambah-deal-form" formRef={dealFormRef} form={form} onChange={setForm} onSubmit={handleSubmit} isSaving={isSaving} t={t} />
       </AddDealDialog>
     </main>
   );

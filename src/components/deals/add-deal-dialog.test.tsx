@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
 import userEvent from "@testing-library/user-event";
 import { AddDealDialog } from "./add-deal-dialog";
 
@@ -37,6 +38,40 @@ describe("AddDealDialog", () => {
     await user.click(screen.getByRole("button", { name: "Open" }));
 
     expect(screen.getByRole("dialog")).toBeDefined();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Tutup" }));
+  });
+
+  // FIND-13: /deal?tambah=1 is rendered open by the server, so a field can
+  // already have the keyboard when this component first runs in the browser.
+  it("leaves focus where it is when it is already inside a dialog the server rendered open", () => {
+    const ui = (
+      <AddDealDialog open onClose={vi.fn()} title="Tambah deal" closeLabel="Tutup">
+        <input aria-label="Nama brand" />
+      </AddDealDialog>
+    );
+    const container = document.createElement("div");
+    document.body.append(container);
+    container.innerHTML = renderToString(ui);
+    const brandInput = container.querySelector("input")!;
+    brandInput.focus();
+
+    render(ui, { container, hydrate: true });
+
+    expect(document.activeElement).toBe(brandInput);
+  });
+
+  it("still moves focus into a dialog the server rendered open when focus is outside it", () => {
+    const ui = (
+      <AddDealDialog open onClose={vi.fn()} title="Tambah deal" closeLabel="Tutup">
+        <input aria-label="Nama brand" />
+      </AddDealDialog>
+    );
+    const container = document.createElement("div");
+    document.body.append(container);
+    container.innerHTML = renderToString(ui);
+
+    render(ui, { container, hydrate: true });
+
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Tutup" }));
   });
 
