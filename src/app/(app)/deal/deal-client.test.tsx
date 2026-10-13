@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
+import { renderToString } from "react-dom/server";
 import type { DealRecord } from "@/lib/deals";
 import { DEAL_DRAG_MIME } from "@/components/deals/deal-card";
 import DealClient from "./deal-client";
@@ -348,5 +349,95 @@ describe("DealClient stage movement (T-15)", () => {
     expect(fetchMock).not.toHaveBeenCalled();
 
     vi.unstubAllGlobals();
+  });
+});
+
+// FIND-13: /deal?tambah=1 arrives from the server with the dialog open, and
+// someone can type into it before this component runs in the browser.
+describe("DealClient add-deal dialog rendered open by the server (FIND-13)", () => {
+  function serverRendered(ui: ReactElement) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    container.innerHTML = renderToString(ui);
+    return container;
+  }
+  const field = (container: HTMLElement, name: string) => container.querySelector<HTMLInputElement | HTMLTextAreaElement>(`[name="${name}"]`)!;
+
+  beforeEach(() => {
+    mockedUseSearchParams.mockReturnValue(new URLSearchParams("tambah=1"));
+    setLocation("/deal?tambah=1");
+  });
+
+  it("keeps what was typed before it ran, lets the typing continue, and saves those values", async () => {
+    const ui = <DealClient initialDeals={[]} initialInvoices={[]} initialDialogOpen={true} />;
+    const container = serverRendered(ui);
+    // What the fields hold after typing with no script on the page.
+    field(container, "brand").value = "Brand Awal";
+    field(container, "contactWa").value = "62817";
+    field(container, "contactWa").focus();
+
+    render(ui, { container, hydrate: true });
+    // The one-shot ?tambah=1 cleanup ran, i.e. the re-render that used to
+    // empty the fields has happened.
+    expect(mockReplace).toHaveBeenCalledWith("/deal");
+
+    expect(field(container, "brand").value).toBe("Brand Awal");
+    expect(field(container, "contactWa").value).toBe("62817");
+    expect(document.activeElement).toBe(field(container, "contactWa"));
+
+    const user = userEvent.setup();
+    await user.keyboard("7000123");
+    expect(field(container, "contactWa").value).toBe("628177000123");
+    expect(field(container, "brand").value).toBe("Brand Awal");
+
+    await user.type(field(container, "scope"), "Video promosi");
+    await user.type(field(container, "feeIdr"), "2500000");
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ deal: { ...dealFixture, id: "deal-new", brand: "Brand Awal" } }) });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await user.click(screen.getByRole("button", { name: "Simpan deal" }));
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+        brand: "Brand Awal",
+        contactWa: "628177000123",
+        scope: "Video promosi",
+        feeIdr: 2500000,
+      });
+      expect(screen.queryByRole("dialog")).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("starts empty again after the dialog is closed and reopened", async () => {
+    const buildUi = () => <DealClient initialDeals={[]} initialInvoices={[]} initialDialogOpen={true} />;
+    const container = serverRendered(buildUi());
+    field(container, "brand").value = "Tidak Disimpan";
+
+    const { rerender } = render(buildUi(), { container, hydrate: true });
+    expect(field(container, "brand").value).toBe("Tidak Disimpan");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Tutup" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    // The cleanup's router.replace lands (no ?tambah=1), then + Deal is used.
+    simulateLinkNavigation(rerender, () => <DealClient initialDeals={[]} initialInvoices={[]} initialDialogOpen={false} />, "/deal");
+    simulateLinkNavigation(rerender, buildUi, "/deal?tambah=1");
+    expect(screen.getByRole("dialog")).toBeDefined();
+    for (const name of ["brand", "contactWa", "contactName", "scope", "feeIdr", "deadline", "paymentTerms"]) {
+      expect(field(container, name).value).toBe("");
+    }
+  });
+
+  it("changes nothing when nothing was typed before it ran", () => {
+    const ui = <DealClient initialDeals={[]} initialInvoices={[]} initialDialogOpen={true} />;
+    const container = serverRendered(ui);
+
+    render(ui, { container, hydrate: true });
+
+    for (const name of ["brand", "contactWa", "contactName", "scope", "feeIdr", "deadline", "paymentTerms"]) {
+      expect(field(container, name).value).toBe("");
+    }
   });
 });

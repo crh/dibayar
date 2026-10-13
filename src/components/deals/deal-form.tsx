@@ -22,6 +22,23 @@ export const EMPTY_DEAL_FORM: DealFormState = {
   paymentTerms: "",
 };
 
+// What the form's fields hold on the page right now, as form state. Returns
+// `current` itself when the page and the state already agree.
+//
+// The two differ in one case: /deal?tambah=1 arrives from the server with the
+// dialog open, and someone typed before the page's scripts ran. The fields
+// then hold text the state has never seen, and the first re-render would put
+// every field back to the state's empty value (FIND-13).
+export function readDealFormFields(formElement: HTMLFormElement, current: DealFormState): DealFormState {
+  let next = current;
+  for (const name of Object.keys(EMPTY_DEAL_FORM) as Array<keyof DealFormState>) {
+    const field = formElement.elements.namedItem(name);
+    if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) continue;
+    if (field.value !== current[name]) next = { ...next, [name]: field.value };
+  }
+  return next;
+}
+
 export function DealForm({
   formId,
   form,
@@ -30,6 +47,7 @@ export function DealForm({
   isSaving,
   t,
   brandInputRef,
+  formRef,
 }: {
   formId: string;
   form: DealFormState;
@@ -38,9 +56,10 @@ export function DealForm({
   isSaving: boolean;
   t: (key: string, values?: Record<string, string>) => string;
   brandInputRef?: React.RefObject<HTMLInputElement | null>;
+  formRef?: React.RefObject<HTMLFormElement | null>;
 }) {
   return (
-    <form id={formId} className="grid gap-4 sm:grid-cols-2" onSubmit={onSubmit}>
+    <form ref={formRef} id={formId} className="grid gap-4 sm:grid-cols-2" onSubmit={onSubmit}>
       <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
         {t("dashboard.brand")}
         <input

@@ -31,11 +31,17 @@ export function AddDealDialog({
   // Capture the trigger so focus can return to it on close, and move focus
   // into the dialog so keyboard/screen-reader users land inside it rather
   // than on the now-hidden trigger.
+  //
+  // Unless focus is already inside it. A dialog the server rendered open
+  // (/deal?tambah=1) can be in use before this effect first runs: someone
+  // typing in a field would have the keyboard moved to the close button in
+  // the middle of a word, where the next space or Enter closes the dialog and
+  // discards what they typed (FIND-13).
   useEffect(() => {
     if (!open) return;
     previouslyFocusedRef.current = document.activeElement;
     const panel = panelRef.current;
-    if (panel) {
+    if (panel && !panel.contains(document.activeElement)) {
       const [firstFocusable] = getFocusableElements(panel);
       firstFocusable?.focus();
     }
