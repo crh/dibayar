@@ -174,8 +174,13 @@ Inventory: A11Y-03.
 1. Run MAN-AUTH-01 on desktop.
 2. Create a synthetic deal from the phone FAB, move it to Invoice, create
    the invoice, mark it sent, set a due date (MAN-DUE-01 steps 3–5), create a
-   share link, open it in a private window, then revoke it and reload the
-   private window (expected: not found).
+   share link, open it in a private window (expected: the invoice, without
+   signing in). Then revoke it on the owner's page: **Cabut tautan**, then
+   **Ya, cabut tautan** in the confirmation that opens. The first button
+   only asks; nothing is revoked until the second. Expected on the owner's
+   page: "Belum ada tautan berbagi untuk invoice ini." and **Buat tautan
+   berbagi** is offered again. Then
+   reload the private window (expected: "Tautan ini tidak ditemukan.").
 3. Confirm `npm run coverage:journeys` output and the outstanding P0/P1 list
    and exception register in `docs/testing/JOURNEY-COVERAGE.md` are attached
    to the release PR, with each open P0 explicitly accepted or fixed
@@ -205,7 +210,75 @@ regression test (in `e2e/`) before the fix is promoted.
 |---|---|---|---|---|---|---|---|
 | 2026-09-30 | MAN-AUTH-01 steps 1–2 (sign-in round trip; sign-out not recorded) | see receipt | desktop browser, Chris's consented Google account | id | `cab167f` | PASS | `docs/receipts/DIBAYAR-HOBBY-STAGING-ACTIVATION-2026-09-29.md` §Smoke |
 
-No run is logged for the 2026-10-11 E2E autopilot's changes: the machine it
-ran on had no phone and could not complete a Google sign-in. Every check
-above is still pending for that candidate. The work order for the person
-with the devices is `docs/receipts/DIBAYAR-E2E-REAL-DEVICE-HANDOFF-2026-10-11.md`.
+No run is logged for the 2026-10-11 release candidate. The candidate is
+`origin/staging` = `fe012816bf3691941600d605dcea589187923d1a` (PR #45's merge
+commit, carrying #41–#44), deployed to the staging alias as
+`dpl_2gyAk5xL9tmoiM1kPwVx2K4BRohd` (verified 2026-10-11). Every check above
+is still pending for it: the machine that validated it had no phone, and no
+Google sign-in or sign-out was performed. The work order is
+`docs/receipts/DIBAYAR-E2E-REAL-DEVICE-HANDOFF-2026-10-11.md`.
+
+Rows to fill in for that candidate. They are **not results**: copy a row into
+the run log above only when the check has been run, with every field filled.
+If the staging deployment no longer reads `fe01281`, write the SHA it does read.
+
+| Date (WIB) | Check | Tester | Device / OS / Browser | Lang | Staging SHA | Result | Evidence / notes |
+|---|---|---|---|---|---|---|---|
+| | MAN-AUTH-01 steps 1–3 (sign-in **and** sign-out, then `/deal` asks to sign in) — blocks a release | | desktop Chrome, private window | id | `fe01281` | | |
+| | MAN-DUE-01 steps 1–9 — blocks a release | | Android phone / Chrome | id + en | `fe01281` | | |
+| | MAN-DUE-01 steps 1–10 (incl. fast wheel) — blocks a release | | iPhone / Safari | id + en | `fe01281` | | |
+| | MAN-REL-01 steps 1–3 (incl. link revoke) — blocks a release | | phone (FAB) + desktop | id | `fe01281` | | |
+| | MAN-DUE-01 steps 1–9 | | desktop Chrome; desktop Safari or Firefox | id | `fe01281` | | |
+| | MAN-DEAL-01 | | Android, iPhone | id | `fe01281` | | |
+| | MAN-WA-01 | | Android, iPhone, desktop (popups blocked) | id | `fe01281` | | |
+| | MAN-PDF-01 | | Android, iPhone, desktop Safari or Firefox | id | `fe01281` | | |
+| | MAN-SHARE-01 | | Android, iPhone | id | `fe01281` | | |
+| | MAN-A11Y-01 | | TalkBack or VoiceOver | id | `fe01281` | | |
+
+**2026-10-12: `staging` moved to `eea298d`** (merge of PR #46, a test-support
+change only; deployed as `dpl_GiHE9tbkVA9uDmuNxXDcMVq4VuJR`, verified
+2026-10-12). The `fe01281` rows above were never filled in and are
+superseded: use the rows below. They are **not results** either. Every check
+is `NOT_RUN` for `eea298d` until a person runs it and fills in every field.
+
+| Date (WIB) | Check | Tester | Device / OS / Browser | Lang | Staging SHA | Result | Evidence / notes |
+|---|---|---|---|---|---|---|---|
+| | MAN-AUTH-01 steps 1–3 (sign-in **and** sign-out, then `/deal` asks to sign in) — blocks a release | | desktop Chrome, private window | id | `eea298d` | | |
+| | MAN-DUE-01 steps 1–9 — blocks a release | | Android phone / Chrome | id + en | `eea298d` | | |
+| | MAN-DUE-01 steps 1–10 (incl. fast wheel) — blocks a release | | iPhone / Safari | id + en | `eea298d` | | |
+| | MAN-REL-01 steps 1–3 (incl. link revoke, checked in a private window) — blocks a release | | phone (FAB) + desktop | id | `eea298d` | | |
+| | MAN-DUE-01 steps 1–9 | | desktop Chrome; desktop Safari or Firefox | id | `eea298d` | | |
+| | MAN-DEAL-01 | | Android, iPhone | id | `eea298d` | | |
+| | MAN-WA-01 | | Android, iPhone, desktop (popups blocked) | id | `eea298d` | | |
+| | MAN-PDF-01 | | Android, iPhone, desktop Safari or Firefox | id | `eea298d` | | |
+| | MAN-SHARE-01 | | Android, iPhone | id | `eea298d` | | |
+| | MAN-A11Y-01 | | TalkBack or VoiceOver | id | `eea298d` | | |
+| | Reduce Motion: account menu appears in place, no slide (optional, not a register entry) | | iPhone / Safari, Reduce Motion on | id | `eea298d` | | |
+
+**2026-10-12 (afternoon): the candidate is not final yet.** PR #48 (tests),
+PR #49 (FIND-13 fix, application code) and PR #47 (documents) are open
+against `staging`, and each merge makes a new candidate SHA, a
+documentation-only merge included (`REVIEW_CHECKLIST.md` Gate F, "Release
+head"). The `eea298d` rows above were never filled in. Run the checks on the
+deployment the alias serves after those merges, and write **that** SHA in
+every row; the sheet with expected results is §7 of
+`docs/receipts/DIBAYAR-FIND13-PR47-PR48-RELEASE-READINESS-2026-10-12.md`. A
+row counts for the SHA it names. If `staging` moves after a check was run,
+rerun it, or Chris states in the release PR why it still applies.
+
+The rows below are **not results**. Every check is `NOT_RUN` until a person
+runs it and fills in every field.
+
+| Date (WIB) | Check | Tester | Device / OS / Browser | Lang | Staging SHA | Result | Evidence / notes |
+|---|---|---|---|---|---|---|---|
+| | MAN-AUTH-01 steps 1–3 (sign-in **and** sign-out, then `/deal` asks to sign in) — blocks a release | | desktop Chrome, private window | id | _deployed SHA_ | | |
+| | MAN-DUE-01 steps 1–9 — blocks a release | | Android phone / Chrome | id + en | _deployed SHA_ | | |
+| | MAN-DUE-01 steps 1–10 (incl. fast wheel) — blocks a release | | iPhone / Safari | id + en | _deployed SHA_ | | |
+| | MAN-REL-01 steps 1–3 (revoke with **Cabut tautan** → **Ya, cabut tautan**, then reload the private window) — blocks a release | | phone (FAB) + desktop | id | _deployed SHA_ | | |
+| | MAN-DEAL-01 | | Android, iPhone | id | _deployed SHA_ | | |
+| | MAN-WA-01 | | Android, iPhone, desktop (popups blocked) | id | _deployed SHA_ | | |
+| | MAN-PDF-01 | | Android, iPhone, desktop Safari or Firefox | id | _deployed SHA_ | | |
+| | MAN-SHARE-01 | | Android, iPhone | id | _deployed SHA_ | | |
+| | MAN-A11Y-01 | | TalkBack or VoiceOver | id | _deployed SHA_ | | |
+| | Reduce Motion: account menu appears in place, no slide (optional, not a register entry) | | iPhone / Safari, Reduce Motion on | id | _deployed SHA_ | | |
+| | FIND-13: on a slow connection open `/deal?tambah=1` and type the brand at once; the text and the keyboard stay, the deal saves once (optional, not a register entry; needs PR #49 deployed) | | phone | id | _deployed SHA_ | | |

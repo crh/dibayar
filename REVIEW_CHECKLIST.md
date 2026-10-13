@@ -15,7 +15,10 @@
 - [ ] Diff scanned: no API keys, tokens, DB URLs, credentials, .env contents
 - [ ] No new env vars undeclared in the task; Vercel-only secrets
 - [ ] No unapproved new dependencies
-- [ ] Repo still private
+- [ ] The repository is public (deliberately, since 2026-10-10: PR #38, PR #40). Everything pushed is world-readable: the diff, commit messages, the PR body and comments, CI logs and uploaded artifacts. None of it contains a secret, a credential, a database URL, `.env` contents, personal data, a screenshot of a real account, or a public invoice link (`/i/…` is a bearer token)
+- [ ] Do not rely on GitHub to catch a secret: scan the diff yourself. (GitHub secret scanning and push protection read as disabled through the API on 2026-10-12; turning them on is Chris's decision)
+- [ ] Test data is synthetic only (seeded fixtures, `ci-only-placeholder` values); nothing copied from Production, staging, or a real account
+- [ ] Protections untouched: ruleset 24837655 still active on `main` and `staging` with no bypass actors; repository visibility, rules and secret settings were not changed by this work (Chris-only)
 
 ## Gate C — Security review (read the diff, don't skim)
 - [ ] Every new query/route scoped to session user
@@ -40,6 +43,8 @@
 <!-- CI-green is not release readiness. Each item below is answered in the release PR body.
      Per-action detail (why, evidence, automation outlook) is the generated exception register in
      docs/testing/JOURNEY-COVERAGE.md. No coverage percentage is a gate. -->
+
+**Release head.** The release head is the `staging` commit the release PR is opened from. Every merge into `staging` makes a new head, a documentation-only merge included. Evidence belongs to one SHA: F1 and F4 runs must have run on the release head, the staging alias must be verified to serve it, and each F2 row names the deployed SHA it was run on. If `staging` moves after evidence was collected: rerun `CI` (it runs on the push), redispatch `Journey coverage (full)` and the cross-browser `CI`, re-verify the alias, and for each F2 row either rerun the check or have Chris state in the release PR why the row on the earlier SHA still applies (what changed between the two SHAs). A sign-off on an earlier SHA is never carried forward silently.
 
 **F1 — Automated CI blockers (absolute: a red or missing item stops the release)**
 - [ ] Workflow `CI` green on the release head: `lint-typecheck-test` (includes `coverage:journeys`), `e2e-critical`, `e2e-a11y`, `ux-audit`

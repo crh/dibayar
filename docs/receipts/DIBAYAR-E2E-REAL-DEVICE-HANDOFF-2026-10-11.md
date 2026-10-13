@@ -37,12 +37,119 @@ staging deployment is not evidence for it. Order of work: Chris merges #44
 deployment → note its commit SHA → run §2 and §3 below. Nothing else in this
 file changed. Receipt: `DIBAYAR-STAGING-RELEASE-READINESS-2026-10-11.md`.
 
+**Update, 2026-10-12 (afternoon). Read this one first.** Two corrections
+from the review of PR #47, and where the current work order is.
+
+- The revoke step of MAN-REL-01 was incomplete as first written: **Cabut
+  tautan** only opens a confirmation, and the link is revoked by **Ya, cabut
+  tautan**. Reloading the recipient window before confirming leaves the link
+  working and would have looked like a failure. The steps below and
+  `docs/testing/MANUAL-UAT.md` now say so. No run was logged with the old
+  wording.
+- Which commit to test: the one the staging alias serves **when the release
+  PR is opened**. Every merge into `staging` makes a new candidate, a
+  documentation-only merge included (`REVIEW_CHECKLIST.md` Gate F, "Release
+  head"). `eea298d` is today's deployment; PR #48, PR #49 and PR #47 are
+  open and each will move it. Do step 0 below first and write the SHA you
+  find in every row.
+- The sheet to fill in for the final candidate, with expected results and
+  blank evidence cells, is §7 of
+  `DIBAYAR-FIND13-PR47-PR48-RELEASE-READINESS-2026-10-12.md`.
+
+**Update, 2026-10-12, after PR #46 was merged.**
+`staging` moved. The candidate to test is now **`eea298d`**, not `fe01281`.
+Still `PENDING`, all eight checks: nothing below has been run by a person
+on a device, and nothing recorded for an earlier SHA counts for this one.
+
+| | |
+|---|---|
+| Candidate (`origin/staging`) | `eea298d94dbf71925a542a8e74d5a36ff4217734` — merge commit of PR #46, 2026-10-12 05:18 WIB. Compared with `fe01281` it changes one test-support file (`e2e/support/test.ts`); the application code is the same |
+| Staging alias | `https://dibayar-git-staging-kenji-iwakura.vercel.app` (Vercel SSO on) |
+| Deployment the alias serves | `dpl_GiHE9tbkVA9uDmuNxXDcMVq4VuJR`, `https://dibayar-nupuh3q1n-kenji-iwakura.vercel.app`, Ready, built from `eea298d` (build log: `Branch: staging, Commit: eea298d`), created 2026-10-12 05:18 WIB |
+| SHA to write in every run-log row | `eea298d` — unless `staging` has moved again; check first (step 0 below) |
+
+The three blocking checks and their steps are unchanged; they are the
+numbered list in the 2026-10-11 block below. Read `eea298d` wherever that
+list says `fe01281`. Blank rows for `eea298d` are at the end of
+`docs/testing/MANUAL-UAT.md`.
+
+Rechecked on ALPHA 2026-10-12: no phone attached, no browser session signed
+in to Vercel, so the hosted app was not opened at all this time. No Google
+sign-in or sign-out was attempted. Details:
+`DIBAYAR-POST-PR46-RELEASE-READINESS-2026-10-12.md`.
+
+One optional addition, if an iPhone is at hand: with **Reduce Motion** on
+(Settings → Accessibility → Motion), tap the account menu (⋮) on Beranda.
+Expected: the menu appears in place without sliding. Note whether it appears
+at once or after a visible pause. This is not a blocking check; it follows up
+a headless-WebKit measurement described in the 2026-10-12 receipt §3.
+
+**Update, post-merge staging acceptance, 2026-10-11 (evening).** The
+candidate now exists and is deployed. Still `PENDING`, all eight checks:
+nothing below has been run by a person on a device.
+
+| | |
+|---|---|
+| Candidate (`origin/staging`) | `fe012816bf3691941600d605dcea589187923d1a` — merge commit of PR #45, 2026-10-11 17:27 WIB; it carries #41–#44 |
+| Staging alias | `https://dibayar-git-staging-kenji-iwakura.vercel.app` (Vercel SSO on) |
+| Deployment the alias serves | `dpl_2gyAk5xL9tmoiM1kPwVx2K4BRohd`, `https://dibayar-j67dyrst2-kenji-iwakura.vercel.app`, Ready, built from `fe01281` (build log: `Branch: staging, Commit: fe01281`), created 2026-10-11 17:27 WIB |
+| SHA to write in every run-log row | `fe01281` — unless `staging` has moved since; check first (step 0 below) |
+
+Rechecked on ALPHA: no `adb`, `idevice_id` lists no iPhone. No Google
+sign-in or sign-out was attempted. A read-only look through the desktop
+Chrome that was already signed in (pages load, no error card, no console
+error) is recorded in `DIBAYAR-POST-MERGE-STAGING-ACCEPTANCE-2026-10-11.md`
+§4; it is not a run of any check in this file.
+
+The three checks a release waits for, as one sitting (about 20 minutes; the
+numbered steps are in `docs/testing/MANUAL-UAT.md`, the full order of work
+with the optional checks is §3 below):
+
+0. **Confirm the commit.** Vercel → project `dibayar` → Deployments → the
+   newest `staging` Preview deployment: its commit must read `fe01281`. If
+   it reads something else, write down that SHA and use it in every row.
+1. **MAN-AUTH-01** — desktop Chrome, private window.
+   - Open the staging URL, pass Vercel SSO. Expected: Google sign-in is offered.
+   - Sign in with the staging test account. Expected: Beranda loads; no
+     console error; no address pointing at the Production host.
+   - Account menu → sign out. Then open `/deal`. Expected: it asks you to
+     sign in again, and shows no deal.
+   - Evidence: screenshot of the sign-in page reached from `/deal` after sign-out.
+2. **MAN-DUE-01** — real Android phone (Chrome), then real iPhone (Safari).
+   Use the synthetic invoice of §2 with no due date.
+   - Tap **on the words** `Belum ditentukan`. Expected: the phone's own date picker opens.
+   - Choose a date about a month ahead. Expected: the field shows it and `Tersimpan` appears.
+   - Reload. Expected: the same date, and `Jatuh tempo: <date>` in the header.
+   - Choose a different date, reload. Expected: the new date.
+   - **Kosongkan**, reload. Expected: `Belum ditentukan` again.
+   - Once in English (Pengaturan → Bahasa antarmuka): steps 2–5 of the check.
+   - Try a year before 2000 or after 2099. Expected: not offered, or a hint and nothing saved.
+   - iPhone only: spin the wheel quickly through several dates, tap Done,
+     reload. Expected: the last date shown, not an earlier one.
+   - Evidence, per phone: one capture of the picker open, one of the saved
+     date after the reload.
+3. **MAN-REL-01** — phone for the FAB, desktop for the private window.
+   - Phone: **+** → synthetic deal → **Lanjut ke …** until Invoice → **Buat
+     invoice** → **Tandai sudah dikirim** → set a due date → **Buat tautan berbagi**.
+   - Open the link in a private window. Expected: the invoice, without signing in.
+   - **Cabut tautan**, then **Ya, cabut tautan** in the confirmation that
+     opens (the first button only asks; the link is revoked by the second).
+     Expected on the owner's page: "Belum ada tautan berbagi untuk
+     invoice ini." and **Buat tautan berbagi** is offered again. Only then reload the private window.
+     Expected there: "Tautan ini tidak ditemukan."
+   - While there (FIND-10, fixed): save the deal's **Nama kontak**, reload.
+     Expected: the deal is still at Invoice, not back at Masuk.
+   - Evidence: capture of the not-found page (crop the address bar: `/i/…` is a bearer token).
+
+File each result as a row in the run log (§5). Blank rows for this candidate
+are under the run log in `docs/testing/MANUAL-UAT.md`.
+
 ## 1. What to test, and on what
 
 | | |
 |---|---|
 | URL | `https://dibayar-git-staging-kenji-iwakura.vercel.app` (Vercel SSO stays on; do not make it public) |
-| Commit under test | The `staging` deployment **after** the autopilot's PRs (#41, #42, #43 and the NAV-08 PR) are merged. When this file was written none was merged and `origin/staging` was still `390bc38c278c04b7b3062ac6c5caeb544b380705`; a PASS on that commit is not evidence for the candidate that contains this work. Before starting, open the Vercel deployment of the `staging` branch, note its commit SHA, and write that SHA in the log. |
+| Commit under test | **Now `fe012816bf3691941600d605dcea589187923d1a`, deployed (see the update above).** Written before the merge: the `staging` deployment **after** the autopilot's PRs (#41, #42, #43 and the NAV-08 PR) are merged. When this file was written none was merged and `origin/staging` was still `390bc38c278c04b7b3062ac6c5caeb544b380705`; a PASS on that commit is not evidence for the candidate that contains this work. Before starting, open the Vercel deployment of the `staging` branch, note its commit SHA, and write that SHA in the log. |
 | Account | the consented staging Google test account. Never a customer's, never Production. |
 | Data | synthetic only: invented brand names and amounts, your own WhatsApp number as the contact. |
 
@@ -77,7 +184,7 @@ only says where and adds what to watch for.
 |---|---|---|---|---|
 | 1 | MAN-AUTH-01 | D3, private window | 1–3. Step 3 is the part never logged: sign out from the account menu, then open `/deal` and confirm it asks you to sign in again. | Yes |
 | 2 | MAN-DUE-01 | D1, D2, D3, D4 | 1–9 on each; step 10 on D2. Tap or click **on the words** `Belum ditentukan`, not the right edge. | Yes (D1 and D2) |
-| 3 | MAN-REL-01 | D1 (FAB) + D3 | 1–3. Steps 1 and 2 reuse checks 1 and 2 above; add the revoke: **Cabut tautan**, then reload the private window and expect "Tautan ini tidak ditemukan." | Yes |
+| 3 | MAN-REL-01 | D1 (FAB) + D3 | 1–3. Steps 1 and 2 reuse checks 1 and 2 above; add the revoke: **Cabut tautan**, then **Ya, cabut tautan** to confirm, then reload the private window and expect "Tautan ini tidak ditemukan." | Yes |
 | 4 | MAN-DEAL-01 | D1, D2 | 1–3 (deadline picker in the add-deal dialog; the invoice's due date must default to it). | No |
 | 5 | MAN-WA-01 | D1, D2, D3 | 1–4. Send only to yourself. | No |
 | 6 | MAN-PDF-01 | D1, D2, D4 | 1–3. | No |
