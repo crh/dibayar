@@ -38,18 +38,34 @@ const REDUCED_MS = 0.01;
 
 type Motion = { finishedMs: number; finished: number; runningMs: number; animationMs: number; transitionMs: number };
 
+// The account menu's own animation (the keyframes in account-menu.tsx).
+const MENU_ANIMATION = "slideUp";
+
 // Records, in every page of the context, how long each finished animation
 // and transition ran (elapsedTime is in seconds).
 async function recordFinishedMotion(page: Page) {
   await page.addInitScript(() => {
-    const finished: Array<{ type: string; ms: number }> = [];
+    const finished: Array<{ type: string; name: string; ms: number }> = [];
     (window as unknown as { __finishedMotion: typeof finished }).__finishedMotion = finished;
     // The cancel events too: motion cut short (its element removed, the
     // property changed again) reports how long it had run the same way.
     for (const type of ["animationend", "transitionend", "animationcancel", "transitioncancel"] as const) {
-      document.addEventListener(type, (event) => finished.push({ type, ms: (event as AnimationEvent | TransitionEvent).elapsedTime * 1000 }), true);
+      document.addEventListener(type, (event) => finished.push({
+        type,
+        // The keyframes' name for an animation, the property for a transition.
+        name: (event as AnimationEvent).animationName ?? (event as TransitionEvent).propertyName,
+        ms: (event as AnimationEvent | TransitionEvent).elapsedTime * 1000,
+      }), true);
     }
   });
+}
+
+// How many times the animation with these keyframes has ended on this page.
+async function endedAnimations(page: Page, name: string): Promise<number> {
+  return page.evaluate((animationName) => {
+    const finished = (window as unknown as { __finishedMotion?: Array<{ type: string; name: string }> }).__finishedMotion ?? [];
+    return finished.filter((entry) => entry.type === "animationend" && entry.name === animationName).length;
+  }, name);
 }
 
 // The longest motion on the page right now, in milliseconds.
@@ -129,9 +145,16 @@ test.describe("reduced motion", { tag: "@critical" }, () => {
 
       // The account menu: the same menu, in its final place at once. Its
       // animation still "runs" and ends, in 0.01 ms: wait for that end, so
-      // the measurement below includes it.
+      // the measurement below includes it. It has to be the menu's own end.
+      // Beranda's loading placeholders end their shortened pulse while the
+      // page loads, so "anything has ended" is already true before the menu
+      // opens, and WebKit holds a new animation at its first keyframe
+      // (opacity 0, one menu height down) until its next frame, which under
+      // load came 118-235 ms later in 3 of 40 local runs: the cause of the
+      // WebKit-only failures of the check below in CI runs 38132454448 and
+      // 38135536022.
       const menu = await openAccountMenu(page, isMobile);
-      await expect.poll(async () => (await measureMotion(page)).finished, { message: "the menu's shortened animation has ended" }).toBeGreaterThanOrEqual(1);
+      await expect.poll(() => endedAnimations(page, MENU_ANIMATION), { message: "the menu's shortened animation has ended" }).toBe(1);
       await expectStill("account menu open");
       expect(await menu.evaluate((element) => {
         const style = getComputedStyle(element);
