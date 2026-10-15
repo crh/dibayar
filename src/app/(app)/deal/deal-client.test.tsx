@@ -482,11 +482,44 @@ describe("DealClient add-deal field errors (#50)", () => {
     // Fixing the number clears its message, and the deal then saves.
     fetchMock.mockResolvedValue({ ok: true, status: 201, json: async () => ({ deal: { ...dealFixture, id: "new" } }) });
     await user.clear(wa);
-    await user.type(wa, "0812 3456 7890");
+    // The last invalid field was edited: no highlighted fields remain, so no stale alert.
     expect(wa.getAttribute("aria-invalid")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    await user.type(wa, "0812 3456 7890");
+    expect(screen.queryByRole("alert")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Simpan deal" }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(await screen.findByRole("status")).toHaveProperty("textContent", "Deal disimpan");
+  });
+
+  it("keeps the validation summary until every highlighted field is corrected", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    const { field } = openForm();
+    await fillRequired(user, field, "1");
+
+    const brand = field("Nama brand");
+    const wa = field("Kontak WhatsApp");
+    await user.clear(brand);
+    await user.type(brand, "   ");
+    await user.click(screen.getByRole("button", { name: "Simpan deal" }));
+
+    expect(brand.getAttribute("aria-invalid")).toBe("true");
+    expect(wa.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByRole("alert").textContent).toBe("Periksa kembali isian yang ditandai.");
+
+    await user.clear(wa);
+    await user.type(wa, "0812 3456 7890");
+    expect(wa.getAttribute("aria-invalid")).toBeNull();
+    expect(brand.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByRole("alert").textContent).toBe("Periksa kembali isian yang ditandai.");
+
+    await user.clear(brand);
+    await user.type(brand, "Kopi Nusantara");
+    expect(brand.getAttribute("aria-invalid")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("a 400 naming a field marks that field instead of the generic message", async () => {
