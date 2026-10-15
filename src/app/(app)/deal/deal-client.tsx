@@ -235,14 +235,17 @@ export default function DealClient({
   }
 
   function handleFormChange(next: DealFormState) {
-    // A field's message goes once the person changes that field.
-    setFieldErrors((current) => {
-      const changed = DEAL_FORM_FIELDS.filter((field) => current[field] && next[field] !== form[field]);
-      if (changed.length === 0) return current;
-      const remaining = { ...current };
+    // Clear corrected fields and the summary only when no highlighted fields remain.
+    // Calculate from the current render instead of setting error state inside a state updater.
+    const changed = DEAL_FORM_FIELDS.filter((field) => fieldErrors[field] && next[field] !== form[field]);
+    if (changed.length > 0) {
+      const remaining = { ...fieldErrors };
       for (const field of changed) delete remaining[field];
-      return remaining;
-    });
+      setFieldErrors(remaining);
+      if (Object.keys(remaining).length === 0 && error === "dealForm.checkFields") {
+        setError(null);
+      }
+    }
     setForm(next);
   }
 
