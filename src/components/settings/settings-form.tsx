@@ -6,6 +6,7 @@ import { useLanguage } from "@/components/language-switcher";
 import { Button, fieldClassName } from "@/components/design-system";
 import { fetchWithTimeout } from "@/lib/http";
 import type { UserSettingsView } from "@/lib/user-settings";
+import { SETTINGS_LIMITS } from "@/lib/user-settings-limits";
 import type { Language } from "@/lib/i18n";
 
 const TEMPLATE_TOKENS = ["{brand}", "{jumlah}", "{jatuh_tempo}", "{nomor_invoice}", "{tautan}"];
@@ -88,6 +89,16 @@ export function SettingsForm({
     return errors;
   }
 
+  function fieldErrorsFromServer(fields: unknown): FieldErrors {
+    const errors: FieldErrors = {};
+    if (!fields || typeof fields !== "object") return errors;
+    for (const field of Object.keys(SETTINGS_LIMITS) as Array<keyof FormState>) {
+      if (!Object.hasOwn(fields, field)) continue;
+      errors[field] = field === "issuerEmail" ? t("settings.invalidEmail") : t("settings.fieldInvalid");
+    }
+    return errors;
+  }
+
   async function persist(payload: FormState): Promise<boolean> {
     const errors = validate(payload);
     if (Object.keys(errors).length > 0) {
@@ -107,6 +118,15 @@ export function SettingsForm({
         body: JSON.stringify(payload),
       });
       const body = await response.json();
+      const serverErrors = response.status === 400 ? fieldErrorsFromServer(body?.fields) : {};
+      if (Object.keys(serverErrors).length > 0) {
+        // Which field the server refused, rather than "couldn't save, try
+        // again" (#50).
+        setFieldErrors(serverErrors);
+        setFormError(t("settings.checkFields"));
+        setStatus("error");
+        return false;
+      }
       if (!response.ok) {
         setFormError(t("settings.saveError"));
         setStatus("error");
@@ -183,6 +203,7 @@ export function SettingsForm({
             <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
               {t("settings.issuer.name")}
               <input
+                maxLength={SETTINGS_LIMITS.issuerName}
                 value={form.issuerName}
                 onChange={(event) => updateField("issuerName", event.target.value)}
                 aria-invalid={Boolean(fieldErrors.issuerName)}
@@ -197,6 +218,7 @@ export function SettingsForm({
             <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
               {t("settings.issuer.address")}
               <textarea
+                maxLength={SETTINGS_LIMITS.issuerAddress}
                 value={form.issuerAddress}
                 onChange={(event) => updateField("issuerAddress", event.target.value)}
                 className="min-h-20 rounded-sm border border-line bg-surface px-3 py-2 text-[15px] font-normal text-ink outline-none"
@@ -205,6 +227,7 @@ export function SettingsForm({
             <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
               {t("settings.issuer.whatsapp")}
               <input
+                maxLength={SETTINGS_LIMITS.issuerWhatsapp}
                 value={form.issuerWhatsapp}
                 onChange={(event) => updateField("issuerWhatsapp", event.target.value)}
                 inputMode="tel"
@@ -214,6 +237,7 @@ export function SettingsForm({
             <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
               {t("settings.issuer.email")}
               <input
+                maxLength={SETTINGS_LIMITS.issuerEmail}
                 value={form.issuerEmail}
                 onChange={(event) => updateField("issuerEmail", event.target.value)}
                 type="email"
@@ -237,6 +261,7 @@ export function SettingsForm({
             <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
               {t("settings.bank.name")}
               <input
+                maxLength={SETTINGS_LIMITS.bankName}
                 value={form.bankName}
                 onChange={(event) => updateField("bankName", event.target.value)}
                 aria-invalid={Boolean(fieldErrors.bankName)}
@@ -251,6 +276,7 @@ export function SettingsForm({
             <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
               {t("settings.bank.accountNumber")}
               <input
+                maxLength={SETTINGS_LIMITS.bankAccountNumber}
                 value={form.bankAccountNumber}
                 onChange={(event) => updateField("bankAccountNumber", event.target.value)}
                 inputMode="numeric"
@@ -266,6 +292,7 @@ export function SettingsForm({
             <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
               {t("settings.bank.accountHolder")}
               <input
+                maxLength={SETTINGS_LIMITS.bankAccountHolder}
                 value={form.bankAccountHolder}
                 onChange={(event) => updateField("bankAccountHolder", event.target.value)}
                 aria-invalid={Boolean(fieldErrors.bankAccountHolder)}
@@ -296,6 +323,7 @@ export function SettingsForm({
               </label>
               <textarea
                 id="settings-template-send"
+                maxLength={SETTINGS_LIMITS.templateSend}
                 value={form.templateSend}
                 onChange={(event) => updateField("templateSend", event.target.value)}
                 className="mt-1.5 min-h-28 w-full rounded-sm border border-line bg-surface px-3 py-2 text-[15px] font-normal text-ink outline-none"
@@ -322,6 +350,7 @@ export function SettingsForm({
               </label>
               <textarea
                 id="settings-template-chase"
+                maxLength={SETTINGS_LIMITS.templateChase}
                 value={form.templateChase}
                 onChange={(event) => updateField("templateChase", event.target.value)}
                 className="mt-1.5 min-h-28 w-full rounded-sm border border-line bg-surface px-3 py-2 text-[15px] font-normal text-ink outline-none"

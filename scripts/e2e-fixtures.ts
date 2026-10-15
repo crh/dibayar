@@ -27,8 +27,8 @@ import { getJakartaCalendarDate } from "../src/lib/invoice-date-status";
 import { encryptShareToken } from "../src/lib/share-token-crypto";
 
 const action = process.argv[2];
-if (!["seed", "verify", "cleanup", "legacy-due-date", "follow-up-states", "follow-up-expired-share", "income-boundaries", "status-consistency", "expire-disposable-session", "incomplete-issuer-settings", "invoice-table-outage", "end-invoice-table-outage", "invoice-write-refusal", "end-invoice-write-refusal"].includes(action ?? "")) {
-  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|follow-up-states|follow-up-expired-share|income-boundaries|status-consistency|expire-disposable-session|incomplete-issuer-settings|invoice-table-outage|end-invoice-table-outage|invoice-write-refusal|end-invoice-write-refusal");
+if (!["seed", "verify", "cleanup", "legacy-due-date", "legacy-invalid-contact", "follow-up-states", "follow-up-expired-share", "income-boundaries", "status-consistency", "expire-disposable-session", "incomplete-issuer-settings", "invoice-table-outage", "end-invoice-table-outage", "invoice-write-refusal", "end-invoice-write-refusal"].includes(action ?? "")) {
+  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|legacy-invalid-contact|follow-up-states|follow-up-expired-share|income-boundaries|status-consistency|expire-disposable-session|incomplete-issuer-settings|invoice-table-outage|end-invoice-table-outage|invoice-write-refusal|end-invoice-write-refusal");
 }
 
 const connectionString = process.env.DATABASE_URL;
@@ -144,9 +144,10 @@ const followUp = {
   },
   // Whole Jakarta-calendar days from "today" to each invoice's due date.
   dueOffsetDays: { overdueStored: -5, overdueSent: -1, dueToday: 0, dueWindowEdge: 7, dueOutsideWindow: 8 },
-  // 8 digits that keep no 62/0/8 prefix: accepted by dealInputSchema (min 6)
-  // and stored as typed, but normalizeWhatsAppNumber() rejects it (< 9
-  // digits) -- the same state a person reaches by typing a short number.
+  // 8 digits that keep no 62/0/8 prefix: normalizeWhatsAppNumber() rejects
+  // it (< 9 digits). dealInputSchema refuses it since #50, but deals saved
+  // before then can still hold such a number, so it is written straight to
+  // the row -- the state the repair flows exist for.
   invalidContactWa: "12345678",
   // Token of the expired share that `follow-up-expired-share` puts on the
   // stored-OVERDUE invoice (FIND-05: a reminder must not send it).
@@ -388,6 +389,21 @@ async function legacyDueDate() {
   });
   if (result.count !== 1) throw new Error(`E2E legacy due-date write expected 1 row, updated ${result.count}`);
   console.log(JSON.stringify({ action: "legacy-due-date", host: normalizedHost, prefix, updated: result.count }));
+}
+
+// The deal e2e/deals/patch-keeps-stage.spec.ts creates, given the number a
+// deal saved before #50 could hold: dealInputSchema now refuses it, so the
+// app itself can no longer write it. Matched by this fixture owner and the
+// spec's brand (repeated there as a literal); the next `seed` removes it.
+const LEGACY_INVALID_CONTACT_BRAND = "E2E Brand Nomor Diperbaiki";
+
+async function legacyInvalidContact() {
+  const result = await prisma.deal.updateMany({
+    where: { userId: ids.owner, brand: LEGACY_INVALID_CONTACT_BRAND },
+    data: { contactWa: followUp.invalidContactWa },
+  });
+  if (result.count !== 1) throw new Error(`E2E legacy invalid-contact write expected 1 row, updated ${result.count}`);
+  console.log(JSON.stringify({ action: "legacy-invalid-contact", host: normalizedHost, prefix, updated: result.count }));
 }
 
 // UTC midnight of the Jakarta calendar date `offsetDays` from today -- the
@@ -676,6 +692,7 @@ async function main() {
     if (action === "seed") await seed();
     else if (action === "verify") await verify();
     else if (action === "legacy-due-date") await legacyDueDate();
+    else if (action === "legacy-invalid-contact") await legacyInvalidContact();
     else if (action === "follow-up-states") await applyFollowUpStates();
     else if (action === "follow-up-expired-share") await followUpExpiredShare();
     else if (action === "income-boundaries") await applyIncomeBoundaries();

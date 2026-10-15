@@ -843,16 +843,20 @@ async function exerciseInvalidContactFlow(page: Page, context: BrowserContext, b
       await expect(page.getByRole("link", { name: language === "id" ? "Buka WhatsApp" : "Open WhatsApp", exact: true })).toBeVisible();
       f15VerifiedLanguages.add(language);
     } finally {
-      const restore = await page.evaluate(async ({ dealId, contactWa }) => {
-        const response = await fetch(`/api/deals/${dealId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contactWa }),
-        });
+      // Restored in the database, not through PATCH: since #50 the API
+      // refuses a number WhatsApp can't open, which is exactly what this
+      // fixture holds. The read-back below still goes through the API.
+      execFileSync("npx", ["tsx", "--env-file-if-exists=.env.local", "scripts/ux-fixtures.ts", "restore-invalid-contact"], {
+        stdio: "inherit",
+        env: { ...process.env, UX_FIXTURE_CONFIRM: "non-production" },
+        timeout: 60_000,
+      });
+      const restore = await page.evaluate(async (dealId) => {
+        const response = await fetch(`/api/deals/${dealId}`, { cache: "no-store" });
         const payload = await response.json().catch(() => ({}));
         return { status: response.status, contactWa: (payload as { deal?: { contactWa?: unknown } }).deal?.contactWa };
-      }, { dealId: fixtures.deals.masuk, contactWa: originalContact });
-      expect(restore.status, "F15 cleanup PATCH must restore the original deal contact").toBe(200);
+      }, fixtures.deals.masuk);
+      expect(restore.status, "F15 cleanup read-back must succeed").toBe(200);
       expect(restore.contactWa, "F15 cleanup read-back must report the original contact value").toBe(originalContact);
       await page.reload({ waitUntil: "networkidle" });
     }

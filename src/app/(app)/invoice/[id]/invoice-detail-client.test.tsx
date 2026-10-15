@@ -666,6 +666,31 @@ describe("InvoiceDetailClient", () => {
       await waitFor(() => expect(screen.getByRole("button", { name: "Kirim lewat WhatsApp" })).toHaveProperty("disabled", false));
     });
 
+    it("does not save or open a tab for a repair number WhatsApp can't open, and says what is wrong (#50)", async () => {
+      const user = userEvent.setup();
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const calls: Array<{ url: string; init?: RequestInit }> = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          calls.push({ url, init });
+          if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: { contactWa: "not-a-phone", brand: "Kopi Nusantara" } });
+          if (url.endsWith("/share")) return jsonResponse({ status: 200, body: { active: false } });
+          return jsonResponse({ status: 500, body: {} });
+        }),
+      );
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Kirim lewat WhatsApp" }));
+      fireEvent.change(await screen.findByLabelText("Perbaiki nomor WhatsApp"), { target: { value: "1" } });
+      await user.click(screen.getByRole("button", { name: "Simpan & kirim" }));
+
+      expect(await screen.findByText("Nomor WhatsApp belum valid. Contoh: 0812 3456 7890.")).toBeDefined();
+      expect(calls.some((call) => call.init?.method === "PATCH")).toBe(false);
+      expect(open).not.toHaveBeenCalled();
+      expect(screen.queryByText("Nomor WhatsApp belum bisa disimpan. Coba lagi.")).toBeNull();
+    });
+
     it("shows a direct Buka WhatsApp link when the repaired number's send is popup-blocked (F15)", async () => {
       const user = userEvent.setup();
       const open = vi.spyOn(window, "open").mockImplementation(() => null);

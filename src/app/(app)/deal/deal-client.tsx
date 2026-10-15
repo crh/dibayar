@@ -8,7 +8,16 @@ import { useLanguage } from "@/components/language-switcher";
 import { DealBoard } from "@/components/deals/deal-board";
 import { StageFilter } from "@/components/deals/stage-filter";
 import { AddDealDialog } from "@/components/deals/add-deal-dialog";
-import { DealForm, EMPTY_DEAL_FORM, readDealFormFields, type DealFormState } from "@/components/deals/deal-form";
+import {
+  DEAL_FORM_FIELDS,
+  DealForm,
+  EMPTY_DEAL_FORM,
+  dealFormErrorsFromServer,
+  readDealFormFields,
+  validateDealForm,
+  type DealFormErrors,
+  type DealFormState,
+} from "@/components/deals/deal-form";
 import { isStageValue } from "@/components/deals/deal-stages";
 
 type DealClientProps = {
@@ -104,6 +113,7 @@ export default function DealClient({
   const [isDialogOpen, setIsDialogOpen] = useState(initialDialogOpen);
   const [form, setForm] = useState<DealFormState>(EMPTY_DEAL_FORM);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<DealFormErrors>({});
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingDealId, setPendingDealId] = useState<string | null>(null);
@@ -170,6 +180,7 @@ export default function DealClient({
   const closeDialog = useCallback(() => {
     setIsDialogOpen(false);
     setError(null);
+    setFieldErrors({});
     setForm(EMPTY_DEAL_FORM);
   }, []);
 
@@ -212,10 +223,43 @@ export default function DealClient({
     }
   }
 
+  // Marks the fields, says so above the form, and puts the keyboard on the
+  // first one, so the person sees what to fix instead of a bare "could not
+  // be saved" (#50).
+  function showFieldErrors(errors: DealFormErrors) {
+    setFieldErrors(errors);
+    setError("dealForm.checkFields");
+    const first = DEAL_FORM_FIELDS.find((field) => errors[field]);
+    const element = first ? dealFormRef.current?.elements.namedItem(first) : null;
+    if (element instanceof HTMLElement) element.focus();
+  }
+
+  function handleFormChange(next: DealFormState) {
+    // Clear corrected fields and the summary only when no highlighted fields remain.
+    // Calculate from the current render instead of setting error state inside a state updater.
+    const changed = DEAL_FORM_FIELDS.filter((field) => fieldErrors[field] && next[field] !== form[field]);
+    if (changed.length > 0) {
+      const remaining = { ...fieldErrors };
+      for (const field of changed) delete remaining[field];
+      setFieldErrors(remaining);
+      if (Object.keys(remaining).length === 0 && error === "dealForm.checkFields") {
+        setError(null);
+      }
+    }
+    setForm(next);
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setSuccessMessage(null);
+
+    const errors = validateDealForm(form);
+    if (Object.keys(errors).length > 0) {
+      showFieldErrors(errors);
+      return;
+    }
+    setFieldErrors({});
     setIsSaving(true);
 
     try {
@@ -231,7 +275,12 @@ export default function DealClient({
         }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error("dashboard.saveError");
+      if (!response.ok) {
+        const serverErrors = response.status === 400 ? dealFormErrorsFromServer(payload?.fields) : {};
+        if (Object.keys(serverErrors).length > 0) showFieldErrors(serverErrors);
+        else setError("dashboard.saveError");
+        return;
+      }
       setDeals((current) => [payload.deal, ...current]);
       setForm(EMPTY_DEAL_FORM);
       setSuccessMessage("dashboard.dealSaved");
@@ -302,7 +351,7 @@ export default function DealClient({
         closeLabel={t("dashboard.close")}
       >
         {error && isDialogOpen ? <p role="alert" className="mb-3 ds-small text-overdue">{t(error)}</p> : null}
-        <DealForm formId="tambah-deal-form" formRef={dealFormRef} form={form} onChange={setForm} onSubmit={handleSubmit} isSaving={isSaving} t={t} />
+        <DealForm formId="tambah-deal-form" formRef={dealFormRef} form={form} errors={fieldErrors} onChange={handleFormChange} onSubmit={handleSubmit} isSaving={isSaving} t={t} />
       </AddDealDialog>
     </main>
   );

@@ -441,3 +441,114 @@ describe("DealClient add-deal dialog rendered open by the server (FIND-13)", () 
     }
   });
 });
+
+describe("DealClient add-deal field errors (#50)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function openForm() {
+    render(<DealClient initialDeals={[]} initialInvoices={[]} initialDialogOpen />);
+    const dialog = screen.getByRole("dialog", { name: "Tambah deal" });
+    const field = (label: string) => screen.getByLabelText(label, { selector: "input, textarea" }) as HTMLInputElement;
+    return { dialog, field };
+  }
+
+  async function fillRequired(user: ReturnType<typeof userEvent.setup>, field: (label: string) => HTMLInputElement, contactWa: string) {
+    await user.type(field("Nama brand"), "Kopi Nusantara");
+    await user.type(field("Kontak WhatsApp"), contactWa);
+    await user.type(field("Scope pekerjaan"), "1 reels");
+    await user.type(field("Fee (Rp)"), "1500000");
+  }
+
+  it("a one-digit WhatsApp number is stopped on the phone with a message on that field, and nothing is sent", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    const { dialog, field } = openForm();
+
+    await fillRequired(user, field, "1");
+    await user.click(screen.getByRole("button", { name: "Simpan deal" }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    const wa = field("Kontak WhatsApp");
+    expect(wa.getAttribute("aria-invalid")).toBe("true");
+    expect(document.activeElement).toBe(wa);
+    const message = document.getElementById(wa.getAttribute("aria-describedby")!);
+    expect(message?.textContent).toBe("Nomor WhatsApp belum valid. Contoh: 0812 3456 7890.");
+    expect(screen.getByRole("alert").textContent).toBe("Periksa kembali isian yang ditandai.");
+    expect(dialog.textContent).not.toContain("Deal belum bisa disimpan.");
+
+    // Fixing the number clears its message, and the deal then saves.
+    fetchMock.mockResolvedValue({ ok: true, status: 201, json: async () => ({ deal: { ...dealFixture, id: "new" } }) });
+    await user.clear(wa);
+    // The last invalid field was edited: no highlighted fields remain, so no stale alert.
+    expect(wa.getAttribute("aria-invalid")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    await user.type(wa, "0812 3456 7890");
+    expect(screen.queryByRole("alert")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Simpan deal" }));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("status")).toHaveProperty("textContent", "Deal disimpan");
+  });
+
+  it("keeps the validation summary until every highlighted field is corrected", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    const { field } = openForm();
+    await fillRequired(user, field, "1");
+
+    const brand = field("Nama brand");
+    const wa = field("Kontak WhatsApp");
+    await user.clear(brand);
+    await user.type(brand, "   ");
+    await user.click(screen.getByRole("button", { name: "Simpan deal" }));
+
+    expect(brand.getAttribute("aria-invalid")).toBe("true");
+    expect(wa.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByRole("alert").textContent).toBe("Periksa kembali isian yang ditandai.");
+
+    await user.clear(wa);
+    await user.type(wa, "0812 3456 7890");
+    expect(wa.getAttribute("aria-invalid")).toBeNull();
+    expect(brand.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByRole("alert").textContent).toBe("Periksa kembali isian yang ditandai.");
+
+    await user.clear(brand);
+    await user.type(brand, "Kopi Nusantara");
+    expect(brand.getAttribute("aria-invalid")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("a 400 naming a field marks that field instead of the generic message", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve({ ok: false, status: 400, json: async () => ({ error: "x", fields: { contactName: ["too long"] } }) })),
+    );
+    const user = userEvent.setup();
+    const { field } = openForm();
+
+    await fillRequired(user, field, "0812 3456 7890");
+    await user.click(screen.getByRole("button", { name: "Simpan deal" }));
+
+    const contactName = field("Nama kontak (opsional)");
+    expect(contactName.getAttribute("aria-invalid")).toBe("true");
+    expect(document.getElementById(contactName.getAttribute("aria-describedby")!)?.textContent).toBe(
+      "Nama kontak maksimal 120 karakter.",
+    );
+    expect((await screen.findByRole("alert")).textContent).toBe("Periksa kembali isian yang ditandai.");
+  });
+
+  it("a failure that names no field still says the deal could not be saved", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: false, status: 500, json: async () => ({ error: "x" }) })));
+    const user = userEvent.setup();
+    const { field } = openForm();
+
+    await fillRequired(user, field, "0812 3456 7890");
+    await user.click(screen.getByRole("button", { name: "Simpan deal" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Deal belum bisa disimpan.");
+  });
+});

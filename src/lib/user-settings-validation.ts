@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SETTINGS_LIMITS } from "./user-settings-limits";
 
 // Exact default template text from dibayar-implementation-spec.md §5.2
 // (`whatsapp.send.default` / `whatsapp.chase.default`). A saved template equal
@@ -28,26 +29,26 @@ function optionalText(max: number, message: string) {
 }
 
 export const userSettingsInputSchema = z.object({
-  issuerName: z.string().trim().min(1, "Nama penerbit wajib diisi").max(120, "Nama penerbit terlalu panjang"),
-  issuerAddress: optionalText(500, "Alamat terlalu panjang"),
-  issuerWhatsapp: optionalText(32, "Nomor WhatsApp tidak valid"),
+  issuerName: z.string().trim().min(1, "Nama penerbit wajib diisi").max(SETTINGS_LIMITS.issuerName, "Nama penerbit terlalu panjang"),
+  issuerAddress: optionalText(SETTINGS_LIMITS.issuerAddress, "Alamat terlalu panjang"),
+  issuerWhatsapp: optionalText(SETTINGS_LIMITS.issuerWhatsapp, "Nomor WhatsApp tidak valid"),
   issuerEmail: z.preprocess(
     emptyToUndefined,
-    z.string().trim().max(254, "Email terlalu panjang").email("Email tidak valid").optional(),
+    z.string().trim().max(SETTINGS_LIMITS.issuerEmail, "Email terlalu panjang").email("Email tidak valid").optional(),
   ),
-  bankName: z.string().trim().min(1, "Nama bank wajib diisi").max(120, "Nama bank terlalu panjang"),
+  bankName: z.string().trim().min(1, "Nama bank wajib diisi").max(SETTINGS_LIMITS.bankName, "Nama bank terlalu panjang"),
   bankAccountNumber: z
     .string()
     .trim()
     .min(1, "Nomor rekening wajib diisi")
-    .max(64, "Nomor rekening terlalu panjang"),
+    .max(SETTINGS_LIMITS.bankAccountNumber, "Nomor rekening terlalu panjang"),
   bankAccountHolder: z
     .string()
     .trim()
     .min(1, "Nama pemilik rekening wajib diisi")
-    .max(120, "Nama pemilik rekening terlalu panjang"),
-  templateSend: optionalText(2000, "Template pesan terlalu panjang"),
-  templateChase: optionalText(2000, "Template pesan terlalu panjang"),
+    .max(SETTINGS_LIMITS.bankAccountHolder, "Nama pemilik rekening terlalu panjang"),
+  templateSend: optionalText(SETTINGS_LIMITS.templateSend, "Template pesan terlalu panjang"),
+  templateChase: optionalText(SETTINGS_LIMITS.templateChase, "Template pesan terlalu panjang"),
 });
 
 export type UserSettingsInput = z.infer<typeof userSettingsInputSchema>;

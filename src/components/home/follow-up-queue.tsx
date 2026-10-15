@@ -19,7 +19,9 @@ type RowState =
   | { kind: "sending" }
   | { kind: "blocked"; href: string }
   | { kind: "error" }
-  | { kind: "repair"; value: string; saving: boolean; error: boolean };
+  // "invalid": not a number WhatsApp can open (the server refuses it too);
+  // "save": the save itself failed.
+  | { kind: "repair"; value: string; saving: boolean; error: false | "invalid" | "save" };
 
 const IDLE: RowState = { kind: "idle" };
 
@@ -105,13 +107,18 @@ export function FollowUpQueue({ invoices, deals, now, loading = false, error = f
   async function handleSaveAndSend(invoice: QueueInvoice, value: string) {
     const deal = deals?.find((candidate) => candidate.id === invoice.dealId);
     if (!deal) {
-      setRowState(invoice.id, { kind: "repair", value, saving: false, error: true });
+      setRowState(invoice.id, { kind: "repair", value, saving: false, error: "save" });
       return;
     }
 
-    // Opened now, while the tap still counts as a user gesture; a number that
-    // can't work even before saving never opens a tab at all.
-    const popup = normalizeWhatsAppNumber(value) ? openWhatsAppPopup(t("whatsapp.opening")) : null;
+    // A number that can't work is never sent or opened; the row says what is
+    // wrong with it instead of "try again" (#50).
+    if (!normalizeWhatsAppNumber(value)) {
+      setRowState(invoice.id, { kind: "repair", value, saving: false, error: "invalid" });
+      return;
+    }
+    // Opened now, while the tap still counts as a user gesture.
+    const popup = openWhatsAppPopup(t("whatsapp.opening"));
     let handedOff = false;
     setRowState(invoice.id, { kind: "repair", value, saving: true, error: false });
     try {
@@ -121,19 +128,23 @@ export function FollowUpQueue({ invoices, deals, now, loading = false, error = f
         body: JSON.stringify({ contactWa: value }),
       });
       const payload = await response.json();
+      if (response.status === 400) {
+        setRowState(invoice.id, { kind: "repair", value, saving: false, error: "invalid" });
+        return;
+      }
       if (!response.ok) throw new Error("save-failed");
 
       const savedNumber: string = payload.deal.contactWa;
       setNumberOverrides((current) => ({ ...current, [invoice.id]: savedNumber }));
       const normalized = normalizeWhatsAppNumber(savedNumber);
       if (!normalized) {
-        setRowState(invoice.id, { kind: "repair", value: savedNumber, saving: false, error: true });
+        setRowState(invoice.id, { kind: "repair", value: savedNumber, saving: false, error: "invalid" });
         return;
       }
       handedOff = true;
       await openReminder(invoice, normalized, popup);
     } catch {
-      setRowState(invoice.id, { kind: "repair", value, saving: false, error: true });
+      setRowState(invoice.id, { kind: "repair", value, saving: false, error: "save" });
     } finally {
       if (!handedOff) popup?.close();
     }
@@ -240,7 +251,11 @@ export function FollowUpQueue({ invoices, deals, now, loading = false, error = f
                       onChange={(event) => setRowState(invoice.id, { ...rowState, value: event.target.value, error: false })}
                       className="h-11 rounded-lg border border-line bg-surface px-3 text-[15px] text-ink outline-none focus:border-primary"
                     />
-                    {rowState.error ? <p role="alert" className="text-[13px] text-overdue">{t("whatsapp.saveError")}</p> : null}
+                    {rowState.error ? (
+                      <p role="alert" className="text-[13px] text-overdue">
+                        {t(rowState.error === "invalid" ? "dealForm.error.contactWa" : "whatsapp.saveError")}
+                      </p>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => handleSaveAndSend(invoice, rowState.value)}

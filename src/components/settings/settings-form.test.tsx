@@ -188,6 +188,37 @@ describe("SettingsForm — required validation", () => {
   });
 });
 
+describe("SettingsForm — field limits and server-refused fields (#50)", () => {
+  it("caps every field at the length the server accepts", () => {
+    vi.stubGlobal("fetch", makeFetchMock());
+    renderForm();
+
+    expect(screen.getByLabelText("Email").getAttribute("maxlength")).toBe("254");
+    for (const element of document.querySelectorAll("form input:not([type=hidden]), form textarea")) {
+      expect(element.getAttribute("maxlength"), element.outerHTML.slice(0, 80)).not.toBeNull();
+    }
+  });
+
+  it("marks the field a 400 names instead of saying 'couldn't save, try again'", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      makeFetchMock([{ status: 400, body: { error: "x", fields: { issuerEmail: ["Email tidak valid"] } } }]),
+    );
+    renderForm();
+
+    const email = screen.getByLabelText("Email");
+    await user.clear(email);
+    await user.type(email, "budi@contoh.id");
+    await user.click(screen.getByRole("button", { name: "Simpan pengaturan" }));
+
+    expect(await screen.findByText("Email tidak valid.")).toBeDefined();
+    expect(screen.getByText("Periksa kembali isian yang ditandai.")).toBeDefined();
+    expect(email.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.queryByText("Gagal menyimpan. Coba lagi.")).toBeNull();
+  });
+});
+
 describe("SettingsForm — save lifecycle", () => {
   it("shows saving then saved, and the saved indicator clears after 2s", async () => {
     const fetchMock = makeFetchMock([{ status: 200, body: { settings: baseSettings } }]);

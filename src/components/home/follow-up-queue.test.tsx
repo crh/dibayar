@@ -295,20 +295,34 @@ describe("FollowUpQueue — Kirim pengingat (FIND-04)", () => {
     expect(screen.queryByRole("link", { name: "Buka WhatsApp" })).toBeNull();
   });
 
-  it("never opens a tab for a repaired number that still can't be a WhatsApp number, and closes it when saving fails", async () => {
+  it("never sends or opens a tab for a number that can't be a WhatsApp number, says why, and closes the tab when saving fails", async () => {
     const wa = stubWhatsAppTab();
-    stubFetch({ dealPatch: { status: 500, body: {} } });
+    const fetchMock = stubFetch({ dealPatch: { status: 500, body: {} } });
     renderQueue([overdue], [makeDeal({ contactWa: "12345678" })]);
 
     fireEvent.click(screen.getByRole("button", { name: "Kirim pengingat" }));
     fireEvent.click(screen.getByRole("button", { name: "Simpan & kirim" }));
     expect(wa.open).not.toHaveBeenCalled();
-    expect(await screen.findByText("Nomor belum bisa disimpan. Coba lagi.")).toBeDefined();
+    // #50: what is wrong with the number, not "try again"; nothing is sent.
+    expect(await screen.findByText("Nomor WhatsApp belum valid. Contoh: 0812 3456 7890.")).toBeDefined();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "PATCH")).toBe(false);
 
     fireEvent.change(screen.getByLabelText("Nomor WhatsApp"), { target: { value: "0812-9999-0000" } });
     fireEvent.click(screen.getByRole("button", { name: "Simpan & kirim" }));
     expect(wa.open).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(wa.tab.close).toHaveBeenCalled());
     expect(wa.href()).toBeNull();
+    expect(await screen.findByText("Nomor belum bisa disimpan. Coba lagi.")).toBeDefined();
+  });
+
+  it("shows the WhatsApp message when the server refuses the number (400)", async () => {
+    stubWhatsAppTab();
+    stubFetch({ dealPatch: { status: 400, body: { fields: { contactWa: ["Nomor WhatsApp tidak valid"] } } } });
+    renderQueue([overdue], [makeDeal({ contactWa: "12345678" })]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Kirim pengingat" }));
+    fireEvent.change(screen.getByLabelText("Nomor WhatsApp"), { target: { value: "0812-9999-0000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Simpan & kirim" }));
+    expect(await screen.findByText("Nomor WhatsApp belum valid. Contoh: 0812 3456 7890.")).toBeDefined();
   });
 });
