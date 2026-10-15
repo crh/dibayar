@@ -1,43 +1,95 @@
 # Dibayar — field-level save errors (issue #50) — 2026-10-15
 
-**Root cause: CONFIRMED by the tester.** On iPhone Safari, the tester typed a one-digit WhatsApp number. The form's `required` accepted it, and the server refused it: `dealInputSchema.contactWa` requires `min(6)`, giving a 400. The dialog showed only "Deal belum bisa disimpan.", so nothing named the field or the rule. This matches the staging log evidence: 6 × `POST /api/deals` → 400, all after the sign-in and Origin checks (see `DIBAYAR-IOS-SAFARI-DEAL-CREATE-2026-10-15.md`, PR #51 branch).
+**Verdict:** fix ready for review in PR #52 · root cause **CONFIRMED** · CI **green** on `346dc1a` · release **NO-GO** (human gates below)
 
-**Decision (product owner, 2026-10-15):** the WhatsApp field enforces the real WhatsApp rule (`normalizeWhatsAppNumber`: 9–15 digits once normalized) in the form and on the server, not just the old length rule.
+## State
 
-## Audit: what the server validates vs. what the user saw
+| Item | Value |
+| --- | --- |
+| `origin/staging` | `b9e9960` (unchanged during this work) |
+| `origin/main` | `308a339` (untouched) |
+| Fix branch | `fix/deal-field-errors-2026-10-15`, head `346dc1a` (plus this receipt) |
+| Fix PR | [#52](https://github.com/crh/dibayar/pull/52) → `staging`, OPEN, mergeable, **not merged** |
+| Diagnostic PR | [#51](https://github.com/crh/dibayar/pull/51), OPEN, superseded by #52: recommend closing unmerged |
+| Issue | [#50](https://github.com/crh/dibayar/issues/50), OPEN; comments posted with the evidence and the fix |
+
+## Root cause
+
+On a physical iPhone in Safari, the tester typed a **one-digit WhatsApp number** into the add-deal form. That form only had `required`, so it sent the number. The server (`dealInputSchema.contactWa: min(6)`) answered **400**. The dialog showed only "Deal belum bisa disimpan." and named neither the field nor the rule.
+
+Evidence:
+- Staging alias `dpl_8gp6DL4Ax69gowtcYruWsV27zqbb` = `b9e9960`.
+- Vercel logs, 2026-10-15 00:30–00:47 UTC: 6 × `POST /api/deals` → 400, all past the sign-in and Origin checks.
+- None of them wrote a row, so there are no duplicates.
+- The tester confirmed the one-digit input.
+- Not reproducible with valid data: WebKit iPhone 13 emulation returned 201 on every path.
+
+**Product decision (2026-10-15):** enforce the real WhatsApp rule (`normalizeWhatsAppNumber`: 9–15 digits once normalized) in both the form and the server, not just the old length rule.
+
+## Audit: server rule vs. what the user saw
 
 | Form | Field / rule | Before | After |
 | --- | --- | --- | --- |
-| Add deal | WhatsApp: server min 6, form only `required` | 400 → "Deal belum bisa disimpan." | Rule now = WhatsApp-openable, checked in the form; field message "Nomor WhatsApp belum valid. Contoh: 0812 3456 7890.", focus, nothing sent |
-| Add deal | WhatsApp `123456` (passed min 6) | Saved; WhatsApp broken later | Refused with the same message |
-| Add deal | Brand / scope only spaces (`trim().min(1)`) | Passed `required` → 400 generic | Field message |
-| Add deal | Brand 120, contact 120, scope 500, terms 500 chars | No limit in form → 400 generic | `maxLength` in form; a 400 naming the field marks it |
-| Add deal | Fee int, ≥0, ≤10 billion | `step`/`min` native; no `max` → 400 generic | `max` added + form check + field message |
-| Add deal | Deadline (`coerce.date`) | Native date input | Unchanged; field message if the server names it |
-| Deal detail | WhatsApp repair | 400 → "…belum bisa disimpan. Coba lagi." | Checked before sending; specific message |
+| Add deal | WhatsApp: server min 6; form only `required` | 400 → "Deal belum bisa disimpan." | WhatsApp-openable rule checked in the form; field message "Nomor WhatsApp belum valid. Contoh: 0812 3456 7890."; focus moves to the field; nothing is sent |
+| Add deal | WhatsApp `123456` (passed min 6) | Saved; the WhatsApp button failed later | Refused, same message |
+| Add deal | Brand / scope only spaces (`trim().min(1)`) | Passed `required` → generic 400 | Field message |
+| Add deal | Brand 120, contact 120, scope 500, terms 500 chars | No form limit → generic 400 | `maxLength`; a 400 naming a field marks that field |
+| Add deal | Fee: integer, ≥ 0, ≤ 10 billion | No `max` → generic 400 | `max`, form check, field message |
+| Deal detail | WhatsApp repair | "…belum bisa disimpan. Coba lagi." | Checked before sending; specific message |
 | Deal detail | Contact name 120 | No limit → "…Coba lagi." | `maxLength=120`; 400 → "Nama kontak maksimal 120 karakter." |
 | Invoice detail | WhatsApp repair | Invalid number sent → "…Coba lagi." | Not sent; specific message |
 | Beranda follow-up | WhatsApp repair | Invalid number sent → "Nomor belum bisa disimpan. Coba lagi." | Not sent; specific message |
-| Settings | Every field max length | No limit → "Gagal menyimpan. Coba lagi." | `maxLength` = server limits |
-| Settings | Email: form pattern vs zod (`budi@contoh..id`) | 400 → "Gagal menyimpan. Coba lagi." | Email field marked "Email tidak valid." |
-| Invoice detail | Due date | Form already applies the server's exact rule + own message | Unchanged (no gap) |
+| Settings | Every field's max length | No limit → "Gagal menyimpan. Coba lagi." | `maxLength` = server limits |
+| Settings | Email where the form pattern and zod disagree (`budi@contoh..id`) | "Gagal menyimpan. Coba lagi." | Email field marked "Email tidak valid." |
+| Invoice detail | Due date | Already applies the server's exact rule with its own message | No gap |
 | Invoice create, language | No typed input | — | No gap |
 
-Existing deals with an invalid number are untouched and can still be repaired.
+Deals already holding an invalid number are untouched and can still be repaired.
 
-## Validation (local, `57cb48a` on `fix/deal-field-errors-2026-10-15`, base staging `b9e9960`)
+## Commits on PR #52
 
-- `npm run lint`: 0 errors, 0 warnings · `npm run typecheck`: clean · `npm test`: 86 files, 1027 passed
-- `npm run e2e:build` + Playwright `--project=chromium --project=chromium-mobile --project=webkit e2e/deals e2e/settings e2e/home e2e/invoices --grep-invert @visual`: **275 passed, 0 failed, 0 flaky**, 40 skipped (existing per-project conditions)
-- `npm run coverage:journeys`: OK (DEAL-CREATE-05 and SET-08 updated; report regenerated)
-- 390px (chromium-mobile): dialog with the WhatsApp error. Red field border, message under the field, alert at the top, no horizontal overflow.
-- RED before the fix: the old `deal-crud.spec.ts` asserted "Deal belum bisa disimpan." for a too-short number, and the new assertions (field message, nothing sent) cannot hold on `b9e9960`. The new unit tests for `validateDealForm` and the client messages target code that did not exist before.
+| SHA | What |
+| --- | --- |
+| `57cb48a` | The fix: rule, form checks, field messages, repair forms, Settings limits, tests, journey inventory (DEAL-CREATE-05, SET-08) |
+| `9f392b9` | Receipt (first version) |
+| `346dc1a` | ux-audit T-27: restore the `not-a-phone` fixture in the DB (new `restore-invalid-contact` action), because the API now refuses it. The read-back still goes through the API. |
 
-## Still open (human)
+## Validation
 
-1. Merge decision for the fix PR into `staging` (reviewer). PR #51 (diagnostic only) is superseded: recommend closing it unmerged.
-2. After merge, on the **physical iPhone**: type `1` in Kontak WhatsApp and confirm the message appears under the field. Then enter `0812 3456 7890`, save once, reload, and confirm exactly one deal.
-3. Then iPhone **MAN-DUE-01** (due-date picker), Android **MAN-DUE-01**: NOT_RUN.
-4. FIND-10 Production read-only SQL: NOT_RUN (not run from this task).
+**CI on `346dc1a`: all green**
+- CI run 38684552924: lint-typecheck-test ✅ · e2e-critical ✅ · e2e-a11y ✅ · ux-audit ✅ · e2e-cross-browser skipped (workflow rule for PRs)
+- Journey coverage (full) run 38684552944: ✅
 
-**Release: NO-GO** until 2–4 are done. No Production, `main`, Vercel, Neon or OAuth change was made.
+**Earlier CI on `9f392b9` (failed, now fixed):** runs 38682270771 and 38682270831 failed only at ux-audit T-27, whose cleanup PATCH tried to write `not-a-phone` and got a 400 from the new rule. It was fixed in `346dc1a`; no product code changed.
+
+**Local**
+- lint: 0 errors, 0 warnings · typecheck: clean · unit: 86 files, **1027 passed**
+- Playwright chromium + chromium-mobile + webkit, `e2e/deals e2e/settings e2e/home e2e/invoices`: **275 passed, 0 failed, 0 flaky**, 40 skipped (existing per-project conditions)
+- `npm run coverage:journeys`: OK
+- `npm run ux:audit` on `346dc1a`:
+  - tests/ux-audit: **69 passed**.
+  - The 9 `@visual` snapshots differ on this machine for every page, including unchanged ones (font rendering). CI ran the same 9 and all passed, so this is not counted as a regression.
+- 390px (chromium-mobile), add-deal dialog with the WhatsApp error: red field border, message under the field, alert at the top, no horizontal overflow.
+
+**RED/GREEN**
+- On `b9e9960` a one-digit number reaches the server and only the generic message is shown.
+- The new `deal-crud.spec.ts` assertions (field message, focus, nothing sent, then exactly one deal after correcting) and the new unit tests (`validateDealForm`, `dealFormErrorsFromServer`, client and repair messages, schema cases `"1"` and `"123456"`) cannot pass there.
+
+## Risks and rollback
+
+- The server is stricter for `contactWa` on create and on PATCH. The only clients are this app's forms, and they check first.
+- Rollback: revert `57cb48a` and `346dc1a`.
+
+## Human gates — still open
+
+| Gate | Status |
+| --- | --- |
+| Review and merge PR #52 into `staging` (not `main`) | PENDING |
+| Close PR #51 unmerged | PENDING (recommended) |
+| Physical iPhone, after #52 is on staging: type `1` → message under the field; then `0812 3456 7890`, save once, reload → exactly one deal | NOT_RUN |
+| iPhone MAN-DUE-01 (due-date picker) | BLOCKED until the iPhone deal creation passes |
+| Android MAN-DUE-01 | NOT_RUN |
+| FIND-10 Production read-only SQL | NOT_RUN (not run from this task) |
+| Desktop authentication | PASS (tester-reported) |
+
+**Release: NO-GO** until the gates above are done. No Production, `main`, Vercel, Neon or OAuth change was made.
