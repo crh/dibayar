@@ -174,9 +174,9 @@
       "persona": "owner",
       "preconditions": "A page is open on a session whose row then expires (expires in the past; fixture action expire-disposable-session on the guarded test database)",
       "interaction": "Reload; browser Back; click a primary-nav link; click Tandai lunas on an open invoice",
-      "expected": "Reload, Back and an in-app link all end on sign-in with no owner data and no 5xx; a status change is answered 401, the page shows 'Status invoice belum bisa diperbarui.' and keeps the old status",
+      "expected": "Reload, Back and an in-app link all end on sign-in with no owner data and no 5xx; a status change is answered 401, the page shows 'Belum tersimpan karena sesi kamu sudah berakhir. Muat ulang halaman untuk masuk lagi.' (#53) and keeps the old status",
       "persisted": "Nothing stored: the owner's valid session still sees the invoice as sent",
-      "alternates": "The error does not tell the person to sign in again (observation, not asserted)",
+      "alternates": "",
       "scope": [
         "chromium",
         "chromium-mobile"
@@ -1144,6 +1144,126 @@
       ]
     },
     {
+      "id": "DEAL-CREATE-08",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "A deal save with no usable answer (502 HTML page, dropped connection, no answer in time) says it may not be saved, and the retry checks before sending",
+      "persona": "owner",
+      "preconditions": "Dialog open with a valid deal; the next POST /api/deals gets a 502 HTML page, is aborted, or is never answered (page.route)",
+      "interaction": "Simpan deal; then Simpan deal again",
+      "expected": "Within the bounded wait (fetchWithTimeout, 8 s) the dialog alert says 'Koneksi terputus atau server terlalu lama menjawab, jadi deal ini belum pasti tersimpan. ...'; no 'Deal disimpan'; the typed values stay; the button is enabled. The second press first reads the board (GET /api/deals), finds nothing, and saves exactly one deal",
+      "persisted": "No row after the failed attempt; exactly one after the retry",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "evidence": "#53 server-error audit 2026-10-15",
+      "tests": [
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a save that gets a 502 HTML page says it may not be saved, keeps the form, and Simpan deal again saves exactly one deal",
+          "kind": "partial",
+          "note": "Real click and retry; the failure is injected with page.route (a stub), so by rule it is partial"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a save that gets no connection says it may not be saved, keeps the form, and Simpan deal again saves exactly one deal",
+          "kind": "partial",
+          "note": "Real click and retry; the failure is injected with page.route (a stub), so by rule it is partial"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a save that gets no answer in time says it may not be saved, keeps the form, and Simpan deal again saves exactly one deal",
+          "kind": "partial",
+          "note": "Real click and retry; the failure is injected with page.route (a stub), so by rule it is partial"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-09",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "A deal the server stored but whose answer never arrived is shown as saved, not saved twice",
+      "persona": "owner",
+      "preconditions": "The POST reaches the real server (route.fetch) and is stored; its answer is withheld",
+      "interaction": "Simpan deal once",
+      "expected": "After the bounded wait the page reads the board, finds the stored deal, closes the dialog and shows 'Deal disimpan'; no alert; one POST only",
+      "persisted": "Exactly one deal, also after reload",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "evidence": "#53 server-error audit 2026-10-15",
+      "tests": [
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a save the server stored but never answered is shown as saved, and is not sent twice",
+          "kind": "partial",
+          "note": "The write is real (route.fetch reaches the server); only the lost answer is injected"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-10",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "A deal save refused by the server's Origin check says to reload",
+      "persona": "owner",
+      "preconditions": "The next POST is sent to the real server with a foreign Origin header (route.fetch)",
+      "interaction": "Simpan deal; then Simpan deal again",
+      "expected": "The server answers 403 itself; the dialog alert says 'Belum tersimpan karena permintaan ditolak demi keamanan. Muat ulang halaman, lalu coba lagi.'; the form stays; the retry saves exactly one deal",
+      "persisted": "No row for the refused attempt",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "evidence": "#53 server-error audit 2026-10-15",
+      "tests": [
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a real 403 says to reload, keeps the form, stores nothing, and a second try saves",
+          "kind": "partial",
+          "note": "The 403 is the server's own answer, but the test rewrites the Origin header to cause it"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-11",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "A deal save after the session expired says to sign in again",
+      "persona": "owner",
+      "preconditions": "Dialog open and filled; the disposable session then expires (expire-disposable-session)",
+      "interaction": "Simpan deal; then reload",
+      "expected": "The server answers 401; the dialog alert says 'Belum tersimpan karena sesi kamu sudah berakhir. Muat ulang halaman untuk masuk lagi.'; the form stays; a reload ends on sign-in with no owner data",
+      "persisted": "Nothing stored (checked with the valid session)",
+      "alternates": "The typed form is lost on the reload to sign-in (not preserved across sign-in)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "evidence": "#53 server-error audit 2026-10-15",
+      "tests": [
+        {
+          "file": "e2e/auth/session-expiry.spec.ts",
+          "title": "Simpan deal after the session expired is refused, says to sign in again, keeps the form, and stores nothing",
+          "kind": "partial",
+          "note": "The 401 is the server's own answer to a really expired session; the dialog is opened with page.goto('/deal?tambah=1')"
+        }
+      ]
+    },
+    {
       "id": "DEAL-STAGE-01",
       "domain": "deals",
       "route": "/deal",
@@ -1272,6 +1392,39 @@
           "title": "executes the 123-capture matrix and non-visual checks",
           "kind": "real",
           "note": "ux-audit job, report-gated"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-STAGE-06",
+      "domain": "deals",
+      "route": "/deal",
+      "action": "A stage move with no answer ends, and shows what the server holds",
+      "persona": "owner",
+      "preconditions": "The next PATCH /api/deals/[id] is never answered; in one case it reaches the server first (route.fetch)",
+      "interaction": "Card menu -> Lanjut ke Nego; then again",
+      "expected": "Not stored: after the bounded wait the card is back in Masuk with the alert '... perubahan ini belum pasti tersimpan. ...', and the retry moves it. Stored: the page reads the deal back and keeps it in Nego with no alert",
+      "persisted": "MASUK after the unstored attempt, NEGO after the retry or the stored attempt",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "evidence": "#53 server-error audit 2026-10-15",
+      "tests": [
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a move that gets no answer in time ends, puts the card back, says so, and a second try moves it",
+          "kind": "partial",
+          "note": "Real click and retry; the failure is injected with page.route (a stub), so by rule it is partial"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a move the server stored but never answered shows the stored stage, with no error",
+          "kind": "partial",
+          "note": "The write is real (route.fetch); only the lost answer is injected"
         }
       ]
     },
@@ -1456,6 +1609,39 @@
           "title": "",
           "kind": "partial",
           "note": "Component tests"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-INV-03",
+      "domain": "deals",
+      "route": "/deal",
+      "action": "Buat invoice with no usable answer never creates a second invoice",
+      "persona": "owner",
+      "preconditions": "An INVOICE-stage deal without an invoice; the next POST /api/invoices gets a 502 HTML page, or is stored but never answered",
+      "interaction": "Card menu -> Buat invoice; then again",
+      "expected": "502: alert '... invoice ini belum pasti dibuat. ...', no 'Invoice dibuat'; the retry checks GET /api/invoices first and creates exactly one. Stored but unanswered: the page finds it and shows 'Invoice dibuat'; Buat invoice is no longer offered",
+      "persisted": "Exactly one invoice for the deal",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "evidence": "#53 server-error audit 2026-10-15",
+      "tests": [
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a create that gets a 502 HTML page says it may not be created, and Buat invoice again creates exactly one",
+          "kind": "partial",
+          "note": "Real click and retry; the failure is injected with page.route (a stub), so by rule it is partial"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a create the server stored but never answered is shown as created, and Buat invoice is not offered again",
+          "kind": "partial",
+          "note": "The write is real (route.fetch); only the lost answer is injected"
         }
       ]
     },
@@ -3148,6 +3334,22 @@
       "futureAutomation": {
         "exists": false,
         "strategy": "It cannot become automated_real_interaction under the current rules. Screen-reader behaviour is MAN-A11Y-01 (P2), on real devices."
+      }
+    },
+    {
+      "actions": [
+        "DEAL-CREATE-08",
+        "DEAL-CREATE-09",
+        "DEAL-STAGE-06",
+        "DEAL-INV-03"
+      ],
+      "category": "partial_by_rule",
+      "reason": "A lost answer, a dropped connection or a gateway page cannot be produced on purpose by the app or the test server, so each test injects exactly that one failure with page.route, which the classification rules cap at partial. Everything around it is real: the click, the page's own bounded wait, its read-back from the real API, the retry, and the stored rows (read with page.request). In the 'stored but never answered' cases the write itself reaches the real server (route.fetch). (#53)",
+      "blocksRelease": false,
+      "releaseEvidence": "CI e2e-critical green on the release head (e2e/deals/server-errors.spec.ts is @critical, chromium and chromium-mobile). No manual sign-off.",
+      "futureAutomation": {
+        "exists": false,
+        "strategy": "It cannot become automated_real_interaction under the current rules without a network-fault proxy in front of the test server; none is planned."
       }
     }
   ],

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useLanguage } from "@/components/language-switcher";
 import { Button, fieldClassName } from "@/components/design-system";
 import { fetchWithTimeout } from "@/lib/http";
+import { mutationErrorKey } from "@/lib/mutation";
 import type { UserSettingsView } from "@/lib/user-settings";
 import { SETTINGS_LIMITS } from "@/lib/user-settings-limits";
 import type { Language } from "@/lib/i18n";
@@ -128,7 +129,9 @@ export function SettingsForm({
         return false;
       }
       if (!response.ok) {
-        setFormError(t("settings.saveError"));
+        // An expired session, a refused Origin or the rate limit each say
+        // what to do next (#53); other refusals keep the generic message.
+        setFormError(t(mutationErrorKey({ kind: "rejected", status: response.status, body }, "settings.saveError")));
         setStatus("error");
         return false;
       }
@@ -140,7 +143,9 @@ export function SettingsForm({
       savedTimeoutRef.current = setTimeout(() => setStatus("idle"), 2000);
       return true;
     } catch {
-      setFormError(t("settings.saveError"));
+      // No answer in time, a dropped connection, or not the API's JSON: it
+      // may have been stored. Saving the same settings again is harmless.
+      setFormError(t("error.connection"));
       setStatus("error");
       return false;
     }

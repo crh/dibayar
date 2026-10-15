@@ -1485,3 +1485,43 @@ describe("InvoiceDetailClient", () => {
     });
   });
 });
+
+describe("InvoiceDetailClient status change when the server cannot answer (#53)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function withUnansweredStatusPatch(stored: unknown) {
+    const base = makeFetchMock();
+    return vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/invoices/invoice-1" && init?.method === "PATCH") throw new TypeError("Failed to fetch");
+      if (url === "/api/invoices/invoice-1") return jsonResponse({ status: 200, body: { invoice: stored } });
+      return base(url, init);
+    });
+  }
+
+  const sent = { ...draftInvoice, status: "SENT" as const, dueDate: new Date("2026-07-30T00:00:00.000Z") };
+  const now = new Date("2026-07-24T00:00:00.000Z");
+
+  it("a Tandai lunas the server did store shows Lunas, with no error", async () => {
+    vi.stubGlobal("fetch", withUnansweredStatusPatch({ ...sent, status: "PAID" }));
+    const user = userEvent.setup();
+    render(<InvoiceDetailClient initialInvoice={sent} now={now} />);
+
+    await user.click(await screen.findByRole("button", { name: "Tandai lunas" }));
+
+    expect(await screen.findByRole("button", { name: "Batalkan status lunas" })).toBeDefined();
+    expect(screen.queryByText(/belum pasti tersimpan/)).toBeNull();
+  });
+
+  it("a Tandai lunas that was not stored keeps the status and says it may not be saved", async () => {
+    vi.stubGlobal("fetch", withUnansweredStatusPatch(sent));
+    const user = userEvent.setup();
+    render(<InvoiceDetailClient initialInvoice={sent} now={now} />);
+
+    await user.click(await screen.findByRole("button", { name: "Tandai lunas" }));
+
+    expect(await screen.findByText(/belum pasti tersimpan/)).toBeDefined();
+    expect(screen.getByRole("button", { name: "Tandai lunas" })).toHaveProperty("disabled", false);
+  });
+});

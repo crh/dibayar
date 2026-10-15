@@ -19,6 +19,7 @@ import {
   type DealFormState,
 } from "@/components/deals/deal-form";
 import { isStageValue } from "@/components/deals/deal-stages";
+import { bodyField, findCreatedDeal, findCreatedInvoice, mutationErrorKey, readList, sendMutation } from "@/lib/mutation";
 
 type DealClientProps = {
   initialDeals: DealRecord[];
@@ -119,6 +120,11 @@ export default function DealClient({
   const [pendingDealId, setPendingDealId] = useState<string | null>(null);
   const hasStrippedDialogParam = useRef(false);
   const dealFormRef = useRef<HTMLFormElement>(null);
+  // Set when a create's outcome is unknown (no answer, dropped connection,
+  // gateway page): it may have been stored, so the next attempt checks the
+  // server first instead of sending it again (#53).
+  const dealCreateUnconfirmed = useRef(false);
+  const invoiceCreateUnconfirmed = useRef(new Set<string>());
 
   // FIND-13: ?tambah=1 arrives from the server with the dialog already open,
   // so on a slow connection someone can type into it before this component's
@@ -207,17 +213,26 @@ export default function DealClient({
     setDeals((current) => current.map((deal) => (deal.id === dealId ? { ...deal, status } : deal)));
 
     try {
-      const response = await fetch(`/api/deals/${dealId}`, {
+      const result = await sendMutation(`/api/deals/${dealId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error("dashboard.dealError");
-      setDeals((current) => current.map((deal) => (deal.id === dealId ? payload.deal : deal)));
-    } catch {
+      const saved = result.kind === "ok" ? bodyField<DealRecord>(result.body, "deal") : undefined;
+      if (saved) {
+        setDeals((current) => current.map((deal) => (deal.id === dealId ? saved : deal)));
+        return;
+      }
+      if (result.kind === "unknown") {
+        // It may have been stored: show what the server holds.
+        const check = await sendMutation(`/api/deals/${dealId}`, { cache: "no-store" });
+        const stored = check.kind === "ok" ? bodyField<DealRecord>(check.body, "deal") : undefined;
+        setDeals((current) => current.map((deal) => (deal.id === dealId ? (stored ?? previousDeal) : deal)));
+        if (stored?.status !== status) setError("error.connection");
+        return;
+      }
       setDeals((current) => current.map((deal) => (deal.id === dealId ? previousDeal : deal)));
-      setError("dashboard.dealError");
+      setError(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.dealError") : "dashboard.dealError");
     } finally {
       setPendingDealId(null);
     }
@@ -262,31 +277,63 @@ export default function DealClient({
     setFieldErrors({});
     setIsSaving(true);
 
-    try {
-      const response = await fetch("/api/deals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          feeIdr: Number(form.feeIdr),
-          deadline: form.deadline || undefined,
-          contactName: form.contactName || undefined,
-          paymentTerms: form.paymentTerms || undefined,
-        }),
-      });
-      const payload = await response.json();
-      if (!response.ok) {
-        const serverErrors = response.status === 400 ? dealFormErrorsFromServer(payload?.fields) : {};
-        if (Object.keys(serverErrors).length > 0) showFieldErrors(serverErrors);
-        else setError("dashboard.saveError");
-        return;
-      }
-      setDeals((current) => [payload.deal, ...current]);
+    const sent = {
+      ...form,
+      feeIdr: Number(form.feeIdr),
+      deadline: form.deadline || undefined,
+      contactName: form.contactName || undefined,
+      paymentTerms: form.paymentTerms || undefined,
+    };
+    const knownIds = new Set(deals.map((deal) => deal.id));
+    // The deal an earlier, unanswered attempt may have stored.
+    async function findStored() {
+      const serverDeals = await readList<DealRecord>("/api/deals", "deals");
+      return serverDeals ? { deal: findCreatedDeal(serverDeals, knownIds, sent) } : null;
+    }
+    function showSaved(deal: DealRecord) {
+      dealCreateUnconfirmed.current = false;
+      setDeals((current) => [deal, ...current.filter((existing) => existing.id !== deal.id)]);
       setForm(EMPTY_DEAL_FORM);
       setSuccessMessage("dashboard.dealSaved");
       setIsDialogOpen(false);
-    } catch {
-      setError("dashboard.saveError");
+    }
+
+    try {
+      if (dealCreateUnconfirmed.current) {
+        const stored = await findStored();
+        if (!stored) {
+          setError("dashboard.saveUnknown");
+          return;
+        }
+        if (stored.deal) {
+          showSaved(stored.deal);
+          return;
+        }
+      }
+
+      const result = await sendMutation("/api/deals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sent),
+      });
+      if (result.kind === "unknown") {
+        dealCreateUnconfirmed.current = true;
+        const stored = await findStored();
+        if (stored?.deal) showSaved(stored.deal);
+        else setError("dashboard.saveUnknown");
+        return;
+      }
+      // A definite answer: whatever an earlier attempt did is now visible
+      // in the server's own reply or not stored at all.
+      dealCreateUnconfirmed.current = false;
+      const created = result.kind === "ok" ? bodyField<DealRecord>(result.body, "deal") : undefined;
+      if (created) {
+        showSaved(created);
+        return;
+      }
+      const serverErrors = result.kind === "rejected" && result.status === 400 ? dealFormErrorsFromServer(bodyField(result.body, "fields")) : {};
+      if (Object.keys(serverErrors).length > 0) showFieldErrors(serverErrors);
+      else setError(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.saveError") : "dashboard.saveError");
     } finally {
       setIsSaving(false);
     }
@@ -297,18 +344,46 @@ export default function DealClient({
     setSuccessMessage(null);
     setIsSaving(true);
 
+    // The invoice an earlier, unanswered attempt may have created.
+    async function findStored() {
+      const serverInvoices = await readList<InvoiceRecord>("/api/invoices", "invoices");
+      return serverInvoices ? { invoice: findCreatedInvoice(serverInvoices, dealId) } : null;
+    }
+    function showCreated(invoice: InvoiceRecord) {
+      invoiceCreateUnconfirmed.current.delete(dealId);
+      setInvoices((current) => [invoice, ...current.filter((existing) => existing.id !== invoice.id)]);
+      setSuccessMessage("dashboard.invoiceCreated");
+    }
+
     try {
-      const response = await fetch("/api/invoices", {
+      if (invoiceCreateUnconfirmed.current.has(dealId)) {
+        const stored = await findStored();
+        if (!stored) {
+          setError("dashboard.invoiceUnknown");
+          return;
+        }
+        if (stored.invoice) {
+          showCreated(stored.invoice);
+          return;
+        }
+      }
+
+      const result = await sendMutation("/api/invoices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dealId, withholdingTaxType: "NONE" }),
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error("dashboard.invoiceError");
-      setInvoices((current) => [payload.invoice, ...current]);
-      setSuccessMessage("dashboard.invoiceCreated");
-    } catch {
-      setError("dashboard.invoiceError");
+      if (result.kind === "unknown") {
+        invoiceCreateUnconfirmed.current.add(dealId);
+        const stored = await findStored();
+        if (stored?.invoice) showCreated(stored.invoice);
+        else setError("dashboard.invoiceUnknown");
+        return;
+      }
+      invoiceCreateUnconfirmed.current.delete(dealId);
+      const created = result.kind === "ok" ? bodyField<InvoiceRecord>(result.body, "invoice") : undefined;
+      if (created) showCreated(created);
+      else setError(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.invoiceError") : "dashboard.invoiceError");
     } finally {
       setIsSaving(false);
     }

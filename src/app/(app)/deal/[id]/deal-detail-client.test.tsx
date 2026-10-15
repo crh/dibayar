@@ -349,3 +349,79 @@ describe("DealDetailClient — next action (deal↔invoice continuity)", () => {
     expect(screen.queryByText(/Telat/)).toBeNull();
   });
 });
+
+describe("DealDetailClient when the server cannot answer (#53)", () => {
+  const invoice: InvoiceRecord = {
+    id: "inv-1",
+    userId: "user-1",
+    dealId: "deal-1",
+    number: "INV/2026/09/001",
+    subtotalIdr: 2_500_000,
+    withholdingTaxType: "NONE",
+    status: "DRAFT",
+    dueDate: null,
+    createdAt: new Date("2026-09-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-09-01T00:00:00.000Z"),
+  };
+
+  function calls(fetchMock: ReturnType<typeof vi.fn>) {
+    return fetchMock.mock.calls.map(([url, init]) => `${(init as RequestInit | undefined)?.method ?? "GET"} ${url}`);
+  }
+
+  it("an invoice create with no answer that the server did create shows its link, and is not sent again", async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(jsonResponse(200, { invoices: [invoice] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={{ ...dealFixture, status: "INVOICE" }} history={[]} />);
+
+    await user.click(screen.getByRole("button", { name: "Buat invoice" }));
+
+    expect(await screen.findByRole("link", { name: "Lihat invoice INV/2026/09/001 →" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Buat invoice" })).toBeNull();
+    expect(calls(fetchMock)).toEqual(["POST /api/invoices", "GET /api/invoices"]);
+  });
+
+  it("an invoice create with no answer that is not found says so, and the next press checks before sending", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 502, json: async () => { throw new SyntaxError("<html>"); } })
+      .mockResolvedValueOnce(jsonResponse(200, { invoices: [] }))
+      .mockResolvedValueOnce(jsonResponse(200, { invoices: [] }))
+      .mockResolvedValueOnce(jsonResponse(201, { invoice }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={{ ...dealFixture, status: "INVOICE" }} history={[]} />);
+
+    await user.click(screen.getByRole("button", { name: "Buat invoice" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("invoice ini belum pasti dibuat");
+
+    await user.click(screen.getByRole("button", { name: "Buat invoice" }));
+    expect(await screen.findByRole("link", { name: "Lihat invoice INV/2026/09/001 →" })).toBeDefined();
+    expect(calls(fetchMock)).toEqual(["POST /api/invoices", "GET /api/invoices", "GET /api/invoices", "POST /api/invoices"]);
+  });
+
+  it("a contact name refused for an expired session says to sign in again, and keeps what was typed", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(401, { error: "raw server text" })));
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={dealFixture} history={[]} />);
+
+    const input = screen.getByLabelText("Nama kontak", { selector: "input" }) as HTMLInputElement;
+    await user.type(input, "Rina");
+    await user.click(screen.getByRole("button", { name: "Simpan" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Belum tersimpan karena sesi kamu sudah berakhir. Muat ulang halaman untuk masuk lagi.");
+    expect(input.value).toBe("Rina");
+  });
+
+  it("a stage move refused for an expired session says to sign in again", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(401, { error: "raw server text" })));
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={dealFixture} history={[]} />);
+
+    await user.click(screen.getByRole("button", { name: "Lanjut ke Deal" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Belum tersimpan karena sesi kamu sudah berakhir. Muat ulang halaman untuk masuk lagi.");
+    expect(screen.getByText(/Tahap saat ini: Nego/)).toBeDefined();
+  });
+});

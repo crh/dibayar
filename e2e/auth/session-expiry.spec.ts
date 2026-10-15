@@ -26,6 +26,9 @@ import { expireDisposableOwnerSession, reseedFixtures } from "../support/reseed"
 const NBSP = " ";
 const SENT_INVOICE_NUMBER = "E2E/SENT/001";
 const SENT_INVOICE_AMOUNT = `Rp${NBSP}6.000.000`;
+// What a change refused for an expired session says (#53): not "try again",
+// which cannot work, but how to get signed in again.
+const SESSION_EXPIRED = "Belum tersimpan karena sesi kamu sudah berakhir. Muat ulang halaman untuk masuk lagi.";
 
 // Sign-in, and nothing of the owner's on it.
 async function expectSignInWithoutOwnerData(page: Page) {
@@ -99,8 +102,9 @@ test.describe("session expiry while the app is open", { tag: "@critical" }, () =
       await page.getByRole("button", { name: "Tandai lunas" }).click();
       expect((await patch).status()).toBe(401);
 
-      // The page says the change did not happen and keeps the old status.
-      await expect(page.getByRole("alert").filter({ hasText: "Status invoice belum bisa diperbarui." })).toBeVisible();
+      // The page says the change did not happen, why, and what to do next,
+      // and keeps the old status.
+      await expect(page.getByRole("alert").filter({ hasText: SESSION_EXPIRED })).toBeVisible();
       await expect(header.getByText("Terkirim", { exact: true })).toBeVisible();
       await expect(header.getByText("Lunas", { exact: true })).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Tandai lunas" })).toBeVisible();
@@ -122,6 +126,48 @@ test.describe("session expiry while the app is open", { tag: "@critical" }, () =
       }
 
       // And the stale page, once reloaded, is at sign-in like any other.
+      await page.reload();
+      await expectSignInWithoutOwnerData(page);
+    });
+  });
+  test.describe("a new deal saved after expiry", () => {
+    test.use({ expectedErrorResponses: [{ method: "POST", pathname: "/api/deals" }] });
+
+    test("Simpan deal after the session expired is refused, says to sign in again, keeps the form, and stores nothing", async ({ page, browser, baseURL }) => {
+      await page.goto("/deal?tambah=1");
+      const dialog = page.getByRole("dialog", { name: "Tambah deal" });
+      await expect(dialog).toBeVisible();
+      const brand = `E2E Sesi Habis ${Date.now()}`;
+      await dialog.getByLabel("Nama brand").fill(brand);
+      await dialog.getByLabel("Kontak WhatsApp").fill("0812 3456 7890");
+      await dialog.getByLabel("Scope pekerjaan").fill("E2E session-expiry check");
+      await dialog.getByLabel("Fee (Rp)").fill("1250000");
+
+      expireDisposableOwnerSession();
+      const post = page.waitForResponse(
+        (response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/deals",
+      );
+      const save = dialog.getByRole("button", { name: "Simpan deal" });
+      await save.click();
+      expect((await post).status()).toBe(401);
+
+      await expect(dialog.getByRole("alert")).toHaveText(SESSION_EXPIRED);
+      await expect(dialog.getByLabel("Nama brand")).toHaveValue(brand);
+      await expect(save).toBeEnabled();
+      await expect(page.getByRole("status")).toHaveCount(0);
+
+      const valid = await browser.newContext({
+        baseURL,
+        storageState: { cookies: [ownerSessionCookie(baseURL!)], origins: [] },
+      });
+      try {
+        const { deals } = (await (await valid.request.get("/api/deals")).json()) as { deals: Array<{ brand: string }> };
+        expect(deals.filter((deal) => deal.brand === brand)).toHaveLength(0);
+      } finally {
+        await valid.close();
+      }
+
+      // Reloading, as the message says, leads to sign-in.
       await page.reload();
       await expectSignInWithoutOwnerData(page);
     });

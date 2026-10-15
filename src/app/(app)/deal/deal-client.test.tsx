@@ -552,3 +552,143 @@ describe("DealClient add-deal field errors (#50)", () => {
     expect((await screen.findByRole("alert")).textContent).toBe("Deal belum bisa disimpan.");
   });
 });
+
+describe("DealClient when the server cannot answer (#53)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const created = { ...dealFixture, id: "new", brand: "Kopi Nusantara", contactWa: "6281234567890", scope: "1 reels", feeIdr: 1500000 };
+
+  function jsonResponse(status: number, body: unknown) {
+    return { ok: status >= 200 && status < 300, status, json: async () => body };
+  }
+
+  async function fillAndSave(user: ReturnType<typeof userEvent.setup>) {
+    const field = (label: string) => screen.getByLabelText(label, { selector: "input, textarea" }) as HTMLInputElement;
+    await user.type(field("Nama brand"), "Kopi Nusantara");
+    await user.type(field("Kontak WhatsApp"), "0812 3456 7890");
+    await user.type(field("Scope pekerjaan"), "1 reels");
+    await user.type(field("Fee (Rp)"), "1500000");
+    await user.click(screen.getByRole("button", { name: "Simpan deal" }));
+    return field;
+  }
+
+  function calls(fetchMock: ReturnType<typeof vi.fn>) {
+    return fetchMock.mock.calls.map(([url, init]) => `${(init as RequestInit | undefined)?.method ?? "GET"} ${url}`);
+  }
+
+  it("a create with no answer that the server did store is shown as saved, and is not sent again", async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(jsonResponse(200, { deals: [dealFixture, created] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen />);
+
+    await fillAndSave(user);
+
+    expect(await screen.findByRole("status")).toHaveProperty("textContent", "Deal disimpan");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(calls(fetchMock)).toEqual(["POST /api/deals", "GET /api/deals"]);
+  });
+
+  it("a create with no answer that is not found says so, keeps the form, and the next Simpan checks before sending", async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(jsonResponse(200, { deals: [dealFixture] }))
+      // Second press: it has turned up since (the first request was stored late).
+      .mockResolvedValueOnce(jsonResponse(200, { deals: [dealFixture, created] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen />);
+
+    const field = await fillAndSave(user);
+    expect((await screen.findByRole("alert")).textContent).toContain("deal ini belum pasti tersimpan");
+    expect(field("Nama brand").value).toBe("Kopi Nusantara");
+    expect(screen.getByRole("button", { name: "Simpan deal" })).toHaveProperty("disabled", false);
+
+    await user.click(screen.getByRole("button", { name: "Simpan deal" }));
+    expect(await screen.findByRole("status")).toHaveProperty("textContent", "Deal disimpan");
+    expect(calls(fetchMock)).toEqual(["POST /api/deals", "GET /api/deals", "GET /api/deals"]);
+  });
+
+  it("when the check itself fails too, nothing is sent again", async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen />);
+
+    await fillAndSave(user);
+    expect((await screen.findByRole("alert")).textContent).toContain("deal ini belum pasti tersimpan");
+    await user.click(screen.getByRole("button", { name: "Simpan deal" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("deal ini belum pasti tersimpan");
+    expect(calls(fetchMock)).toEqual(["POST /api/deals", "GET /api/deals", "GET /api/deals"]);
+  });
+
+  it.each([
+    [401, "Belum tersimpan karena sesi kamu sudah berakhir. Muat ulang halaman untuk masuk lagi."],
+    [403, "Belum tersimpan karena permintaan ditolak demi keamanan. Muat ulang halaman, lalu coba lagi."],
+  ])("a create refused with %i says what to do next, and the server's own text is not shown", async (status, message) => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(status, { error: "raw server text" })));
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[]} initialInvoices={[]} initialDialogOpen />);
+
+    await fillAndSave(user);
+    expect((await screen.findByRole("alert")).textContent).toBe(message);
+    expect(document.body.textContent).not.toContain("raw server text");
+  });
+
+  it("a stage move with no answer that the server did store keeps the card moved, with no error", async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(jsonResponse(200, { deal: { ...dealFixture, status: "NEGO" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Acme" }));
+    await user.click(screen.getByRole("menuitem", { name: "Lanjut ke Nego" }));
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(calls(fetchMock)).toEqual(["PATCH /api/deals/deal-1", "GET /api/deals/deal-1"]);
+    await vi.waitFor(() => expect(screen.getAllByRole("region", { name: "Nego" })[0].textContent).toContain("Acme"));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("a stage move with no answer that was not stored moves back and says it may not be saved", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(jsonResponse(200, { deal: dealFixture })));
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Acme" }));
+    await user.click(screen.getByRole("menuitem", { name: "Lanjut ke Nego" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("belum pasti tersimpan");
+    expect(screen.getAllByRole("region", { name: "Masuk" })[0].textContent).toContain("Acme");
+  });
+
+  it("an invoice create with no answer that the server did create is shown as created, and not sent again", async () => {
+    const invoiceDeal = { ...dealFixture, status: "INVOICE" as const };
+    const invoice = { id: "inv-1", userId: "user-1", dealId: "deal-1", number: "INV/1", subtotalIdr: 1500000, withholdingTaxType: "NONE", status: "DRAFT", dueDate: null, createdAt: new Date(), updatedAt: new Date() };
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(jsonResponse(200, { invoices: [invoice] }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[invoiceDeal]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Acme" }));
+    await user.click(screen.getByRole("menuitem", { name: "Buat invoice" }));
+
+    expect(await screen.findByRole("status")).toHaveProperty("textContent", "Invoice dibuat");
+    expect(calls(fetchMock)).toEqual(["POST /api/invoices", "GET /api/invoices"]);
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Acme" }));
+    expect(screen.queryByRole("menuitem", { name: "Buat invoice" })).toBeNull();
+  });
+});

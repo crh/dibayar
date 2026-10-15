@@ -14,6 +14,7 @@ import { DateField, type DateFieldCommitResult } from "@/components/date-field";
 import type { Language } from "@/lib/i18n";
 import { triggerPaidHaptic } from "@/lib/haptics";
 import { fetchWithTimeout } from "@/lib/http";
+import { bodyField, mutationErrorKey, sendMutation } from "@/lib/mutation";
 import { PPH_RATES } from "@/lib/income-summary";
 import { formatMoney } from "@/lib/format/money";
 import { formatDate as formatDateCentral } from "@/lib/format/date";
@@ -614,7 +615,10 @@ export default function InvoiceDetailClient({
         body: JSON.stringify({ status }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error("invoice.statusUpdateError");
+      if (!response.ok) {
+        setError(mutationErrorKey({ kind: "rejected", status: response.status, body: payload }, "invoice.statusUpdateError"));
+        return;
+      }
       setInvoice(payload.invoice);
       if (status === "PAID" && invoice.status !== "PAID") {
         triggerPaidHaptic();
@@ -622,7 +626,12 @@ export default function InvoiceDetailClient({
         window.setTimeout(() => setPaidMoment(false), 2600);
       }
     } catch {
-      setError("invoice.statusUpdateError");
+      // No answer, a dropped connection or a gateway page: it may have been
+      // stored, so show what the server holds rather than guess (#53).
+      const check = await sendMutation(`/api/invoices/${invoice.id}`, { cache: "no-store" });
+      const stored = check.kind === "ok" ? bodyField<InvoiceRecord>(check.body, "invoice") : undefined;
+      if (stored) setInvoice(stored);
+      if (stored?.status !== status) setError("error.connection");
     } finally {
       setIsSaving(false);
     }

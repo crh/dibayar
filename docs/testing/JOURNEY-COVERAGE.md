@@ -8,16 +8,16 @@ An entry in this inventory is not proof that the action works. Only `automated_r
 
 ## Summary
 
-- Inventoried user-facing actions: **95** (2 not applicable, so the denominator is **93**)
-- Automated real-interaction coverage: **82/93 = 88.2%**
+- Inventoried user-facing actions: **101** (2 not applicable, so the denominator is **99**)
+- Automated real-interaction coverage: **82/99 = 82.8%**
 - P0 automated real-interaction coverage: **28/30 = 93.3%**
-- Manually verified (recorded): **1/93 = 1.1%**
-- Outstanding P0/P1 actions: **3**
+- Manually verified (recorded): **1/99 = 1.0%**
+- Outstanding P0/P1 actions: **7**
 
 | Status | P0 | P1 | P2 | Total |
 |---|---:|---:|---:|---:|
 | `automated_real_interaction` | 28 | 35 | 19 | 82 |
-| `automated_partial` | 0 | 2 | 6 | 8 |
+| `automated_partial` | 0 | 6 | 8 | 14 |
 | `manual_verified` | 1 | 0 | 0 | 1 |
 | `manual_pending` | 1 | 0 | 1 | 2 |
 | `not_covered` | 0 | 0 | 0 | 0 |
@@ -31,6 +31,10 @@ An entry in this inventory is not proof that the action works. Only `automated_r
 | INV-DUE-03 | P0 | `manual_pending` | Pick a date in the native picker -> saved -> reload | Selecting inside a native picker is not drivable/observable from Playwright |
 | A11Y-01 | P1 | `automated_partial` | No serious/critical automatically detectable violations | Stays partial by rule: an axe scan is rendering evidence, not an interaction. Widened 2026-10-11 to deal detail, the repair, expired-share and Settings-error states, the English interface and the phone layout; zero serious or critical findings, nothing excluded. Not scanned: the regenerate/revoke confirmations in the phone layout, the public page in English. Screen-reader behaviour is not automated at all (MAN-A11Y-01) |
 | DEAL-CREATE-07 | P1 | `automated_partial` | Optional fields: contact name, deadline (native date input), payment terms | Text fields automated in Phase 2B on both projects. 2026-10-11: the deadline is now typed with the keyboard on desktop Chromium (saved, shown on card and detail after reload, becomes the new invoice's due date; a second value; and no deadline -> no due date). The action stays partial: on a phone the deadline can only be chosen in the OS date picker, which no test drives, and MAN-DEAL-01 on a real phone is still pending |
+| DEAL-CREATE-08 | P1 | `automated_partial` | A deal save with no usable answer (502 HTML page, dropped connection, no answer in time) says it may not be saved, and the retry checks before sending |  |
+| DEAL-CREATE-09 | P1 | `automated_partial` | A deal the server stored but whose answer never arrived is shown as saved, not saved twice |  |
+| DEAL-INV-03 | P1 | `automated_partial` | Buat invoice with no usable answer never creates a second invoice |  |
+| DEAL-STAGE-06 | P1 | `automated_partial` | A stage move with no answer ends, and shows what the server holds |  |
 
 ## Exception register (P0/P1 not fully automated)
 
@@ -45,6 +49,7 @@ Every outstanding P0/P1 action above, plus every P0/P1 action that is automated 
 | INV-PDF-01 (P1, `automated_real_interaction`)<br>PUB-05 (P1, `automated_real_interaction`) | Physical / native device | MAN-PDF-01 | How a phone's browser hands a downloaded PDF to its viewer or its downloads is OS behaviour outside the page. Automated for real: the click, the download and the PDF's text for owner and recipient, in desktop and 390px Chromium. | No | The pdf-download journeys green in CI on the release head. MAN-PDF-01 run on a phone and logged; if it was not run, the release PR says so. | Yes: A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built. |
 | SHARE-05 (P1, `automated_real_interaction`) | Physical / native device | MAN-SHARE-01 | Clipboard permission and the copy confirmation on real phone browsers differ from desktop Chromium, where the test grants clipboard access to its own context. Automated for real on desktop Chromium only. | No | The share-copy journey green in CI on the release head. MAN-SHARE-01 run on a phone and logged; if it was not run, the release PR says so. | Yes: A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built. |
 | A11Y-01 (P1, `automated_partial`) | Partial by classification rule | — | An axe scan is rendering evidence, not an interaction, so the classification rules cap this action at partial however many pages are scanned. Since 2026-10-11 the scans cover deal detail, the repair, expired-share and Settings-error states, the English interface and the phone layout (390px, desktop Chromium), plus one keyboard-only journey. No scan operates a screen reader. | No | CI job e2e-a11y green on the release head (it runs on every PR and push; it includes e2e/smoke/accessibility-states.spec.ts). No manual sign-off. | No: It cannot become automated_real_interaction under the current rules. Screen-reader behaviour is MAN-A11Y-01 (P2), on real devices. |
+| DEAL-CREATE-08 (P1, `automated_partial`)<br>DEAL-CREATE-09 (P1, `automated_partial`)<br>DEAL-STAGE-06 (P1, `automated_partial`)<br>DEAL-INV-03 (P1, `automated_partial`) | Partial by classification rule | — | A lost answer, a dropped connection or a gateway page cannot be produced on purpose by the app or the test server, so each test injects exactly that one failure with page.route, which the classification rules cap at partial. Everything around it is real: the click, the page's own bounded wait, its read-back from the real API, the retry, and the stored rows (read with page.request). In the 'stored but never answered' cases the write itself reaches the real server (route.fetch). (#53) | No | CI e2e-critical green on the release head (e2e/deals/server-errors.spec.ts is @critical, chromium and chromium-mobile). No manual sign-off. | No: It cannot become automated_real_interaction under the current rules without a network-fault proxy in front of the test server; none is planned. |
 
 ## Findings
 
@@ -123,11 +128,16 @@ Test kinds: **R** = real interaction, **P** = partial (URL entry, `fill()` on a 
 | DEAL-CREATE-05 | P1 | `automated_real_interaction` | A WhatsApp number WhatsApp can't open is refused with a message on the field, and saves nothing | chromium, chromium-mobile | R: `deals/deal-crud.spec.ts`<br>P: `deals/deal-crud.spec.ts` |
 | DEAL-CREATE-06 | P1 | `automated_real_interaction` | Required-field validation before submit | chromium, chromium-mobile | R: `deals/create-validation.spec.ts` |
 | DEAL-CREATE-07 | P1 | `automated_partial` | Optional fields: contact name, deadline (native date input), payment terms | chromium, chromium-mobile, manual: real phone | P: `deals/create-validation.spec.ts` |
+| DEAL-CREATE-08 | P1 | `automated_partial` | A deal save with no usable answer (502 HTML page, dropped connection, no answer in time) says it may not be saved, and the retry checks before sending | chromium, chromium-mobile | P: `deals/server-errors.spec.ts` |
+| DEAL-CREATE-09 | P1 | `automated_partial` | A deal the server stored but whose answer never arrived is shown as saved, not saved twice | chromium, chromium-mobile | P: `deals/server-errors.spec.ts` |
+| DEAL-CREATE-10 | P2 | `automated_partial` | A deal save refused by the server's Origin check says to reload | chromium, chromium-mobile | P: `deals/server-errors.spec.ts` |
+| DEAL-CREATE-11 | P2 | `automated_partial` | A deal save after the session expired says to sign in again | chromium, chromium-mobile | P: `auth/session-expiry.spec.ts` |
 | DEAL-STAGE-01 | P0 | `automated_real_interaction` | Move a deal to the next stage from its card menu | chromium, chromium-mobile | R: `deals/deal-crud.spec.ts` |
 | DEAL-STAGE-02 | P1 | `automated_real_interaction` | Move a deal to the previous stage (Kembali ke ...) | chromium, chromium-mobile | R: `deals/stage-back.spec.ts` |
 | DEAL-STAGE-03 | P1 | `automated_real_interaction` | Move stage from deal detail; history entry persists | chromium, chromium-mobile | R: `deals/deal-crud.spec.ts` |
 | DEAL-STAGE-04 | P2 | `automated_real_interaction` | Drag a deal card to another stage column | chromium 1440 (ux-audit) | R: `tests/ux-audit/t27.verification.spec.ts` |
 | DEAL-STAGE-05 | P1 | `automated_real_interaction` | Keyboard-only stage move via card menu | chromium (ux-audit) | R: `tests/ux-audit/t27.verification.spec.ts` |
+| DEAL-STAGE-06 | P1 | `automated_partial` | A stage move with no answer ends, and shows what the server holds | chromium, chromium-mobile | P: `deals/server-errors.spec.ts` |
 | DEAL-DETAIL-01 | P1 | `automated_real_interaction` | Open deal detail from a board card (card menu -> Lihat detail) | chromium, chromium-mobile | R: `deals/stage-back.spec.ts` |
 | DEAL-DETAIL-02 | P2 | `automated_real_interaction` | Edit and save contact name | chromium, chromium-mobile | R: `deals/patch-keeps-stage.spec.ts` |
 | DEAL-DETAIL-03 | P1 | `automated_real_interaction` | Repair an invalid WhatsApp number on the deal | chromium, chromium-mobile | R: `deals/contact-repair.spec.ts` |
@@ -135,6 +145,7 @@ Test kinds: **R** = real interaction, **P** = partial (URL entry, `fill()` on a 
 | DEAL-DETAIL-05 | P0 | `automated_real_interaction` | Create an invoice from deal detail and follow its link | chromium, chromium-mobile | R: `invoices/status-lifecycle.spec.ts` |
 | DEAL-INV-01 | P0 | `automated_real_interaction` | Create an invoice from the card menu | chromium, chromium-mobile | R: `invoices/invoice-journeys.spec.ts` |
 | DEAL-INV-02 | P2 | `automated_partial` | Create-invoice action is not offered when ineligible | unit | P: `src/components/deals/deal-card.test.tsx` |
+| DEAL-INV-03 | P1 | `automated_partial` | Buat invoice with no usable answer never creates a second invoice | chromium, chromium-mobile | P: `deals/server-errors.spec.ts` |
 | DEAL-DELETE-01 | P2 | `not_applicable` | Delete a deal |  | — |
 | DEAL-LAYOUT-01 | P1 | `automated_real_interaction` | Long brand names keep card actions reachable and pages free of horizontal scroll | chromium-mobile | R: `deals/deal-crud.spec.ts` |
 
