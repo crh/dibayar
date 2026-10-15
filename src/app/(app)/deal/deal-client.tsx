@@ -22,6 +22,22 @@ type DealClientProps = {
 // is native and needs no help.
 const STAGE_FILTER_LOCATION_EVENT = "dealclient:stagefilterlocationchange";
 
+// TEMPORARY (issue #50): one short line naming why a deal save failed --
+// the server's failure code, the rejected field names and the log reference,
+// or the HTTP status when the response was not the API's JSON. Field names
+// only; never what was typed.
+export function describeSaveFailure(status: number, payload: unknown): string {
+  if (!payload || typeof payload !== "object") return `NON_JSON · HTTP ${status}`;
+  const { code, fields, ref } = payload as { code?: unknown; fields?: unknown; ref?: unknown };
+  const parts = [typeof code === "string" ? code : `HTTP ${status}`];
+  if (fields && typeof fields === "object") {
+    const names = Object.keys(fields);
+    if (names.length > 0) parts.push(names.join(", "));
+  }
+  if (typeof ref === "string") parts.push(ref);
+  return parts.join(" · ");
+}
+
 function readStageFromTahap(tahap: string | null): DealRecord["status"] | null {
   return isStageValue(tahap) ? tahap : null;
 }
@@ -104,6 +120,9 @@ export default function DealClient({
   const [isDialogOpen, setIsDialogOpen] = useState(initialDialogOpen);
   const [form, setForm] = useState<DealFormState>(EMPTY_DEAL_FORM);
   const [error, setError] = useState<string | null>(null);
+  // TEMPORARY (issue #50): what the failed save's response said, shown under
+  // the generic message so a tester on a phone can report it.
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingDealId, setPendingDealId] = useState<string | null>(null);
@@ -170,6 +189,7 @@ export default function DealClient({
   const closeDialog = useCallback(() => {
     setIsDialogOpen(false);
     setError(null);
+    setErrorDetail(null);
     setForm(EMPTY_DEAL_FORM);
   }, []);
 
@@ -215,29 +235,39 @@ export default function DealClient({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setErrorDetail(null);
     setSuccessMessage(null);
     setIsSaving(true);
 
     try {
-      const response = await fetch("/api/deals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          feeIdr: Number(form.feeIdr),
-          deadline: form.deadline || undefined,
-          contactName: form.contactName || undefined,
-          paymentTerms: form.paymentTerms || undefined,
-        }),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error("dashboard.saveError");
+      let response: Response;
+      try {
+        response = await fetch("/api/deals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...form,
+            feeIdr: Number(form.feeIdr),
+            deadline: form.deadline || undefined,
+            contactName: form.contactName || undefined,
+            paymentTerms: form.paymentTerms || undefined,
+          }),
+        });
+      } catch {
+        setError("dashboard.saveError");
+        setErrorDetail("NETWORK");
+        return;
+      }
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.deal) {
+        setError("dashboard.saveError");
+        setErrorDetail(describeSaveFailure(response.status, payload));
+        return;
+      }
       setDeals((current) => [payload.deal, ...current]);
       setForm(EMPTY_DEAL_FORM);
       setSuccessMessage("dashboard.dealSaved");
       setIsDialogOpen(false);
-    } catch {
-      setError("dashboard.saveError");
     } finally {
       setIsSaving(false);
     }
@@ -301,7 +331,12 @@ export default function DealClient({
         description={t("dashboard.addDealHint")}
         closeLabel={t("dashboard.close")}
       >
-        {error && isDialogOpen ? <p role="alert" className="mb-3 ds-small text-overdue">{t(error)}</p> : null}
+        {error && isDialogOpen ? (
+          <div role="alert" className="mb-3">
+            <p className="ds-small text-overdue">{t(error)}</p>
+            {errorDetail ? <p className="mt-1 text-[12px] text-muted">{t("dashboard.saveErrorDetail", { detail: errorDetail })}</p> : null}
+          </div>
+        ) : null}
         <DealForm formId="tambah-deal-form" formRef={dealFormRef} form={form} onChange={setForm} onSubmit={handleSubmit} isSaving={isSaving} t={t} />
       </AddDealDialog>
     </main>

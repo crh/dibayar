@@ -85,7 +85,12 @@ test.describe("deal create/update journeys", { tag: "@critical" }, () => {
       // The dialog stays open and shows an error -- deal-client.tsx's
       // handleSubmit only closes it and clears the form on the success path.
       await expect(dialog).toBeVisible();
-      await expect(dialog.getByRole("alert")).toHaveText("Deal belum bisa disimpan.");
+      // Under the generic message, the failure code, the rejected field and
+      // a log reference (issue #50) -- never the value that was typed.
+      const alert = dialog.getByRole("alert");
+      await expect(alert).toContainText("Deal belum bisa disimpan.");
+      await expect(alert).toContainText(/Kode: INVALID_INPUT · contactWa · [0-9a-f]{8}$/);
+      await expect(alert).not.toContainText("12345");
       await expect(dialog.getByLabel("Nama brand")).toHaveValue(brand);
 
       await dialog.getByRole("button", { name: "Tutup" }).click();

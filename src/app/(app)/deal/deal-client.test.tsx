@@ -5,7 +5,7 @@ import type { ReactElement } from "react";
 import { renderToString } from "react-dom/server";
 import type { DealRecord } from "@/lib/deals";
 import { DEAL_DRAG_MIME } from "@/components/deals/deal-card";
-import DealClient from "./deal-client";
+import DealClient, { describeSaveFailure } from "./deal-client";
 
 const mockPush = vi.fn();
 const mockReplace = vi.fn();
@@ -439,5 +439,48 @@ describe("DealClient add-deal dialog rendered open by the server (FIND-13)", () 
     for (const name of ["brand", "contactWa", "contactName", "scope", "feeIdr", "deadline", "paymentTerms"]) {
       expect(field(container, name).value).toBe("");
     }
+  });
+});
+
+describe("DealClient save failure detail (issue #50)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function submitAndReadAlert(fetchImpl: () => Promise<unknown>) {
+    vi.stubGlobal("fetch", vi.fn(fetchImpl));
+    render(<DealClient initialDeals={[]} initialInvoices={[]} initialDialogOpen />);
+    const dialog = screen.getByRole("dialog", { name: "Tambah deal" });
+    fireEvent.submit(dialog.querySelector("form")!);
+    return (await screen.findByRole("alert")).textContent;
+  }
+
+  it("shows the server's code, the rejected fields and the log reference under the generic message", async () => {
+    const text = await submitAndReadAlert(() =>
+      Promise.resolve({
+        ok: false,
+        status: 400,
+        json: async () => ({ error: "Periksa kembali data deal kamu.", fields: { contactWa: ["x"], feeIdr: ["y"] }, code: "INVALID_INPUT", ref: "ab12cd34" }),
+      }),
+    );
+    expect(text).toBe("Deal belum bisa disimpan.Kode: INVALID_INPUT · contactWa, feeIdr · ab12cd34");
+  });
+
+  it("says NETWORK when the request never got a response", async () => {
+    const text = await submitAndReadAlert(() => Promise.reject(new TypeError("Load failed")));
+    expect(text).toBe("Deal belum bisa disimpan.Kode: NETWORK");
+  });
+
+  it("gives the HTTP status when the response is not the API's JSON (an SSO or login page, say)", async () => {
+    const text = await submitAndReadAlert(() =>
+      Promise.resolve({ ok: true, status: 200, json: async () => { throw new SyntaxError("Unexpected token <"); } }),
+    );
+    expect(text).toBe("Deal belum bisa disimpan.Kode: NON_JSON · HTTP 200");
+  });
+});
+
+describe("describeSaveFailure", () => {
+  it("falls back to the HTTP status when the JSON carries no code", () => {
+    expect(describeSaveFailure(502, { message: "Bad gateway" })).toBe("HTTP 502");
   });
 });
