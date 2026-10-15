@@ -1067,3 +1067,10 @@ Starting state verified fresh: `main` = `origin/main` = `a60dfdf`, no open PRs, 
 - Release: **NO-GO / PENDING_OPERATOR.** Merge order for Chris: #48, #49, #47, then refresh evidence on the final SHA, then the manual checks. Receipt: `docs/receipts/DIBAYAR-FIND13-PR47-PR48-RELEASE-READINESS-2026-10-12.md`.
 - Not changed: `main`, `staging`, Production, Neon, Vercel settings, OAuth, SSO, the ruleset, repo visibility and settings. Nothing merged; no merge attempted.
 - Rubric self-score: Evidence honesty 2/2 (the invalid local run, the unexplained WebKit condition, the unexercised skip path and everything not run are stated); shipped completeness 1/2 (three PRs ready, none merged, manual and Production gates outstanding); security discipline 2/2.
+
+## 2026-10-15 — #53 server error handling audit (PR #54)
+
+- Audited every client write against its route contract (18 actions); receipt `docs/receipts/DIBAYAR-SERVER-ERROR-HANDLING-AUDIT-2026-10-15.md`.
+- Fixed P1: create deal, stage moves and invoice create had no timeout (endless spinner) and could duplicate a deal/invoice after a lost answer. Now bounded, with read-back reconciliation before any re-POST. 401/403/429 now say what to do next.
+- RED/GREEN recorded; CI green on `1dc00db` (run 38746164839); local critical 278 passed / 0 failed; WebKit 99 passed / 0 failed.
+- PR #54 → `staging`, not merged. #51 recommended closed unmerged (already conflicts with `staging`). Release stays NO-GO on the existing human gates.
