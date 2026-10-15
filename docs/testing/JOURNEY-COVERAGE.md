@@ -120,7 +120,7 @@ Test kinds: **R** = real interaction, **P** = partial (URL entry, `fill()` on a 
 | DEAL-CREATE-02 | P0 | `automated_real_interaction` | Create a deal on a phone: FAB -> typed form -> saved -> reload -> detail | chromium-mobile | R: `deals/mobile-create-entry.spec.ts` |
 | DEAL-CREATE-03 | P1 | `automated_real_interaction` | Close the add-deal dialog without saving | chromium, chromium-mobile | R: `deals/deal-crud.spec.ts` |
 | DEAL-CREATE-04 | P1 | `automated_real_interaction` | Close the add-deal dialog with Escape | chromium, chromium-mobile | R: `deals/add-deal-dialog.spec.ts` |
-| DEAL-CREATE-05 | P1 | `automated_real_interaction` | Server-rejected deal shows an error and saves nothing | chromium, chromium-mobile | R: `deals/deal-crud.spec.ts` |
+| DEAL-CREATE-05 | P1 | `automated_real_interaction` | A WhatsApp number WhatsApp can't open is refused with a message on the field, and saves nothing | chromium, chromium-mobile | R: `deals/deal-crud.spec.ts`<br>P: `deals/deal-crud.spec.ts` |
 | DEAL-CREATE-06 | P1 | `automated_real_interaction` | Required-field validation before submit | chromium, chromium-mobile | R: `deals/create-validation.spec.ts` |
 | DEAL-CREATE-07 | P1 | `automated_partial` | Optional fields: contact name, deadline (native date input), payment terms | chromium, chromium-mobile, manual: real phone | P: `deals/create-validation.spec.ts` |
 | DEAL-STAGE-01 | P0 | `automated_real_interaction` | Move a deal to the next stage from its card menu | chromium, chromium-mobile | R: `deals/deal-crud.spec.ts` |

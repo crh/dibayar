@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { DealRecord, DealStageTransitionRecord } from "@/lib/deals";
@@ -160,6 +160,43 @@ describe("DealDetailClient WhatsApp action (T-18)", () => {
     expect(screen.getByRole("button", { name: "Buka WhatsApp" })).toBeDefined();
     expect(openSpy).not.toHaveBeenCalled();
     openSpy.mockRestore();
+  });
+});
+
+describe("DealDetailClient field messages (#50)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("a repair number WhatsApp can't open is not sent, and the message says what is wrong", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={{ ...dealFixture, contactWa: "not-a-phone" }} history={[]} />);
+
+    await user.click(screen.getByRole("button", { name: "Buka WhatsApp" }));
+    const input = screen.getByLabelText("Perbaiki nomor WhatsApp");
+    await user.clear(input);
+    await user.type(input, "1");
+    await user.click(screen.getByRole("button", { name: "Simpan nomor" }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toContain(
+      "Nomor WhatsApp belum valid. Contoh: 0812 3456 7890.",
+    );
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("a contact name the server refuses says it is too long, not 'try again'", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(400, { fields: { contactName: ["x"] } }))));
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={dealFixture} history={[]} />);
+
+    expect(screen.getByLabelText("Nama kontak").getAttribute("maxlength")).toBe("120");
+    await user.type(screen.getByLabelText("Nama kontak"), "Budi");
+    await user.click(screen.getByRole("button", { name: "Simpan" }));
+
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Nama kontak maksimal 120 karakter.");
   });
 });
 

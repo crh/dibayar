@@ -10,7 +10,7 @@
 // no reseed -- they never mutate fixture rows.
 import { execFileSync } from "node:child_process";
 
-function runFixtureAction(action: "seed" | "legacy-due-date" | "follow-up-states" | "follow-up-expired-share" | "income-boundaries" | "status-consistency" | "expire-disposable-session" | "incomplete-issuer-settings" | "invoice-table-outage" | "end-invoice-table-outage" | "invoice-write-refusal" | "end-invoice-write-refusal"): void {
+function runFixtureAction(action: "seed" | "legacy-due-date" | "legacy-invalid-contact" | "follow-up-states" | "follow-up-expired-share" | "income-boundaries" | "status-consistency" | "expire-disposable-session" | "incomplete-issuer-settings" | "invoice-table-outage" | "end-invoice-table-outage" | "invoice-write-refusal" | "end-invoice-write-refusal"): void {
   const env = { ...process.env, E2E_FIXTURE_CONFIRM: "non-production" };
   execFileSync("npx", ["tsx", "--env-file-if-exists=.env.local", "scripts/e2e-fixtures.ts", action], {
     stdio: "inherit",
@@ -30,6 +30,14 @@ export function reseedFixtures(): void {
 // also undoes it for the next test.
 export function seedLegacyInvalidDueDate(): void {
   runFixtureAction("legacy-due-date");
+}
+
+// Gives the deal named "E2E Brand Nomor Diperbaiki" the WhatsApp number a
+// deal saved before #50 could hold ("12345678"), which the app now refuses
+// to write itself (scripts/e2e-fixtures.ts legacyInvalidContact). Called
+// mid-test after the deal is created; the next reseed removes it.
+export function giveDealLegacyInvalidContact(): void {
+  runFixtureAction("legacy-invalid-contact");
 }
 
 // Reseeds, then adds the follow-up overlay (scripts/e2e-fixtures.ts

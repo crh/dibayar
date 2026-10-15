@@ -10,7 +10,8 @@ import type { DealRecord, DealStageTransitionRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
 import { isOverdueByDueDate, daysUntilDue } from "@/lib/invoice-date-status";
 import { PIPELINE_STAGES, PIPELINE_STAGE_KEYS } from "@/components/deals/deal-stages";
-import { buildDealWhatsApp } from "@/lib/whatsapp";
+import { buildDealWhatsApp, normalizeWhatsAppNumber } from "@/lib/whatsapp";
+import { DEAL_LIMITS } from "@/lib/deal-limits";
 import { formatPhone } from "@/lib/format/phone";
 
 export default function DealDetailClient({
@@ -103,6 +104,10 @@ export default function DealDetailClient({
         body: JSON.stringify({ contactName: contactName || undefined }),
       });
       const payload = await response.json();
+      if (response.status === 400) {
+        setMessage({ kind: "error", text: t("dealForm.error.contactName") });
+        return;
+      }
       if (!response.ok) throw new Error("deal.detailContactNameError");
       setDeal(payload.deal);
       setContactName(payload.deal.contactName ?? "");
@@ -117,8 +122,15 @@ export default function DealDetailClient({
   // Repairing the number never opens WhatsApp itself -- it only unblocks the
   // separate "Buka WhatsApp" button above, which the user still has to click.
   async function handleSaveContactWa() {
-    setIsSavingContactWa(true);
     setContactWaMessage(null);
+    // A number WhatsApp can't open is refused by the server too; say what is
+    // wrong with it rather than "try again" (#50).
+    if (!normalizeWhatsAppNumber(contactWaDraft)) {
+      setContactWaMessage({ kind: "error", text: t("dealForm.error.contactWa") });
+      contactWaInputRef.current?.focus();
+      return;
+    }
+    setIsSavingContactWa(true);
 
     try {
       const response = await fetch(`/api/deals/${deal.id}`, {
@@ -127,6 +139,10 @@ export default function DealDetailClient({
         body: JSON.stringify({ contactWa: contactWaDraft }),
       });
       const payload = await response.json();
+      if (response.status === 400) {
+        setContactWaMessage({ kind: "error", text: t("dealForm.error.contactWa") });
+        return;
+      }
       if (!response.ok || typeof payload.deal?.contactWa !== "string") throw new Error("deal.detailWhatsAppNumberError");
       const readBackResponse = await fetch(`/api/deals/${deal.id}`, { cache: "no-store" });
       const readBackPayload = await readBackResponse.json();
@@ -259,6 +275,7 @@ export default function DealDetailClient({
           <div className="mt-1.5 flex flex-col gap-2 min-[360px]:flex-row min-[360px]:items-center">
             <input
               id="contactName"
+              maxLength={DEAL_LIMITS.contactName}
               value={contactName}
               onChange={(event) => setContactName(event.target.value)}
               placeholder={t("deal.detailContactNameEmpty")}
@@ -316,6 +333,7 @@ export default function DealDetailClient({
                       ref={contactWaInputRef}
                       id="contactWa"
                       inputMode="tel"
+                      maxLength={DEAL_LIMITS.contactWa}
                       value={contactWaDraft}
                       onChange={(event) => setContactWaDraft(event.target.value)}
                       className={`${fieldClassName} w-full min-[360px]:min-w-0 min-[360px]:flex-1`}

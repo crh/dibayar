@@ -1041,12 +1041,12 @@
       "id": "DEAL-CREATE-05",
       "domain": "deals",
       "route": "/deal (dialog)",
-      "action": "Server-rejected deal shows an error and saves nothing",
+      "action": "A WhatsApp number WhatsApp can't open is refused with a message on the field, and saves nothing",
       "persona": "owner",
       "preconditions": "Dialog open",
-      "interaction": "Enter a 5-digit WhatsApp number, Simpan deal",
-      "expected": "400, inline alert, values kept, nothing persisted after reload",
-      "persisted": "No row",
+      "interaction": "Enter a one-digit WhatsApp number (the #50 case), Simpan deal; then correct it and Simpan deal again",
+      "expected": "Nothing is sent; alert 'Periksa kembali isian yang ditandai.'; the WhatsApp field is marked invalid, focused and described by 'Nomor WhatsApp belum valid. Contoh: 0812 3456 7890.'; once corrected the same form saves exactly one deal. The API itself answers 400 naming contactWa for such a number",
+      "persisted": "No row for the refused attempt; one deal after the corrected submit",
       "alternates": "",
       "scope": [
         "chromium",
@@ -1057,8 +1057,14 @@
       "tests": [
         {
           "file": "e2e/deals/deal-crud.spec.ts",
-          "title": "a server-rejected deal (WhatsApp number too short) shows an error and saves nothing",
+          "title": "a WhatsApp number WhatsApp can't open is stopped on the field with a message, nothing is sent, and once corrected the deal saves",
           "kind": "real"
+        },
+        {
+          "file": "e2e/deals/deal-crud.spec.ts",
+          "title": "the API refuses a WhatsApp number WhatsApp can't open, naming contactWa, and saves nothing",
+          "kind": "partial",
+          "note": "Direct API request (page.request), not a UI interaction: proves the server keeps the rule for anything that bypasses the form"
         }
       ]
     },
@@ -2793,7 +2799,7 @@
       "persona": "owner",
       "preconditions": "The server rejects the save (400: issuer WhatsApp number over 32 characters, which the form does not limit), or the PATCH fails",
       "interaction": "Edit fields; click/tap Simpan pengaturan",
-      "expected": "Alert 'Gagal menyimpan. Coba lagi.', no 'Tersimpan', the typed values stay in the form; a reload shows the stored values",
+      "expected": "A field the server refuses is marked with its own message ('Email tidak valid.') under the alert 'Periksa kembali isian yang ditandai.'; any other failure shows 'Gagal menyimpan. Coba lagi.'; no 'Tersimpan', the typed values stay in the form; a reload shows the stored values. Every field is capped at the server's length",
       "persisted": "Unchanged",
       "alternates": "",
       "scope": [
@@ -2806,9 +2812,9 @@
       "tests": [
         {
           "file": "e2e/settings/save-failure.spec.ts",
-          "title": "a save the server rejects (WhatsApp number too long) shows an error, keeps what was typed, and stores nothing",
+          "title": "a save the server rejects (an email it refuses) marks that field, keeps what was typed, and stores nothing",
           "kind": "real",
-          "note": "No stub: the form accepts a 33-character number and the server's own validation answers 400"
+          "note": "No stub: 'budi@contoh..id' passes the form's email pattern and the server's own (zod) validation answers 400 naming issuerEmail"
         },
         {
           "file": "e2e/settings/save-failure.spec.ts",

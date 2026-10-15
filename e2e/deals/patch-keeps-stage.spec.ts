@@ -23,7 +23,7 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "../support/test";
 import { loadFixtureManifest } from "../support/manifest";
-import { reseedFixtures } from "../support/reseed";
+import { giveDealLegacyInvalidContact, reseedFixtures } from "../support/reseed";
 import { keepWhatsAppLocal } from "../support/follow-up";
 import { press, responseTo } from "../support/journey";
 
@@ -109,7 +109,9 @@ test.describe("changing a deal's contact keeps its stage (FIND-10)", { tag: "@cr
     const brand = "E2E Brand Nomor Diperbaiki";
     await keepWhatsAppLocal(context);
 
-    // A deal whose number WhatsApp cannot use, taken to Invoice and invoiced.
+    // A deal taken to Invoice and invoiced, whose number WhatsApp cannot use.
+    // The form refuses such a number since #50, so the deal is created with a
+    // good one and then given the number a deal saved before then could hold.
     // Through the visible + Deal from Beranda, not a direct address: the
     // dialog then opens on a page that has already hydrated. (Opened directly,
     // WebKit could fill the form before React attached to it and the save
@@ -119,7 +121,7 @@ test.describe("changing a deal's contact keeps its stage (FIND-10)", { tag: "@cr
     const dialog = page.getByRole("dialog", { name: "Tambah deal" });
     await expect(dialog).toBeVisible();
     await dialog.getByLabel("Nama brand").fill(brand);
-    await dialog.getByLabel("Kontak WhatsApp").fill("12345678");
+    await dialog.getByLabel("Kontak WhatsApp").fill("628177000031");
     await dialog.getByLabel("Scope pekerjaan").fill("Satu video");
     await dialog.getByLabel("Fee (Rp)").fill("1500000");
     const created = await responseTo(page, "POST", "/api/deals", () => press(dialog.getByRole("button", { name: "Simpan deal" }), isMobile));
@@ -133,6 +135,7 @@ test.describe("changing a deal's contact keeps its stage (FIND-10)", { tag: "@cr
     }
     const invoiced = await responseTo(page, "POST", "/api/invoices", () => press(page.getByRole("button", { name: "Buat invoice" }), isMobile));
     expect(invoiced.ok()).toBe(true);
+    giveDealLegacyInvalidContact();
     await press(page.getByRole("link", { name: /^Lihat invoice .+ →$/ }), isMobile);
     await expect(page).toHaveURL(/\/invoice\/[^/]+$/);
 

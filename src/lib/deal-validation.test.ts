@@ -63,6 +63,30 @@ describe("dealInputSchema", () => {
   });
 });
 
+describe("dealInputSchema contactWa (#50)", () => {
+  const base = { brand: "Kopi Nusantara", scope: "1 reels", feeIdr: 1_000_000 };
+  const contactWaOf = (contactWa: string) => dealInputSchema.safeParse({ ...base, contactWa });
+
+  it.each(["0812 3456 7890", "+62 812-3456-7890", "6281234567890", "81234567890", "0812345678"])(
+    "accepts %s, a number WhatsApp can open",
+    (value) => {
+      expect(contactWaOf(value).success).toBe(true);
+    },
+  );
+
+  // "1" is what the iPhone tester typed; "123456" passed the old 6-character
+  // rule and saved a deal WhatsApp could not open.
+  it.each(["1", "12345", "123456", "08123", "abcdefgh", "      ", "6281234567890123"])(
+    "refuses %s with a WhatsApp message on contactWa alone",
+    (value) => {
+      const result = contactWaOf(value);
+      expect(result.success).toBe(false);
+      if (result.success) return;
+      expect(Object.keys(result.error.flatten().fieldErrors)).toEqual(["contactWa"]);
+    },
+  );
+});
+
 describe("dealPatchSchema", () => {
   // FIND-10: partial() keeps a field's default, so a patch without a status
   // used to come back with status "MASUK" and move the deal there.
@@ -79,6 +103,7 @@ describe("dealPatchSchema", () => {
 
   it("keeps every other rule of the create schema", () => {
     expect(dealPatchSchema.safeParse({ contactWa: "12345" }).success).toBe(false);
+    expect(dealPatchSchema.safeParse({ contactWa: "123456" }).success).toBe(false);
     expect(dealPatchSchema.safeParse({ brand: "" }).success).toBe(false);
     expect(dealPatchSchema.safeParse({ feeIdr: -1 }).success).toBe(false);
   });

@@ -556,7 +556,13 @@ export default function InvoiceDetailClient({
     // Opened by the tap itself, before the save's awaits, so it is not
     // blocked for lacking a user gesture (see openWhatsAppPopup). A draft that
     // can't be a WhatsApp number even before saving never opens a tab.
-    const popup = normalizeWhatsAppNumber(contactWaDraft) ? openWhatsAppPopup(t("whatsapp.opening")) : null;
+    // A number WhatsApp can't open is refused by the server too; say what is
+    // wrong with it rather than "try again", and send nothing (#50).
+    if (!normalizeWhatsAppNumber(contactWaDraft)) {
+      setContactWaMessage({ kind: "error", text: t("dealForm.error.contactWa") });
+      return;
+    }
+    const popup = openWhatsAppPopup(t("whatsapp.opening"));
     let handedOff = false;
     setIsSavingContactWa(true);
     setContactWaMessage(null);
@@ -567,6 +573,10 @@ export default function InvoiceDetailClient({
         body: JSON.stringify({ contactWa: contactWaDraft }),
       });
       const payload = await response.json();
+      if (response.status === 400) {
+        setContactWaMessage({ kind: "error", text: t("dealForm.error.contactWa") });
+        return;
+      }
       if (!response.ok || typeof payload.deal?.contactWa !== "string") throw new Error("invoice.contactRepairError");
       const readBackResponse = await fetchWithTimeout(`/api/deals/${invoice.dealId}`);
       const readBackPayload = await readBackResponse.json();

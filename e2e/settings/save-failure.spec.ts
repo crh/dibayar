@@ -3,16 +3,18 @@
 //
 // Two ways the save fails:
 //
-// - For real: the form has no length limit on the issuer's WhatsApp number,
-//   the server allows 32 characters (src/lib/user-settings-validation.ts).
-//   A longer one passes the form's own checks and the server answers 400
-//   itself. Nothing is stubbed.
+// - For real: an email the form's own pattern accepts but the server's
+//   (zod's) refuses, "budi@contoh..id". The server answers 400 naming the
+//   field, and the page marks that field (#50) instead of a bare "couldn't
+//   save". Nothing is stubbed. (Every field is capped at the server's length
+//   (maxLength), so a too-long value can no longer reach the server; the
+//   first test checks that cap on the WhatsApp number.)
 // - Injected: the next settings PATCH is answered with a 409 by page.route
 //   before it reaches the server. The click and everything the page then
 //   shows are real; the failure is a stub, so by the inventory's rules this
 //   test is partial evidence.
 //
-// In both, the page must say the save failed, keep what was typed so it can
+// In both, the page must say what failed, keep what was typed so it can
 // be corrected, never say "Tersimpan", and a reload must show the values the
 // server still holds. The spec reseeds before and after (UserSettings).
 import type { Page } from "@playwright/test";
@@ -22,6 +24,9 @@ import { reseedFixtures } from "../support/reseed";
 import { press, responseTo } from "../support/journey";
 
 const SAVE_ERROR = "Gagal menyimpan. Coba lagi.";
+const CHECK_FIELDS = "Periksa kembali isian yang ditandai.";
+// Passes the form's email pattern; zod's email check refuses the double dot.
+const SERVER_REFUSED_EMAIL = "budi@contoh..id";
 const SEEDED = { issuerName: "E2E Fixture Owner", issuerWhatsapp: "628199999999", bankName: "Bank E2E Fixture" };
 const TYPED = { issuerName: "Nama Yang Tidak Tersimpan", bankName: "Bank Yang Tidak Tersimpan" };
 // 33 characters: one more than the server accepts.
@@ -32,6 +37,7 @@ function fields(page: Page) {
   return {
     issuerName: issuer.getByLabel("Nama / nama usaha"),
     issuerWhatsapp: issuer.getByLabel("Nomor WhatsApp"),
+    issuerEmail: issuer.getByLabel("Email"),
     bankName: page.getByRole("region", { name: "Rekening pembayaran" }).getByLabel("Nama bank"),
   };
 }
@@ -57,23 +63,31 @@ test.describe("failed settings save", { tag: "@critical" }, () => {
   test.beforeEach(reseedFixtures);
   test.afterEach(reseedFixtures);
 
-  test("a save the server rejects (WhatsApp number too long) shows an error, keeps what was typed, and stores nothing", async ({ page, isMobile }) => {
+  test("a save the server rejects (an email it refuses) marks that field, keeps what was typed, and stores nothing", async ({ page, isMobile }) => {
     expect(TOO_LONG_WHATSAPP).toHaveLength(33);
     await openSettings(page, isMobile);
     const f = fields(page);
+    // The WhatsApp field stops at the 32 characters the server accepts.
+    await f.issuerWhatsapp.fill(TOO_LONG_WHATSAPP);
+    await expect(f.issuerWhatsapp).toHaveValue(TOO_LONG_WHATSAPP.slice(0, 32));
+    await f.issuerWhatsapp.fill(SEEDED.issuerWhatsapp);
     await f.issuerName.fill(TYPED.issuerName);
     await f.bankName.fill(TYPED.bankName);
-    await f.issuerWhatsapp.fill(TOO_LONG_WHATSAPP);
+    await f.issuerEmail.fill(SERVER_REFUSED_EMAIL);
 
     const rejected = await responseTo(page, "PATCH", "/api/me/settings", () => press(page.getByRole("button", { name: "Simpan pengaturan" }), isMobile));
     expect(rejected.status()).toBe(400);
 
-    await expect(page.locator('p[role="alert"]')).toHaveText(SAVE_ERROR);
+    // Which field, and what is wrong with it -- not "couldn't save, try again".
+    await expect(page.locator('p[role="alert"]')).toHaveText(CHECK_FIELDS);
+    await expect(f.issuerEmail).toHaveAttribute("aria-invalid", "true");
+    await expect(page.getByText("Email tidak valid.", { exact: true })).toBeVisible();
+    await expect(page.getByText(SAVE_ERROR)).toHaveCount(0);
     await expect(page.getByText("Tersimpan", { exact: true })).toHaveCount(0);
     // What was typed is still there to correct, and the button works again.
     await expect(f.issuerName).toHaveValue(TYPED.issuerName);
     await expect(f.bankName).toHaveValue(TYPED.bankName);
-    await expect(f.issuerWhatsapp).toHaveValue(TOO_LONG_WHATSAPP);
+    await expect(f.issuerEmail).toHaveValue(SERVER_REFUSED_EMAIL);
     await expect(page.getByRole("button", { name: "Simpan pengaturan" })).toBeEnabled();
 
     // None of it was stored, including the fields that were valid.
@@ -89,6 +103,7 @@ test.describe("failed settings save", { tag: "@critical" }, () => {
     // Corrected, the same edit saves.
     await f.issuerName.fill(TYPED.issuerName);
     await f.issuerWhatsapp.fill("628123456789");
+    await f.issuerEmail.fill("budi@contoh.id");
     const saved = await responseTo(page, "PATCH", "/api/me/settings", () => press(page.getByRole("button", { name: "Simpan pengaturan" }), isMobile));
     expect(saved.ok()).toBe(true);
     await expect(page.getByText("Tersimpan", { exact: true })).toBeVisible();
