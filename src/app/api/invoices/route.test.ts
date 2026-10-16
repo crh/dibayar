@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ZodError } from "zod";
 import { auth } from "@/auth";
 import { invoiceCreateSchema } from "@/lib/invoice-validation";
-import { createInvoice, listInvoices, type InvoiceRecord } from "@/lib/invoices";
+import { createInvoiceOnce, listInvoices, type InvoiceRecord } from "@/lib/invoices";
+import { IdempotencyConflictError } from "@/lib/idempotency";
 import { GET, POST } from "./route";
 
 vi.mock("@/auth", () => ({
@@ -10,7 +11,7 @@ vi.mock("@/auth", () => ({
 }));
 
 vi.mock("@/lib/invoices", () => ({
-  createInvoice: vi.fn(),
+  createInvoiceOnce: vi.fn(),
   listInvoices: vi.fn(),
 }));
 
@@ -19,7 +20,7 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 const mockedAuth = vi.mocked(auth);
-const mockedCreateInvoice = vi.mocked(createInvoice);
+const mockedCreateInvoice = vi.mocked(createInvoiceOnce);
 const mockedListInvoices = vi.mocked(listInvoices);
 
 function makeRequest(body: unknown, headers: HeadersInit = { origin: "http://localhost" }) {
@@ -141,7 +142,7 @@ describe("POST /api/invoices", () => {
 
   it("mengembalikan 201 beserta invoice saat berhasil dibuat", async () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
-    mockedCreateInvoice.mockResolvedValue(invoice);
+    mockedCreateInvoice.mockResolvedValue({ record: invoice, replayed: false });
 
     const response = await POST(makeRequest({ dealId: "deal-1" }));
 
@@ -194,7 +195,7 @@ describe("same-origin protection for POST /api/invoices", () => {
   });
 
   it("allows a same-origin POST", async () => {
-    mockedCreateInvoice.mockResolvedValue(invoice);
+    mockedCreateInvoice.mockResolvedValue({ record: invoice, replayed: false });
 
     const response = await POST(makeRequest({ dealId: "deal-1" }));
 
@@ -221,5 +222,57 @@ describe("same-origin protection for POST /api/invoices", () => {
 
     expect(response.status).toBe(403);
     expect(mockedCreateInvoice).not.toHaveBeenCalled();
+  });
+});
+
+describe("Idempotency-Key on POST /api/invoices (#53)", () => {
+  const key = "5b0f7c2e-8a41-4d7e-9a35-1c2b3d4e5f60";
+
+  beforeEach(() => {
+    mockedAuth.mockReset();
+    mockedCreateInvoice.mockReset();
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+  });
+
+  it("passes the key to the create, scoped to the session user", async () => {
+    mockedCreateInvoice.mockResolvedValue({ record: invoice, replayed: false });
+
+    const response = await POST(makeRequest({ dealId: "deal-1" }, { origin: "http://localhost", "Idempotency-Key": key }));
+
+    expect(response.status).toBe(201);
+    expect(mockedCreateInvoice).toHaveBeenCalledWith(expect.anything(), "user-1", { dealId: "deal-1" }, key);
+  });
+
+  it("passes no key when the request has none", async () => {
+    mockedCreateInvoice.mockResolvedValue({ record: invoice, replayed: false });
+
+    await POST(makeRequest({ dealId: "deal-1" }));
+
+    expect(mockedCreateInvoice).toHaveBeenCalledWith(expect.anything(), "user-1", { dealId: "deal-1" }, null);
+  });
+
+  it("answers a repeat of a stored create with 200 and the stored invoice", async () => {
+    mockedCreateInvoice.mockResolvedValue({ record: invoice, replayed: true });
+
+    const response = await POST(makeRequest({ dealId: "deal-1" }, { origin: "http://localhost", "Idempotency-Key": key }));
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).invoice.id).toBe(invoice.id);
+  });
+
+  it("refuses a malformed key with 400 before creating anything", async () => {
+    const response = await POST(makeRequest({ dealId: "deal-1" }, { origin: "http://localhost", "Idempotency-Key": "bad key" }));
+
+    expect(response.status).toBe(400);
+    expect(mockedCreateInvoice).not.toHaveBeenCalled();
+  });
+
+  it("answers 409 when the key was used for different content", async () => {
+    mockedCreateInvoice.mockRejectedValue(new IdempotencyConflictError());
+
+    const response = await POST(makeRequest({ dealId: "deal-1" }, { origin: "http://localhost", "Idempotency-Key": key }));
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).error).toBe("Permintaan ini bentrok dengan permintaan sebelumnya. Muat ulang halaman lalu coba lagi.");
   });
 });

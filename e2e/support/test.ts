@@ -24,6 +24,15 @@ type BrowserDiagnostics = {
 // the opt-in covers 4xx only, so a 5xx on an opted-in address still fails.
 type ExpectedErrorResponse = { method: string; pathname: string; status?: number };
 
+// Opt-in for a test that deliberately makes one request fail with no
+// response at all -- a dropped connection (route.abort) or a request the app
+// gives up on itself (fetchWithTimeout's abort) -- to prove the page says so
+// (#53). Same shape and narrowness as expectedErrorResponses: method +
+// pathname, per test. Only that request's own failure, and the browser's
+// "Failed to load resource: net::..." console line for that pathname, are
+// dropped; every other failed request is still reported.
+type ExpectedFailedRequest = { method: string; pathname: string };
+
 // Opt-in for a test that deliberately makes the app itself report an error
 // to the console -- today only the route-error-boundary journey, where a
 // server component really throws and React logs that it did. Like
@@ -50,11 +59,13 @@ export const test = base.extend<{
   browserDiagnostics: BrowserDiagnostics;
   expectedErrorResponses: ExpectedErrorResponse[];
   expectedConsoleError: ExpectedConsoleError;
+  expectedFailedRequests: ExpectedFailedRequest[];
 }>({
   expectedErrorResponses: [[], { option: true }],
   expectedConsoleError: [null, { option: true }],
+  expectedFailedRequests: [[], { option: true }],
   browserDiagnostics: [
-    async ({ page, expectedErrorResponses, expectedConsoleError }, useFixture, testInfo) => {
+    async ({ page, expectedErrorResponses, expectedConsoleError, expectedFailedRequests }, useFixture, testInfo) => {
       const diagnostics: BrowserDiagnostics = {
         pageErrors: [],
         consoleErrors: [],
@@ -113,8 +124,16 @@ export const test = base.extend<{
       // (see its type comment above) -- same correlation mechanism, same
       // narrowness guarantee.
       const pendingExpectedResponseUrls = new Map<string, number>();
+      const isExpectedFailedPath = (rawUrl: string) => {
+        if (!URL.canParse(rawUrl)) return false;
+        const { pathname } = new URL(rawUrl);
+        return expectedFailedRequests.some((expected) => expected.pathname === pathname);
+      };
       const onConsole = (message: ConsoleMessage) => {
         if (message.type() === "error") {
+          // The console line and the requestfailed event are not ordered, so
+          // this matches the opted-in pathname rather than waiting for the event.
+          if (/^Failed to load resource: net::[A-Z_]+$/.test(message.text()) && isExpectedFailedPath(message.location().url)) return;
           if (/^Failed to load resource: the server responded with a status of \d+ \(.+\)$/.test(message.text())) {
             const url = message.location().url;
             const pending = pendingExpectedResponseUrls.get(url) ?? 0;
@@ -127,10 +146,13 @@ export const test = base.extend<{
           diagnostics.consoleErrors.push(message.text());
         }
       };
-      const onRequestFailed = (request: { url(): string; failure(): { errorText?: string } | null }) => {
+      const onRequestFailed = (request: { url(): string; method(): string; failure(): { errorText?: string } | null }) => {
         const failure = request.failure();
         const url = new URL(request.url());
         const errorText = failure?.errorText ?? "";
+        if (expectedFailedRequests.some((expected) => expected.method === request.method() && expected.pathname === url.pathname)) {
+          return;
+        }
         // Next App Router cancels superseded RSC navigations by design when a
         // second history/router update wins the race. These requests carry
         // the internal `_rsc` query marker; keep all other failed requests

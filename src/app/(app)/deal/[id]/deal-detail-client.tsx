@@ -13,6 +13,8 @@ import { PIPELINE_STAGES, PIPELINE_STAGE_KEYS } from "@/components/deals/deal-st
 import { buildDealWhatsApp, normalizeWhatsAppNumber } from "@/lib/whatsapp";
 import { DEAL_LIMITS } from "@/lib/deal-limits";
 import { formatPhone } from "@/lib/format/phone";
+import { fetchWithTimeout } from "@/lib/http";
+import { bodyField, IDEMPOTENCY_HEADER, idempotencyKeyFor, mutationErrorKey, sendMutation } from "@/lib/mutation";
 
 export default function DealDetailClient({
   initialDeal,
@@ -35,6 +37,10 @@ export default function DealDetailClient({
   const [isChangingStage, setIsChangingStage] = useState(false);
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [nextActionMessage, setNextActionMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  // An invoice create whose outcome is unknown may have been stored, so its
+  // key is kept for the next press: the server then returns that invoice
+  // instead of creating a second one (#53).
+  const pendingInvoiceCreate = useRef<{ key: string; body: string } | null>(null);
 
   const stageIndex = PIPELINE_STAGES.findIndex((stage) => stage.value === deal.status);
   const previousStage = stageIndex > 0 ? PIPELINE_STAGES[stageIndex - 1] : null;
@@ -46,16 +52,25 @@ export default function DealDetailClient({
     setIsChangingStage(true);
     setNextActionMessage(null);
     try {
-      const response = await fetch(`/api/deals/${deal.id}`, {
+      const result = await sendMutation(`/api/deals/${deal.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error("dashboard.dealError");
-      setDeal(payload.deal);
-    } catch {
-      setNextActionMessage({ kind: "error", text: t("dashboard.dealError") });
+      const saved = result.kind === "ok" ? bodyField<DealRecord>(result.body, "deal") : undefined;
+      if (saved) {
+        setDeal(saved);
+        return;
+      }
+      if (result.kind === "unknown") {
+        // It may have been stored: show what the server holds.
+        const check = await sendMutation(`/api/deals/${deal.id}`, { cache: "no-store" });
+        const stored = check.kind === "ok" ? bodyField<DealRecord>(check.body, "deal") : undefined;
+        if (stored) setDeal(stored);
+        if (stored?.status !== status) setNextActionMessage({ kind: "error", text: t("error.connection") });
+        return;
+      }
+      setNextActionMessage({ kind: "error", text: t(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.dealError") : "dashboard.dealError") });
     } finally {
       setIsChangingStage(false);
     }
@@ -64,18 +79,29 @@ export default function DealDetailClient({
   async function handleCreateInvoice() {
     setIsCreatingInvoice(true);
     setNextActionMessage(null);
+
+    const body = JSON.stringify({ dealId: deal.id, withholdingTaxType: "NONE" });
+    const key = idempotencyKeyFor(pendingInvoiceCreate.current, body);
+    pendingInvoiceCreate.current = { key, body };
+
     try {
-      const response = await fetch("/api/invoices", {
+      const result = await sendMutation("/api/invoices", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dealId: deal.id, withholdingTaxType: "NONE" }),
+        headers: { "Content-Type": "application/json", [IDEMPOTENCY_HEADER]: key },
+        body,
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error("dashboard.invoiceError");
-      setInvoice(payload.invoice);
-      setNextActionMessage({ kind: "success", text: t("deal.detailInvoiceCreatedLinkPrefix") });
-    } catch {
-      setNextActionMessage({ kind: "error", text: t("dashboard.invoiceError") });
+      if (result.kind === "unknown") {
+        setNextActionMessage({ kind: "error", text: t("dashboard.invoiceUnknown") });
+        return;
+      }
+      pendingInvoiceCreate.current = null;
+      const created = result.kind === "ok" ? bodyField<InvoiceRecord>(result.body, "invoice") : undefined;
+      if (created) {
+        setInvoice(created);
+        setNextActionMessage({ kind: "success", text: t("deal.detailInvoiceCreatedLinkPrefix") });
+      } else {
+        setNextActionMessage({ kind: "error", text: t(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.invoiceError") : "dashboard.invoiceError") });
+      }
     } finally {
       setIsCreatingInvoice(false);
     }
@@ -98,7 +124,7 @@ export default function DealDetailClient({
     setMessage(null);
 
     try {
-      const response = await fetch(`/api/deals/${deal.id}`, {
+      const response = await fetchWithTimeout(`/api/deals/${deal.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contactName: contactName || undefined }),
@@ -108,7 +134,10 @@ export default function DealDetailClient({
         setMessage({ kind: "error", text: t("dealForm.error.contactName") });
         return;
       }
-      if (!response.ok) throw new Error("deal.detailContactNameError");
+      if (!response.ok) {
+        setMessage({ kind: "error", text: t(mutationErrorKey({ kind: "rejected", status: response.status, body: payload }, "deal.detailContactNameError")) });
+        return;
+      }
       setDeal(payload.deal);
       setContactName(payload.deal.contactName ?? "");
       setMessage({ kind: "success", text: t("deal.detailContactNameSaved") });
@@ -133,7 +162,7 @@ export default function DealDetailClient({
     setIsSavingContactWa(true);
 
     try {
-      const response = await fetch(`/api/deals/${deal.id}`, {
+      const response = await fetchWithTimeout(`/api/deals/${deal.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contactWa: contactWaDraft }),
@@ -143,8 +172,12 @@ export default function DealDetailClient({
         setContactWaMessage({ kind: "error", text: t("dealForm.error.contactWa") });
         return;
       }
-      if (!response.ok || typeof payload.deal?.contactWa !== "string") throw new Error("deal.detailWhatsAppNumberError");
-      const readBackResponse = await fetch(`/api/deals/${deal.id}`, { cache: "no-store" });
+      if (!response.ok) {
+        setContactWaMessage({ kind: "error", text: t(mutationErrorKey({ kind: "rejected", status: response.status, body: payload }, "deal.detailWhatsAppNumberError")) });
+        return;
+      }
+      if (typeof payload.deal?.contactWa !== "string") throw new Error("deal.detailWhatsAppNumberError");
+      const readBackResponse = await fetchWithTimeout(`/api/deals/${deal.id}`, { cache: "no-store" });
       const readBackPayload = await readBackResponse.json();
       if (
         !readBackResponse.ok ||

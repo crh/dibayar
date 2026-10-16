@@ -19,6 +19,7 @@ import {
   type DealFormState,
 } from "@/components/deals/deal-form";
 import { isStageValue } from "@/components/deals/deal-stages";
+import { bodyField, IDEMPOTENCY_HEADER, idempotencyKeyFor, mutationErrorKey, sendMutation } from "@/lib/mutation";
 
 type DealClientProps = {
   initialDeals: DealRecord[];
@@ -119,6 +120,12 @@ export default function DealClient({
   const [pendingDealId, setPendingDealId] = useState<string | null>(null);
   const hasStrippedDialogParam = useRef(false);
   const dealFormRef = useRef<HTMLFormElement>(null);
+  // A create whose outcome is unknown (no answer, dropped connection, 5xx)
+  // may have been stored, so its key is kept: the next press of the same
+  // submission sends it again and the server returns what was stored
+  // instead of writing a second deal or invoice (#53).
+  const pendingDealCreate = useRef<{ key: string; body: string } | null>(null);
+  const pendingInvoiceCreates = useRef(new Map<string, { key: string; body: string }>());
 
   // FIND-13: ?tambah=1 arrives from the server with the dialog already open,
   // so on a slow connection someone can type into it before this component's
@@ -207,17 +214,26 @@ export default function DealClient({
     setDeals((current) => current.map((deal) => (deal.id === dealId ? { ...deal, status } : deal)));
 
     try {
-      const response = await fetch(`/api/deals/${dealId}`, {
+      const result = await sendMutation(`/api/deals/${dealId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error("dashboard.dealError");
-      setDeals((current) => current.map((deal) => (deal.id === dealId ? payload.deal : deal)));
-    } catch {
+      const saved = result.kind === "ok" ? bodyField<DealRecord>(result.body, "deal") : undefined;
+      if (saved) {
+        setDeals((current) => current.map((deal) => (deal.id === dealId ? saved : deal)));
+        return;
+      }
+      if (result.kind === "unknown") {
+        // It may have been stored: show what the server holds.
+        const check = await sendMutation(`/api/deals/${dealId}`, { cache: "no-store" });
+        const stored = check.kind === "ok" ? bodyField<DealRecord>(check.body, "deal") : undefined;
+        setDeals((current) => current.map((deal) => (deal.id === dealId ? (stored ?? previousDeal) : deal)));
+        if (stored?.status !== status) setError("error.connection");
+        return;
+      }
       setDeals((current) => current.map((deal) => (deal.id === dealId ? previousDeal : deal)));
-      setError("dashboard.dealError");
+      setError(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.dealError") : "dashboard.dealError");
     } finally {
       setPendingDealId(null);
     }
@@ -262,31 +278,40 @@ export default function DealClient({
     setFieldErrors({});
     setIsSaving(true);
 
+    const body = JSON.stringify({
+      ...form,
+      feeIdr: Number(form.feeIdr),
+      deadline: form.deadline || undefined,
+      contactName: form.contactName || undefined,
+      paymentTerms: form.paymentTerms || undefined,
+    });
+    const key = idempotencyKeyFor(pendingDealCreate.current, body);
+    pendingDealCreate.current = { key, body };
+
     try {
-      const response = await fetch("/api/deals", {
+      const result = await sendMutation("/api/deals", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          feeIdr: Number(form.feeIdr),
-          deadline: form.deadline || undefined,
-          contactName: form.contactName || undefined,
-          paymentTerms: form.paymentTerms || undefined,
-        }),
+        headers: { "Content-Type": "application/json", [IDEMPOTENCY_HEADER]: key },
+        body,
       });
-      const payload = await response.json();
-      if (!response.ok) {
-        const serverErrors = response.status === 400 ? dealFormErrorsFromServer(payload?.fields) : {};
-        if (Object.keys(serverErrors).length > 0) showFieldErrors(serverErrors);
-        else setError("dashboard.saveError");
+      if (result.kind === "unknown") {
+        setError("dashboard.saveUnknown");
         return;
       }
-      setDeals((current) => [payload.deal, ...current]);
-      setForm(EMPTY_DEAL_FORM);
-      setSuccessMessage("dashboard.dealSaved");
-      setIsDialogOpen(false);
-    } catch {
-      setError("dashboard.saveError");
+      // A definite answer: stored (now, or by an earlier attempt with this
+      // key) or refused, so this submission is settled.
+      pendingDealCreate.current = null;
+      const created = result.kind === "ok" ? bodyField<DealRecord>(result.body, "deal") : undefined;
+      if (created) {
+        setDeals((current) => [created, ...current.filter((existing) => existing.id !== created.id)]);
+        setForm(EMPTY_DEAL_FORM);
+        setSuccessMessage("dashboard.dealSaved");
+        setIsDialogOpen(false);
+        return;
+      }
+      const serverErrors = result.kind === "rejected" && result.status === 400 ? dealFormErrorsFromServer(bodyField(result.body, "fields")) : {};
+      if (Object.keys(serverErrors).length > 0) showFieldErrors(serverErrors);
+      else setError(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.saveError") : "dashboard.saveError");
     } finally {
       setIsSaving(false);
     }
@@ -297,18 +322,28 @@ export default function DealClient({
     setSuccessMessage(null);
     setIsSaving(true);
 
+    const body = JSON.stringify({ dealId, withholdingTaxType: "NONE" });
+    const key = idempotencyKeyFor(pendingInvoiceCreates.current.get(dealId) ?? null, body);
+    pendingInvoiceCreates.current.set(dealId, { key, body });
+
     try {
-      const response = await fetch("/api/invoices", {
+      const result = await sendMutation("/api/invoices", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dealId, withholdingTaxType: "NONE" }),
+        headers: { "Content-Type": "application/json", [IDEMPOTENCY_HEADER]: key },
+        body,
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error("dashboard.invoiceError");
-      setInvoices((current) => [payload.invoice, ...current]);
-      setSuccessMessage("dashboard.invoiceCreated");
-    } catch {
-      setError("dashboard.invoiceError");
+      if (result.kind === "unknown") {
+        setError("dashboard.invoiceUnknown");
+        return;
+      }
+      pendingInvoiceCreates.current.delete(dealId);
+      const created = result.kind === "ok" ? bodyField<InvoiceRecord>(result.body, "invoice") : undefined;
+      if (created) {
+        setInvoices((current) => [created, ...current.filter((existing) => existing.id !== created.id)]);
+        setSuccessMessage("dashboard.invoiceCreated");
+      } else {
+        setError(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.invoiceError") : "dashboard.invoiceError");
+      }
     } finally {
       setIsSaving(false);
     }

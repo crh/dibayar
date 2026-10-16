@@ -49,6 +49,7 @@ import { expectNoOwnerControls, press, responseTo, rupiah, watchPageHealth } fro
 
 const NEGO_DEAL_ID = `${E2E_FIXTURE_PREFIX}-deal-nego`;
 const TYPED_CONTACT_NAME = "Kontak Yang Tidak Tersimpan";
+const SESSION_EXPIRED = "Belum tersimpan karena sesi kamu sudah berakhir. Muat ulang halaman untuk masuk lagi.";
 const SENT_INVOICE_NUMBER = "E2E/SENT/001";
 const PAID_INVOICE_NUMBER = "E2E/PAID/002";
 
@@ -118,14 +119,16 @@ test.describe("journey: resilience and permissions", { tag: "@critical" }, () =>
     await test.step("Simpan and Lanjut ke Deal are refused, and each says so", async () => {
       const save = await responseTo(page, "PATCH", `/api/deals/${dealId}`, () => press(page.getByRole("button", { name: "Simpan", exact: true }), isMobile));
       expect(save.status()).toBe(401);
-      await expect(page.getByRole("alert").filter({ hasText: "Nama kontak belum bisa disimpan. Coba lagi." })).toBeVisible();
+      // Not "try again", which cannot work, but how to sign in again (#53).
+      await expect(page.getByRole("alert").filter({ hasText: SESSION_EXPIRED })).toHaveCount(1);
       await expect(page.getByRole("status").filter({ hasText: "Nama kontak disimpan" })).toHaveCount(0);
       // What was entered is still in the field, to try again after signing in.
       await expect(contactName).toHaveValue(TYPED_CONTACT_NAME);
 
       const move = await responseTo(page, "PATCH", `/api/deals/${dealId}`, () => press(page.getByRole("button", { name: "Lanjut ke Deal", exact: true }), isMobile));
       expect(move.status()).toBe(401);
-      await expect(page.getByRole("alert").filter({ hasText: "Deal belum bisa diperbarui. Coba lagi." })).toBeVisible();
+      // The contact-name message stays; the move adds its own.
+      await expect(page.getByRole("alert").filter({ hasText: SESSION_EXPIRED })).toHaveCount(2);
       await expect(page.getByText("Tahap saat ini: Nego")).toBeVisible();
       await expect(page.getByText("Tahap saat ini: Deal")).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Lanjut ke Deal", exact: true })).toBeVisible();

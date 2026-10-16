@@ -1067,3 +1067,17 @@ Starting state verified fresh: `main` = `origin/main` = `a60dfdf`, no open PRs, 
 - Release: **NO-GO / PENDING_OPERATOR.** Merge order for Chris: #48, #49, #47, then refresh evidence on the final SHA, then the manual checks. Receipt: `docs/receipts/DIBAYAR-FIND13-PR47-PR48-RELEASE-READINESS-2026-10-12.md`.
 - Not changed: `main`, `staging`, Production, Neon, Vercel settings, OAuth, SSO, the ruleset, repo visibility and settings. Nothing merged; no merge attempted.
 - Rubric self-score: Evidence honesty 2/2 (the invalid local run, the unexplained WebKit condition, the unexercised skip path and everything not run are stated); shipped completeness 1/2 (three PRs ready, none merged, manual and Production gates outstanding); security discipline 2/2.
+
+## 2026-10-15 — #53 server error handling audit (PR #54)
+
+- Audited every client write against its route contract (18 actions); receipt `docs/receipts/DIBAYAR-SERVER-ERROR-HANDLING-AUDIT-2026-10-15.md`.
+- Fixed P1: create deal, stage moves and invoice create had no timeout (endless spinner) and could duplicate a deal/invoice after a lost answer. Now bounded, with read-back reconciliation before any re-POST. 401/403/429 now say what to do next.
+- RED/GREEN recorded; CI green on `1dc00db` (run 38746164839); local critical 278 passed / 0 failed; WebKit 99 passed / 0 failed.
+- PR #54 → `staging`, not merged. #51 recommended closed unmerged (already conflicts with `staging`). Release stays NO-GO on the existing human gates.
+
+## 2026-10-16 — PR #54 review follow-up: idempotency key (#53)
+
+- The three unresolved Codex threads on #54 were valid: a point-in-time read cannot prove a timed-out create will not commit later; a gateway's JSON 5xx was classed as a refusal; content matching could adopt another tab's deal.
+- Fix: `Idempotency-Key` on `POST /api/deals` and `POST /api/invoices`, enforced by `@@unique([userId, idempotencyKey])` (additive migration `20261016000000_create_idempotency_keys`). Same key → stored row (200); other content → 409. Every 5xx is now an unknown outcome; content matching removed. Tandai lunas reads back after a 5xx too.
+- RED on the previous head: 58 + 4 unit failures; E2E 8 failures, including six concurrent creates → six deals. GREEN: see the receipt's "Review follow-up" section.
+- Not merged. Merging to `staging` applies the migration to the staging database; Production only through a separately authorized release. Release stays NO-GO.

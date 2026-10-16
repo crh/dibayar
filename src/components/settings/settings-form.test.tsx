@@ -255,6 +255,34 @@ describe("SettingsForm — save lifecycle", () => {
     expect(screen.getByRole("heading", { name: "Identitas penerbit" })).toBeDefined();
   });
 
+  it.each([
+    [401, "Belum tersimpan karena sesi kamu sudah berakhir. Muat ulang halaman untuk masuk lagi."],
+    [403, "Belum tersimpan karena permintaan ditolak demi keamanan. Muat ulang halaman, lalu coba lagi."],
+    [429, "Belum tersimpan karena terlalu banyak percobaan. Tunggu sebentar, lalu coba lagi."],
+  ])("a save refused with %i says what to do next (#53)", async (status, message) => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetchMock([{ status, body: { error: "raw server text" } }]));
+    renderForm();
+
+    await user.click(screen.getByRole("button", { name: "Simpan pengaturan" }));
+
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", message);
+    expect(document.body.textContent).not.toContain("raw server text");
+  });
+
+  it("a save with no answer says it may not be saved, and the form stays editable (#53)", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    }));
+    renderForm();
+
+    await user.click(screen.getByRole("button", { name: "Simpan pengaturan" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("belum pasti tersimpan");
+    expect(screen.getByRole("button", { name: "Simpan pengaturan" })).toHaveProperty("disabled", false);
+  });
+
   it("PATCHes the exact form payload and adopts the server-returned view on success", async () => {
     const user = userEvent.setup();
     const updated = { ...baseSettings, issuerAddress: "Jl. Melati 1" };

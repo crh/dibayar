@@ -1,7 +1,8 @@
 import { nextInvoiceNumber } from "./invoice-number";
-import { invoiceCreateSchema } from "./invoice-validation";
+import { invoiceCreateSchema, type InvoiceCreateInput } from "./invoice-validation";
 import { isSupportedStoredDueDate } from "./due-date";
 import { createInvoiceSequenceDb, type InvoiceSequenceQueryClient } from "./invoice-sequence";
+import { createOnce, type CreateOnceResult } from "./idempotency";
 
 export type InvoiceStatus = "DRAFT" | "SENT" | "DUE" | "OVERDUE" | "PAID";
 export type WithholdingTaxType = "NONE" | "PPH21" | "PPH23";
@@ -15,6 +16,8 @@ export type InvoiceRecord = {
   withholdingTaxType: WithholdingTaxType;
   status: InvoiceStatus;
   dueDate: Date | null;
+  // See createInvoiceOnce. Optional here: no client code reads it.
+  idempotencyKey?: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -29,6 +32,7 @@ type InvoiceCreateData = {
   withholdingTaxType: WithholdingTaxType;
   status: InvoiceStatus;
   dueDate: Date | null;
+  idempotencyKey?: string;
 };
 
 // Matches Prisma's $transaction callback client: raw query access for the atomic sequence adapter plus invoice.create.
@@ -43,6 +47,12 @@ export type InvoiceCreateDb = {
     findFirst(args: { where: { id: string; userId: string } }): Promise<OwnedDeal | null>;
   };
   $transaction<T>(fn: (tx: InvoiceTransactionClient) => Promise<T>): Promise<T>;
+};
+
+export type InvoiceCreateOnceDb = InvoiceCreateDb & {
+  invoice: {
+    findFirst(args: { where: { userId: string; idempotencyKey: string } }): Promise<InvoiceRecord | null>;
+  };
 };
 
 export type InvoiceReadDb = {
@@ -199,12 +209,13 @@ export async function updateInvoiceDueDate(
 }
 
 // Returns null (not a throw) when the deal is missing or not owned by userId, so callers can respond 404 uniformly.
-export async function createInvoice(db: InvoiceCreateDb, userId: string, input: unknown) {
-  const validated = invoiceCreateSchema.parse(input);
-
-  const deal = await db.deal.findFirst({ where: { id: validated.dealId, userId } });
-  if (!deal) return null;
-
+async function insertInvoice(
+  db: InvoiceCreateDb,
+  userId: string,
+  deal: OwnedDeal,
+  validated: InvoiceCreateInput,
+  idempotencyKey: string | null,
+) {
   return db.$transaction(async (tx) => {
     const number = await nextInvoiceNumber(createInvoiceSequenceDb(tx), userId);
     return tx.invoice.create({
@@ -219,7 +230,39 @@ export async function createInvoice(db: InvoiceCreateDb, userId: string, input: 
         // contract, so an out-of-range legacy deadline never spreads into a
         // new invoice.
         dueDate: validated.dueDate ?? (deal.deadline && isSupportedStoredDueDate(deal.deadline) ? deal.deadline : null),
+        ...(idempotencyKey ? { idempotencyKey } : {}),
       },
     });
   });
+}
+
+export async function createInvoice(db: InvoiceCreateDb, userId: string, input: unknown) {
+  const validated = invoiceCreateSchema.parse(input);
+
+  const deal = await db.deal.findFirst({ where: { id: validated.dealId, userId } });
+  if (!deal) return null;
+
+  return insertInvoice(db, userId, deal, validated, null);
+}
+
+// #53: the invoice counterpart of createDealOnce. null when the deal is not
+// the user's; a key already used for another deal or tax type throws
+// IdempotencyConflictError.
+export async function createInvoiceOnce(
+  db: InvoiceCreateOnceDb,
+  userId: string,
+  input: unknown,
+  idempotencyKey: string | null,
+): Promise<CreateOnceResult<InvoiceRecord> | null> {
+  const validated = invoiceCreateSchema.parse(input);
+
+  const deal = await db.deal.findFirst({ where: { id: validated.dealId, userId } });
+  if (!deal) return null;
+
+  if (!idempotencyKey) return { record: await insertInvoice(db, userId, deal, validated, null), replayed: false };
+  return createOnce(
+    () => db.invoice.findFirst({ where: { userId, idempotencyKey } }),
+    () => insertInvoice(db, userId, deal, validated, idempotencyKey),
+    (stored) => stored.dealId === deal.id && stored.withholdingTaxType === validated.withholdingTaxType,
+  );
 }

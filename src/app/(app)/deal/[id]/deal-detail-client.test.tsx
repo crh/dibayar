@@ -349,3 +349,85 @@ describe("DealDetailClient — next action (deal↔invoice continuity)", () => {
     expect(screen.queryByText(/Telat/)).toBeNull();
   });
 });
+
+describe("DealDetailClient when the server cannot answer (#53)", () => {
+  const invoice: InvoiceRecord = {
+    id: "inv-1",
+    userId: "user-1",
+    dealId: "deal-1",
+    number: "INV/2026/09/001",
+    subtotalIdr: 2_500_000,
+    withholdingTaxType: "NONE",
+    status: "DRAFT",
+    dueDate: null,
+    createdAt: new Date("2026-09-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-09-01T00:00:00.000Z"),
+  };
+
+  function calls(fetchMock: ReturnType<typeof vi.fn>) {
+    return fetchMock.mock.calls.map(([url, init]) => `${(init as RequestInit | undefined)?.method ?? "GET"} ${url}`);
+  }
+
+  function keyOf(fetchMock: ReturnType<typeof vi.fn>, call: number) {
+    return ((fetchMock.mock.calls[call][1] as RequestInit).headers as Record<string, string>)["Idempotency-Key"];
+  }
+
+  it.each([
+    ["no answer", () => Promise.reject(new TypeError("Failed to fetch"))],
+    ["a 502 gateway page", () => Promise.resolve({ ok: false, status: 502, json: async () => { throw new SyntaxError("<html>"); } })],
+    ["a JSON 504", () => Promise.resolve(jsonResponse(504, { message: "upstream timed out" }))],
+  ])("an invoice create with %s says so, and Buat invoice again resends it with the same key and shows the stored invoice", async (_case, firstAnswer) => {
+    const fetchMock = vi.fn().mockImplementationOnce(firstAnswer).mockResolvedValueOnce(jsonResponse(200, { invoice }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={{ ...dealFixture, status: "INVOICE" }} history={[]} />);
+
+    await user.click(screen.getByRole("button", { name: "Buat invoice" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("invoice ini belum pasti dibuat");
+
+    await user.click(screen.getByRole("button", { name: "Buat invoice" }));
+    expect(await screen.findByRole("link", { name: "Lihat invoice INV/2026/09/001 →" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Buat invoice" })).toBeNull();
+    expect(calls(fetchMock)).toEqual(["POST /api/invoices", "POST /api/invoices"]);
+    expect(keyOf(fetchMock, 0)).toMatch(/^[A-Za-z0-9-]{16,100}$/);
+    expect(keyOf(fetchMock, 1)).toBe(keyOf(fetchMock, 0));
+  });
+
+  it("after a definite refusal, Buat invoice again gets a new key", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(403, { error: "x" })).mockResolvedValueOnce(jsonResponse(201, { invoice }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={{ ...dealFixture, status: "INVOICE" }} history={[]} />);
+
+    await user.click(screen.getByRole("button", { name: "Buat invoice" }));
+    await screen.findByRole("alert");
+    await user.click(screen.getByRole("button", { name: "Buat invoice" }));
+
+    await screen.findByRole("link", { name: "Lihat invoice INV/2026/09/001 →" });
+    expect(keyOf(fetchMock, 1)).not.toBe(keyOf(fetchMock, 0));
+  });
+
+  it("a contact name refused for an expired session says to sign in again, and keeps what was typed", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(401, { error: "raw server text" })));
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={dealFixture} history={[]} />);
+
+    const input = screen.getByLabelText("Nama kontak", { selector: "input" }) as HTMLInputElement;
+    await user.type(input, "Rina");
+    await user.click(screen.getByRole("button", { name: "Simpan" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Belum tersimpan karena sesi kamu sudah berakhir. Muat ulang halaman untuk masuk lagi.");
+    expect(input.value).toBe("Rina");
+  });
+
+  it("a stage move refused for an expired session says to sign in again", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(401, { error: "raw server text" })));
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={dealFixture} history={[]} />);
+
+    await user.click(screen.getByRole("button", { name: "Lanjut ke Deal" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Belum tersimpan karena sesi kamu sudah berakhir. Muat ulang halaman untuk masuk lagi.");
+    expect(screen.getByText(/Tahap saat ini: Nego/)).toBeDefined();
+  });
+});

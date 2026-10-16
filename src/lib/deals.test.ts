@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { Prisma } from "@/generated/prisma/client";
+import { IdempotencyConflictError } from "./idempotency";
 import {
   createDeal,
+  createDealOnce,
   deleteDeal,
   getOwnedDeal,
   listDeals,
@@ -52,8 +54,10 @@ function makeDb(records: DealRecord[] = []): DealDb {
       findMany: vi.fn(async ({ where }: { where: { userId: string } }) =>
         data.filter((deal) => deal.userId === where.userId),
       ),
-      findFirst: vi.fn(async ({ where }: { where: { id: string; userId: string } }) =>
-        data.find((deal) => deal.id === where.id && deal.userId === where.userId) ?? null,
+      // Matches every field named in `where` (by id, or by userId and
+      // idempotencyKey), like Prisma's own findFirst.
+      findFirst: vi.fn(async ({ where }: { where: Partial<DealRecord> }) =>
+        data.find((deal) => Object.entries(where).every(([field, value]) => deal[field as keyof DealRecord] === value)) ?? null,
       ),
       create: vi.fn(async ({ data: values }: { data: Omit<DealRecord, "id" | "createdAt" | "updatedAt"> }) => {
         const record: DealRecord = {
@@ -366,5 +370,77 @@ describe("deal stage history (T-17)", () => {
     const history = await listDealStageTransitions(db, "deal-1");
 
     expect(history[0]).toMatchObject({ fromStatus: "NEGO", toStatus: "DEAL" });
+  });
+});
+
+describe("createDealOnce (#53)", () => {
+  const key = "5b0f7c2e-8a41-4d7e-9a35-1c2b3d4e5f60";
+
+  it("stores the key on the new deal", async () => {
+    const db = makeDb();
+
+    const result = await createDealOnce(db, "user-1", input, key);
+
+    expect(result.replayed).toBe(false);
+    expect(db.deal.create).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: "user-1", idempotencyKey: key }) });
+  });
+
+  it("returns the stored deal for a repeat with the same key, and writes nothing", async () => {
+    const db = makeDb();
+    const first = await createDealOnce(db, "user-1", input, key);
+
+    const repeat = await createDealOnce(db, "user-1", { ...input, contactWa: "0812 1234 5678" }, key);
+
+    expect(repeat).toEqual({ record: first.record, replayed: true });
+    expect(db.deal.create).toHaveBeenCalledTimes(1);
+    expect(db.dealStageTransition.create).toHaveBeenCalledTimes(1);
+    expect(await listDeals(db, "user-1")).toHaveLength(1);
+  });
+
+  it("still returns the stored deal after its stage was moved", async () => {
+    const db = makeDb();
+    const first = await createDealOnce(db, "user-1", input, key);
+    await updateDeal(db, first.record.id, "user-1", { status: "NEGO" });
+
+    await expect(createDealOnce(db, "user-1", input, key)).resolves.toMatchObject({ replayed: true });
+  });
+
+  it.each([
+    ["brand", { brand: "Kopi Lain" }],
+    ["contact name", { contactName: "Rina" }],
+    ["deadline", { deadline: "2026-08-01" }],
+    ["payment terms", { paymentTerms: "NET 30" }],
+    ["fee", { feeIdr: 1500001 }],
+  ])("refuses the key when the %s differs, and writes nothing", async (_field, change) => {
+    const db = makeDb();
+    await createDealOnce(db, "user-1", input, key);
+
+    await expect(createDealOnce(db, "user-1", { ...input, ...change }, key)).rejects.toBeInstanceOf(IdempotencyConflictError);
+    expect(db.deal.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps keys per user: the same key from another user creates that user's own deal", async () => {
+    const db = makeDb();
+    await createDealOnce(db, "user-1", input, key);
+
+    const other = await createDealOnce(db, "user-2", input, key);
+
+    expect(other.replayed).toBe(false);
+    expect(other.record.userId).toBe("user-2");
+  });
+
+  it("validates before looking anything up", async () => {
+    const db = makeDb();
+    await expect(createDealOnce(db, "user-1", { ...input, feeIdr: -1 }, key)).rejects.toThrow();
+    expect(db.deal.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("creates as before without a key", async () => {
+    const db = makeDb();
+    await createDealOnce(db, "user-1", input, null);
+    await createDealOnce(db, "user-1", input, null);
+
+    expect(await listDeals(db, "user-1")).toHaveLength(2);
+    expect(db.deal.create).toHaveBeenCalledWith({ data: expect.not.objectContaining({ idempotencyKey: expect.anything() }) });
   });
 });
