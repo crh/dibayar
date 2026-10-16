@@ -38,7 +38,7 @@ const ORIGIN_REJECTED = "Muat ulang halaman, lalu coba lagi.";
 // tests are listed, before global setup writes the manifest.
 const MASUK_DEAL_PATCH = { method: "PATCH", pathname: `/api/deals/${E2E_FIXTURE_PREFIX}-deal-masuk` };
 
-type Failure = "gateway-html" | "gateway-json" | "network" | "no-answer" | "stored-no-answer" | "stored-gateway-json";
+type Failure = "gateway-html" | "gateway-json" | "network" | "no-answer" | "stored-no-answer" | "stored-gateway-json" | "stored-gateway-408-json";
 
 type SentRequest = { key: string | undefined; body: string | null };
 
@@ -67,6 +67,12 @@ async function failNext(page: Page, method: string, pathname: string, failure: F
         // Stored by the real server; a gateway's own JSON answer replaces its reply.
         await route.fetch();
         return route.fulfill({ status: 504, json: { message: "Gateway Timeout" } });
+      }
+      if (failure === "stored-gateway-408-json") {
+        // The real API already stored the deal, but the gateway answers 408.
+        // The UI must reuse the same key so a retry reads that deal.
+        await route.fetch();
+        return route.fulfill({ status: 408, json: { message: "Request Timeout" } });
       }
       // The real server handles it; its answer is never passed on.
       if (failure === "stored-no-answer") await route.fetch();
@@ -218,6 +224,37 @@ test.describe("add deal when the server cannot answer", { tag: "@critical" }, ()
     expect(late.status()).toBe(200);
     expect(((await late.json()) as { deal: { brand: string } }).deal.brand).toBe(brand);
     expect(await storedDealsNamed(page, brand)).toBe(1);
+  });
+});
+
+test.describe("HTTP 408 after the server stores a deal", { tag: "@critical" }, () => {
+  test.beforeEach(reseedFixtures);
+  test.use({ expectedErrorResponses: [{ method: "POST", pathname: "/api/deals", status: 408 }] });
+
+  test("a gateway JSON 408 keeps the same key and the retry reuses one stored deal", async ({ page }) => {
+    const brand = `E2E Gateway 408 ${Date.now()}`;
+    const dialog = await openFilledDialog(page, brand);
+    const posts = await failNext(page, "POST", "/api/deals", "stored-gateway-408-json");
+    const save = dialog.getByRole("button", { name: "Simpan deal" });
+    await save.click();
+
+    await expect(dialog.getByRole("alert")).toContainText(SAVE_UNKNOWN, { timeout: 15_000 });
+    await expect(save).toBeEnabled();
+    await expect(dialog.getByLabel("Nama brand")).toHaveValue(brand);
+    await expect.poll(() => storedDealsNamed(page, brand)).toBe(1);
+
+    const response = page.waitForResponse((r) =>
+      r.request().method() === "POST" && new URL(r.url()).pathname === "/api/deals",
+    );
+    await save.click();
+    expect((await response).status()).toBe(200);
+    await expect(dialog).toHaveCount(0);
+    expect(posts).toHaveLength(2);
+    expect(posts[1].key).toBe(posts[0].key);
+    expect(posts[1].body).toBe(posts[0].body);
+    expect(await storedDealsNamed(page, brand)).toBe(1);
+    await page.reload();
+    await expect(page.getByText(brand, { exact: true })).toHaveCount(1);
   });
 });
 
