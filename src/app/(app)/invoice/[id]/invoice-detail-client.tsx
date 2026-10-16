@@ -614,6 +614,9 @@ export default function InvoiceDetailClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
+      // A 5xx may be a gateway that gave up while the change was being
+      // stored: read it back below, as for no answer at all.
+      if (response.status >= 500) throw new Error("invoice.statusUpdateUnknown");
       const payload = await response.json();
       if (!response.ok) {
         setError(mutationErrorKey({ kind: "rejected", status: response.status, body: payload }, "invoice.statusUpdateError"));
@@ -626,8 +629,8 @@ export default function InvoiceDetailClient({
         window.setTimeout(() => setPaidMoment(false), 2600);
       }
     } catch {
-      // No answer, a dropped connection or a gateway page: it may have been
-      // stored, so show what the server holds rather than guess (#53).
+      // No answer, a dropped connection, a gateway page or a 5xx: it may
+      // have been stored, so show what the server holds rather than guess (#53).
       const check = await sendMutation(`/api/invoices/${invoice.id}`, { cache: "no-store" });
       const stored = check.kind === "ok" ? bodyField<InvoiceRecord>(check.body, "invoice") : undefined;
       if (stored) setInvoice(stored);

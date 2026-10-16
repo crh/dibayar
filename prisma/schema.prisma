@@ -115,12 +115,17 @@ model Deal {
   deadline         DateTime?
   paymentTerms     String?               @db.Text
   status           DealStatus            @default(MASUK)
+  // The page's own key for the request that created this deal (#53): a
+  // repeated create with the same key returns this row instead of a second
+  // deal. Null for deals created before the key existed.
+  idempotencyKey   String?
   user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   invoices         Invoice[]
   stageTransitions DealStageTransition[]
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 
+  @@unique([userId, idempotencyKey])
   @@index([userId, status])
   @@index([userId, deadline])
 }
@@ -160,6 +165,8 @@ model Invoice {
   withholdingTaxType WithholdingTaxType @default(NONE)
   status             InvoiceStatus      @default(DRAFT)
   dueDate            DateTime?
+  // Same contract as Deal.idempotencyKey (#53).
+  idempotencyKey     String?
   user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   deal               Deal               @relation(fields: [dealId], references: [id], onDelete: Restrict)
   share              InvoiceShare?
@@ -167,6 +174,7 @@ model Invoice {
   updatedAt          DateTime           @updatedAt
 
   @@unique([userId, number])
+  @@unique([userId, idempotencyKey])
   @@index([dealId])
 }
 

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { auth } from "@/auth";
-import { createDeal, listDeals, type DealDb } from "@/lib/deals";
+import { createDealOnce, listDeals, type DealDb } from "@/lib/deals";
 import { prisma } from "@/lib/prisma";
 import { isSameOriginRequest } from "@/lib/request-origin";
+import { IdempotencyConflictError, readIdempotencyKey } from "@/lib/idempotency";
 
 const db = prisma as unknown as DealDb;
 
@@ -31,13 +32,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Permintaan ditolak. Muat ulang halaman lalu coba lagi." }, { status: 403 });
     }
 
-    const deal = await createDeal(db, session.user.id, await request.json());
-    return NextResponse.json({ deal }, { status: 201 });
+    const idempotency = readIdempotencyKey(request);
+    if (!idempotency.ok) {
+      return NextResponse.json({ error: "Permintaan ditolak. Muat ulang halaman lalu coba lagi." }, { status: 400 });
+    }
+
+    // A repeat of a stored create (same key) answers 200 with that deal.
+    const { record: deal, replayed } = await createDealOnce(db, session.user.id, await request.json(), idempotency.key);
+    return NextResponse.json({ deal }, { status: replayed ? 200 : 201 });
   } catch (error) {
     if (error instanceof ZodError) {
       return NextResponse.json(
         { error: "Periksa kembali data deal kamu.", fields: error.flatten().fieldErrors },
         { status: 400 },
+      );
+    }
+    if (error instanceof IdempotencyConflictError) {
+      return NextResponse.json(
+        { error: "Permintaan ini bentrok dengan permintaan sebelumnya. Muat ulang halaman lalu coba lagi." },
+        { status: 409 },
       );
     }
     if (error instanceof SyntaxError) {

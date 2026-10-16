@@ -1491,10 +1491,13 @@ describe("InvoiceDetailClient status change when the server cannot answer (#53)"
     vi.unstubAllGlobals();
   });
 
-  function withUnansweredStatusPatch(stored: unknown) {
+  function withUnansweredStatusPatch(stored: unknown, patchAnswer?: { status: number; body: unknown }) {
     const base = makeFetchMock();
     return vi.fn(async (url: string, init?: RequestInit) => {
-      if (url === "/api/invoices/invoice-1" && init?.method === "PATCH") throw new TypeError("Failed to fetch");
+      if (url === "/api/invoices/invoice-1" && init?.method === "PATCH") {
+        if (patchAnswer) return jsonResponse(patchAnswer);
+        throw new TypeError("Failed to fetch");
+      }
       if (url === "/api/invoices/invoice-1") return jsonResponse({ status: 200, body: { invoice: stored } });
       return base(url, init);
     });
@@ -1516,6 +1519,30 @@ describe("InvoiceDetailClient status change when the server cannot answer (#53)"
 
   it("a Tandai lunas that was not stored keeps the status and says it may not be saved", async () => {
     vi.stubGlobal("fetch", withUnansweredStatusPatch(sent));
+    const user = userEvent.setup();
+    render(<InvoiceDetailClient initialInvoice={sent} now={now} />);
+
+    await user.click(await screen.findByRole("button", { name: "Tandai lunas" }));
+
+    expect(await screen.findByText(/belum pasti tersimpan/)).toBeDefined();
+    expect(screen.getByRole("button", { name: "Tandai lunas" })).toHaveProperty("disabled", false);
+  });
+
+  // A gateway that gave up while the change was being stored can answer with
+  // JSON too, so a 5xx is read back like no answer (#54 review).
+  it.each([500, 502, 504])("a Tandai lunas answered with a JSON %i that the server did store shows Lunas, with no error", async (status) => {
+    vi.stubGlobal("fetch", withUnansweredStatusPatch({ ...sent, status: "PAID" }, { status, body: { message: "upstream timed out" } }));
+    const user = userEvent.setup();
+    render(<InvoiceDetailClient initialInvoice={sent} now={now} />);
+
+    await user.click(await screen.findByRole("button", { name: "Tandai lunas" }));
+
+    expect(await screen.findByRole("button", { name: "Batalkan status lunas" })).toBeDefined();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("a Tandai lunas answered with a JSON 502 that was not stored keeps the status and says it may not be saved", async () => {
+    vi.stubGlobal("fetch", withUnansweredStatusPatch(sent, { status: 502, body: { message: "Bad Gateway" } }));
     const user = userEvent.setup();
     render(<InvoiceDetailClient initialInvoice={sent} now={now} />);
 

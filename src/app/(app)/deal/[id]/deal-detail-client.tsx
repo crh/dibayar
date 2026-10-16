@@ -14,7 +14,7 @@ import { buildDealWhatsApp, normalizeWhatsAppNumber } from "@/lib/whatsapp";
 import { DEAL_LIMITS } from "@/lib/deal-limits";
 import { formatPhone } from "@/lib/format/phone";
 import { fetchWithTimeout } from "@/lib/http";
-import { bodyField, findCreatedInvoice, mutationErrorKey, readList, sendMutation } from "@/lib/mutation";
+import { bodyField, IDEMPOTENCY_HEADER, idempotencyKeyFor, mutationErrorKey, sendMutation } from "@/lib/mutation";
 
 export default function DealDetailClient({
   initialDeal,
@@ -37,9 +37,10 @@ export default function DealDetailClient({
   const [isChangingStage, setIsChangingStage] = useState(false);
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [nextActionMessage, setNextActionMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
-  // An invoice create whose outcome is unknown may have been stored; the
-  // next attempt checks the server first instead of creating a second (#53).
-  const invoiceCreateUnconfirmed = useRef(false);
+  // An invoice create whose outcome is unknown may have been stored, so its
+  // key is kept for the next press: the server then returns that invoice
+  // instead of creating a second one (#53).
+  const pendingInvoiceCreate = useRef<{ key: string; body: string } | null>(null);
 
   const stageIndex = PIPELINE_STAGES.findIndex((stage) => stage.value === deal.status);
   const previousStage = stageIndex > 0 ? PIPELINE_STAGES[stageIndex - 1] : null;
@@ -79,46 +80,28 @@ export default function DealDetailClient({
     setIsCreatingInvoice(true);
     setNextActionMessage(null);
 
-    // The invoice an earlier, unanswered attempt may have created.
-    async function findStored() {
-      const serverInvoices = await readList<InvoiceRecord>("/api/invoices", "invoices");
-      return serverInvoices ? { invoice: findCreatedInvoice(serverInvoices, deal.id) } : null;
-    }
-    function showCreated(created: InvoiceRecord) {
-      invoiceCreateUnconfirmed.current = false;
-      setInvoice(created);
-      setNextActionMessage({ kind: "success", text: t("deal.detailInvoiceCreatedLinkPrefix") });
-    }
+    const body = JSON.stringify({ dealId: deal.id, withholdingTaxType: "NONE" });
+    const key = idempotencyKeyFor(pendingInvoiceCreate.current, body);
+    pendingInvoiceCreate.current = { key, body };
 
     try {
-      if (invoiceCreateUnconfirmed.current) {
-        const stored = await findStored();
-        if (!stored) {
-          setNextActionMessage({ kind: "error", text: t("dashboard.invoiceUnknown") });
-          return;
-        }
-        if (stored.invoice) {
-          showCreated(stored.invoice);
-          return;
-        }
-      }
-
       const result = await sendMutation("/api/invoices", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dealId: deal.id, withholdingTaxType: "NONE" }),
+        headers: { "Content-Type": "application/json", [IDEMPOTENCY_HEADER]: key },
+        body,
       });
       if (result.kind === "unknown") {
-        invoiceCreateUnconfirmed.current = true;
-        const stored = await findStored();
-        if (stored?.invoice) showCreated(stored.invoice);
-        else setNextActionMessage({ kind: "error", text: t("dashboard.invoiceUnknown") });
+        setNextActionMessage({ kind: "error", text: t("dashboard.invoiceUnknown") });
         return;
       }
-      invoiceCreateUnconfirmed.current = false;
+      pendingInvoiceCreate.current = null;
       const created = result.kind === "ok" ? bodyField<InvoiceRecord>(result.body, "invoice") : undefined;
-      if (created) showCreated(created);
-      else setNextActionMessage({ kind: "error", text: t(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.invoiceError") : "dashboard.invoiceError") });
+      if (created) {
+        setInvoice(created);
+        setNextActionMessage({ kind: "success", text: t("deal.detailInvoiceCreatedLinkPrefix") });
+      } else {
+        setNextActionMessage({ kind: "error", text: t(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.invoiceError") : "dashboard.invoiceError") });
+      }
     } finally {
       setIsCreatingInvoice(false);
     }

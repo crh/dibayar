@@ -1,5 +1,6 @@
 import { Prisma } from "@/generated/prisma/client";
 import { dealInputSchema, dealPatchSchema, type DealInput, type DealPatch } from "./deal-validation";
+import { createOnce, type CreateOnceResult } from "./idempotency";
 import { normalizeWhatsAppNumber } from "./whatsapp";
 
 export type DealStatus = DealInput["status"];
@@ -15,6 +16,8 @@ export type DealRecord = {
   deadline: Date | null;
   paymentTerms: string | null;
   status: DealStatus;
+  // See createDealOnce. Optional here: no client code reads it.
+  idempotencyKey?: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -26,7 +29,9 @@ type DealModel = {
     where: { userId: string };
     orderBy: Array<Record<string, "asc" | "desc">>;
   }): Promise<DealRecord[]>;
-  findFirst(args: { where: { id: string; userId: string } }): Promise<DealRecord | null>;
+  findFirst(args: {
+    where: { id: string; userId: string } | { userId: string; idempotencyKey: string };
+  }): Promise<DealRecord | null>;
   create(args: { data: DealCreateData }): Promise<DealRecord>;
   update(args: { where: { id: string; userId: string }; data: Partial<DealCreateData> }): Promise<DealRecord>;
   delete(args: { where: { id: string; userId: string } }): Promise<DealRecord>;
@@ -65,7 +70,7 @@ export type DealDb = DealClient & {
   $transaction<T>(fn: (tx: DealClient) => Promise<T>): Promise<T>;
 };
 
-function toCreateData(userId: string, input: DealInput): DealCreateData {
+function toCreateData(userId: string, input: DealInput, idempotencyKey: string | null = null): DealCreateData {
   return {
     userId,
     brand: input.brand,
@@ -76,6 +81,7 @@ function toCreateData(userId: string, input: DealInput): DealCreateData {
     deadline: input.deadline ?? null,
     paymentTerms: input.paymentTerms ?? null,
     status: input.status,
+    ...(idempotencyKey ? { idempotencyKey } : {}),
   };
 }
 
@@ -109,13 +115,49 @@ export async function listDeals(db: DealDb, userId: string) {
   });
 }
 
-export async function createDeal(db: DealDb, userId: string, input: unknown) {
-  const validated = dealInputSchema.parse(input);
+async function insertDeal(db: DealDb, userId: string, validated: DealInput, idempotencyKey: string | null) {
   return db.$transaction(async (tx) => {
-    const deal = await tx.deal.create({ data: toCreateData(userId, validated) });
+    const deal = await tx.deal.create({ data: toCreateData(userId, validated, idempotencyKey) });
     await recordDealStageTransition(tx, deal.id, null, deal.status);
     return deal;
   });
+}
+
+export async function createDeal(db: DealDb, userId: string, input: unknown) {
+  return insertDeal(db, userId, dealInputSchema.parse(input), null);
+}
+
+// The stored deal is the same submission when every field the person typed
+// matches. The stage is left out: it can be moved before a late repeat.
+function isSameDealSubmission(stored: DealRecord, sent: DealCreateData) {
+  return (
+    stored.brand === sent.brand &&
+    stored.contactWa === sent.contactWa &&
+    stored.contactName === sent.contactName &&
+    stored.scope === sent.scope &&
+    stored.feeIdr === sent.feeIdr &&
+    (stored.deadline?.getTime() ?? null) === (sent.deadline?.getTime() ?? null) &&
+    stored.paymentTerms === sent.paymentTerms
+  );
+}
+
+// #53: a create the page may repeat after an unknown outcome. With a key, a
+// repeat returns the deal the first request stored (see createOnce); a key
+// already used for different content throws IdempotencyConflictError.
+export async function createDealOnce(
+  db: DealDb,
+  userId: string,
+  input: unknown,
+  idempotencyKey: string | null,
+): Promise<CreateOnceResult<DealRecord>> {
+  const validated = dealInputSchema.parse(input);
+  if (!idempotencyKey) return { record: await insertDeal(db, userId, validated, null), replayed: false };
+  const sent = toCreateData(userId, validated);
+  return createOnce(
+    () => db.deal.findFirst({ where: { userId, idempotencyKey } }),
+    () => insertDeal(db, userId, validated, idempotencyKey),
+    (stored) => isSameDealSubmission(stored, sent),
+  );
 }
 
 export async function getOwnedDeal(db: DealClient, id: string, userId: string) {

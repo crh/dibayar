@@ -19,7 +19,7 @@ import {
   type DealFormState,
 } from "@/components/deals/deal-form";
 import { isStageValue } from "@/components/deals/deal-stages";
-import { bodyField, findCreatedDeal, findCreatedInvoice, mutationErrorKey, readList, sendMutation } from "@/lib/mutation";
+import { bodyField, IDEMPOTENCY_HEADER, idempotencyKeyFor, mutationErrorKey, sendMutation } from "@/lib/mutation";
 
 type DealClientProps = {
   initialDeals: DealRecord[];
@@ -120,11 +120,12 @@ export default function DealClient({
   const [pendingDealId, setPendingDealId] = useState<string | null>(null);
   const hasStrippedDialogParam = useRef(false);
   const dealFormRef = useRef<HTMLFormElement>(null);
-  // Set when a create's outcome is unknown (no answer, dropped connection,
-  // gateway page): it may have been stored, so the next attempt checks the
-  // server first instead of sending it again (#53).
-  const dealCreateUnconfirmed = useRef(false);
-  const invoiceCreateUnconfirmed = useRef(new Set<string>());
+  // A create whose outcome is unknown (no answer, dropped connection, 5xx)
+  // may have been stored, so its key is kept: the next press of the same
+  // submission sends it again and the server returns what was stored
+  // instead of writing a second deal or invoice (#53).
+  const pendingDealCreate = useRef<{ key: string; body: string } | null>(null);
+  const pendingInvoiceCreates = useRef(new Map<string, { key: string; body: string }>());
 
   // FIND-13: ?tambah=1 arrives from the server with the dialog already open,
   // so on a slow connection someone can type into it before this component's
@@ -277,58 +278,35 @@ export default function DealClient({
     setFieldErrors({});
     setIsSaving(true);
 
-    const sent = {
+    const body = JSON.stringify({
       ...form,
       feeIdr: Number(form.feeIdr),
       deadline: form.deadline || undefined,
       contactName: form.contactName || undefined,
       paymentTerms: form.paymentTerms || undefined,
-    };
-    const knownIds = new Set(deals.map((deal) => deal.id));
-    // The deal an earlier, unanswered attempt may have stored.
-    async function findStored() {
-      const serverDeals = await readList<DealRecord>("/api/deals", "deals");
-      return serverDeals ? { deal: findCreatedDeal(serverDeals, knownIds, sent) } : null;
-    }
-    function showSaved(deal: DealRecord) {
-      dealCreateUnconfirmed.current = false;
-      setDeals((current) => [deal, ...current.filter((existing) => existing.id !== deal.id)]);
-      setForm(EMPTY_DEAL_FORM);
-      setSuccessMessage("dashboard.dealSaved");
-      setIsDialogOpen(false);
-    }
+    });
+    const key = idempotencyKeyFor(pendingDealCreate.current, body);
+    pendingDealCreate.current = { key, body };
 
     try {
-      if (dealCreateUnconfirmed.current) {
-        const stored = await findStored();
-        if (!stored) {
-          setError("dashboard.saveUnknown");
-          return;
-        }
-        if (stored.deal) {
-          showSaved(stored.deal);
-          return;
-        }
-      }
-
       const result = await sendMutation("/api/deals", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(sent),
+        headers: { "Content-Type": "application/json", [IDEMPOTENCY_HEADER]: key },
+        body,
       });
       if (result.kind === "unknown") {
-        dealCreateUnconfirmed.current = true;
-        const stored = await findStored();
-        if (stored?.deal) showSaved(stored.deal);
-        else setError("dashboard.saveUnknown");
+        setError("dashboard.saveUnknown");
         return;
       }
-      // A definite answer: whatever an earlier attempt did is now visible
-      // in the server's own reply or not stored at all.
-      dealCreateUnconfirmed.current = false;
+      // A definite answer: stored (now, or by an earlier attempt with this
+      // key) or refused, so this submission is settled.
+      pendingDealCreate.current = null;
       const created = result.kind === "ok" ? bodyField<DealRecord>(result.body, "deal") : undefined;
       if (created) {
-        showSaved(created);
+        setDeals((current) => [created, ...current.filter((existing) => existing.id !== created.id)]);
+        setForm(EMPTY_DEAL_FORM);
+        setSuccessMessage("dashboard.dealSaved");
+        setIsDialogOpen(false);
         return;
       }
       const serverErrors = result.kind === "rejected" && result.status === 400 ? dealFormErrorsFromServer(bodyField(result.body, "fields")) : {};
@@ -344,46 +322,28 @@ export default function DealClient({
     setSuccessMessage(null);
     setIsSaving(true);
 
-    // The invoice an earlier, unanswered attempt may have created.
-    async function findStored() {
-      const serverInvoices = await readList<InvoiceRecord>("/api/invoices", "invoices");
-      return serverInvoices ? { invoice: findCreatedInvoice(serverInvoices, dealId) } : null;
-    }
-    function showCreated(invoice: InvoiceRecord) {
-      invoiceCreateUnconfirmed.current.delete(dealId);
-      setInvoices((current) => [invoice, ...current.filter((existing) => existing.id !== invoice.id)]);
-      setSuccessMessage("dashboard.invoiceCreated");
-    }
+    const body = JSON.stringify({ dealId, withholdingTaxType: "NONE" });
+    const key = idempotencyKeyFor(pendingInvoiceCreates.current.get(dealId) ?? null, body);
+    pendingInvoiceCreates.current.set(dealId, { key, body });
 
     try {
-      if (invoiceCreateUnconfirmed.current.has(dealId)) {
-        const stored = await findStored();
-        if (!stored) {
-          setError("dashboard.invoiceUnknown");
-          return;
-        }
-        if (stored.invoice) {
-          showCreated(stored.invoice);
-          return;
-        }
-      }
-
       const result = await sendMutation("/api/invoices", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dealId, withholdingTaxType: "NONE" }),
+        headers: { "Content-Type": "application/json", [IDEMPOTENCY_HEADER]: key },
+        body,
       });
       if (result.kind === "unknown") {
-        invoiceCreateUnconfirmed.current.add(dealId);
-        const stored = await findStored();
-        if (stored?.invoice) showCreated(stored.invoice);
-        else setError("dashboard.invoiceUnknown");
+        setError("dashboard.invoiceUnknown");
         return;
       }
-      invoiceCreateUnconfirmed.current.delete(dealId);
+      pendingInvoiceCreates.current.delete(dealId);
       const created = result.kind === "ok" ? bodyField<InvoiceRecord>(result.body, "invoice") : undefined;
-      if (created) showCreated(created);
-      else setError(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.invoiceError") : "dashboard.invoiceError");
+      if (created) {
+        setInvoices((current) => [created, ...current.filter((existing) => existing.id !== created.id)]);
+        setSuccessMessage("dashboard.invoiceCreated");
+      } else {
+        setError(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.invoiceError") : "dashboard.invoiceError");
+      }
     } finally {
       setIsSaving(false);
     }

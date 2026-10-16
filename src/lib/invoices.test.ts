@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import { IdempotencyConflictError } from "./idempotency";
 import {
   ALLOWED_STATUS_TRANSITIONS,
   createInvoice,
+  createInvoiceOnce,
   getOwnedInvoice,
   getOwnedInvoiceContact,
   listInvoices,
@@ -11,6 +13,7 @@ import {
   type InvoiceContactDb,
   type InvoiceDueDateDb,
   type InvoiceCreateDb,
+  type InvoiceCreateOnceDb,
   type InvoiceListDb,
   type InvoiceReadDb,
   type InvoiceRecord,
@@ -31,6 +34,7 @@ function makeDb(options: {
     data: Omit<InvoiceRecord, "id" | "createdAt" | "updatedAt">;
   }) => Promise<InvoiceRecord>;
   rejectTransactionAfterQuery?: boolean;
+  storedByKey?: InvoiceRecord | null;
 }) {
   const {
     deal = ownedDeal,
@@ -38,6 +42,7 @@ function makeDb(options: {
     queryRawImpl,
     invoiceCreateImpl,
     rejectTransactionAfterQuery = false,
+    storedByKey = null,
   } = options;
 
   const queryRaw = vi.fn(queryRawImpl ?? (async () => sequenceRows));
@@ -61,8 +66,11 @@ function makeDb(options: {
     invoice: { create: invoiceCreate },
   } as unknown as InvoiceTransactionClient;
 
-  const db: InvoiceCreateDb = {
+  const invoiceFindFirst = vi.fn(async () => storedByKey);
+
+  const db: InvoiceCreateOnceDb = {
     deal: { findFirst: dealFindFirst },
+    invoice: { findFirst: invoiceFindFirst },
     $transaction: vi.fn(async (fn) => {
       if (rejectTransactionAfterQuery) {
         await queryRaw();
@@ -72,7 +80,7 @@ function makeDb(options: {
     }),
   };
 
-  return { db, dealFindFirst, queryRaw, invoiceCreate };
+  return { db, dealFindFirst, queryRaw, invoiceCreate, invoiceFindFirst };
 }
 
 describe("createInvoice", () => {
@@ -545,5 +553,64 @@ describe("updateInvoiceDueDate", () => {
     expect(await updateInvoiceDueDate(db, "invoice-1", "user-1", dueDate)).toEqual({ kind: "invalid-due-date" });
     expect(findFirst).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe("createInvoiceOnce (#53)", () => {
+  const key = "5b0f7c2e-8a41-4d7e-9a35-1c2b3d4e5f60";
+  const stored: InvoiceRecord = {
+    id: "invoice-stored",
+    userId: "user-1",
+    dealId: "deal-1",
+    number: "INV/2026/07/001",
+    subtotalIdr: 1_500_000,
+    withholdingTaxType: "NONE",
+    status: "DRAFT",
+    dueDate: null,
+    idempotencyKey: key,
+    createdAt: new Date("2026-07-15T00:00:00.000Z"),
+    updatedAt: new Date("2026-07-15T00:00:00.000Z"),
+  };
+
+  it("stores the key on the new invoice and looks it up by owner and key", async () => {
+    const { db, invoiceCreate, invoiceFindFirst } = makeDb({});
+
+    const result = await createInvoiceOnce(db, "user-1", { dealId: "deal-1" }, key);
+
+    expect(result?.replayed).toBe(false);
+    expect(invoiceFindFirst).toHaveBeenCalledWith({ where: { userId: "user-1", idempotencyKey: key } });
+    expect(invoiceCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ idempotencyKey: key, dealId: "deal-1" }) });
+  });
+
+  it("returns the stored invoice for a repeat, without numbering or writing another", async () => {
+    const { db, invoiceCreate, queryRaw } = makeDb({ storedByKey: stored });
+
+    await expect(createInvoiceOnce(db, "user-1", { dealId: "deal-1" }, key)).resolves.toEqual({ record: stored, replayed: true });
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(invoiceCreate).not.toHaveBeenCalled();
+  });
+
+  it("refuses a key stored for another deal or tax type", async () => {
+    await expect(
+      createInvoiceOnce(makeDb({ storedByKey: { ...stored, dealId: "deal-2" } }).db, "user-1", { dealId: "deal-1" }, key),
+    ).rejects.toBeInstanceOf(IdempotencyConflictError);
+    await expect(
+      createInvoiceOnce(makeDb({ storedByKey: stored }).db, "user-1", { dealId: "deal-1", withholdingTaxType: "PPH23" }, key),
+    ).rejects.toBeInstanceOf(IdempotencyConflictError);
+  });
+
+  it("is null for a deal that is not the user's, before any key lookup", async () => {
+    const { db, invoiceFindFirst } = makeDb({ deal: null, storedByKey: stored });
+
+    await expect(createInvoiceOnce(db, "user-1", { dealId: "deal-1" }, key)).resolves.toBeNull();
+    expect(invoiceFindFirst).not.toHaveBeenCalled();
+  });
+
+  it("creates as before without a key", async () => {
+    const { db, invoiceCreate, invoiceFindFirst } = makeDb({});
+
+    await expect(createInvoiceOnce(db, "user-1", { dealId: "deal-1" }, null)).resolves.toMatchObject({ replayed: false });
+    expect(invoiceFindFirst).not.toHaveBeenCalled();
+    expect(invoiceCreate).toHaveBeenCalledWith({ data: expect.not.objectContaining({ idempotencyKey: expect.anything() }) });
   });
 });

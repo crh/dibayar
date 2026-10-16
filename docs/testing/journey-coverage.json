@@ -1147,11 +1147,11 @@
       "id": "DEAL-CREATE-08",
       "domain": "deals",
       "route": "/deal (dialog)",
-      "action": "A deal save with no usable answer (502 HTML page, dropped connection, no answer in time) says it may not be saved, and the retry checks before sending",
+      "action": "A deal save with no usable answer (502 HTML or JSON page, dropped connection, no answer in time) says it may not be saved, and the retry sends the same Idempotency-Key",
       "persona": "owner",
-      "preconditions": "Dialog open with a valid deal; the next POST /api/deals gets a 502 HTML page, is aborted, or is never answered (page.route)",
+      "preconditions": "Dialog open with a valid deal; the next POST /api/deals gets a 502 HTML or JSON page, is aborted, or is never answered (page.route)",
       "interaction": "Simpan deal; then Simpan deal again",
-      "expected": "Within the bounded wait (fetchWithTimeout, 8 s) the dialog alert says 'Koneksi terputus atau server terlalu lama menjawab, jadi deal ini belum pasti tersimpan. ...'; no 'Deal disimpan'; the typed values stay; the button is enabled. The second press first reads the board (GET /api/deals), finds nothing, and saves exactly one deal",
+      "expected": "Within the bounded wait (fetchWithTimeout, 8 s) the dialog alert says 'Koneksi terputus atau server tidak memberi jawaban yang jelas, jadi deal ini belum pasti tersimpan. ...'; no 'Deal disimpan'; the typed values stay; the button is enabled. The second press sends the same body with the same Idempotency-Key and saves exactly one deal",
       "persisted": "No row after the failed attempt; exactly one after the retry",
       "alternates": "",
       "scope": [
@@ -1160,11 +1160,17 @@
       ],
       "priority": "P1",
       "status": "automated_partial",
-      "evidence": "#53 server-error audit 2026-10-15",
+      "evidence": "#53 server-error audit 2026-10-15; idempotency key 2026-10-16 (#54 review)",
       "tests": [
         {
           "file": "e2e/deals/server-errors.spec.ts",
           "title": "a save that gets a 502 HTML page says it may not be saved, keeps the form, and Simpan deal again saves exactly one deal",
+          "kind": "partial",
+          "note": "Real click and retry; the failure is injected with page.route (a stub), so by rule it is partial"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a save that gets a JSON 502 from a gateway says it may not be saved, keeps the form, and Simpan deal again saves exactly one deal",
           "kind": "partial",
           "note": "Real click and retry; the failure is injected with page.route (a stub), so by rule it is partial"
         },
@@ -1186,11 +1192,11 @@
       "id": "DEAL-CREATE-09",
       "domain": "deals",
       "route": "/deal (dialog)",
-      "action": "A deal the server stored but whose answer never arrived is shown as saved, not saved twice",
+      "action": "A deal the server stored but whose answer was lost, or replaced by a gateway's JSON 504, is never saved twice",
       "persona": "owner",
-      "preconditions": "The POST reaches the real server (route.fetch) and is stored; its answer is withheld",
-      "interaction": "Simpan deal once",
-      "expected": "After the bounded wait the page reads the board, finds the stored deal, closes the dialog and shows 'Deal disimpan'; no alert; one POST only",
+      "preconditions": "The POST reaches the real server (route.fetch) and is stored; its answer is withheld or replaced by a JSON 504. Or: the first POST is held back until the retry is stored, then delivered",
+      "interaction": "Simpan deal; then Simpan deal again",
+      "expected": "The dialog alert says the deal may not be saved; the second press sends the same Idempotency-Key, the server answers 200 with the stored deal, the dialog closes with 'Deal disimpan'. An original delivered after its retry was stored gets 200 with that same deal",
       "persisted": "Exactly one deal, also after reload",
       "alternates": "",
       "scope": [
@@ -1199,13 +1205,25 @@
       ],
       "priority": "P1",
       "status": "automated_partial",
-      "evidence": "#53 server-error audit 2026-10-15",
+      "evidence": "#53 server-error audit 2026-10-15; idempotency key 2026-10-16 (#54 review)",
       "tests": [
         {
           "file": "e2e/deals/server-errors.spec.ts",
-          "title": "a save the server stored but never answered is shown as saved, and is not sent twice",
+          "title": "a save the server stored but never answered says it may not be saved, and Simpan deal again shows that one deal instead of a second",
           "kind": "partial",
           "note": "The write is real (route.fetch reaches the server); only the lost answer is injected"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a save the server stored but a gateway answered with a JSON 504 says it may not be saved, and Simpan deal again shows that one deal instead of a second",
+          "kind": "partial",
+          "note": "The write is real (route.fetch); only the gateway's JSON answer is injected"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "an original that reaches the server after its retry was stored returns that deal instead of a second",
+          "kind": "partial",
+          "note": "Real retry through the UI; the held-back original is delivered with page.request"
         }
       ]
     },
@@ -1260,6 +1278,45 @@
           "title": "Simpan deal after the session expired is refused, says to sign in again, keeps the form, and stores nothing",
           "kind": "partial",
           "note": "The 401 is the server's own answer to a really expired session; the dialog is opened with page.goto('/deal?tambah=1')"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-12",
+      "domain": "deals",
+      "route": "POST /api/deals, POST /api/invoices",
+      "action": "Repeats of one create with the same Idempotency-Key store one row; a key reused for other content is refused",
+      "persona": "owner",
+      "preconditions": "Signed-in owner; six identical POSTs with one key sent at the same time (page.request, real database)",
+      "interaction": "API only: concurrent POST /api/deals and POST /api/invoices with one key; then the deal key with a different brand",
+      "expected": "One 201 and five 200s, all with the same row; a different body with a used key gets 409",
+      "persisted": "Exactly one deal or invoice per key; nothing for the refused body",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "evidence": "#54 review (Codex P1: a point-in-time read cannot prove a timed-out create will not commit) 2026-10-16",
+      "tests": [
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "repeats of one deal create sent at the same time store one deal, and each gets that deal",
+          "kind": "partial",
+          "note": "API-level against the real database, no UI interaction"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a key already used for a different deal is refused with 409 and stores nothing",
+          "kind": "partial",
+          "note": "API-level against the real database, no UI interaction"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "repeats of one invoice create sent at the same time make one invoice",
+          "kind": "partial",
+          "note": "API-level against the real database, no UI interaction"
         }
       ]
     },
@@ -1620,7 +1677,7 @@
       "persona": "owner",
       "preconditions": "An INVOICE-stage deal without an invoice; the next POST /api/invoices gets a 502 HTML page, or is stored but never answered",
       "interaction": "Card menu -> Buat invoice; then again",
-      "expected": "502: alert '... invoice ini belum pasti dibuat. ...', no 'Invoice dibuat'; the retry checks GET /api/invoices first and creates exactly one. Stored but unanswered: the page finds it and shows 'Invoice dibuat'; Buat invoice is no longer offered",
+      "expected": "502: alert '... invoice ini belum pasti dibuat. ...', no 'Invoice dibuat'; the retry sends the same Idempotency-Key and creates exactly one. Stored but unanswered: the same alert; the retry gets the stored invoice back (200) and shows 'Invoice dibuat'; Buat invoice is no longer offered",
       "persisted": "Exactly one invoice for the deal",
       "alternates": "",
       "scope": [
@@ -1629,7 +1686,7 @@
       ],
       "priority": "P1",
       "status": "automated_partial",
-      "evidence": "#53 server-error audit 2026-10-15",
+      "evidence": "#53 server-error audit 2026-10-15; idempotency key 2026-10-16 (#54 review)",
       "tests": [
         {
           "file": "e2e/deals/server-errors.spec.ts",
@@ -1639,7 +1696,7 @@
         },
         {
           "file": "e2e/deals/server-errors.spec.ts",
-          "title": "a create the server stored but never answered is shown as created, and Buat invoice is not offered again",
+          "title": "a create the server stored but never answered says it may not be created, and Buat invoice again shows that one invoice instead of a second",
           "kind": "partial",
           "note": "The write is real (route.fetch); only the lost answer is injected"
         }
@@ -3340,11 +3397,12 @@
       "actions": [
         "DEAL-CREATE-08",
         "DEAL-CREATE-09",
+        "DEAL-CREATE-12",
         "DEAL-STAGE-06",
         "DEAL-INV-03"
       ],
       "category": "partial_by_rule",
-      "reason": "A lost answer, a dropped connection or a gateway page cannot be produced on purpose by the app or the test server, so each test injects exactly that one failure with page.route, which the classification rules cap at partial. Everything around it is real: the click, the page's own bounded wait, its read-back from the real API, the retry, and the stored rows (read with page.request). In the 'stored but never answered' cases the write itself reaches the real server (route.fetch). (#53)",
+      "reason": "A lost answer, a dropped connection or a gateway page cannot be produced on purpose by the app or the test server, so each test injects exactly that one failure with page.route, which the classification rules cap at partial. Everything around it is real: the click, the page's own bounded wait, the retry with the same Idempotency-Key, and the stored rows (read with page.request). In the 'stored but never answered' cases the write itself reaches the real server (route.fetch). DEAL-CREATE-12 has no UI step at all: it sends concurrent and late repeats straight to the real API and database, which no click can time. (#53, #54 review)",
       "blocksRelease": false,
       "releaseEvidence": "CI e2e-critical green on the release head (e2e/deals/server-errors.spec.ts is @critical, chromium and chromium-mobile). No manual sign-off.",
       "futureAutomation": {

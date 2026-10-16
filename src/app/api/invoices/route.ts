@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { auth } from "@/auth";
-import { createInvoice, listInvoices, type InvoiceCreateDb, type InvoiceReadDb } from "@/lib/invoices";
+import { createInvoiceOnce, listInvoices, type InvoiceCreateOnceDb, type InvoiceReadDb } from "@/lib/invoices";
 import { prisma } from "@/lib/prisma";
 import { isSameOriginRequest } from "@/lib/request-origin";
+import { IdempotencyConflictError, readIdempotencyKey } from "@/lib/idempotency";
 
-const db = prisma as unknown as InvoiceCreateDb;
+const db = prisma as unknown as InvoiceCreateOnceDb;
 const readDb = prisma as unknown as InvoiceReadDb;
 
 export async function GET() {
@@ -32,16 +33,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Permintaan ditolak. Muat ulang halaman lalu coba lagi." }, { status: 403 });
     }
 
-    const invoice = await createInvoice(db, session.user.id, await request.json());
-    if (!invoice) {
+    const idempotency = readIdempotencyKey(request);
+    if (!idempotency.ok) {
+      return NextResponse.json({ error: "Permintaan ditolak. Muat ulang halaman lalu coba lagi." }, { status: 400 });
+    }
+
+    const created = await createInvoiceOnce(db, session.user.id, await request.json(), idempotency.key);
+    if (!created) {
       return NextResponse.json({ error: "Deal tidak ditemukan." }, { status: 404 });
     }
-    return NextResponse.json({ invoice }, { status: 201 });
+    // A repeat of a stored create (same key) answers 200 with that invoice.
+    return NextResponse.json({ invoice: created.record }, { status: created.replayed ? 200 : 201 });
   } catch (error) {
     if (error instanceof ZodError) {
       return NextResponse.json(
         { error: "Periksa kembali data invoice kamu.", fields: error.flatten().fieldErrors },
         { status: 400 },
+      );
+    }
+    if (error instanceof IdempotencyConflictError) {
+      return NextResponse.json(
+        { error: "Permintaan ini bentrok dengan permintaan sebelumnya. Muat ulang halaman lalu coba lagi." },
+        { status: 409 },
       );
     }
     if (error instanceof SyntaxError) {

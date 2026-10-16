@@ -1,16 +1,17 @@
 import { fetchWithTimeout } from "@/lib/http";
-import { normalizeWhatsAppNumber } from "@/lib/whatsapp";
 
 // What a write to the app's own API came to, as far as the page can tell
-// (#53). The API answers every request it handles with JSON, so:
+// (#53):
 //
 // - "ok": a JSON 2xx answer;
-// - "rejected": a JSON error answer. The route refused or failed before
-//   anything was stored (a ZodError, auth, Origin or a thrown write all end
-//   in its catch, with the transaction rolled back), so nothing changed;
-// - "unknown": no answer in time, a dropped connection, or something that is
-//   not the API's JSON (a gateway's 502/504 page). The request may still
-//   have been stored, so a create must be checked before it is sent again.
+// - "rejected": a 4xx answer. The route refused before anything was stored
+//   (a ZodError, auth, Origin, a reused key), or, without JSON, something in
+//   front of it refused the request before it reached the app;
+// - "unknown": no answer in time, a dropped connection, or any 5xx. A 5xx
+//   may come from a gateway that gave up while the app was still storing
+//   the request, and JSON alone does not prove it came from the app, so the
+//   request may still have been stored. A create is therefore repeated with
+//   the same Idempotency-Key (see src/lib/idempotency.ts), never a new one.
 export type MutationResult =
   | { kind: "ok"; status: number; body: unknown }
   | { kind: "rejected"; status: number; body: unknown }
@@ -24,15 +25,36 @@ export async function sendMutation(input: string, init: RequestInit, timeoutMs?:
     return { kind: "unknown" };
   }
 
+  if (response.status >= 500) return { kind: "unknown" };
+
   let body: unknown;
   try {
     body = await response.json();
   } catch {
     // Not the API's own answer. A 4xx without JSON was still refused before
-    // reaching a write; anything else is not known.
-    return response.status >= 400 && response.status < 500 ? { kind: "rejected", status: response.status, body: null } : { kind: "unknown" };
+    // reaching a write; a 2xx or 3xx without it is not known.
+    return response.status >= 400 ? { kind: "rejected", status: response.status, body: null } : { kind: "unknown" };
   }
   return response.ok ? { kind: "ok", status: response.status, body } : { kind: "rejected", status: response.status, body };
+}
+
+// Server side: src/lib/idempotency.ts (which imports Prisma, so the page
+// takes the header name from here).
+export const IDEMPOTENCY_HEADER = "Idempotency-Key";
+
+// A key for one submission of a create. randomUUID needs a secure context
+// (HTTPS or localhost), which every deployment is; the fallback only keeps
+// a plain-HTTP dev setup working.
+export function newIdempotencyKey(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+// The key for a create of `body`: the pending one when the same content is
+// sent again after an unknown outcome, so the server can return what the
+// first attempt stored; a new one when the content changed.
+export function idempotencyKeyFor(pending: { key: string; body: string } | null, body: string): string {
+  return pending && pending.body === body ? pending.key : newIdempotencyKey();
 }
 
 // The message for a refused or unknown write. A refusal the person can do
@@ -49,42 +71,4 @@ export function mutationErrorKey(result: Exclude<MutationResult, { kind: "ok" }>
 
 export function bodyField<T>(body: unknown, field: string): T | undefined {
   return body && typeof body === "object" && field in body ? ((body as Record<string, unknown>)[field] as T) : undefined;
-}
-
-type DealLike = { id: string; brand: string; contactWa: string; scope: string; feeIdr: number };
-
-// After a create whose outcome is unknown: the deal the server holds that
-// this page did not know about and that has exactly what was sent, if any.
-// Compared the way the server stores it (trimmed, number normalized).
-export function findCreatedDeal<T extends DealLike>(
-  serverDeals: T[],
-  knownIds: ReadonlySet<string>,
-  sent: { brand: string; contactWa: string; scope: string; feeIdr: number },
-): T | null {
-  const contactWa = normalizeWhatsAppNumber(sent.contactWa) ?? sent.contactWa.trim();
-  return (
-    serverDeals.find(
-      (deal) =>
-        !knownIds.has(deal.id) &&
-        deal.brand === sent.brand.trim() &&
-        deal.scope === sent.scope.trim() &&
-        deal.feeIdr === sent.feeIdr &&
-        deal.contactWa === contactWa,
-    ) ?? null
-  );
-}
-
-// The app makes one invoice per deal (the create action is only offered
-// while the deal has none), so any invoice for the deal is the one created.
-export function findCreatedInvoice<T extends { dealId: string }>(serverInvoices: T[], dealId: string): T | null {
-  return serverInvoices.find((invoice) => invoice.dealId === dealId) ?? null;
-}
-
-// Reads a list from the API to check what an unknown write did. null means
-// the check itself failed, so the outcome is still unknown.
-export async function readList<T>(input: string, field: string): Promise<T[] | null> {
-  const result = await sendMutation(input, { cache: "no-store" });
-  if (result.kind !== "ok") return null;
-  const list = bodyField<T[]>(result.body, field);
-  return Array.isArray(list) ? list : null;
 }

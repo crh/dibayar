@@ -368,27 +368,16 @@ describe("DealDetailClient when the server cannot answer (#53)", () => {
     return fetchMock.mock.calls.map(([url, init]) => `${(init as RequestInit | undefined)?.method ?? "GET"} ${url}`);
   }
 
-  it("an invoice create with no answer that the server did create shows its link, and is not sent again", async () => {
-    const fetchMock = vi.fn()
-      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockResolvedValueOnce(jsonResponse(200, { invoices: [invoice] }));
-    vi.stubGlobal("fetch", fetchMock);
-    const user = userEvent.setup();
-    render(<DealDetailClient initialDeal={{ ...dealFixture, status: "INVOICE" }} history={[]} />);
+  function keyOf(fetchMock: ReturnType<typeof vi.fn>, call: number) {
+    return ((fetchMock.mock.calls[call][1] as RequestInit).headers as Record<string, string>)["Idempotency-Key"];
+  }
 
-    await user.click(screen.getByRole("button", { name: "Buat invoice" }));
-
-    expect(await screen.findByRole("link", { name: "Lihat invoice INV/2026/09/001 →" })).toBeDefined();
-    expect(screen.queryByRole("button", { name: "Buat invoice" })).toBeNull();
-    expect(calls(fetchMock)).toEqual(["POST /api/invoices", "GET /api/invoices"]);
-  });
-
-  it("an invoice create with no answer that is not found says so, and the next press checks before sending", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: false, status: 502, json: async () => { throw new SyntaxError("<html>"); } })
-      .mockResolvedValueOnce(jsonResponse(200, { invoices: [] }))
-      .mockResolvedValueOnce(jsonResponse(200, { invoices: [] }))
-      .mockResolvedValueOnce(jsonResponse(201, { invoice }));
+  it.each([
+    ["no answer", () => Promise.reject(new TypeError("Failed to fetch"))],
+    ["a 502 gateway page", () => Promise.resolve({ ok: false, status: 502, json: async () => { throw new SyntaxError("<html>"); } })],
+    ["a JSON 504", () => Promise.resolve(jsonResponse(504, { message: "upstream timed out" }))],
+  ])("an invoice create with %s says so, and Buat invoice again resends it with the same key and shows the stored invoice", async (_case, firstAnswer) => {
+    const fetchMock = vi.fn().mockImplementationOnce(firstAnswer).mockResolvedValueOnce(jsonResponse(200, { invoice }));
     vi.stubGlobal("fetch", fetchMock);
     const user = userEvent.setup();
     render(<DealDetailClient initialDeal={{ ...dealFixture, status: "INVOICE" }} history={[]} />);
@@ -398,7 +387,24 @@ describe("DealDetailClient when the server cannot answer (#53)", () => {
 
     await user.click(screen.getByRole("button", { name: "Buat invoice" }));
     expect(await screen.findByRole("link", { name: "Lihat invoice INV/2026/09/001 →" })).toBeDefined();
-    expect(calls(fetchMock)).toEqual(["POST /api/invoices", "GET /api/invoices", "GET /api/invoices", "POST /api/invoices"]);
+    expect(screen.queryByRole("button", { name: "Buat invoice" })).toBeNull();
+    expect(calls(fetchMock)).toEqual(["POST /api/invoices", "POST /api/invoices"]);
+    expect(keyOf(fetchMock, 0)).toMatch(/^[A-Za-z0-9-]{16,100}$/);
+    expect(keyOf(fetchMock, 1)).toBe(keyOf(fetchMock, 0));
+  });
+
+  it("after a definite refusal, Buat invoice again gets a new key", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(403, { error: "x" })).mockResolvedValueOnce(jsonResponse(201, { invoice }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={{ ...dealFixture, status: "INVOICE" }} history={[]} />);
+
+    await user.click(screen.getByRole("button", { name: "Buat invoice" }));
+    await screen.findByRole("alert");
+    await user.click(screen.getByRole("button", { name: "Buat invoice" }));
+
+    await screen.findByRole("link", { name: "Lihat invoice INV/2026/09/001 →" });
+    expect(keyOf(fetchMock, 1)).not.toBe(keyOf(fetchMock, 0));
   });
 
   it("a contact name refused for an expired session says to sign in again, and keeps what was typed", async () => {

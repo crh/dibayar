@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { findCreatedDeal, findCreatedInvoice, mutationErrorKey, readList, sendMutation } from "./mutation";
+import { idempotencyKeyFor, mutationErrorKey, newIdempotencyKey, sendMutation } from "./mutation";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -26,13 +26,20 @@ describe("sendMutation", () => {
     await expect(sendMutation("/api/deals", { method: "POST" })).resolves.toEqual({ kind: "ok", status: 201, body: { deal: { id: "d1" } } });
   });
 
-  it.each([400, 401, 403, 404, 409, 429, 500])("is rejected for the API's own JSON %i", async (status) => {
+  it.each([400, 401, 403, 404, 409, 429])("is rejected for a JSON %i", async (status) => {
     vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(status, { error: "x" })));
     await expect(sendMutation("/api/deals", { method: "POST" })).resolves.toEqual({ kind: "rejected", status, body: { error: "x" } });
   });
 
   it.each([502, 503, 504, 200])("is unknown for a %i answer that is not JSON (a gateway page)", async (status) => {
     vi.stubGlobal("fetch", vi.fn(async () => htmlResponse(status)));
+    await expect(sendMutation("/api/deals", { method: "POST" })).resolves.toEqual({ kind: "unknown" });
+  });
+
+  // A gateway that gave up while the app was still storing the request can
+  // answer with JSON too; JSON does not prove the app refused it (#53 review).
+  it.each([500, 502, 503, 504])("is unknown for a JSON %i", async (status) => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(status, { message: "upstream timed out" })));
     await expect(sendMutation("/api/deals", { method: "POST" })).resolves.toEqual({ kind: "unknown" });
   });
 
@@ -75,43 +82,19 @@ describe("mutationErrorKey", () => {
   });
 });
 
-describe("findCreatedDeal", () => {
-  const sent = { brand: "  Kopi Nusantara ", contactWa: "0812 3456 7890", scope: " 1 reels ", feeIdr: 1500000 };
-  const stored = { id: "new", brand: "Kopi Nusantara", contactWa: "6281234567890", scope: "1 reels", feeIdr: 1500000 };
-
-  it("finds the deal stored the way the server stores what was sent", () => {
-    expect(findCreatedDeal([stored], new Set(), sent)).toBe(stored);
+describe("idempotencyKeyFor", () => {
+  it("keeps the pending key when the same content is sent again", () => {
+    expect(idempotencyKeyFor({ key: "pending-key-0000000001", body: '{"a":1}' }, '{"a":1}')).toBe("pending-key-0000000001");
   });
 
-  it("ignores a deal the page already had", () => {
-    expect(findCreatedDeal([stored], new Set(["new"]), sent)).toBeNull();
+  it("makes a new key when nothing is pending or the content changed", () => {
+    const fresh = idempotencyKeyFor(null, '{"a":1}');
+    expect(fresh).toMatch(/^[A-Za-z0-9-]{16,100}$/);
+    expect(idempotencyKeyFor({ key: "pending-key-0000000001", body: '{"a":1}' }, '{"a":2}')).not.toBe("pending-key-0000000001");
   });
 
-  it("ignores a deal that differs in any compared field", () => {
-    expect(findCreatedDeal([{ ...stored, feeIdr: 1500001 }], new Set(), sent)).toBeNull();
-    expect(findCreatedDeal([{ ...stored, brand: "Kopi" }], new Set(), sent)).toBeNull();
-    expect(findCreatedDeal([{ ...stored, scope: "2 reels" }], new Set(), sent)).toBeNull();
-    expect(findCreatedDeal([{ ...stored, contactWa: "6281111111111" }], new Set(), sent)).toBeNull();
-  });
-});
-
-describe("findCreatedInvoice", () => {
-  it("finds the deal's invoice, or nothing", () => {
-    const invoice = { id: "i1", dealId: "d1" };
-    expect(findCreatedInvoice([{ id: "i0", dealId: "d0" }, invoice], "d1")).toBe(invoice);
-    expect(findCreatedInvoice([{ id: "i0", dealId: "d0" }], "d1")).toBeNull();
-  });
-});
-
-describe("readList", () => {
-  it("returns the list, or null when the check itself fails", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(200, { deals: [{ id: "d1" }] })));
-    await expect(readList("/api/deals", "deals")).resolves.toEqual([{ id: "d1" }]);
-
-    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(500, { error: "x" })));
-    await expect(readList("/api/deals", "deals")).resolves.toBeNull();
-
-    vi.stubGlobal("fetch", vi.fn(async () => htmlResponse(502)));
-    await expect(readList("/api/deals", "deals")).resolves.toBeNull();
+  it("makes a key of the accepted shape even without crypto.randomUUID", () => {
+    vi.stubGlobal("crypto", { getRandomValues: (bytes: Uint8Array) => bytes.fill(171) });
+    expect(newIdempotencyKey()).toBe("ab".repeat(16));
   });
 });
