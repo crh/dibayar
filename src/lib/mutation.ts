@@ -4,14 +4,12 @@ import { fetchWithTimeout } from "@/lib/http";
 // (#53):
 //
 // - "ok": a JSON 2xx answer;
-// - "rejected": a 4xx answer. The route refused before anything was stored
-//   (a ZodError, auth, Origin, a reused key), or, without JSON, something in
-//   front of it refused the request before it reached the app;
-// - "unknown": no answer in time, a dropped connection, or any 5xx. A 5xx
-//   may come from a gateway that gave up while the app was still storing
-//   the request, and JSON alone does not prove it came from the app, so the
-//   request may still have been stored. A create is therefore repeated with
-//   the same Idempotency-Key (see src/lib/idempotency.ts), never a new one.
+// - "rejected": a non-408 4xx answer (validation, auth, Origin, conflict,
+//   rate limit), including a non-JSON response rejected by an intermediary;
+// - "unknown": no answer in time, a dropped connection, HTTP 408 or any 5xx.
+//   A gateway can time out after forwarding a write; even a JSON body does
+//   not prove it failed before storage. Retrying a create must keep its
+//   Idempotency-Key (see src/lib/idempotency.ts), never allocate a new one.
 export type MutationResult =
   | { kind: "ok"; status: number; body: unknown }
   | { kind: "rejected"; status: number; body: unknown }
@@ -25,14 +23,16 @@ export async function sendMutation(input: string, init: RequestInit, timeoutMs?:
     return { kind: "unknown" };
   }
 
-  if (response.status >= 500) return { kind: "unknown" };
+  // HTTP 408 is also an uncertain timeout: the write could still commit
+  // after an intermediary gives up, even if its response is valid JSON.
+  if (response.status === 408 || response.status >= 500) return { kind: "unknown" };
 
   let body: unknown;
   try {
     body = await response.json();
   } catch {
-    // Not the API's own answer. A 4xx without JSON was still refused before
-    // reaching a write; a 2xx or 3xx without it is not known.
+    // Not the API's own answer. A non-408 4xx without JSON is treated as
+    // rejected; a 2xx/3xx with no JSON remains unknown.
     return response.status >= 400 ? { kind: "rejected", status: response.status, body: null } : { kind: "unknown" };
   }
   return response.ok ? { kind: "ok", status: response.status, body } : { kind: "rejected", status: response.status, body };
