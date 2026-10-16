@@ -43,6 +43,19 @@ describe("sendMutation", () => {
     await expect(sendMutation("/api/deals", { method: "POST" })).resolves.toEqual({ kind: "unknown" });
   });
 
+  // HTTP 408 can come from a proxy after a write reached the server.
+  // The response body format must not make a second create use a new key.
+  it.each(["json", "html"] as const)("is unknown for a %s HTTP 408, retaining its retry key", async (format) => {
+    vi.stubGlobal("fetch", vi.fn(async () =>
+      format === "json" ? jsonResponse(408, { error: "gateway timeout" }) : htmlResponse(408),
+    ));
+    const pending = { key: "same-408-key-000001", body: '{"deal":"once"}' };
+    const result = await sendMutation("/api/deals", { method: "POST" });
+    expect(result).toEqual({ kind: "unknown" });
+    expect(idempotencyKeyFor(pending, pending.body)).toBe(pending.key);
+    expect(mutationErrorKey(result, "dashboard.saveError")).toBe("error.connection");
+  });
+
   it("is rejected for a 4xx answer that is not JSON", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => htmlResponse(404)));
     await expect(sendMutation("/api/deals", { method: "POST" })).resolves.toEqual({ kind: "rejected", status: 404, body: null });
