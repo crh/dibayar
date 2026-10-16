@@ -52,6 +52,7 @@ describe("sendMutation", () => {
     const pending = { key: "same-408-key-000001", body: '{"deal":"once"}' };
     const result = await sendMutation("/api/deals", { method: "POST" });
     expect(result).toEqual({ kind: "unknown" });
+    if (result.kind !== "unknown") throw new Error("HTTP 408 must have an unknown outcome");
     expect(idempotencyKeyFor(pending, pending.body)).toBe(pending.key);
     expect(mutationErrorKey(result, "dashboard.saveError")).toBe("error.connection");
   });
