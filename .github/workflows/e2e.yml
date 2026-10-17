@@ -40,6 +40,15 @@ jobs:
       # a gate until Chris approves one.
       - run: npm run test:journey-coverage
       - run: npm run coverage:journeys
+      # Product capabilities (docs/product/capabilities.json), kept apart
+      # from the inventory above: every REQUIRED capability maps to an
+      # inventory action driven for real, a manual check, or an open gap with
+      # an issue/finding; a mapped action that is deleted or re-marked not
+      # applicable fails, so a requirement cannot vanish through the
+      # inventory. Static and deterministic, seconds. The LLM explorer in
+      # docs/product/COMPLETENESS-AUDIT.md is not part of CI.
+      - run: npm run test:capability-coverage
+      - run: npm run coverage:capabilities
       # Every E2E/UX-audit job below builds with `next build --webpack`
       # (see docs/testing/E2E.md) for a reproducible browser-test target, so
       # nothing else in this workflow exercises the default Turbopack build

@@ -1535,6 +1535,12 @@
           "title": "a contact name typed on deal detail is saved, survives a reload, and leaves the deal's stage and history alone",
           "kind": "real",
           "note": "Base-seed Nego deal reached through the board card menu; fill() into the visible text field, Simpan clicked/tapped; value, stage, history and board column asserted after reload. Also the FIND-10 regression"
+        },
+        {
+          "file": "e2e/deals/deal-change-keeps-invoice.spec.ts",
+          "title": "after the contact name of an invoiced deal is changed, the invoice keeps its number, amount, PPh and due date for the owner and the brand",
+          "kind": "real",
+          "note": "Contact name changed on an invoiced deal (Invoice stage) through board -> card menu -> Lihat detail; the issued invoice keeps number, amount, PPh and due date on the owner page and the recipient page after reload (CAP-INV-11, #55)."
         }
       ],
       "evidence": "One-shot autopilot 2026-10-11 (FIND-10 fix PR)"
@@ -1716,7 +1722,7 @@
       "scope": [],
       "priority": "P2",
       "status": "not_applicable",
-      "reason": "The API route exists but no UI control calls it (verified: no DELETE fetch to /api/deals in src). Not a user-facing action; re-inventory if a delete control ships."
+      "reason": "The API route exists but no UI control calls it (verified: no DELETE fetch to /api/deals in src). Not a user-facing action; re-inventory if a delete control ships. The capability itself is REQUIRED in docs/product/capabilities.json (CAP-DEAL-09) and tracked as a gap in #58; this row stays not applicable only because there is no control to drive."
     },
     {
       "id": "DEAL-LAYOUT-01",

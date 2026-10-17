@@ -141,7 +141,7 @@ Test kinds: **R** = real interaction, **P** = partial (URL entry, `fill()` on a 
 | DEAL-STAGE-05 | P1 | `automated_real_interaction` | Keyboard-only stage move via card menu | chromium (ux-audit) | R: `tests/ux-audit/t27.verification.spec.ts` |
 | DEAL-STAGE-06 | P1 | `automated_partial` | A stage move with no answer ends, and shows what the server holds | chromium, chromium-mobile | P: `deals/server-errors.spec.ts` |
 | DEAL-DETAIL-01 | P1 | `automated_real_interaction` | Open deal detail from a board card (card menu -> Lihat detail) | chromium, chromium-mobile | R: `deals/stage-back.spec.ts` |
-| DEAL-DETAIL-02 | P2 | `automated_real_interaction` | Edit and save contact name | chromium, chromium-mobile | R: `deals/patch-keeps-stage.spec.ts` |
+| DEAL-DETAIL-02 | P2 | `automated_real_interaction` | Edit and save contact name | chromium, chromium-mobile | R: `deals/patch-keeps-stage.spec.ts`<br>R: `deals/deal-change-keeps-invoice.spec.ts` |
 | DEAL-DETAIL-03 | P1 | `automated_real_interaction` | Repair an invalid WhatsApp number on the deal | chromium, chromium-mobile | R: `deals/contact-repair.spec.ts` |
 | DEAL-DETAIL-04 | P2 | `automated_real_interaction` | Open WhatsApp chat with the brand contact | chromium, chromium-mobile | R: `deals/deal-whatsapp.spec.ts` |
 | DEAL-DETAIL-05 | P0 | `automated_real_interaction` | Create an invoice from deal detail and follow its link | chromium, chromium-mobile | R: `invoices/status-lifecycle.spec.ts` |
