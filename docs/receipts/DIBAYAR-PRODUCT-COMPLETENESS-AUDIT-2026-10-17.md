@@ -11,6 +11,7 @@
 | Environment | Local only: `next build --webpack` + `next start` on `127.0.0.1:3300`, isolated test database `127.0.0.1:55432/dibayar_test`, E2E fixture owner and synthetic data (`npm run e2e:fixtures` guardrails). No staging or Production page, account or data was opened. Hosted deployment SHA: **not inspected** (no hosted claims are made). |
 | Browsers | Playwright Chromium desktop (1280), Chromium 390 px touch emulation, WebKit 390 px touch emulation (iPhone 13 profile). **No real phone**: native picker behaviour stays MANUAL PENDING. |
 | Open PRs at start | #39 (dependabot). Open issues: #53, #55. |
+| Created | Issues #56, #57, #58, #59; PR #60 (test clock fix); PR #61 (this audit); pilot comment on #55 |
 
 ## 2. Phase 1 — capability model (requirements first)
 
@@ -106,8 +107,10 @@ Also UNKNOWN (not ranked): CAP-ACC-01 account/data deletion (legal), CAP-HOME-05
 | `npm run test:capability-coverage` / `coverage:capabilities` | PASS (13) / PASS (27/34 covered, 7 gaps) |
 | New journey, local | chromium, chromium-mobile, WebKit desktop: PASS; tripwire: expected failure in all three; negative control: FAIL as intended |
 | Probe, local | chromium, chromium-mobile, webkit-mobile: PASS, identical inventories |
-| `npm run test:e2e:critical` (local) | see §8a |
-| CI on the pushed commit | see PR |
+| `npm run test:e2e:critical` (local, chromium + chromium-mobile) | PASS: 294 passed, 0 failed, 28 skipped (23.9 min); `coverage:journeys --results` on it: 144 real claims passed, 5 not exercised (ux-audit / non-critical, expected for a critical-only run) |
+| CI on `9e7146c` (PR #61) | [`CI` 39017457890](https://github.com/crh/dibayar/actions/runs/39017457890): success. lint-typecheck-test (incl. capability self-test 13/13 and `coverage:capabilities` OK), e2e-critical 294 passed (new journey ran in both projects), e2e-a11y, ux-audit all success; e2e-cross-browser skipped by design. [`Journey coverage (full)` 39017457888](https://github.com/crh/dibayar/actions/runs/39017457888): success |
+| CI on `4209e83` (PR #60) | [`CI` 39016552672](https://github.com/crh/dibayar/actions/runs/39016552672): success |
+| Cross-browser (Firefox/WebKit) suite | NOT_RUN (dispatch/scheduled only; the new journey was run locally in WebKit desktop) |
 
 ## 9. Residual risks and limits
 
