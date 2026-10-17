@@ -507,6 +507,10 @@ describe("getPublicInvoiceDocumentByToken", () => {
     return { db, findUnique };
   }
 
+  // The lookups below pass this clock: with the real one, fullRow's share
+  // expired at 2026-10-17T00:00Z and these tests started failing that day.
+  const LOOKUP_NOW = new Date("2026-07-19T00:00:00.000Z");
+
   const fullRow = {
     expiresAt: new Date("2026-10-17T00:00:00.000Z"),
     invoice: {
@@ -594,7 +598,7 @@ describe("getPublicInvoiceDocumentByToken", () => {
   it("projects a ready-to-render InvoiceDocumentInput for a live token", async () => {
     const { db } = makeLookupDb(fullRow);
 
-    const result = await getPublicInvoiceDocumentByToken(db, "token");
+    const result = await getPublicInvoiceDocumentByToken(db, "token", LOOKUP_NOW);
 
     expect(result).toEqual({
       kind: "ok",
@@ -627,7 +631,7 @@ describe("getPublicInvoiceDocumentByToken", () => {
       invoice: { ...fullRow.invoice, user: { settings: null } },
     });
 
-    const result = await getPublicInvoiceDocumentByToken(db, "token");
+    const result = await getPublicInvoiceDocumentByToken(db, "token", LOOKUP_NOW);
 
     expect(result.kind).toBe("ok");
     if (result.kind !== "ok") throw new Error("expected ok");
