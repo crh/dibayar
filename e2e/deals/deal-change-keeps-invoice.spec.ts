@@ -23,6 +23,7 @@ import { expect, test } from "../support/test";
 import { loadFixtureManifest } from "../support/manifest";
 import { reseedFixtures } from "../support/reseed";
 import { press, responseTo } from "../support/journey";
+import { cardMenuEditAction, dealDetailEditAffordance } from "../support/deal-edit-affordance";
 
 const NEW_CONTACT_NAME = "Kontak Baru Setelah Invoice";
 
@@ -120,16 +121,30 @@ test.describe("a deal change leaves its issued invoice alone (CAP-INV-11)", () =
 
   // Expected failure, never counted as coverage. It documents that a saved
   // deal's core details cannot be edited (#55, CAP-DEAL-05) and is meant to
-  // start failing the day an edit action ships: then remove test.fail, map
-  // the new journey in docs/testing/journey-coverage.json, and close the gap
-  // in docs/product/capabilities.json.
-  test("the card menu offers an action to edit a saved deal (#55)", async ({ page, isMobile }) => {
-    test.fail(true, "#55: no edit action for a saved deal's brand, scope, fee, deadline or payment terms");
+  // start passing -- which fails the run -- the day an edit ships, in the
+  // card menu or on deal detail (an edit action, or the core fields made
+  // editable in place): then remove test.fail, turn this into the edit
+  // journey, map it in docs/testing/journey-coverage.json, and close the gap
+  // in docs/product/capabilities.json. What counts as an edit, and what does
+  // not, is in e2e/support/deal-edit-affordance.ts and proved by
+  // e2e/deals/deal-edit-affordance.spec.ts.
+  test("a saved deal can be edited from its card menu or its detail page (#55)", async ({ page, isMobile }, testInfo) => {
+    test.fail(true, "#55: no edit for a saved deal's brand, scope, fee, deadline or payment terms");
     const manifest = loadFixtureManifest();
-    const brand = manifest.brands[manifest.deals.nego];
+    const dealId = manifest.deals.nego;
+    const brand = manifest.brands[dealId];
     await page.goto("/deal");
     const card = page.locator("article", { hasText: brand });
     await press(card.getByRole("button", { name: `Aksi lain untuk deal ${brand}` }), isMobile);
-    await expect(page.getByRole("menuitem", { name: /^(ubah|edit)( deal)?$/i })).toBeVisible({ timeout: 2_000 });
+    await page.getByRole("menu").getByRole("menuitem").first().waitFor();
+    let found = await cardMenuEditAction(page);
+    if (found === null) {
+      await press(page.getByRole("menuitem", { name: "Lihat detail" }), isMobile);
+      await expect(page).toHaveURL(new RegExp(`/deal/${dealId}$`));
+      await expect(page.getByRole("heading", { level: 1, name: brand })).toBeVisible();
+      found = await dealDetailEditAffordance(page);
+    }
+    testInfo.annotations.push({ type: "#55 edit affordance", description: found ?? "none on the card menu or deal detail" });
+    expect(found, "no full edit of a saved deal on its card menu or its detail page").not.toBeNull();
   });
 });

@@ -150,7 +150,7 @@
       "priority": "P1",
       "rationale": [{ "source": "ROADMAP.md M1", "says": "Deal capture flow ... create/read/update/delete smoke verified (update was exercised through the API only: DAILY_LOG line 67)" }, { "source": "dibayar-implementation-spec.md §3.3", "says": "scope empty → Belum diisi ... with an inline edit affordance" }, { "source": "issue #55", "says": "The deal owner can safely correct and update a saved deal without deleting and recreating it" }],
       "verification": { "actions": [] },
-      "gap": { "kind": "missing", "ref": "#55", "summary": "No edit control for any core field: card menu offers only stage moves and Lihat detail; deal detail edits only the contact name (and an invalid WhatsApp number). PATCH /api/deals/[id] already accepts all fields.", "evidence": "Audit 2026-10-17 exploration on chromium, chromium-mobile and WebKit 390px; expected-failure tripwire in e2e/deals/deal-change-keeps-invoice.spec.ts" }
+      "gap": { "kind": "missing", "ref": "#55", "summary": "No edit control for any core field: card menu offers only stage moves and Lihat detail; deal detail edits only the contact name (and an invalid WhatsApp number). PATCH /api/deals/[id] already accepts all fields.", "evidence": "Audit 2026-10-17 exploration on chromium, chromium-mobile and WebKit 390px; expected-failure tripwire in e2e/deals/deal-change-keeps-invoice.spec.ts, which looks for an edit on the card menu and on deal detail (an edit action or core fields editable in place), with controls in e2e/deals/deal-edit-affordance.spec.ts" }
     },
     {
       "id": "CAP-DEAL-06",
