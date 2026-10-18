@@ -86,5 +86,5 @@ smoke: real browser automation against the live Preview deployment — see lates
 
 ## next_3_tasks
 1. Chris: on staging `3e410da`, run MAN-DEAL-02 (edit a saved deal, physical iPhone Safari + Android Chrome) and MAN-DUE-01 (P0) on real phones; MAN-AUTH-01; MAN-REL-01. Then close #55 if MAN-DEAL-02 passes.
-2. Chris: decide Decision B (#56), including whether a sent invoice's due date stays editable, and Decision C (#57); run the FIND-10 read-only Production query. Note for the next `staging -> main` release: it applies the snapshot migration and backfill to Production (reconstructed snapshots for already sent/shared invoices).
+2. Chris: decide Decision B (#56), including whether a sent invoice's due date stays editable, and Decision C (#57); run the FIND-10 read-only Production query. Note for the next `staging -> main` release: it applies the snapshot migration and backfill to Production (reconstructed snapshots for non-DRAFT invoices and DRAFTs with a remaining share row; a DRAFT whose link was revoked earlier freezes at its next exposure).
 3. Then the `staging -> main` release PR with Gate F on the final SHA; #58/#59 (P2) can follow independently.

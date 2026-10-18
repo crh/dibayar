@@ -151,7 +151,7 @@ regression tests, answered and resolved before merge.
 - **MAN-AUTH-01** (hosted Google sign-in and sign-out).
 - **MAN-REL-01** (staging release smoke).
 - **FIND-10:** read-only Production impact query, not run.
-- **Release note for Chris:** the `staging → main` release will run this migration's backfill on Production. Production invoices already sent or shared will get reconstructed snapshots from current deal and Settings values, labelled as such.
+- **Release note for Chris:** the `staging → main` release will run this migration's backfill on Production. On Production it reconstructs snapshots, from current deal and Settings values and labelled as such, for every invoice that is no longer DRAFT and every DRAFT that still has a share row (active or expired). A DRAFT whose link was revoked before the release has no share row, so it gets no snapshot then; it freezes at its next exposure (§4).
 
 ## 8. Next recommended action
 
