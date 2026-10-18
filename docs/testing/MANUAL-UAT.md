@@ -31,6 +31,7 @@ inventory entry points at a check that is not defined here.
   | MAN-REL-01 | Release smoke on the hosted environment | Blocked |
   | MAN-DUE-01 (P0) | Native date picker on real phones | Blocked, unless Chris accepts the risk in the release PR |
   | MAN-AUTH-01 (P0) | Real Google sign-in, a third party | Blocked, unless Chris accepts the risk in the release PR |
+  | MAN-AUTH-02 (P0) | Pilot gate with a real, uninvited Google account | Blocked, unless Chris accepts the risk in the release PR |
   | MAN-DEAL-01, MAN-DEAL-02, MAN-WA-01, MAN-PDF-01, MAN-SHARE-01 (P1) | Phone-only remainder of flows that are automated on Chromium | Not blocked; the release PR lists each one as run or not run |
   | MAN-A11Y-01 (P2) | Screen reader | Not blocked |
 
@@ -128,6 +129,22 @@ Inventory: AUTH-03.
    console errors, nothing that points at the Production host.
 3. Sign out via the account menu. Expected: the next visit to `/deal` asks you
    to sign in again.
+
+### MAN-AUTH-02 — Pilot gate: invited and uninvited Google accounts (P0)
+
+Inventory: AUTH-10. Needs `PILOT_ALLOWED_EMAILS` set for the environment
+under test (Chris; never pasted into an issue, PR, log or screenshot) with
+one invited account on it and a second Google account that is not.
+
+1. In a private window, sign in with the **uninvited** account. Expected:
+   "Akses khusus kreator yang diundang" on `/akses-terbatas`; the page does
+   not show the email; `/deal` and `/` lead back to sign-in, never to the app.
+2. Chris, read-only on that environment's database: no `User` row was created
+   for the uninvited account (aggregate count only, no email printed).
+3. In a new private window, sign in with the **invited** account. Expected:
+   Beranda loads. Sign out via the account menu.
+4. Open an existing share link `/i/…` in a private window with no sign-in.
+   Expected: the invoice and **Unduh PDF** work as before.
 
 ### MAN-WA-01 — WhatsApp hand-off and real popup blocker (P1)
 

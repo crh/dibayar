@@ -9,6 +9,9 @@ const languageDb = prisma as unknown as UserLanguageDb;
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
+  if (session?.pilotAccessDenied) {
+    redirect("/akses-terbatas");
+  }
   if (!session?.user?.id) {
     redirect("/api/auth/signin?callbackUrl=%2F");
   }

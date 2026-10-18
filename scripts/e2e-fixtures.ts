@@ -21,6 +21,9 @@ import {
   E2E_OTHER_OWNER_SESSION_TOKEN,
   E2E_OWNER_SESSION_TOKEN,
   E2E_OWNER_SIGNOUT_SESSION_TOKEN,
+  E2E_UNINVITED_DEAL_BRAND,
+  E2E_UNINVITED_SESSION_TOKEN,
+  E2E_UNINVITED_USER_ID,
 } from "../e2e/support/fixture-ids";
 import { FIXTURE_FUTURE_DATE, FIXTURE_PAST_DATE } from "../src/lib/e2e-fixture-dates";
 import { getJakartaCalendarDate } from "../src/lib/invoice-date-status";
@@ -66,7 +69,7 @@ const manifestPath = path.resolve(".hermes-runtime/e2e-fixtures/fixtures.json");
 // database has a deliberately small connection budget.
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString, max: 1 }) });
 
-const ids = { owner: `${prefix}-owner`, otherOwner: E2E_OTHER_OWNER_ID };
+const ids = { owner: `${prefix}-owner`, otherOwner: E2E_OTHER_OWNER_ID, uninvited: E2E_UNINVITED_USER_ID };
 
 // A real, database-backed Auth.js session row -- not a bypass endpoint. See
 // e2e/support/auth.ts, which sets this value as the `authjs.session-token`
@@ -76,6 +79,7 @@ const sessionTokens = {
   owner: E2E_OWNER_SESSION_TOKEN,
   ownerSignout: E2E_OWNER_SIGNOUT_SESSION_TOKEN,
   otherOwner: E2E_OTHER_OWNER_SESSION_TOKEN,
+  uninvited: E2E_UNINVITED_SESSION_TOKEN,
 };
 
 const dealIds = {
@@ -202,7 +206,7 @@ const statusConsistency = {
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 async function cleanupRows() {
-  await prisma.user.deleteMany({ where: { id: { in: [ids.owner, ids.otherOwner] } } });
+  await prisma.user.deleteMany({ where: { id: { in: [ids.owner, ids.otherOwner, ids.uninvited] } } });
 }
 
 async function seed() {
@@ -228,11 +232,20 @@ async function seed() {
   await prisma.user.create({
     data: { id: ids.otherOwner, name: "E2E Fixture Other Owner", email: `${prefix}-other-owner@example.invalid`, language: "id" },
   });
+  // Pilot-access fixture: a real account with its own data and a valid
+  // session, but not on the E2E server's pilot allowlist.
+  await prisma.user.create({
+    data: { id: ids.uninvited, name: "E2E Fixture Uninvited", email: `${prefix}-uninvited@example.invalid`, language: "id" },
+  });
+  await prisma.deal.create({
+    data: { id: `${prefix}-uninvited-deal`, userId: ids.uninvited, brand: E2E_UNINVITED_DEAL_BRAND, contactWa: "628110000099", scope: "E2E fixture: uninvited creator", feeIdr: 1_000_000, status: DealStatus.MASUK },
+  });
   await prisma.session.createMany({
     data: [
       { sessionToken: sessionTokens.owner, userId: ids.owner, expires: sessionExpiry },
       { sessionToken: sessionTokens.ownerSignout, userId: ids.owner, expires: sessionExpiry },
       { sessionToken: sessionTokens.otherOwner, userId: ids.otherOwner, expires: sessionExpiry },
+      { sessionToken: sessionTokens.uninvited, userId: ids.uninvited, expires: sessionExpiry },
     ],
   });
 
@@ -378,6 +391,10 @@ async function verify() {
     otherOwnerHasNoDeals: otherOwner?.deals.length === 0,
     otherOwnerHasNoInvoices: otherOwner?.invoices.length === 0,
     otherOwnerSessionPresent: otherOwner?.sessions.some((session) => session.sessionToken === sessionTokens.otherOwner) === true,
+    // The pilot-access journey needs this account to be real, own data and
+    // hold a valid session; only the allowlist may stop it.
+    uninvitedSessionPresent: (await prisma.session.count({ where: { sessionToken: sessionTokens.uninvited, userId: ids.uninvited } })) === 1,
+    uninvitedOwnsOneDeal: (await prisma.deal.count({ where: { userId: ids.uninvited } })) === 1,
   };
   if (Object.values(checks).some((value) => !value)) throw new Error(`E2E fixture verification failed: ${JSON.stringify(checks)}`);
   console.log(JSON.stringify({ action: "verify", host: normalizedHost, prefix, checks }));
@@ -385,7 +402,7 @@ async function verify() {
 
 async function cleanup() {
   await cleanupRows();
-  const remaining = await prisma.user.count({ where: { id: { in: [ids.owner, ids.otherOwner] } } });
+  const remaining = await prisma.user.count({ where: { id: { in: [ids.owner, ids.otherOwner, ids.uninvited] } } });
   if (remaining !== 0) throw new Error(`E2E fixture cleanup read-back failed: ${remaining} users remain`);
   await rm(manifestPath, { force: true });
   console.log(JSON.stringify({ action: "cleanup", host: normalizedHost, prefix, remainingUsers: remaining }));

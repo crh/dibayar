@@ -5,5 +5,8 @@ declare module "next-auth" {
     user: {
       id: string;
     } & DefaultSession["user"];
+    // Set (with no user) when the session's account is not on the pilot
+    // allowlist; see src/auth.ts.
+    pilotAccessDenied?: true;
   }
 }

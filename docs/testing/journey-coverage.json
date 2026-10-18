@@ -243,6 +243,64 @@
       "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
     },
     {
+      "id": "AUTH-09",
+      "domain": "auth",
+      "route": "/ (any protected route), owner APIs, /api/auth/session",
+      "action": "An existing session for an account not on the pilot allowlist reaches no creator data",
+      "persona": "uninvited creator with a still-valid session",
+      "preconditions": "PILOT_ALLOWED_EMAILS set without this account; a valid Session row and own data",
+      "interaction": "Navigate to protected pages; call owner GET/POST APIs",
+      "expected": "Pages redirect to /akses-terbatas (no shell, no data, no email); APIs 401; /api/auth/session has no user",
+      "persisted": "No deal created",
+      "alternates": "Invited owner still reaches the app; recipient /i/ link and PDF work with no session",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/security/pilot-access.spec.ts",
+          "title": "an existing session for an uninvited account is sent to the invite-only page and sees no data",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/security/pilot-access.spec.ts",
+          "title": "the uninvited session is refused by owner APIs, reads and writes alike",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/security/pilot-access.spec.ts",
+          "title": "an invited owner still reaches the app; recipients still open a share link and its PDF with no session",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/security/pilot-access.spec.ts",
+          "title": "the invite-only page names no account and offers sign-in after an Auth.js AccessDenied",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "AUTH-10",
+      "domain": "auth",
+      "route": "/api/auth/signin -> Google -> /akses-terbatas",
+      "action": "Real Google sign-in by an uninvited account is refused before any account is created",
+      "persona": "uninvited creator with a Google account",
+      "preconditions": "Hosted environment with OAuth and PILOT_ALLOWED_EMAILS configured",
+      "interaction": "Sign in with an uninvited, then an invited Google account",
+      "expected": "Uninvited: invite-only page, no User row; invited: Beranda",
+      "persisted": "No User/Account row for the uninvited account",
+      "alternates": "Google email not verified; allowlist unset (everyone refused)",
+      "scope": [
+        "manual: staging"
+      ],
+      "priority": "P0",
+      "status": "manual_pending",
+      "manualCheck": "MAN-AUTH-02"
+    },
+    {
       "id": "HOME-01",
       "domain": "home",
       "route": "/",
@@ -3687,6 +3745,20 @@
       "futureAutomation": {
         "exists": true,
         "strategy": "A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built."
+      }
+    },
+    {
+      "actions": [
+        "AUTH-10"
+      ],
+      "category": "third_party_auth",
+      "manualCheck": "MAN-AUTH-02",
+      "reason": "The refusal happens in Auth.js's signIn callback during a real Google OAuth callback, which the suite never performs (no Google traffic, no stored Google credential). The callback's decision is unit-tested (src/auth.test.ts); the hosted round trip, and that no User row is left behind, need a real uninvited Google account.",
+      "blocksRelease": true,
+      "releaseEvidence": "MAN-AUTH-02 logged PASS on staging for the release candidate, with the environment's allowlist configured by Chris.",
+      "futureAutomation": {
+        "exists": false,
+        "strategy": "Not planned, for the same reason as AUTH-03 (MAN-AUTH-01)."
       }
     }
   ],
