@@ -2391,7 +2391,7 @@
       "persona": "owner",
       "preconditions": "",
       "interaction": "Edit bank details in Settings; open the invoice from the list; click Unduh PDF",
-      "expected": "The browser downloads <number>.pdf; its text has the invoice number, issuer, brand, description, amount, tax, payment terms, due date and the bank details last saved in Settings (moved from SET-03)",
+      "expected": "The browser downloads <number>.pdf; its text has the invoice number, issuer, brand, description, amount, tax, payment terms, due date and the bank details the invoice was issued with -- not bank details saved in Settings after it was shared (Decision A, CAP-INV-12; moved from SET-03)",
       "persisted": "n/a",
       "alternates": "Incomplete issuer settings",
       "scope": [
@@ -2404,9 +2404,9 @@
       "tests": [
         {
           "file": "e2e/invoices/pdf-download.spec.ts",
-          "title": "Unduh PDF on invoice detail downloads a PDF with the invoice, issuer and current bank details",
+          "title": "Unduh PDF on invoice detail downloads a PDF with the invoice, issuer and the bank details it was issued with, not later Settings",
           "kind": "real",
-          "note": "Bank details changed through Settings first; visible Unduh PDF click, the browser's download event, text read with pdftotext -layout and compared line by line with literal expected lines (the replaced bank details must be absent). File kept only under the test's output directory"
+          "note": "Bank details changed through Settings first; visible Unduh PDF click, the browser's download event, text read with pdftotext -layout and compared line by line with literal expected lines: the seeded invoice was shared before the change, so the PDF must keep the seeded bank details and print none of the new ones (Decision A). File kept only under the test's output directory"
         },
         {
           "file": "tests/ux-audit/fixtures.baseline.spec.ts",
@@ -2418,6 +2418,39 @@
       "manualCheck": "MAN-PDF-01",
       "followUp": "How a phone's browser hands the PDF to its viewer/downloads stays MAN-PDF-01",
       "evidence": "Zero Routine Phase 2B, 2026-10-08"
+    },
+    {
+      "id": "INV-DOC-01",
+      "domain": "invoices",
+      "route": "/invoice/[id], /i/[token], /api/invoices/[id]/pdf, /api/public/invoices/[token]/pdf",
+      "action": "An issued invoice's document is frozen against later deal and Settings edits (Decision A)",
+      "persona": "owner and brand contact (recipient)",
+      "preconditions": "A deal at the Invoice stage with no invoice (base seed)",
+      "interaction": "Deal detail -> Buat invoice; edit the deal while the invoice is a Draft; invoice detail -> Buat tautan berbagi; edit the deal's contact name on deal detail and the bank name in Pengaturan; Unduh PDF as owner and as the brand; Buat ulang tautan, Cabut tautan, Buat tautan berbagi; Tandai sudah dikirim",
+      "expected": "An unshared Draft's PDF follows the deal; from the first share link (or Tandai sudah dikirim, whichever is first) the owner's PDF, the brand's page and the brand's PDF keep the brand, contact name, scope, payment terms, issuer and bank details of that moment, through link rotation, revoke and re-share and the move to Terkirim; owner and brand PDFs have the same text",
+      "persisted": "InvoiceSnapshot (one row per invoice, never updated)",
+      "alternates": "Tandai sudah dikirim before any link (second test); an invoice exposed without a snapshot is frozen at its next read (unit and database tests); migration backfill (npm run test:snapshot-db)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "evidence": "Decision A implementation 2026-10-18 (issue #55)",
+      "tests": [
+        {
+          "file": "e2e/invoices/document-snapshot.spec.ts",
+          "title": "a Draft follows its deal and Settings until its first share link; from then on the owner's PDF, the brand's page and its PDF keep that copy through rotate, revoke, re-share and Terkirim",
+          "kind": "real",
+          "note": "Share, rotate, revoke, re-share, Terkirim, the contact-name edit and the Settings edit are all visible controls, and the frozen outcome is asserted on the owner's PDF, the brand's page and the brand's PDF after reloads. Brand, scope and payment terms are additionally changed through the deal's PATCH endpoint (page.request), because no UI edits them before #55's editor; that part alone is partial"
+        },
+        {
+          "file": "e2e/invoices/document-snapshot.spec.ts",
+          "title": "Tandai sudah dikirim freezes a Draft that has no link yet; a link made later shows the copy from that moment",
+          "kind": "partial",
+          "note": "Tandai sudah dikirim and Buat tautan berbagi are clicked; the deal change in between goes through the deal's PATCH endpoint (page.request) until #55's editor ships"
+        }
+      ]
     },
     {
       "id": "INV-OWN-01",
@@ -2897,11 +2930,11 @@
       "id": "SET-03",
       "domain": "settings",
       "route": "/pengaturan",
-      "action": "Update bank details; they persist and appear on the recipient invoice page",
+      "action": "Update bank details; they persist and appear on the recipient page of an invoice shared afterwards",
       "persona": "owner",
       "preconditions": "",
-      "interaction": "Edit bank name/account/holder, save, reload, open the invoice share link as the recipient",
-      "expected": "Persisted after reload and navigation; shown in the recipient page's payment block (/i/<token>)",
+      "interaction": "Edit bank name/account/holder, save, reload; create and share an invoice from the pending deal; open both that link and the earlier invoice's link as the recipient",
+      "expected": "Persisted after reload and navigation; shown in the recipient page's payment block (/i/<token>) of the invoice shared after the save; the invoice shared before the save keeps the details it was issued with (Decision A, CAP-INV-12)",
       "persisted": "UserSettings bank fields",
       "alternates": "Required-field errors",
       "scope": [
@@ -2913,9 +2946,9 @@
       "tests": [
         {
           "file": "e2e/settings/bank-details.spec.ts",
-          "title": "edited bank details persist after reload and appear on the recipient's invoice page",
+          "title": "edited bank details persist after reload and appear on the recipient's page of an invoice shared afterwards, not on one already shared",
           "kind": "real",
-          "note": "Edits the three bank fields with synthetic values, saves, reloads, navigates away and back, then opens the invoice's share link in a separate session-less context with the project's device emulation and checks the 'Pembayaran ke' block. The PDF outcome is tracked under INV-PDF-01"
+          "note": "Edits the three bank fields with synthetic values, saves, reloads, navigates away and back, then makes an invoice through Buat invoice and Buat tautan berbagi and opens its link in a separate session-less context with the project's device emulation: the 'Pembayaran ke' block has the new details; the seeded invoice's link still has the seeded ones. The PDF outcome is tracked under INV-PDF-01"
         },
         {
           "file": "e2e/settings/bank-details.spec.ts",
@@ -3020,8 +3053,8 @@
       "action": "Incomplete issuer settings warn on invoice detail",
       "persona": "owner",
       "preconditions": "The owner has never saved Pengaturan (no UserSettings row; guarded fixture action incomplete-issuer-settings)",
-      "interaction": "Nav -> Invoice -> invoice detail; nav -> Pengaturan; save an incomplete form, then a complete one; back to the invoice",
-      "expected": "Notice on invoice detail and in Pengaturan, 'Detail rekening belum lengkap.' on the recipient page; all three gone after the details are saved, also after reload",
+      "interaction": "Pending deal -> Buat invoice -> the Draft; nav -> Pengaturan; save an incomplete form, then a complete one; back to the invoice; share it. Second test: share the Draft first, then complete Pengaturan",
+      "expected": "Notice on an unshared Draft and in Pengaturan, gone after the details are saved, also after reload; the Draft shared afterwards shows the brand the saved details. An invoice shared while details were missing keeps 'Detail rekening belum lengkap.' on the recipient page after Pengaturan is completed, and invoice detail says Pengaturan no longer changes it (Decision A, CAP-INV-12)",
       "persisted": "UserSettings (created by the save)",
       "alternates": "",
       "scope": [
@@ -3034,9 +3067,15 @@
       "tests": [
         {
           "file": "e2e/settings/incomplete-issuer.spec.ts",
-          "title": "missing issuer and bank details warn on invoice detail, in Pengaturan and on the brand's page, until they are saved",
+          "title": "missing issuer and bank details warn on a Draft and in Pengaturan until they are saved; the Draft shared afterwards gives the brand the saved details",
           "kind": "real",
           "note": "The starting state is a fixture precondition (the form cannot produce it); every step after it is through the UI. The invoice notice is plain text with no link to Pengaturan, so the journey reaches Pengaturan through the navigation"
+        },
+        {
+          "file": "e2e/settings/incomplete-issuer.spec.ts",
+          "title": "an invoice shared while the details were missing keeps the gaps after Pengaturan is completed, and says so",
+          "kind": "real",
+          "note": "Decision A alternate: Buat tautan berbagi on the incomplete Draft, then the Pengaturan save; the owner's frozen-invoice notice and the recipient's 'Detail rekening belum lengkap.' remain after reloads"
         }
       ]
     },

@@ -468,12 +468,16 @@ export default function InvoiceDetailClient({
   initialInvoice,
   now,
   hasIncompleteIssuer = false,
+  documentFrozen = false,
   templateSend = DEFAULT_TEMPLATE_SEND,
   templateChase = DEFAULT_TEMPLATE_CHASE,
 }: {
   initialInvoice: InvoiceRecord;
   now?: Date;
   hasIncompleteIssuer?: boolean;
+  // Decision A: the document was sent or shared and no longer follows the
+  // deal or Settings.
+  documentFrozen?: boolean;
   templateSend?: string;
   templateChase?: string;
 }) {
@@ -481,6 +485,9 @@ export default function InvoiceDetailClient({
   const [invoice, setInvoice] = useState(initialInvoice);
   const [contactWa, setContactWa] = useState<string | null>(null);
   const [brand, setBrand] = useState<string | null>(null);
+  // The brand the invoice document names (its snapshot once frozen), used
+  // in the WhatsApp message so it matches the linked invoice.
+  const [documentBrand, setDocumentBrand] = useState<string | null>(null);
   const [contactStatus, setContactStatus] = useState<ContactStatus>("loading");
   const [contactWaDraft, setContactWaDraft] = useState("");
   const [isSavingContactWa, setIsSavingContactWa] = useState(false);
@@ -505,6 +512,14 @@ export default function InvoiceDetailClient({
   // "mark due" on an invoice already shown as overdue.
   const nextActions = NEXT_ACTIONS[invoice.status].filter((action) => !(isOverdue && action.status === "DUE"));
   const shareState = useShareState(invoice.id);
+  // Decision A: the document freezes the moment the invoice leaves Draf or
+  // gets a share row (active or expired). The server's answer at page load is
+  // the start; a move or a link made on this page latches it too, so the
+  // notice below is right without a reload. Nothing here ever unlatches it:
+  // a revoked link leaves the snapshot in place.
+  const [frozenOnPage, setFrozenOnPage] = useState(documentFrozen);
+  const exposedOnPage = invoice.status !== "DRAFT" || shareState.share.kind === "active" || shareState.share.kind === "expired";
+  if (exposedOnPage && !frozenOnPage) setFrozenOnPage(true);
   const [isSharingToWhatsApp, setIsSharingToWhatsApp] = useState(false);
 
   // Split from the retry trigger below so the effect only ever invokes a
@@ -519,6 +534,7 @@ export default function InvoiceDetailClient({
       .then(({ response, payload }) => {
         if (cancelled) return;
         if (typeof payload.brand === "string") setBrand(payload.brand);
+        if (typeof payload.documentBrand === "string") setDocumentBrand(payload.documentBrand);
         if (response.ok && typeof payload.contactWa === "string") {
           setContactWa(payload.contactWa);
           setContactWaDraft(payload.contactWa);
@@ -681,11 +697,27 @@ export default function InvoiceDetailClient({
         : await shareState.ensureLink();
       if (!link) return;
 
+      // The link may have just frozen the document (Decision A), possibly
+      // with a brand edited elsewhere since this page loaded: name the brand
+      // the frozen document has. If that cannot be read, the brand loaded
+      // with the page is used, as before.
+      let messageBrand = documentBrand ?? brand ?? "";
+      try {
+        const fresh = await fetchWithTimeout(`/api/invoices/${invoice.id}/contact`, { cache: "no-store" });
+        const payload = fresh.ok ? await fresh.json() : null;
+        if (typeof payload?.documentBrand === "string") {
+          messageBrand = payload.documentBrand;
+          setDocumentBrand(payload.documentBrand);
+        }
+      } catch {
+        // keep messageBrand
+      }
+
       const result = buildInvoiceWhatsApp({
         contactWa: number,
         shareUrl: link,
         template: isOverdue ? templateChase : templateSend,
-        brand: brand ?? "",
+        brand: messageBrand,
         invoiceNumber: invoice.number,
         totalIdr: invoice.subtotalIdr,
         // An unusable legacy date is left out of the message rather than
@@ -937,7 +969,7 @@ export default function InvoiceDetailClient({
 
           {hasIncompleteIssuer ? (
             <div role="status" className="mt-4 rounded-md border border-due bg-due-tint px-4 py-3 text-[14px] text-ink">
-              {t("invoice.settingsDependencyNotice")}
+              {t(frozenOnPage ? "invoice.settingsFrozenNotice" : "invoice.settingsDependencyNotice")}
             </div>
           ) : null}
         </section>

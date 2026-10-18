@@ -12,12 +12,12 @@
 // deadline and other fields, extend this journey with those edits rather
 // than writing a second one.
 //
-// What this journey does NOT decide: the brand, scope, payment terms and
-// contact name on the invoice document are read from the deal when the page
-// or PDF is rendered (src/lib/invoice-share.ts), so a contact name saved
-// after the invoice went out does appear on the brand's page. Whether that is
-// wanted is an open product decision (CAP-INV-12, UNKNOWN); the journey
-// records what it saw as an annotation and asserts nothing about it.
+// Decision A (issue #55, approved 2026-10-18; CAP-INV-12): the brand, scope,
+// payment terms and contact name on the document are frozen with the issuer
+// and bank details when the invoice is first shared or sent
+// (src/lib/invoice-snapshot.ts), so a contact name saved afterwards does not
+// reach the brand's page either. e2e/invoices/document-snapshot.spec.ts
+// follows the other fields and the owner's and brand's PDFs.
 import type { Page } from "@playwright/test";
 import { expect, test } from "../support/test";
 import { loadFixtureManifest } from "../support/manifest";
@@ -60,7 +60,7 @@ test.describe("a deal change leaves its issued invoice alone (CAP-INV-11)", () =
   test.beforeEach(reseedFixtures);
   test.afterEach(reseedFixtures);
 
-  test("after the contact name of an invoiced deal is changed, the invoice keeps its number, amount, PPh and due date for the owner and the brand", { tag: "@critical" }, async ({ page, browser, baseURL, isMobile }, testInfo) => {
+  test("after the contact name of an invoiced deal is changed, the invoice keeps its number, amount, PPh and due date for the owner and the brand", { tag: "@critical" }, async ({ page, browser, baseURL, isMobile }) => {
     test.setTimeout(60_000);
     const manifest = loadFixtureManifest();
     const dealId = manifest.deals.invoiceSent;
@@ -110,10 +110,8 @@ test.describe("a deal change leaves its issued invoice alone (CAP-INV-11)", () =
       expect(brandAfter.amount).toBe(brandBefore.amount);
       expect(brandAfter.due).toBe(brandBefore.due);
       expect(brandAfter.pph).toBe(brandBefore.pph);
-      testInfo.annotations.push({
-        type: "observation (CAP-INV-12, undecided)",
-        description: `contact name saved after the invoice was issued ${brandAfter.showsNewContactName ? "appears" : "does not appear"} on the brand's invoice page`,
-      });
+      // Decision A: the issued document keeps the contact it was issued with.
+      expect(brandAfter.showsNewContactName, "a contact name saved after issue is not on the brand's page").toBe(false);
     } finally {
       await recipientContext.close();
     }

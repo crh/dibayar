@@ -1,12 +1,13 @@
 # Product decision brief — completeness audit follow-ups (2026-10-17)
 
-For: Chris (product owner). Status: **every item below NEEDS_OWNER_APPROVAL.**
-Nothing here is built, and no recommendation is an approval. Source of truth
+For: Chris (product owner). Status: **Decision A APPROVED 2026-10-18** (see
+its section); **every other item below NEEDS_OWNER_APPROVAL**, and no
+recommendation is an approval. Source of truth
 for the gaps: `docs/product/capabilities.json` (generated view:
 `docs/product/capability-matrix.md`). Customer: one Indonesian creator
 managing their own deals, not an agency.
 
-## What the code does today (verified 2026-10-17)
+## What the code did on 2026-10-17 (before Decision A was implemented)
 
 - An invoice stores its own number, `subtotalIdr` (copied from the deal fee
   at creation), `withholdingTaxType` (NONE / PPH21 / PPH23), `dueDate` and
@@ -25,6 +26,39 @@ managing their own deals, not an agency.
 
 ## Decision A — issued-invoice snapshot (CAP-INV-12; blocks #55)
 
+**APPROVED 2026-10-18 by the product owner (Chris)**, recorded in the issue
+#55 comment of 2026-10-18 ("Product-owner decision — APPROVED (2026-10-18):
+CAP-INV-12 / Decision A"). Approved policy, verbatim in substance:
+
+- Draft invoices may reflect current deal and issuer/Settings values until the
+  first issuance/external-sharing boundary.
+- At the first transition out of Draft **or** the earliest action that makes
+  a public invoice available (a recipient-accessible share link), whichever
+  comes first, the document fields are captured atomically and locked. A
+  share link on a Draft must not serve mutable live fields.
+- The snapshot covers brand, contact name, scope, payment terms and the
+  issuer identity, bank and payment details rendered to the owner, the public
+  link and the PDF. Invoice-native number, subtotal, PPh and due date stay
+  consistent and are never silently overwritten by deal edits. Once frozen,
+  never unfrozen on a status reversal.
+- Existing issued/shared invoices: additive migration with a one-time
+  reconstruction from currently available deal/Settings values, explicitly
+  marked as captured during migration, not authenticated original issuance
+  data. No invented historic values.
+- Later deal or Settings edits must not silently alter a frozen invoice or a
+  previously shared recipient document.
+- Approval covers Decision A only: not Decision B (correction/void), not
+  Decision C (PPh), not a Production migration or deployment.
+
+Implementation: `InvoiceSnapshot` (migration
+`20261018000000_invoice_document_snapshot`, `src/lib/invoice-snapshot.ts`).
+The explicit due-date editor (MAN-DUE-01) is kept: the due date is
+invoice-owned, and an owner's deliberate edit of it still changes the owner's
+PDF, the brand's page and PDF. Whether a sent invoice's due date should stay
+editable belongs to Decision B.
+
+The original options, for the record:
+
 Why first: once #55 lets a creator edit brand, scope or payment terms, every
 already-sent invoice will silently change for the brand.
 
@@ -40,7 +74,7 @@ a one-time backfill from the deal's current values, flagged as "captured at
 migration", since the original text was never stored). Migration only after
 approval.
 
-## Decision B — correcting an invoice (CAP-INV-10, #56)
+## Decision B — correcting an invoice (CAP-INV-10, #56) — NEEDS_OWNER_APPROVAL
 
 Proposed default: **edit freely while Draf; once sent or paid, void and
 replace** — the old invoice stays visible as Dibatalkan with a reason and a
@@ -51,7 +85,7 @@ transitions, numbering of the replacement, whether a paid invoice can be
 voided at all. An accountant should confirm the numbering/void rules before
 build.
 
-## Decision C — PPh choice at invoice creation (CAP-INV-02, #57)
+## Decision C — PPh choice at invoice creation (CAP-INV-02, #57) — NEEDS_OWNER_APPROVAL
 
 Proposed: an explicit PPh 21 / PPh 23 / Tidak ada choice at creation, default
 Tidak ada, editable while Draf, with copy that it is an estimate. **Before

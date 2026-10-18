@@ -375,28 +375,28 @@ describe("getOwnedInvoice", () => {
 });
 
 describe("getOwnedInvoiceContact", () => {
-  function makeContactDb(record: { deal: { contactWa: string; brand: string } } | null) {
+  function makeContactDb(record: { deal: { contactWa: string; brand: string }; snapshot: { brand: string } | null } | null) {
     const findFirst = vi.fn(async () => record);
     const db = { invoice: { findFirst } } as unknown as InvoiceContactDb;
     return { db, findFirst };
   }
 
   it("returns the deal's WhatsApp contact and brand together (T-21: brand feeds the {brand} template token)", async () => {
-    const { db } = makeContactDb({ deal: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } });
+    const { db } = makeContactDb({ deal: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" }, snapshot: null });
 
     const result = await getOwnedInvoiceContact(db, "invoice-1", "user-1");
 
-    expect(result).toEqual({ deal: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } });
+    expect(result).toEqual({ deal: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" }, snapshot: null });
   });
 
-  it("queries by invoice ID and owner together, selecting only contactWa and brand", async () => {
+  it("queries by invoice ID and owner together, selecting only contactWa, the deal's brand and the snapshot's brand", async () => {
     const { db, findFirst } = makeContactDb(null);
 
     await getOwnedInvoiceContact(db, "invoice-1", "user-2");
 
     expect(findFirst).toHaveBeenCalledWith({
       where: { id: "invoice-1", userId: "user-2" },
-      select: { deal: { select: { contactWa: true, brand: true } } },
+      select: { deal: { select: { contactWa: true, brand: true } }, snapshot: { select: { brand: true } } },
     });
   });
 
@@ -416,8 +416,55 @@ describe("updateInvoiceStatus", () => {
       ...existingInvoice,
       status: data.status,
     }));
-    return { db: { invoice: { findFirst, update } } as unknown as InvoiceStatusDb, findFirst, update };
+    const writes: string[] = [];
+    update.mockImplementation(async ({ data }: { data: { status: InvoiceRecord["status"] } }) => {
+      writes.push(`status:${data.status}`);
+      return { ...existingInvoice, status: data.status };
+    });
+    const executeRaw = vi.fn(async (query: { values: unknown[] }) => {
+      writes.push(`freeze:${String(query.values[0])}`);
+      return 1;
+    });
+    const db = { invoice: { findFirst, update }, $executeRaw: executeRaw } as Record<string, unknown>;
+    const transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+      writes.push("tx:begin");
+      return fn(db);
+    });
+    db.$transaction = transaction;
+    return { db: db as unknown as InvoiceStatusDb, findFirst, update, executeRaw, transaction, writes };
   }
+
+  // Decision A (issue #55): leaving DRAFT exposes the document, so the
+  // snapshot is written in the same transaction, before the status.
+  it("freezes the document before writing the status, in one transaction, when a Draft is sent", async () => {
+    const { db, executeRaw, writes } = makeStatusDb(existingInvoice);
+
+    await updateInvoiceStatus(db, "invoice-1", "user-1", "SENT");
+
+    expect(writes).toEqual(["tx:begin", "freeze:STATUS_CHANGE", "status:SENT"]);
+    const query = executeRaw.mock.calls[0][0] as unknown as { values: unknown[]; strings: string[] };
+    expect(query.values).toEqual(["STATUS_CHANGE", "invoice-1", "user-1"]);
+    expect(query.strings.join("?")).toMatch(/ON CONFLICT \("invoiceId"\) DO NOTHING/);
+  });
+
+  it("asks for the snapshot on later moves too (a no-op in the database once frozen), never a different write", async () => {
+    const { db, writes } = makeStatusDb({ ...existingInvoice, status: "PAID" });
+
+    await updateInvoiceStatus(db, "invoice-1", "user-1", "SENT");
+
+    expect(writes).toEqual(["tx:begin", "freeze:STATUS_CHANGE", "status:SENT"]);
+  });
+
+  it("freezes nothing for a refused transition or a foreign invoice", async () => {
+    const refused = makeStatusDb(existingInvoice);
+    const foreign = makeStatusDb(null);
+
+    await updateInvoiceStatus(refused.db, "invoice-1", "user-1", "PAID");
+    await updateInvoiceStatus(foreign.db, "invoice-1", "user-2", "SENT");
+
+    expect(refused.executeRaw).not.toHaveBeenCalled();
+    expect(foreign.executeRaw).not.toHaveBeenCalled();
+  });
 
   it("updates an owned draft invoice to SENT", async () => {
     const { db, findFirst, update } = makeStatusDb(existingInvoice);

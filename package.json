@@ -27,6 +27,7 @@
     "test:e2e:headed": "playwright test -c playwright.e2e.config.ts --project=chromium --headed",
     "test:e2e:ui": "playwright test -c playwright.e2e.config.ts --ui",
     "test:cron-guard": "node --test scripts/cron-guard.test.mjs",
+    "test:snapshot-db": "tsx --env-file-if-exists=.env.local --test scripts/invoice-snapshot-db.test.ts",
     "coverage:journeys": "node scripts/journey-coverage.mjs check",
     "coverage:journeys:report": "node scripts/journey-coverage.mjs report",
     "test:journey-coverage": "node --test scripts/journey-coverage.test.mjs",

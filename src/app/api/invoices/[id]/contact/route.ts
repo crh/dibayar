@@ -17,7 +17,7 @@ export async function GET(_request: Request, context: RouteContext) {
     if (!result) return NextResponse.json({ error: "Invoice tidak ditemukan." }, { status: 404 });
 
     return NextResponse.json(
-      { contactWa: result.deal.contactWa, brand: result.deal.brand },
+      { contactWa: result.deal.contactWa, brand: result.deal.brand, documentBrand: result.snapshot?.brand ?? result.deal.brand },
       { headers: { "Cache-Control": "private, no-store" } },
     );
   } catch {

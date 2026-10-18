@@ -8,15 +8,15 @@ An entry in this inventory is not proof that the action works. Only `automated_r
 
 ## Summary
 
-- Inventoried user-facing actions: **102** (2 not applicable, so the denominator is **100**)
-- Automated real-interaction coverage: **82/100 = 82.0%**
+- Inventoried user-facing actions: **103** (2 not applicable, so the denominator is **101**)
+- Automated real-interaction coverage: **83/101 = 82.2%**
 - P0 automated real-interaction coverage: **28/30 = 93.3%**
-- Manually verified (recorded): **1/100 = 1.0%**
+- Manually verified (recorded): **1/101 = 1.0%**
 - Outstanding P0/P1 actions: **8**
 
 | Status | P0 | P1 | P2 | Total |
 |---|---:|---:|---:|---:|
-| `automated_real_interaction` | 28 | 35 | 19 | 82 |
+| `automated_real_interaction` | 28 | 36 | 19 | 83 |
 | `automated_partial` | 0 | 7 | 8 | 15 |
 | `manual_verified` | 1 | 0 | 0 | 1 |
 | `manual_pending` | 1 | 0 | 1 | 2 |
@@ -174,6 +174,7 @@ Test kinds: **R** = real interaction, **P** = partial (URL entry, `fill()` on a 
 | INV-WA-03 | P1 | `automated_real_interaction` | Repair invalid contact on the invoice, save and send | chromium 390 (ux-audit, id+en), chromium, chromium-mobile | R: `tests/ux-audit/t27.verification.spec.ts`<br>R: `deals/patch-keeps-stage.spec.ts` |
 | INV-WA-04 | P2 | `automated_partial` | Contact load error and retry | unit | P: `src/app/(app)/invoice/[id]/invoice-detail-client.test.tsx` |
 | INV-PDF-01 | P1 | `automated_real_interaction` | Download the invoice PDF (owner) | chromium, chromium-mobile, manual: phones | R: `invoices/pdf-download.spec.ts`<br>P: `tests/ux-audit/fixtures.baseline.spec.ts` |
+| INV-DOC-01 | P1 | `automated_real_interaction` | An issued invoice's document is frozen against later deal and Settings edits (Decision A) | chromium, chromium-mobile | R: `invoices/document-snapshot.spec.ts`<br>P: `invoices/document-snapshot.spec.ts` |
 | INV-OWN-01 | P0 | `automated_real_interaction` | Another owner cannot view, read or change this owner's deal/invoice | chromium, chromium-mobile | R: `security/ownership-denial.spec.ts` |
 
 ### sharing
@@ -204,7 +205,7 @@ Test kinds: **R** = real interaction, **P** = partial (URL entry, `fill()` on a 
 |---|---|---|---|---|---|
 | SET-01 | P0 | `automated_real_interaction` | Update issuer name and save; persists | chromium, chromium-mobile | R: `settings/settings.spec.ts` |
 | SET-02 | P1 | `automated_real_interaction` | Invalid issuer email is rejected | chromium, chromium-mobile | R: `settings/settings.spec.ts` |
-| SET-03 | P1 | `automated_real_interaction` | Update bank details; they persist and appear on the recipient invoice page | chromium, chromium-mobile | R: `settings/bank-details.spec.ts` |
+| SET-03 | P1 | `automated_real_interaction` | Update bank details; they persist and appear on the recipient page of an invoice shared afterwards | chromium, chromium-mobile | R: `settings/bank-details.spec.ts` |
 | SET-04 | P1 | `automated_real_interaction` | Edit WhatsApp templates; the next message uses them | chromium, chromium-mobile | R: `settings/whatsapp-templates.spec.ts` |
 | SET-05 | P2 | `automated_real_interaction` | Reset a template to default | chromium, chromium-mobile | R: `settings/template-reset.spec.ts` |
 | SET-06 | P1 | `automated_real_interaction` | Switch interface language (Indonesia/English); persists across pages | chromium, chromium-mobile | R: `settings/language.spec.ts`<br>P: `tests/ux-audit/t27.verification.spec.ts` |

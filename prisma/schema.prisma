@@ -30,6 +30,31 @@ enum WithholdingTaxType {
   PPH23
 }
 
+// Where an InvoiceSnapshot's text came from (Decision A, issue #55).
+// CAPTURED_ON_ISSUE: copied in the same transaction as the invoice's first
+// exposure (leaving Draf, or its first share link), so it is exactly what was
+// issued. RECONSTRUCTED_ON_MIGRATION: written by the one-time backfill from
+// the deal and Settings values current at migration time -- an approximation,
+// never the authenticated original. RECONSTRUCTED_LATE: an invoice that was
+// already sent or shared without a snapshot (e.g. while the previous app
+// version was still serving) and was frozen at the next touch; also an
+// approximation.
+enum InvoiceSnapshotProvenance {
+  CAPTURED_ON_ISSUE
+  RECONSTRUCTED_ON_MIGRATION
+  RECONSTRUCTED_LATE
+}
+
+// What froze the document: the status change out of Draf, the creation or
+// rotation of a share link, a document read that found an exposed invoice
+// without a snapshot, or the migration backfill.
+enum InvoiceSnapshotTrigger {
+  STATUS_CHANGE
+  SHARE_LINK
+  DOCUMENT_READ
+  MIGRATION
+}
+
 model User {
   id               String            @id @default(cuid())
   name             String?
@@ -170,6 +195,7 @@ model Invoice {
   user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   deal               Deal               @relation(fields: [dealId], references: [id], onDelete: Restrict)
   share              InvoiceShare?
+  snapshot           InvoiceSnapshot?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
 
@@ -190,14 +216,52 @@ model Invoice {
 // forward. One row per invoice; presence of a row means the link is active
 // (revoke deletes the row).
 model InvoiceShare {
-  id               String    @id @default(cuid())
-  invoiceId        String    @unique
-  tokenHash        String    @unique
-  tokenCiphertext  String?   @db.Text
-  expiresAt        DateTime?
-  invoice          Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  invoiceId       String    @unique
+  tokenHash       String    @unique
+  tokenCiphertext String?   @db.Text
+  expiresAt       DateTime?
+  invoice         Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// Decision A (issue #55, approved 2026-10-18): the deal and Settings text an
+// issued invoice's document shows, frozen at its first exposure -- the first
+// move out of DRAFT or the first share link, whichever comes first -- so a
+// later deal or Settings edit never changes a document the brand already has.
+// Number, subtotal, PPh, due date and issue date stay on Invoice under their
+// existing contract and are not copied here. One row per invoice, written
+// once with INSERT ... ON CONFLICT DO NOTHING (src/lib/invoice-snapshot.ts);
+// a database trigger rejects every UPDATE. A Draft that was never exposed has
+// no row and renders from the live deal and Settings.
+model InvoiceSnapshot {
+  id                      String                    @id @default(cuid())
+  invoiceId               String                    @unique
+  brand                   String
+  contactName             String?
+  scope                   String                    @db.Text
+  paymentTerms            String?                   @db.Text
+  // Whether a UserSettings row existed at capture; the issuer columns below
+  // are null either way when it did not.
+  issuerSettingsPresent   Boolean
+  issuerName              String?
+  issuerAddress           String?                   @db.Text
+  issuerWhatsapp          String?
+  issuerEmail             String?
+  bankName                String?
+  bankAccountNumber       String?
+  bankAccountHolder       String?
+  provenance              InvoiceSnapshotProvenance
+  trigger                 InvoiceSnapshotTrigger
+  // The source rows' updatedAt at capture. For a reconstructed snapshot, a
+  // value at or before the invoice's createdAt shows that source had not
+  // changed since the invoice was made; a later one means it may differ
+  // from what was originally issued.
+  sourceDealUpdatedAt     DateTime
+  sourceSettingsUpdatedAt DateTime?
+  capturedAt              DateTime                  @default(now()) @db.Timestamptz
+  invoice                 Invoice                   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 }
 
 // One row per (user, year, month); lastSequence is incremented atomically
