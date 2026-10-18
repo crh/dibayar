@@ -31,7 +31,7 @@ export default async function AccessRestrictedPage({ searchParams }: AccessPageP
         <div className="mt-2 flex flex-col gap-3">
           {session?.pilotAccessDenied ? (
             <Link
-              href="/api/auth/signout?callbackUrl=%2F"
+              href="/api/auth/signout?callbackUrl=%2Fmasuk"
               className="inline-flex h-11 w-fit items-center justify-center rounded-full bg-primary px-5 text-[15px] font-semibold text-surface hover:bg-primary-d"
             >
               {t("access.signOut")}
@@ -44,7 +44,7 @@ export default async function AccessRestrictedPage({ searchParams }: AccessPageP
               {t("access.signInOther")}
             </Link>
           )}
-          <Link href="/" className="inline-flex min-h-11 w-fit items-center text-[15px] font-semibold text-primary underline">
+          <Link href="/masuk" className="inline-flex min-h-11 w-fit items-center text-[15px] font-semibold text-primary underline">
             {t("access.backHome")}
           </Link>
         </div>

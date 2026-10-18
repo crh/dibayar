@@ -36,7 +36,7 @@ test.describe("restricted pilot access", { tag: "@critical" }, () => {
       expect(body).not.toContain("e2e fixture uninvited");
 
       // Offers sign-out so the creator can switch to an invited account.
-      await expect(page.getByRole("link", { name: "Keluar dari akun ini" })).toHaveAttribute("href", "/api/auth/signout?callbackUrl=%2F");
+      await expect(page.getByRole("link", { name: "Keluar dari akun ini" })).toHaveAttribute("href", "/api/auth/signout?callbackUrl=%2Fmasuk");
     } finally {
       await context.close();
     }
@@ -103,6 +103,12 @@ test.describe("restricted pilot access", { tag: "@critical" }, () => {
       await expect(page.getByText(/belum terdaftar untuk pilot Dibayar/)).toBeVisible();
       await expect(page.getByRole("link", { name: "Masuk dengan akun lain" })).toBeVisible();
       await expect(page.getByRole("link", { name: "Keluar dari akun ini" })).toHaveCount(0);
+
+      // "Back to home" must reach the public landing page, not bounce
+      // through the protected (app) home back into sign-in.
+      await page.getByRole("link", { name: "Kembali ke halaman utama" }).click();
+      await expect(page).toHaveURL(/\/masuk$/);
+      await expect(page.getByRole("link", { name: "Masuk dengan Google" })).toBeVisible();
     } finally {
       await anonymous.close();
     }

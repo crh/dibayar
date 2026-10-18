@@ -39,7 +39,7 @@ describe("/akses-terbatas", () => {
 
     await renderPage();
 
-    expect(screen.getByRole("link", { name: "Keluar dari akun ini" }).getAttribute("href")).toBe("/api/auth/signout?callbackUrl=%2F");
+    expect(screen.getByRole("link", { name: "Keluar dari akun ini" }).getAttribute("href")).toBe("/api/auth/signout?callbackUrl=%2Fmasuk");
     expect(screen.getByText(/belum terdaftar untuk pilot Dibayar/)).toBeDefined();
   });
 
@@ -62,6 +62,6 @@ describe("/akses-terbatas", () => {
     await renderPage({ error: "AccessDenied" });
 
     expect(screen.getByRole("heading", { level: 1, name: "Access is for invited creators only" })).toBeDefined();
-    expect(screen.getByRole("link", { name: "Back to the home page" }).getAttribute("href")).toBe("/");
+    expect(screen.getByRole("link", { name: "Back to the home page" }).getAttribute("href")).toBe("/masuk");
   });
 });
