@@ -1081,3 +1081,13 @@ Starting state verified fresh: `main` = `origin/main` = `a60dfdf`, no open PRs, 
 - Fix: `Idempotency-Key` on `POST /api/deals` and `POST /api/invoices`, enforced by `@@unique([userId, idempotencyKey])` (additive migration `20261016000000_create_idempotency_keys`). Same key → stored row (200); other content → 409. Every 5xx is now an unknown outcome; content matching removed. Tandai lunas reads back after a 5xx too.
 - RED on the previous head: 58 + 4 unit failures; E2E 8 failures, including six concurrent creates → six deals. GREEN: see the receipt's "Review follow-up" section.
 - Not merged. Merging to `staging` applies the migration to the staging database; Production only through a separately authorized release. Release stays NO-GO.
+
+## 2026-10-18 — Decision A invoice snapshots (PR #62) and #55 deal edit + FIND-11 (PR #63)
+
+- Start: `staging` `5129ca4`, `main` `308a339` (re-fetched). Worked in new worktrees; the main checkout's untracked files were left alone.
+- Decision A (approved by Chris in the #55 comment, staging only): `InvoiceSnapshot` + migration `20261018000000_invoice_document_snapshot` (additive; UPDATE-rejecting trigger; idempotent backfill labelled `RECONSTRUCTED_ON_MIGRATION`). Freeze at the first move out of DRAFT or first share link, same transaction, `ON CONFLICT DO NOTHING`. Renderers read only the snapshot once frozen; never a live fallback. Due-date editor kept (invoice-owned; post-issue policy = Decision B).
+- Journeys that asserted Settings reaching an already shared invoice were rewritten to the approved policy (pdf-download, bank-details, incomplete-issuer, settings-to-recipient, public long-issuer, deal-change-keeps-invoice); new INV-DOC-01 journey; real-PostgreSQL migration test `npm run test:snapshot-db` (15/15) added to CI.
+- #55: Ubah deal (card menu at every stage + deal detail), changed fields only, no status, read-back before success, discard confirmation, invoice note. FIND-11 fixed. Fee null/blank no longer becomes Rp 0. DEAL-EDIT-01..07; CAP-DEAL-05/06/08 closed; MAN-DEAL-02 added (not run).
+- Review: 4 Codex threads (2 per PR), all valid, fixed with tests, resolved. WebKit 390 px emulation: 48/48 over two repeats after two test-side fixes.
+- Merged: #62 → `63b9e3c`, #63 → `3e410da` (exact-head merges, required checks green). Migration applied to Neon `staging` by the Vercel build (log); alias serves `3e410da`. `main`/Production untouched.
+- Not run: physical-device checks, hosted signed-in smoke, Neon staging row counts, FIND-10 Production query. #55 left open for MAN-DEAL-02. Receipt `docs/receipts/DIBAYAR-DECISION-A-SNAPSHOT-AND-DEAL-EDIT-2026-10-18.md`.
