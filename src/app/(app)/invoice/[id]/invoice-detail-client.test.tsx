@@ -428,6 +428,30 @@ describe("InvoiceDetailClient", () => {
       expect(await screen.findByTitle(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
     });
 
+    // Decision A: the link may freeze the document with a brand edited
+    // elsewhere after this page loaded; the message names the frozen brand.
+    it("names the brand of the document the link just froze, not the one loaded with the page", async () => {
+      const user = userEvent.setup();
+      const wa = stubWhatsAppTab();
+      const base = makeFetchMock({ shareGet: { status: 200, body: { active: false } } });
+      let contactReads = 0;
+      vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.endsWith("/contact") && (init?.method ?? "GET") === "GET") {
+          contactReads += 1;
+          const documentBrand = contactReads === 1 ? "Brand Saat Halaman Dibuka" : "Brand Saat Dibekukan";
+          return { ok: true, status: 200, json: async () => ({ contactWa: "0812-3456-7890", brand: "Brand Deal", documentBrand }) };
+        }
+        return base(url, init);
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Kirim lewat WhatsApp" }));
+
+      const message = decodeURIComponent((await sentWhatsAppHref(wa)).split("?text=")[1] ?? "");
+      expect(message).toContain("Brand Saat Dibekukan");
+      expect(message).not.toContain("Brand Saat Halaman Dibuka");
+    });
+
     it("opens exactly one tab, cut off from this page, and shows no Buka WhatsApp fallback once it opened (FIND-04)", async () => {
       const user = userEvent.setup();
       const wa = stubWhatsAppTab();
@@ -1415,6 +1439,37 @@ describe("InvoiceDetailClient", () => {
       expect(
         await screen.findByText("Complete issuer and bank details in Settings so the invoice is complete."),
       ).toBeDefined();
+    });
+
+    // Decision A: a frozen invoice is not completed by Settings any more.
+    it("shows the frozen-invoice notice when the document is already frozen", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "SENT" }} hasIncompleteIssuer documentFrozen />);
+
+      expect(await screen.findByText(/sudah dikirim atau dibagikan dengan identitas penerbit atau rekening yang belum lengkap/)).toBeDefined();
+      expect(screen.queryByText("Lengkapi identitas penerbit dan rekening di Pengaturan agar invoice lengkap.")).toBeNull();
+    });
+
+    it("switches to the frozen-invoice notice as soon as this page makes the Draft's first share link, without a reload", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} hasIncompleteIssuer documentFrozen={false} />);
+      expect(await screen.findByText("Lengkapi identitas penerbit dan rekening di Pengaturan agar invoice lengkap.")).toBeDefined();
+
+      await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
+
+      expect(await screen.findByText(/sudah dikirim atau dibagikan dengan identitas penerbit/)).toBeDefined();
+      expect(screen.queryByText("Lengkapi identitas penerbit dan rekening di Pengaturan agar invoice lengkap.")).toBeNull();
+    });
+
+    it("switches to the frozen-invoice notice once this page marks the Draft sent", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal("fetch", makeFetchMock({ statusPatch: { status: 200, body: { invoice: { ...draftInvoice, status: "SENT" } } } }));
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} hasIncompleteIssuer documentFrozen={false} />);
+
+      await user.click(await screen.findByRole("button", { name: "Tandai sudah dikirim" }));
+
+      expect(await screen.findByText(/sudah dikirim atau dibagikan dengan identitas penerbit/)).toBeDefined();
     });
 
     it("does not render the notice when issuer/bank details are complete", async () => {
