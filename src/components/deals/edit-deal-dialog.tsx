@@ -157,7 +157,10 @@ function EditDealDialogContent({ deal, invoiceNumber, t, onClose, onSaved }: Pro
       closeLabel={t("dashboard.close")}
     >
       {confirmingDiscard ? (
-        <div role="alertdialog" aria-labelledby={`${formId}-discard`} className="mb-4 rounded-xl border border-due bg-due-tint p-4">
+        // Shown instead of the form, not above it: while the question is open
+        // the only things to tab to are its two answers and the dialog's own
+        // close button (which, like Escape, means "keep editing").
+        <div role="alertdialog" aria-labelledby={`${formId}-discard`} className="rounded-xl border border-due bg-due-tint p-4">
           <p id={`${formId}-discard`} className="text-[14px] font-semibold text-ink">{t("deal.editDiscardTitle")}</p>
           <div className="mt-3 flex flex-col gap-2 min-[360px]:flex-row">
             <button
@@ -177,34 +180,37 @@ function EditDealDialogContent({ deal, invoiceNumber, t, onClose, onSaved }: Pro
             </button>
           </div>
         </div>
-      ) : null}
-      {invoiceNumber ? (
-        <p role="note" className="mb-4 rounded-md border border-line bg-bg px-3 py-2 text-[13px] text-ink">
-          {t("deal.editInvoiceNote", { number: invoiceNumber })}
-        </p>
-      ) : null}
-      {error ? <p role="alert" className="mb-3 ds-small text-overdue">{t(error)}</p> : null}
-      <DealForm
-        formId={formId}
-        formRef={formRef}
-        form={form}
-        errors={fieldErrors}
-        onChange={handleChange}
-        onSubmit={handleSubmit}
-        isSaving={isSaving}
-        t={t}
-        submitLabel={t("deal.editSave")}
-        secondaryAction={
-          <button
-            type="button"
-            onClick={requestClose}
-            disabled={isSaving}
-            className="inline-flex h-11 items-center justify-center rounded-full border border-line px-5 text-[15px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60 sm:w-fit"
-          >
-            {t("deal.editCancel")}
-          </button>
-        }
-      />
+      ) : (
+        <>
+          {invoiceNumber ? (
+            <p role="note" className="mb-4 rounded-md border border-line bg-bg px-3 py-2 text-[13px] text-ink">
+              {t("deal.editInvoiceNote", { number: invoiceNumber })}
+            </p>
+          ) : null}
+          {error ? <p role="alert" className="mb-3 ds-small text-overdue">{t(error)}</p> : null}
+          <DealForm
+            formId={formId}
+            formRef={formRef}
+            form={form}
+            errors={fieldErrors}
+            onChange={handleChange}
+            onSubmit={handleSubmit}
+            isSaving={isSaving}
+            t={t}
+            submitLabel={t("deal.editSave")}
+            secondaryAction={
+              <button
+                type="button"
+                onClick={requestClose}
+                disabled={isSaving}
+                className="inline-flex h-11 items-center justify-center rounded-full border border-line px-5 text-[15px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60 sm:w-fit"
+              >
+                {t("deal.editCancel")}
+              </button>
+            }
+          />
+        </>
+      )}
     </AddDealDialog>
   );
 }

@@ -740,4 +740,20 @@ describe("DealClient edit from the board card (#55)", () => {
     const masuk = screen.getByRole("region", { name: /Masuk/ });
     expect(masuk.textContent).toContain("Acme Baru");
   });
+
+  it("returns keyboard focus to the card's actions button when the editor closes", async () => {
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    const actions = screen.getByRole("button", { name: "Aksi lain untuk deal Acme" });
+    await user.click(actions);
+    screen.getByRole("menuitem", { name: "Ubah deal" }).focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("dialog", { name: "Ubah deal" })).toBeTruthy();
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(actions);
+  });
 });
+

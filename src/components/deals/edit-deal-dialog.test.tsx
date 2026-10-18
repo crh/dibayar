@@ -102,6 +102,26 @@ describe("EditDealDialog (#55)", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("while the discard question is open, the form is not in the tab order: Tab stays on the question and the close button", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+    await user.type(screen.getByLabelText("Nama brand"), " Baru");
+    await user.click(screen.getByRole("button", { name: "Batal" }));
+
+    expect(screen.queryByLabelText("Nama brand")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Simpan perubahan" })).toBeNull();
+    const reachable = new Set<string>();
+    for (let i = 0; i < 6; i += 1) {
+      await user.tab();
+      reachable.add((document.activeElement as HTMLElement).textContent ?? "");
+    }
+    expect([...reachable].sort()).toEqual(["Buang perubahan", "Lanjut mengubah", "×"].sort());
+
+    // Keeping on editing brings the form back with the edit.
+    await user.click(screen.getByRole("button", { name: "Lanjut mengubah" }));
+    expect(screen.getByLabelText("Nama brand")).toHaveProperty("value", "Kopi Nusantara Baru");
+  });
+
   it("saves only the changed fields, without a status, and reports the deal read back from the server", async () => {
     const stored = { ...deal, brand: "Kopi Baru", feeIdr: 3_000_000 };
     const fetchMock = stubFetch(() => Promise.resolve(jsonResponse(200, { deal: stored })), stored);

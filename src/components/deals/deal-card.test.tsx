@@ -261,4 +261,17 @@ describe("DealCard", () => {
 
     expect(screen.getByRole("menuitem", { name: "Edit deal" })).toBeTruthy();
   });
+
+  it("moves focus to the card's actions button when Ubah deal is chosen, so the editor can return focus there", async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    const actions = screen.getByRole("button", { name: "Aksi lain untuk deal Kopi Nusantara" });
+    await user.click(actions);
+    screen.getByRole("menuitem", { name: "Ubah deal" }).focus();
+    await user.keyboard("{Enter}");
+
+    expect(document.activeElement).toBe(actions);
+  });
 });
+
