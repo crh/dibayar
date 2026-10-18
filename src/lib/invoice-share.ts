@@ -1,6 +1,13 @@
 import { createHash, randomBytes } from "node:crypto";
 import { getOwnedInvoice, type InvoiceReadDb, type WithholdingTaxType } from "./invoices";
 import { decryptShareToken, encryptShareToken } from "./share-token-crypto";
+import {
+  freezeInvoiceDocument,
+  resolvePublicInvoiceDocument,
+  SNAPSHOT_DOCUMENT_SELECT,
+  type InvoiceDocumentDb,
+  type InvoiceSnapshotWriteClient,
+} from "./invoice-snapshot";
 import type { InvoiceDocumentInput } from "@/components/documents/invoice-document/model";
 
 const TOKEN_BYTES = 32;
@@ -27,7 +34,7 @@ export type InvoiceShareRecord = {
   updatedAt: Date;
 };
 
-export type InvoiceShareDb = InvoiceReadDb & {
+export type InvoiceShareClient = InvoiceReadDb & InvoiceSnapshotWriteClient & {
   invoiceShare: {
     findUnique(args: { where: { invoiceId: string } }): Promise<InvoiceShareRecord | null>;
     upsert(args: {
@@ -37,6 +44,10 @@ export type InvoiceShareDb = InvoiceReadDb & {
     }): Promise<InvoiceShareRecord>;
     deleteMany(args: { where: { invoiceId: string } }): Promise<{ count: number }>;
   };
+};
+
+export type InvoiceShareDb = InvoiceShareClient & {
+  $transaction<T>(fn: (tx: InvoiceShareClient) => Promise<T>): Promise<T>;
 };
 
 // The one expiry rule, shared by the owner's view (getShareState), reminders
@@ -83,9 +94,10 @@ export type CreateShareResult =
   | { kind: "not-found" }
   | { kind: "created"; path: string; expiresAt: Date };
 
-// Always issues a new token; the caller has already checked ownership.
+// Always issues a new token; the caller has already checked ownership and
+// frozen the document (see exposeInvoice).
 async function issueShare(
-  db: InvoiceShareDb,
+  db: InvoiceShareClient,
   invoiceId: string,
   tokenFactory: () => string,
   now: Date,
@@ -104,6 +116,15 @@ async function issueShare(
   return { path: `/i/${token}`, expiresAt };
 }
 
+// A share link makes the document reachable by whoever holds it, so the
+// link is an exposure boundary (Decision A) even for a Draft: the snapshot
+// is written first, in the same transaction as the share row, so no link
+// ever opens a document that still follows the deal. A no-op when the
+// invoice is already frozen -- rotating a link never re-captures.
+async function freezeForShare(tx: InvoiceShareClient, invoiceId: string, userId: string) {
+  await freezeInvoiceDocument(tx, invoiceId, userId, "SHARE_LINK");
+}
+
 // The explicit, destructive operation ("Buat tautan berbagi" / "Buat ulang
 // tautan"): always rotates, so a link already sent stops working. A flow
 // that only needs a working link to send must use ensureShare instead.
@@ -114,11 +135,14 @@ export async function createOrRegenerateShare(
   tokenFactory: () => string = generateShareToken,
   nowFactory: () => Date = () => new Date(),
 ): Promise<CreateShareResult> {
-  const invoice = await getOwnedInvoice(db, invoiceId, userId);
-  if (!invoice) return { kind: "not-found" };
+  return db.$transaction(async (tx) => {
+    const invoice = await getOwnedInvoice(tx, invoiceId, userId);
+    if (!invoice) return { kind: "not-found" };
 
-  const issued = await issueShare(db, invoiceId, tokenFactory, nowFactory());
-  return { kind: "created", ...issued };
+    await freezeForShare(tx, invoiceId, userId);
+    const issued = await issueShare(tx, invoiceId, tokenFactory, nowFactory());
+    return { kind: "created", ...issued };
+  });
 }
 
 export type EnsureShareResult =
@@ -140,21 +164,29 @@ export async function ensureShare(
   tokenFactory: () => string = generateShareToken,
   nowFactory: () => Date = () => new Date(),
 ): Promise<EnsureShareResult> {
-  const invoice = await getOwnedInvoice(db, invoiceId, userId);
-  if (!invoice) return { kind: "not-found" };
+  return db.$transaction(async (tx) => {
+    const invoice = await getOwnedInvoice(tx, invoiceId, userId);
+    if (!invoice) return { kind: "not-found" };
 
-  const now = nowFactory();
-  const share = await db.invoiceShare.findUnique({ where: { invoiceId } });
-  if (share && !isShareExpired(share.expiresAt, now)) {
-    const token = share.tokenCiphertext ? decryptShareToken(share.tokenCiphertext) : null;
-    if (token) return { kind: "reused", path: `/i/${token}`, expiresAt: share.expiresAt };
-  }
+    // Also on reuse: an existing link the previous app version made without
+    // a snapshot gets one before it is sent again.
+    await freezeForShare(tx, invoiceId, userId);
+    const now = nowFactory();
+    const share = await tx.invoiceShare.findUnique({ where: { invoiceId } });
+    if (share && !isShareExpired(share.expiresAt, now)) {
+      const token = share.tokenCiphertext ? decryptShareToken(share.tokenCiphertext) : null;
+      if (token) return { kind: "reused", path: `/i/${token}`, expiresAt: share.expiresAt };
+    }
 
-  const issued = await issueShare(db, invoiceId, tokenFactory, now);
-  return { kind: "created", ...issued };
+    const issued = await issueShare(tx, invoiceId, tokenFactory, now);
+    return { kind: "created", ...issued };
+  });
 }
 
 export type RevokeShareResult = { kind: "not-found" } | { kind: "revoked" };
+
+// Revoking removes the link only. The snapshot stays: the brand may already
+// hold a copy, and a later link must show the same document (Decision A).
 
 export async function revokeShare(
   db: InvoiceShareDb,
@@ -175,31 +207,35 @@ export function withholdingTaxLabel(type: WithholdingTaxType): string {
   return type === "NONE" ? "Tidak ada" : type.replace("PPH", "PPh ");
 }
 
-// T-23: extended select carrying every field the canonical InvoiceDocument
-// (T-22) needs -- issuer/bank settings, deal contact name/payment terms,
-// and the invoice's issue date. Also the sole select used by the PDF route
-// since T-24: one query shape for both document renderers now, not two.
+// The brand's document comes only from the invoice and its snapshot
+// (Decision A): this select does not reach the deal or Settings at all, so
+// the public page and PDF cannot show a value changed after the invoice was
+// exposed. Number, subtotal, PPh, due date and issue date are invoice-owned.
+// Also the sole select used by the public PDF route (T-24): one query shape
+// for both document renderers.
 type PublicInvoiceDocumentJoin = {
   expiresAt: Date | null;
   invoice: {
     id: string;
+    userId: string;
     number: string;
     subtotalIdr: number;
     withholdingTaxType: WithholdingTaxType;
     dueDate: Date | null;
     createdAt: Date;
-    deal: { brand: string; contactName: string | null; scope: string; paymentTerms: string | null };
-    user: {
-      settings: {
-        issuerName: string | null;
-        issuerAddress: string | null;
-        issuerWhatsapp: string | null;
-        issuerEmail: string | null;
-        bankName: string | null;
-        bankAccountNumber: string | null;
-        bankAccountHolder: string | null;
-      } | null;
-    };
+    snapshot: {
+      brand: string;
+      contactName: string | null;
+      scope: string;
+      paymentTerms: string | null;
+      issuerName: string | null;
+      issuerAddress: string | null;
+      issuerWhatsapp: string | null;
+      issuerEmail: string | null;
+      bankName: string | null;
+      bankAccountNumber: string | null;
+      bankAccountHolder: string | null;
+    } | null;
   };
 };
 
@@ -208,32 +244,18 @@ const PUBLIC_INVOICE_DOCUMENT_SELECT = {
   invoice: {
     select: {
       id: true,
+      userId: true,
       number: true,
       subtotalIdr: true,
       withholdingTaxType: true,
       dueDate: true,
       createdAt: true,
-      deal: { select: { brand: true, contactName: true, scope: true, paymentTerms: true } },
-      user: {
-        select: {
-          settings: {
-            select: {
-              issuerName: true,
-              issuerAddress: true,
-              issuerWhatsapp: true,
-              issuerEmail: true,
-              bankName: true,
-              bankAccountNumber: true,
-              bankAccountHolder: true,
-            },
-          },
-        },
-      },
+      snapshot: { select: SNAPSHOT_DOCUMENT_SELECT },
     },
   },
 } as const;
 
-export type PublicInvoiceDocumentLookupDb = {
+export type PublicInvoiceDocumentLookupDb = Pick<InvoiceDocumentDb, "$executeRaw" | "invoiceSnapshot"> & {
   invoiceShare: {
     findUnique(args: {
       where: { tokenHash: string };
@@ -246,35 +268,6 @@ export type PublicInvoiceDocumentLookup =
   | { kind: "ok"; input: InvoiceDocumentInput }
   | { kind: "invalid" }
   | { kind: "expired" };
-
-function toDocumentInput(invoice: PublicInvoiceDocumentJoin["invoice"]): InvoiceDocumentInput {
-  const settings = invoice.user.settings;
-  return {
-    invoice: {
-      id: invoice.id,
-      number: invoice.number,
-      subtotalIdr: invoice.subtotalIdr,
-      withholdingTaxType: invoice.withholdingTaxType,
-      dueDate: invoice.dueDate,
-      createdAt: invoice.createdAt,
-    },
-    deal: {
-      brand: invoice.deal.brand,
-      contactName: invoice.deal.contactName,
-      scope: invoice.deal.scope,
-      paymentTerms: invoice.deal.paymentTerms,
-    },
-    settings: {
-      issuerName: settings?.issuerName ?? "",
-      issuerAddress: settings?.issuerAddress ?? "",
-      issuerWhatsapp: settings?.issuerWhatsapp ?? "",
-      issuerEmail: settings?.issuerEmail ?? "",
-      bankName: settings?.bankName ?? "",
-      bankAccountNumber: settings?.bankAccountNumber ?? "",
-      bankAccountHolder: settings?.bankAccountHolder ?? "",
-    },
-  };
-}
 
 // Same hash->lookup path as the PDF lookup below (no early-exit on token
 // shape: every input -- unknown, revoked, or malformed -- is hashed and
@@ -297,5 +290,6 @@ export async function getPublicInvoiceDocumentByToken(
 
   if (!row) return { kind: "invalid" };
   if (isShareExpired(row.expiresAt, now)) return { kind: "expired" };
-  return { kind: "ok", input: toDocumentInput(row.invoice) };
+  const { snapshot, ...invoice } = row.invoice;
+  return { kind: "ok", input: await resolvePublicInvoiceDocument(db, invoice, snapshot) };
 }

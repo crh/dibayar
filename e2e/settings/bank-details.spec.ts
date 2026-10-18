@@ -4,9 +4,11 @@
 // The owner's own invoice page does not render bank details; the recipient
 // document does (/i/<token>, src/components/documents/invoice-document). So
 // the journey edits the three bank fields in Settings, proves they survived
-// a reload and a round trip through the nav, takes the share link from the
-// owner's invoice page, and opens it the way a recipient does: in a
-// separate browser context with no session but the same device emulation.
+// a reload and a round trip through the nav, and opens share links the way a
+// recipient does: in a separate browser context with no session but the
+// same device emulation. Decision A (issue #55, CAP-INV-12): the seeded
+// invoice was shared before the edit, so its document keeps the bank details
+// it was issued with; an invoice shared after the edit carries the new ones.
 // The PDF carries the same model (buildInvoiceDocumentModel) but its
 // compressed text is not checked here; that outcome is tracked under
 // INV-PDF-01 (Batch 2, which can use pdftotext as the ux-audit job does).
@@ -25,9 +27,10 @@ test.describe("payment details in settings", { tag: "@critical" }, () => {
   test.beforeEach(reseedFixtures);
   test.afterEach(reseedFixtures);
 
-  test("edited bank details persist after reload and appear on the recipient's invoice page", async ({ page, browser, baseURL, viewport, isMobile, hasTouch, userAgent, locale, timezoneId }) => {
+  test("edited bank details persist after reload and appear on the recipient's page of an invoice shared afterwards, not on one already shared", async ({ page, browser, baseURL, viewport, isMobile, hasTouch, userAgent, locale, timezoneId }) => {
     const manifest = loadFixtureManifest();
     const invoiceBrand = manifest.brands[manifest.deals.invoiceSent];
+    const pendingDealId = manifest.deals.invoicePending;
 
     await page.goto("/");
     await primaryNav(page).getByRole("link", { name: "Pengaturan", exact: true }).click();
@@ -60,6 +63,16 @@ test.describe("payment details in settings", { tag: "@critical" }, () => {
     const shareLink = await page.getByTestId("share-link-track").locator("span[title]").getAttribute("title");
     expect(shareLink).toMatch(/\/i\/[^/]+$/);
 
+    // An invoice made and shared after the edit, through the deal's own
+    // Buat invoice and the invoice's Buat tautan berbagi.
+    await page.goto(`/deal/${pendingDealId}`);
+    await page.getByRole("button", { name: "Buat invoice" }).click();
+    await page.getByRole("link", { name: /^Lihat invoice / }).click();
+    await expect(page).toHaveURL(/\/invoice\/[^/]+$/);
+    await page.getByRole("button", { name: "Buat tautan berbagi" }).click();
+    const newLink = await page.getByTestId("share-link-track").locator("span[title]").getAttribute("title");
+    expect(newLink).toMatch(/\/i\/[^/]+$/);
+
     // browser.newContext() would fall back to desktop defaults; pass this
     // project's device options so the recipient on a phone gets the 390px
     // touch emulation the owner had.
@@ -71,8 +84,10 @@ test.describe("payment details in settings", { tag: "@critical" }, () => {
       const recipientPage = await recipient.newPage();
       expect(recipientPage.viewportSize()).toEqual(viewport);
       expect(await recipientPage.evaluate(() => navigator.maxTouchPoints > 0)).toBe(hasTouch);
-      await recipientPage.goto(shareLink!);
       const paymentBlock = recipientPage.locator("div", { has: recipientPage.getByRole("heading", { name: "Pembayaran ke" }) }).last();
+
+      // Shared after the edit: the new details.
+      await recipientPage.goto(newLink!);
       await expect(paymentBlock).toContainText(`Bank: ${UPDATED.bankName}`);
       await expect(paymentBlock).toContainText(`Nomor rekening: ${UPDATED.accountNumber}`);
       await expect(paymentBlock).toContainText(`Atas nama: ${UPDATED.holder}`);
@@ -80,6 +95,12 @@ test.describe("payment details in settings", { tag: "@critical" }, () => {
       await expect(paymentBlock.getByRole("alert")).toHaveCount(0);
       // No sideways scrolling on the recipient's page at this project's width.
       expect(await recipientPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+      // Shared before the edit: the details it was issued with.
+      await recipientPage.goto(shareLink!);
+      await expect(paymentBlock).toContainText(`Bank: ${SEEDED.bankName}`);
+      await expect(paymentBlock).toContainText(`Nomor rekening: ${SEEDED.accountNumber}`);
+      await expect(paymentBlock).not.toContainText(UPDATED.bankName);
     } finally {
       await recipient.close();
     }

@@ -468,12 +468,16 @@ export default function InvoiceDetailClient({
   initialInvoice,
   now,
   hasIncompleteIssuer = false,
+  documentFrozen = false,
   templateSend = DEFAULT_TEMPLATE_SEND,
   templateChase = DEFAULT_TEMPLATE_CHASE,
 }: {
   initialInvoice: InvoiceRecord;
   now?: Date;
   hasIncompleteIssuer?: boolean;
+  // Decision A: the document was sent or shared and no longer follows the
+  // deal or Settings.
+  documentFrozen?: boolean;
   templateSend?: string;
   templateChase?: string;
 }) {
@@ -481,6 +485,9 @@ export default function InvoiceDetailClient({
   const [invoice, setInvoice] = useState(initialInvoice);
   const [contactWa, setContactWa] = useState<string | null>(null);
   const [brand, setBrand] = useState<string | null>(null);
+  // The brand the invoice document names (its snapshot once frozen), used
+  // in the WhatsApp message so it matches the linked invoice.
+  const [documentBrand, setDocumentBrand] = useState<string | null>(null);
   const [contactStatus, setContactStatus] = useState<ContactStatus>("loading");
   const [contactWaDraft, setContactWaDraft] = useState("");
   const [isSavingContactWa, setIsSavingContactWa] = useState(false);
@@ -519,6 +526,7 @@ export default function InvoiceDetailClient({
       .then(({ response, payload }) => {
         if (cancelled) return;
         if (typeof payload.brand === "string") setBrand(payload.brand);
+        if (typeof payload.documentBrand === "string") setDocumentBrand(payload.documentBrand);
         if (response.ok && typeof payload.contactWa === "string") {
           setContactWa(payload.contactWa);
           setContactWaDraft(payload.contactWa);
@@ -685,7 +693,7 @@ export default function InvoiceDetailClient({
         contactWa: number,
         shareUrl: link,
         template: isOverdue ? templateChase : templateSend,
-        brand: brand ?? "",
+        brand: documentBrand ?? brand ?? "",
         invoiceNumber: invoice.number,
         totalIdr: invoice.subtotalIdr,
         // An unusable legacy date is left out of the message rather than
@@ -937,7 +945,7 @@ export default function InvoiceDetailClient({
 
           {hasIncompleteIssuer ? (
             <div role="status" className="mt-4 rounded-md border border-due bg-due-tint px-4 py-3 text-[14px] text-ink">
-              {t("invoice.settingsDependencyNotice")}
+              {t(documentFrozen ? "invoice.settingsFrozenNotice" : "invoice.settingsDependencyNotice")}
             </div>
           ) : null}
         </section>

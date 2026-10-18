@@ -1,10 +1,16 @@
-// Long journey B2: what the owner saves in Pengaturan is what the brand reads.
+// Long journey B2: what the owner saves in Pengaturan is what the brand reads
+// on every invoice issued afterwards -- and only on those.
 //
 // The owner rewrites their issuer identity, their bank account and the
 // "send invoice" WhatsApp template in one sitting, and the journey follows
 // those values everywhere they surface: Pengaturan after a reload, the
 // WhatsApp message sent from an invoice, the owner's PDF, the brand's public
-// page and the brand's PDF. The short specs each follow one field group
+// page and the brand's PDF. Decision A (issue #55, CAP-INV-12): an invoice's
+// document is frozen when it is first shared or sent, so the seeded invoice,
+// shared before the save, keeps the issuer and bank details it was issued
+// with on every surface, while an invoice made and shared after the save
+// carries the new ones. The template is the owner's message, not part of the
+// document, so it applies to the seeded invoice too. The short specs each follow one field group
 // (bank details: settings/bank-details.spec.ts and invoices/pdf-download.spec.ts;
 // templates: settings/whatsapp-templates.spec.ts); none follows the issuer's
 // address, WhatsApp number and email, and none proves that one save reaches
@@ -16,14 +22,18 @@
 //      and the reminder template, which was not touched, is still the default
 //   3. Invoice list -> the seeded sent invoice: no "complete your settings"
 //      notice, and Kirim lewat WhatsApp sends the rewritten template
-//   4. the owner's PDF carries the new issuer and bank details
-//   5. the brand, with no session: the public page and its PDF carry the
-//      same, and nothing of the old values
-//   6. back in Pengaturan through the navigation, the values are still there
+//   4. that invoice's owner PDF keeps the issuer and bank details it was
+//      issued with, and none of the new ones
+//   5. the brand, with no session: its public page and PDF keep the same
+//   6. an invoice made from the pending deal and shared now: the owner's
+//      PDF, the brand's page and its PDF carry the new details, none of the
+//      old
+//   7. back in Pengaturan through the navigation, the values are still there
 //
 // Preconditions come from the base seed only (scripts/e2e-fixtures.ts): the
-// fixture owner's complete settings and their sent invoice E2E/SENT/001 with
-// an active share link. Every changed value is entered into its visible
+// fixture owner's complete settings, their sent invoice E2E/SENT/001 with an
+// active share link (frozen at seed time), and the pending INVOICE-stage deal
+// with no invoice yet. Every changed value is entered into its visible
 // field (fill(), in both projects) and saved through the UI. The owner's own invoice page does not print issuer or bank details
 // (the document does), so "what the owner sees" is the owner's PDF.
 //
@@ -88,17 +98,17 @@ async function expectUpdatedSettings(page: Page) {
   await expect(fields.templateChase).toHaveValue(/^Halo \{brand\}, izin mengingatkan/);
 }
 
-// The lines the document must print for the new issuer and bank details, and
-// the old values it must no longer print anywhere.
-function expectDocumentText(text: string, brand: string) {
+// The lines a document issued after the save must print for the new issuer
+// and bank details, and the old values it must not print anywhere.
+function expectDocumentText(text: string, brand: string, invoiceNumber: string, total: string) {
   const lines = text.split("\n");
   for (const expected of [
-    `Nomor invoice: ${INVOICE_NUMBER}`,
+    `Nomor invoice: ${invoiceNumber}`,
     `${UPDATED.issuerName} ${brand}`,
     UPDATED.issuerAddress,
     UPDATED.issuerWhatsapp,
     UPDATED.issuerEmail,
-    "Total Rp 6.000.000",
+    `Total ${total}`,
     `Bank: ${UPDATED.bankName}`,
     `Nomor rekening: ${UPDATED.bankAccountNumber}`,
     `Atas nama: ${UPDATED.bankAccountHolder}`,
@@ -106,6 +116,25 @@ function expectDocumentText(text: string, brand: string) {
     expect(lines, `the PDF has the line "${expected}"`).toContain(expected);
   }
   for (const old of Object.values(SEEDED)) expect(text, `the PDF no longer has "${old}"`).not.toContain(old);
+}
+
+// The seeded invoice was issued before the save: its document keeps the
+// seeded issuer and bank details and prints none of the new ones.
+function expectFrozenDocumentText(text: string, brand: string) {
+  const lines = text.split("\n");
+  for (const expected of [
+    `Nomor invoice: ${INVOICE_NUMBER}`,
+    `${SEEDED.issuerName} ${brand}`,
+    SEEDED.issuerAddress,
+    SEEDED.issuerWhatsapp,
+    SEEDED.issuerEmail,
+    "Total Rp 6.000.000",
+    `Bank: ${SEEDED.bankName}`,
+    `Nomor rekening: ${SEEDED.bankAccountNumber}`,
+  ]) {
+    expect(lines, `the PDF has the line "${expected}"`).toContain(expected);
+  }
+  for (const updated of Object.values(UPDATED)) expect(text, `the PDF does not have "${updated}"`).not.toContain(updated);
 }
 
 test.describe("journey: settings reach the recipient", { tag: "@critical" }, () => {
@@ -180,19 +209,60 @@ test.describe("journey: settings reach the recipient", { tag: "@critical" }, () 
     });
 
     let ownerPdfText = "";
-    await test.step("the owner's PDF carries the new issuer and bank details", async () => {
+    await test.step("the owner's PDF of the invoice shared before the save keeps the details it was issued with", async () => {
       const owner = await downloadPdfByClick(page, page.getByRole("link", { name: "Unduh PDF" }), testInfo, "owner.pdf");
       expect(owner.download.suggestedFilename()).toBe("E2E-SENT-001.pdf");
-      expectDocumentText(owner.text, brand);
+      expectFrozenDocumentText(owner.text, brand);
       ownerPdfText = owner.text;
       await expect(page).toHaveURL(new RegExp(`/invoice/${invoiceId}$`));
     });
 
-    await test.step("the brand, with no session, reads the same details on the page and in its PDF", async () => {
+    await test.step("the brand, with no session, reads the same issued details on that invoice's page and in its PDF", async () => {
       const response = await recipient.goto(shareLink);
       expect(response?.status()).toBe(200);
       const invoiceDoc = recipient.getByRole("main");
       await expect(invoiceDoc.getByText(new RegExp(`Nomor invoice:\\s*${escapeRegExp(INVOICE_NUMBER)}`))).toBeVisible();
+      const from = recipient.locator("div", { has: recipient.getByRole("heading", { name: "Dari" }) }).last();
+      await expect(from).toContainText(SEEDED.issuerName);
+      await expect(from).toContainText(SEEDED.issuerAddress);
+      const payment = recipient.locator("div", { has: recipient.getByRole("heading", { name: "Pembayaran ke" }) }).last();
+      await expect(payment).toContainText(`Bank: ${SEEDED.bankName}`);
+      await expect(payment).toContainText(`Nomor rekening: ${SEEDED.bankAccountNumber}`);
+      for (const updated of Object.values(UPDATED)) await expect(invoiceDoc.getByText(updated), `"${updated}" is not on the page`).toHaveCount(0);
+      await expect(invoiceDoc.getByText("JALAN-KIRIM")).toHaveCount(0);
+      await expectNoOwnerControls(recipient);
+
+      const received = await downloadPdfByClick(recipient, recipient.getByRole("link", { name: "Unduh PDF" }), testInfo, "recipient.pdf");
+      expectFrozenDocumentText(received.text, brand);
+      expect(received.text === ownerPdfText, "owner and recipient PDFs have the same text").toBe(true);
+
+      // A reload reads the frozen copy again, not the new settings.
+      await recipient.reload();
+      await expect(from).toContainText(SEEDED.issuerName);
+      await expect(payment).toContainText(`Bank: ${SEEDED.bankName}`);
+    });
+
+    await test.step("an invoice made and shared after the save carries the new details for the owner and the brand", async () => {
+      const pendingDealId = manifest.deals.invoicePending;
+      const pendingBrand = manifest.brands[pendingDealId];
+      await page.goto(`/deal/${pendingDealId}`);
+      const created = await responseTo(page, "POST", "/api/invoices", () => press(page.getByRole("button", { name: "Buat invoice" }), isMobile));
+      expect(created.ok()).toBe(true);
+      const invoiceLink = page.getByRole("link", { name: /^Lihat invoice INV\/\d{4}\/\d{2}\/\d{3,} →$/ });
+      const newNumber = (await invoiceLink.textContent())!.replace(/^Lihat invoice /, "").replace(/ →$/, "");
+      await press(invoiceLink, isMobile);
+      await expect(page).toHaveURL(/\/invoice\/[^/]+$/);
+      await expect(page.getByRole("button", { name: "Kirim lewat WhatsApp" })).toBeEnabled();
+      const newInvoiceId = new URL(page.url()).pathname.split("/").pop()!;
+      const shared = await responseTo(page, "POST", `/api/invoices/${newInvoiceId}/share`, () => press(page.getByRole("button", { name: "Buat tautan berbagi" }), isMobile));
+      expect(shared.ok()).toBe(true);
+      const newLink = await shownShareLink(page);
+
+      const owner = await downloadPdfByClick(page, page.getByRole("link", { name: "Unduh PDF" }), testInfo, "owner-new.pdf");
+      expectDocumentText(owner.text, pendingBrand, newNumber, "Rp 5.000.000");
+
+      const response = await recipient.goto(newLink);
+      expect(response?.status()).toBe(200);
       const from = recipient.locator("div", { has: recipient.getByRole("heading", { name: "Dari" }) }).last();
       await expect(from).toContainText(UPDATED.issuerName);
       await expect(from).toContainText(UPDATED.issuerAddress);
@@ -202,21 +272,16 @@ test.describe("journey: settings reach the recipient", { tag: "@critical" }, () 
       await expect(payment).toContainText(`Bank: ${UPDATED.bankName}`);
       await expect(payment).toContainText(`Nomor rekening: ${UPDATED.bankAccountNumber}`);
       await expect(payment).toContainText(`Atas nama: ${UPDATED.bankAccountHolder}`);
-      for (const old of Object.values(SEEDED)) await expect(invoiceDoc.getByText(old), `"${old}" is gone from the page`).toHaveCount(0);
+      const invoiceDoc = recipient.getByRole("main");
+      for (const old of Object.values(SEEDED)) await expect(invoiceDoc.getByText(old), `"${old}" is not on the page`).toHaveCount(0);
       await expect(recipient.locator('p[role="alert"]')).toHaveCount(0);
-      // The template is the owner's message, not part of the document.
-      await expect(invoiceDoc.getByText("JALAN-KIRIM")).toHaveCount(0);
       await expectNoOwnerControls(recipient);
       expect(await recipient.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
-      const received = await downloadPdfByClick(recipient, recipient.getByRole("link", { name: "Unduh PDF" }), testInfo, "recipient.pdf");
-      expectDocumentText(received.text, brand);
-      expect(received.text === ownerPdfText, "owner and recipient PDFs have the same text").toBe(true);
-
-      // A reload of the brand's page reads the settings again, not a copy.
-      await recipient.reload();
-      await expect(from).toContainText(UPDATED.issuerName);
-      await expect(payment).toContainText(`Bank: ${UPDATED.bankName}`);
+      const received = await downloadPdfByClick(recipient, recipient.getByRole("link", { name: "Unduh PDF" }), testInfo, "recipient-new.pdf");
+      expectDocumentText(received.text, pendingBrand, newNumber, "Rp 5.000.000");
+      expect(received.text === owner.text, "owner and recipient PDFs have the same text").toBe(true);
+      await page.goto(`/invoice/${invoiceId}`);
     });
 
     await test.step("back in Pengaturan through the navigation, the saved values are still there", async () => {

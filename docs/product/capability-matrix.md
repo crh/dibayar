@@ -8,8 +8,8 @@ What a creator must be able to do, kept independently of the screens and of the 
 
 ## Summary
 
-- Capabilities: **46** (REQUIRED 34, PROPOSED 4, UNKNOWN 5, NOT_APPLICABLE 3)
-- REQUIRED and covered: **27/34**
+- Capabilities: **46** (REQUIRED 35, PROPOSED 4, UNKNOWN 4, NOT_APPLICABLE 3)
+- REQUIRED and covered: **28/35**
 - REQUIRED with an open gap: **7**
 - REQUIRED with no action at all in the inventory: **7** (CAP-DEAL-05, CAP-DEAL-06, CAP-DEAL-08, CAP-DEAL-09, CAP-INV-02, CAP-INV-03, CAP-INV-10)
 
@@ -31,7 +31,6 @@ What a creator must be able to do, kept independently of the screens and of the 
 |---|---|---|
 | CAP-ACC-01 | Is self-service account deletion (and its effect on issued invoices) required for the MVP, e.g. under Indonesia's personal-data law? Needs an owner/legal decision. Not built today. | Chris |
 | CAP-DEAL-10 | Is a lost/cancelled outcome needed (stage, archive, or delete via CAP-DEAL-09)? Today such a deal stays in Masuk/Nego and stays eligible for '3 deal terdekat' (only Dibayar is excluded: src/components/home/nearest-deals.tsx), where it shows as overdue once its deadline passes. Ask in M4 sessions. | Chris |
-| CAP-INV-12 | Snapshot brand/scope/terms/contact at issue, keep them live, or warn the creator before a change reaches a sent invoice? Must be decided before #55 adds brand/scope/terms editing. Issuer and bank details (Settings) are live too. | Chris |
 | CAP-INV-13 | Should marking the invoice paid offer or perform the move to Dibayar (and the reverse)? Two independent states can disagree on Beranda and the board. | Chris |
 | CAP-HOME-05 | Does 'manual entry first' mean manual non-deal income entry is in the MVP? The MVP solution list does not include it. | Chris |
 
@@ -69,7 +68,7 @@ What a creator must be able to do, kept independently of the screens and of the 
 | CAP-INV-09 | REQUIRED | P0 | Send the invoice to the brand on WhatsApp | Kirim lewat WhatsApp opens one chat with the template text and an unexpired link. | INV-WA-01, INV-WA-02, INV-WA-03, MAN-WA-01 |  | PRODUCT.md solution 4 |
 | CAP-INV-10 | REQUIRED | P1 | Correct an invoice issued with a wrong amount or PPh | Outcome required; mechanism (edit while Draf, void and replace, other) is the owner's decision. | gap #56 |  | PRODUCT.md solution 3; src/lib/invoices.ts (constraint, not a requirement) |
 | CAP-INV-11 | REQUIRED | P1 | An issued invoice keeps its number, amount, PPh and due date when its deal changes | No deal change rewrites an issued invoice's financial fields; a separate explicit action is the only way. | DEAL-DETAIL-02 |  | issue #55 item 6 |
-| CAP-INV-12 | UNKNOWN |  | Whether an issued invoice's document follows later deal changes (brand, scope, terms, contact name) | Undecided. Observed 2026-10-17: a contact name saved after issue appears on the brand's page on reload (the document reads these fields from the deal at render time). | — |  | src/lib/invoice-share.ts (behaviour); issue #55 item 6 |
+| CAP-INV-12 | REQUIRED | P1 | An issued invoice's document does not follow later deal or Settings changes | Brand, contact name, scope, payment terms, issuer and bank details are frozen at the invoice's first share link or move out of Draf, whichever is first; the owner's PDF, the brand's page and the brand's PDF keep them through later deal and Settings edits, link rotation, revoke and re-share. An unshared Draft still follows its deal and Settings. Number, amount, PPh, issue date and due date stay invoice-owned; the due date keeps its explicit editor (MAN-DUE-01). Invoices exposed before the change carry a copy reconstructed at migration, labelled as such. | INV-DOC-01 |  | src/lib/invoice-share.ts (behaviour before 2026-10-18); issue #55 comment 2026-10-18 (product owner Chris); docs/product/DECISION-BRIEF-2026-10-17.md |
 | CAP-INV-13 | UNKNOWN |  | Paid invoice and the deal's Dibayar stage agree | Undecided. Observed 2026-10-17: Tandai lunas leaves the deal at Invoice; moving the deal to Dibayar does not mark the invoice paid. | — |  | PRODUCT.md solution 2 |
 | CAP-INV-14 | PROPOSED |  | Several invoices for one deal (down payment, instalments) | Proposed only. | — |  | audit 2026-10-17 |
 | CAP-INV-15 | NOT_APPLICABLE |  | Invoice line items | Out of scope. | — |  | dibayar-implementation-spec.md §2, §8 C |

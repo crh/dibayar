@@ -25,6 +25,7 @@ import {
 import { FIXTURE_FUTURE_DATE, FIXTURE_PAST_DATE } from "../src/lib/e2e-fixture-dates";
 import { getJakartaCalendarDate } from "../src/lib/invoice-date-status";
 import { encryptShareToken } from "../src/lib/share-token-crypto";
+import { freezeInvoiceDocument } from "../src/lib/invoice-snapshot";
 
 const action = process.argv[2];
 if (!["seed", "verify", "cleanup", "legacy-due-date", "legacy-invalid-contact", "follow-up-states", "follow-up-expired-share", "income-boundaries", "status-consistency", "expire-disposable-session", "incomplete-issuer-settings", "invoice-table-outage", "end-invoice-table-outage", "invoice-write-refusal", "end-invoice-write-refusal"].includes(action ?? "")) {
@@ -298,6 +299,19 @@ async function seed() {
       bankAccountHolder: "E2E Fixture Owner",
     },
   });
+
+  // The seeded SENT and PAID invoices were "issued" before any test runs, so
+  // their documents are frozen now (Decision A, issue #55) through the app's
+  // own statement, with the deal and Settings above -- a later deal or
+  // Settings change in a journey must not reach them. They are already past
+  // DRAFT, so the statement labels them RECONSTRUCTED_LATE. The overlays
+  // below add invoices without a snapshot on purpose: those are frozen at
+  // their first share link or document read, as the app does for invoices
+  // the previous version sent.
+  for (const invoiceId of [invoiceIds.sent, invoiceIds.paid]) {
+    const frozen = await freezeInvoiceDocument(prisma, invoiceId, ids.owner, "STATUS_CHANGE");
+    if (frozen !== 1) throw new Error(`E2E fixture snapshot expected 1 row for ${invoiceId}, wrote ${frozen}`);
+  }
 
   const manifest = {
     schemaVersion: 1,

@@ -413,15 +413,15 @@
     {
       "id": "CAP-INV-12",
       "domain": "invoices",
-      "title": "Whether an issued invoice's document follows later deal changes (brand, scope, terms, contact name)",
+      "title": "An issued invoice's document does not follow later deal or Settings changes",
       "persona": "brand contact (recipient)",
-      "preconditions": "An issued, shared invoice; its deal is changed afterwards",
-      "targetState": "Undecided",
-      "expectedOutcome": "Undecided. Observed 2026-10-17: a contact name saved after issue appears on the brand's page on reload (the document reads these fields from the deal at render time).",
-      "classification": "UNKNOWN",
-      "rationale": [{ "source": "src/lib/invoice-share.ts (behaviour)", "says": "deal: { select: { brand, contactName, scope, paymentTerms } } read at render time" }, { "source": "issue #55 item 6", "says": "lists amount, number, due date and tax only" }],
-      "openQuestion": "Snapshot brand/scope/terms/contact at issue, keep them live, or warn the creator before a change reaches a sent invoice? Must be decided before #55 adds brand/scope/terms editing. Issuer and bank details (Settings) are live too.",
-      "decisionOwner": "Chris"
+      "preconditions": "An invoice that has been shared or has left Draf; its deal or the owner's Settings change afterwards",
+      "targetState": "The document the brand has stays as issued",
+      "expectedOutcome": "Brand, contact name, scope, payment terms, issuer and bank details are frozen at the invoice's first share link or move out of Draf, whichever is first; the owner's PDF, the brand's page and the brand's PDF keep them through later deal and Settings edits, link rotation, revoke and re-share. An unshared Draft still follows its deal and Settings. Number, amount, PPh, issue date and due date stay invoice-owned; the due date keeps its explicit editor (MAN-DUE-01). Invoices exposed before the change carry a copy reconstructed at migration, labelled as such.",
+      "classification": "REQUIRED",
+      "priority": "P1",
+      "rationale": [{ "source": "src/lib/invoice-share.ts (behaviour before 2026-10-18)", "says": "deal: { select: { brand, contactName, scope, paymentTerms } } read at render time" }, { "source": "issue #55 comment 2026-10-18 (product owner Chris)", "says": "Decision A approved: immutable snapshot of brand, contact name, scope, payment terms and issuer/bank details at the first transition out of Draft or the earliest public link; never unfrozen; existing invoices backfilled and labelled as reconstructed. Decision A only, not B (#56) or C (#57)" }, { "source": "docs/product/DECISION-BRIEF-2026-10-17.md", "says": "Decision A recommended option: snapshot at send" }],
+      "verification": { "actions": ["INV-DOC-01"] }
     },
     {
       "id": "CAP-INV-13",

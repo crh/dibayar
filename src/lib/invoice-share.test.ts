@@ -57,19 +57,22 @@ function makeDb(options: {
 
   const invoiceFindFirst = vi.fn(async () => invoice);
   const shareFindUnique = vi.fn(async () => share);
-  const shareUpsert = vi.fn(
-    upsertImpl ??
-      (async ({ create }: { create: { invoiceId: string; tokenHash: string; tokenCiphertext?: string } }) => ({
-        id: "share-new",
-        invoiceId: create.invoiceId,
-        tokenHash: create.tokenHash,
-        tokenCiphertext: create.tokenCiphertext ?? null,
-        expiresAt: null,
-        createdAt: new Date("2026-07-17T00:00:00.000Z"),
-        updatedAt: new Date("2026-07-17T00:00:00.000Z"),
-      })),
-  );
+  // Records the order of writes so tests can prove the snapshot is written
+  // before the share row, inside the transaction.
+  const writes: string[] = [];
+  const shareUpsert = vi.fn(async (args: unknown) => {
+    writes.push("share:upsert");
+    return (upsertImpl ?? defaultUpsert)(args);
+  });
   const shareDeleteMany = vi.fn(async () => ({ count: share ? 1 : 0 }));
+  const executeRaw = vi.fn(async (query: { values: unknown[] }) => {
+    writes.push(`freeze:${String(query.values.find((value) => typeof value === "string" && /^[A-Z_]+$/.test(value)))}`);
+    return 1;
+  });
+  const transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+    writes.push("tx:begin");
+    return fn(db);
+  });
 
   const db = {
     invoice: { findFirst: invoiceFindFirst, findMany: vi.fn() },
@@ -78,9 +81,24 @@ function makeDb(options: {
       upsert: shareUpsert,
       deleteMany: shareDeleteMany,
     },
+    $executeRaw: executeRaw,
+    $transaction: transaction,
   } as unknown as InvoiceShareDb;
 
-  return { db, invoiceFindFirst, shareFindUnique, shareUpsert, shareDeleteMany };
+  return { db, invoiceFindFirst, shareFindUnique, shareUpsert, shareDeleteMany, executeRaw, transaction, writes };
+}
+
+async function defaultUpsert(args: unknown): Promise<InvoiceShareRecord> {
+  const { create } = args as { create: { invoiceId: string; tokenHash: string; tokenCiphertext?: string } };
+  return {
+    id: "share-new",
+    invoiceId: create.invoiceId,
+    tokenHash: create.tokenHash,
+    tokenCiphertext: create.tokenCiphertext ?? null,
+    expiresAt: null,
+    createdAt: new Date("2026-07-17T00:00:00.000Z"),
+    updatedAt: new Date("2026-07-17T00:00:00.000Z"),
+  };
 }
 
 describe("generateShareToken", () => {
@@ -499,12 +517,18 @@ describe("revokeShare", () => {
 });
 
 describe("getPublicInvoiceDocumentByToken", () => {
-  function makeLookupDb(row: unknown) {
+  function makeLookupDb(row: unknown, lateSnapshot: unknown = null) {
     const findUnique = vi.fn<PublicInvoiceDocumentLookupDb["invoiceShare"]["findUnique"]>(
       async () => row as Awaited<ReturnType<PublicInvoiceDocumentLookupDb["invoiceShare"]["findUnique"]>>,
     );
-    const db = { invoiceShare: { findUnique } } as unknown as PublicInvoiceDocumentLookupDb;
-    return { db, findUnique };
+    const executeRaw = vi.fn<(query: unknown) => Promise<number>>(async () => 1);
+    const snapshotFindUnique = vi.fn(async () => lateSnapshot);
+    const db = {
+      invoiceShare: { findUnique },
+      invoiceSnapshot: { findUnique: snapshotFindUnique },
+      $executeRaw: executeRaw,
+    } as unknown as PublicInvoiceDocumentLookupDb;
+    return { db, findUnique, executeRaw, snapshotFindUnique };
   }
 
   // The lookups below pass this clock: with the real one, fullRow's share
@@ -515,24 +539,36 @@ describe("getPublicInvoiceDocumentByToken", () => {
     expiresAt: new Date("2026-10-17T00:00:00.000Z"),
     invoice: {
       id: "invoice-1",
+      userId: "user-1",
       number: "INV/2026/07/001",
       subtotalIdr: 1_500_000,
       withholdingTaxType: "PPH23" as const,
       dueDate: new Date("2026-07-31T00:00:00.000Z"),
       createdAt: new Date("2026-07-15T00:00:00.000Z"),
-      deal: { brand: "Brand Kopi", contactName: "Budi", scope: "1 reel + 2 story", paymentTerms: "Lunas di muka" },
-      user: {
-        settings: {
-          issuerName: "Kenji",
-          issuerAddress: "Jl. Melati",
-          issuerWhatsapp: "0812",
-          issuerEmail: "k@example.com",
-          bankName: "BCA",
-          bankAccountNumber: "123",
-          bankAccountHolder: "Kenji",
-        },
+      snapshot: {
+        brand: "Brand Kopi",
+        contactName: "Budi",
+        scope: "1 reel + 2 story",
+        paymentTerms: "Lunas di muka",
+        issuerName: "Kenji",
+        issuerAddress: "Jl. Melati",
+        issuerWhatsapp: "0812",
+        issuerEmail: "k@example.com",
+        bankName: "BCA",
+        bankAccountNumber: "123",
+        bankAccountHolder: "Kenji",
       },
     },
+  };
+  const nullSettingsSnapshot = {
+    ...fullRow.invoice.snapshot,
+    issuerName: null,
+    issuerAddress: null,
+    issuerWhatsapp: null,
+    issuerEmail: null,
+    bankName: null,
+    bankAccountNumber: null,
+    bankAccountHolder: null,
   };
 
   it("reports invalid for an unknown token without distinguishing it from a revoked one", async () => {
@@ -567,27 +603,29 @@ describe("getPublicInvoiceDocumentByToken", () => {
     expect(call.select).toEqual({
       expiresAt: true,
       invoice: {
+        // Decision A: invoice-owned fields and the snapshot only. No deal
+        // and no Settings: the brand's document cannot follow a later edit.
         select: {
           id: true,
+          userId: true,
           number: true,
           subtotalIdr: true,
           withholdingTaxType: true,
           dueDate: true,
           createdAt: true,
-          deal: { select: { brand: true, contactName: true, scope: true, paymentTerms: true } },
-          user: {
+          snapshot: {
             select: {
-              settings: {
-                select: {
-                  issuerName: true,
-                  issuerAddress: true,
-                  issuerWhatsapp: true,
-                  issuerEmail: true,
-                  bankName: true,
-                  bankAccountNumber: true,
-                  bankAccountHolder: true,
-                },
-              },
+              brand: true,
+              contactName: true,
+              scope: true,
+              paymentTerms: true,
+              issuerName: true,
+              issuerAddress: true,
+              issuerWhatsapp: true,
+              issuerEmail: true,
+              bankName: true,
+              bankAccountNumber: true,
+              bankAccountHolder: true,
             },
           },
         },
@@ -595,11 +633,12 @@ describe("getPublicInvoiceDocumentByToken", () => {
     });
   });
 
-  it("projects a ready-to-render InvoiceDocumentInput for a live token", async () => {
-    const { db } = makeLookupDb(fullRow);
+  it("projects a ready-to-render InvoiceDocumentInput from the invoice and its snapshot for a live token, writing nothing", async () => {
+    const { db, executeRaw } = makeLookupDb(fullRow);
 
     const result = await getPublicInvoiceDocumentByToken(db, "token", LOOKUP_NOW);
 
+    expect(executeRaw).not.toHaveBeenCalled();
     expect(result).toEqual({
       kind: "ok",
       input: {
@@ -625,10 +664,10 @@ describe("getPublicInvoiceDocumentByToken", () => {
     });
   });
 
-  it("normalizes a null settings row (issuer never saved Settings) to empty strings, not a crash", async () => {
+  it("normalizes a snapshot taken with no settings row (issuer never saved Settings) to empty strings, not a crash", async () => {
     const { db } = makeLookupDb({
       ...fullRow,
-      invoice: { ...fullRow.invoice, user: { settings: null } },
+      invoice: { ...fullRow.invoice, snapshot: nullSettingsSnapshot },
     });
 
     const result = await getPublicInvoiceDocumentByToken(db, "token", LOOKUP_NOW);
@@ -663,5 +702,93 @@ describe("getPublicInvoiceDocumentByToken", () => {
     const result = await getPublicInvoiceDocumentByToken(db, "legacy-token", new Date("2030-01-01T00:00:00.000Z"));
 
     expect(result.kind).toBe("ok");
+  });
+
+  it("freezes a shared invoice that has no snapshot yet (made before this version) and renders that copy, labelled a late capture", async () => {
+    const lateSnapshot = { ...fullRow.invoice.snapshot, brand: "Brand Saat Ini" };
+    const { db, executeRaw, snapshotFindUnique } = makeLookupDb({ ...fullRow, invoice: { ...fullRow.invoice, snapshot: null } }, lateSnapshot);
+
+    const result = await getPublicInvoiceDocumentByToken(db, "token", LOOKUP_NOW);
+
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+    const query = executeRaw.mock.calls[0][0] as unknown as { values: unknown[]; strings: string[] };
+    expect(query.values).toEqual(["DOCUMENT_READ", "invoice-1", "user-1"]);
+    expect(query.strings.join("?")).toContain("ON CONFLICT (\"invoiceId\") DO NOTHING");
+    expect(snapshotFindUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { invoiceId: "invoice-1" } }));
+    expect(result.kind === "ok" && result.input.deal.brand).toBe("Brand Saat Ini");
+  });
+
+  it("never falls back to live values: an exposed invoice whose snapshot cannot be captured is an error, not a live render", async () => {
+    const { db } = makeLookupDb({ ...fullRow, invoice: { ...fullRow.invoice, snapshot: null } }, null);
+
+    await expect(getPublicInvoiceDocumentByToken(db, "token", LOOKUP_NOW)).rejects.toThrow(/no document snapshot/);
+  });
+
+  it("does not capture anything for an expired link", async () => {
+    const { db, executeRaw } = makeLookupDb({ ...fullRow, expiresAt: new Date("2026-07-18T00:00:00.000Z"), invoice: { ...fullRow.invoice, snapshot: null } });
+
+    expect(await getPublicInvoiceDocumentByToken(db, "token", LOOKUP_NOW)).toEqual({ kind: "expired" });
+    expect(executeRaw).not.toHaveBeenCalled();
+  });
+});
+
+// Decision A (issue #55): a share link makes the document reachable, so
+// creating, rotating or reusing one freezes the document first, inside the
+// same transaction as the share write.
+describe("share links freeze the invoice document (Decision A)", () => {
+  it("creating a link writes the snapshot (SHARE_LINK) before the share row, in one transaction", async () => {
+    const { db, transaction, writes } = makeDb({ invoice: { ...ownedInvoice, status: "DRAFT" } });
+
+    await createOrRegenerateShare(db, "invoice-1", "user-1", () => "token-a");
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(writes).toEqual(["tx:begin", "freeze:SHARE_LINK", "share:upsert"]);
+  });
+
+  it("rotating a link asks for the snapshot again, which the database keeps as first written (ON CONFLICT DO NOTHING)", async () => {
+    const { db, executeRaw } = makeDb({ share: existingShare });
+
+    await createOrRegenerateShare(db, "invoice-1", "user-1", () => "token-b");
+
+    const query = executeRaw.mock.calls[0][0] as unknown as { strings: string[]; values: unknown[] };
+    expect(query.strings.join("?")).toMatch(/ON CONFLICT \("invoiceId"\) DO NOTHING/);
+    expect(query.strings.join("?")).not.toMatch(/DO UPDATE/);
+    expect(query.values).toEqual(["SHARE_LINK", "invoice-1", "user-1"]);
+  });
+
+  it("ensureShare freezes even when it reuses the existing link, and writes no share row then", async () => {
+    const token = "reused-token";
+    const { db, writes } = makeDb({ share: { ...existingShare, tokenCiphertext: encryptShareToken(token), expiresAt: null } });
+
+    const result = await ensureShare(db, "invoice-1", "user-1");
+
+    expect(result).toEqual({ kind: "reused", path: `/i/${token}`, expiresAt: null });
+    expect(writes).toEqual(["tx:begin", "freeze:SHARE_LINK"]);
+  });
+
+  it("ensureShare that creates a link freezes before the share row", async () => {
+    const { db, writes } = makeDb({ invoice: { ...ownedInvoice, status: "DRAFT" } });
+
+    await ensureShare(db, "invoice-1", "user-1", () => "token-c");
+
+    expect(writes).toEqual(["tx:begin", "freeze:SHARE_LINK", "share:upsert"]);
+  });
+
+  it("a foreign or missing invoice freezes nothing and writes no link", async () => {
+    const created = makeDb({ invoice: null });
+    const ensured = makeDb({ invoice: null });
+
+    expect(await createOrRegenerateShare(created.db, "invoice-1", "user-2")).toEqual({ kind: "not-found" });
+    expect(await ensureShare(ensured.db, "invoice-1", "user-2")).toEqual({ kind: "not-found" });
+    expect(created.executeRaw).not.toHaveBeenCalled();
+    expect(ensured.executeRaw).not.toHaveBeenCalled();
+    expect(created.shareUpsert).not.toHaveBeenCalled();
+  });
+
+  it("revoking a link leaves the snapshot alone", async () => {
+    const { db, executeRaw } = makeDb({ share: existingShare });
+
+    expect(await revokeShare(db, "invoice-1", "user-1")).toEqual({ kind: "revoked" });
+    expect(executeRaw).not.toHaveBeenCalled();
   });
 });

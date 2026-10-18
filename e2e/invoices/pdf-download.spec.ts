@@ -8,10 +8,14 @@
 // stream is compressed, so a byte search would prove nothing. Files are
 // written only under the test's output directory.
 //
-// The owner first changes the bank details in Settings, so the PDF is checked
-// against values that exist nowhere in the seed: a PDF built from stale or
-// default settings fails. Owner and recipient PDFs are compared by their
-// normalized text, not byte-for-byte (PDF metadata differs per render).
+// The owner first changes the bank details in Settings. The seeded invoice
+// was shared before that, so under Decision A (issue #55, CAP-INV-12) its
+// document keeps the bank details it was issued with: a PDF built from the
+// live Settings fails here, and so does one built from empty defaults. (A
+// Draft that was never shared does follow Settings:
+// e2e/invoices/document-snapshot.spec.ts.) Owner and recipient PDFs are
+// compared by their normalized text, not byte-for-byte (PDF metadata differs
+// per render).
 //
 // All values are synthetic. The tests change the fixture owner's
 // UserSettings, so they reseed before and after.
@@ -39,9 +43,9 @@ function expectedDocumentLines(brand: string) {
     "Pajak potong PPh 21",
     "30 hari setelah invoice diterima",
     "Jatuh tempo: 31 Desember 2099",
-    `Bank: ${UPDATED_BANK.bankName}`,
-    `Nomor rekening: ${UPDATED_BANK.accountNumber}`,
-    `Atas nama: ${UPDATED_BANK.holder}`,
+    "Bank: Bank E2E Fixture",
+    "Nomor rekening: 1234509876",
+    "Atas nama: E2E Fixture Owner",
   ];
 }
 
@@ -50,9 +54,10 @@ function expectDocumentText(text: string, brand: string) {
   for (const expected of expectedDocumentLines(brand)) {
     expect(lines, `the PDF has the line "${expected}"`).toContain(expected);
   }
-  // Nothing from the bank details that were replaced.
-  expect(text).not.toContain("Bank E2E Fixture");
-  expect(text).not.toContain("1234509876");
+  // Nothing from the bank details saved after the invoice was shared.
+  expect(text).not.toContain(UPDATED_BANK.bankName);
+  expect(text).not.toContain(UPDATED_BANK.accountNumber);
+  expect(text).not.toContain(UPDATED_BANK.holder);
 }
 
 // Settings -> bank details -> save, through the nav and the visible fields.
@@ -86,7 +91,7 @@ test.describe("invoice PDF downloads", { tag: "@critical" }, () => {
   test.beforeEach(reseedFixtures);
   test.afterEach(reseedFixtures);
 
-  test("Unduh PDF on invoice detail downloads a PDF with the invoice, issuer and current bank details", async ({ page }, testInfo) => {
+  test("Unduh PDF on invoice detail downloads a PDF with the invoice, issuer and the bank details it was issued with, not later Settings", async ({ page }, testInfo) => {
     const manifest = loadFixtureManifest();
     const brand = manifest.brands[manifest.deals.invoiceSent];
     await saveBankDetails(page);
@@ -111,7 +116,8 @@ test.describe("invoice PDF downloads", { tag: "@critical" }, () => {
 
     await recipient.goto(shareLink);
     await expect(recipient.getByText(/Nomor invoice:\s*E2E\/SENT\/001/)).toBeVisible();
-    await expect(recipient.locator("main")).toContainText(UPDATED_BANK.bankName);
+    await expect(recipient.locator("main")).toContainText("Bank E2E Fixture");
+    await expect(recipient.locator("main")).not.toContainText(UPDATED_BANK.bankName);
     const received = await downloadPdfByClick(recipient, recipient.getByRole("link", { name: "Unduh PDF" }), testInfo, "recipient.pdf");
 
     expect(received.download.suggestedFilename()).toBe("E2E-SENT-001.pdf");

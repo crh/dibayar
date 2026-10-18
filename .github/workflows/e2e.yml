@@ -105,6 +105,11 @@ jobs:
           sudo apt-get install -y poppler-utils
           pdftotext -v
       - run: npx prisma migrate deploy
+      # Decision A invoice snapshot against real PostgreSQL: the migration on
+      # a populated old-schema database (replayed in its own throwaway
+      # schema), backfill provenance, idempotence, the immutability trigger
+      # and the freeze statement under concurrency.
+      - run: npm run test:snapshot-db
       - run: npm run test:e2e:critical
       # The inventory's "real" claims against this actual run: a referenced
       # real test that ran here but was skipped, failed, or expected to fail
