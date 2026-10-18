@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { fieldClassName } from "@/components/design-system";
 import { formatMoney } from "@/lib/format/money";
 import { DEAL_LIMITS } from "@/lib/deal-limits";
@@ -88,6 +88,8 @@ export function DealForm({
   t,
   brandInputRef,
   formRef,
+  submitLabel,
+  secondaryAction,
 }: {
   formId: string;
   form: DealFormState;
@@ -98,6 +100,10 @@ export function DealForm({
   t: (key: string, values?: Record<string, string>) => string;
   brandInputRef?: React.RefObject<HTMLInputElement | null>;
   formRef?: React.RefObject<HTMLFormElement | null>;
+  // The edit dialog (#55) names its own save and adds Batal beside it; the
+  // create dialog keeps its single "Simpan deal" button as it was.
+  submitLabel?: string;
+  secondaryAction?: ReactNode;
 }) {
   function fieldProps(name: keyof DealFormState) {
     const invalid = Boolean(errors[name]);
@@ -228,13 +234,26 @@ export function DealForm({
         </label>
         {fieldError("paymentTerms")}
       </div>
-      <button
-        type="submit"
-        disabled={isSaving}
-        className="inline-flex h-11 items-center justify-center rounded-full bg-primary px-5 text-[15px] font-semibold text-surface hover:bg-primary-d disabled:cursor-wait disabled:opacity-60 sm:col-span-2 sm:w-fit"
-      >
-        {isSaving ? t("dashboard.saving") : t("dashboard.saveDeal")}
-      </button>
+      {secondaryAction ? (
+        <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:items-center">
+          {secondaryAction}
+          <button
+            type="submit"
+            disabled={isSaving}
+            className="inline-flex h-11 items-center justify-center rounded-full bg-primary px-5 text-[15px] font-semibold text-surface hover:bg-primary-d disabled:cursor-wait disabled:opacity-60 sm:w-fit"
+          >
+            {isSaving ? t("dashboard.saving") : (submitLabel ?? t("dashboard.saveDeal"))}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="inline-flex h-11 items-center justify-center rounded-full bg-primary px-5 text-[15px] font-semibold text-surface hover:bg-primary-d disabled:cursor-wait disabled:opacity-60 sm:col-span-2 sm:w-fit"
+        >
+          {isSaving ? t("dashboard.saving") : (submitLabel ?? t("dashboard.saveDeal"))}
+        </button>
+      )}
     </form>
   );
 }

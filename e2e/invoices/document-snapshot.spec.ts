@@ -8,17 +8,14 @@
 // brand's PDF all show the copy taken then, through link rotation, revoke and
 // re-share, and the move to Terkirim.
 //
-// What changes the deal here: the contact name through deal detail (the only
-// deal edit the UI offers before #55's editor ships), and brand, scope and
-// payment terms through the deal's own PATCH endpoint, which already accepts
-// them -- same-origin, as the page sends it. Settings are changed through
-// Pengaturan. When the #55 editor ships, the brand/scope/terms edits move to
-// it (deal-change-keeps-invoice.spec.ts carries that journey).
+// What changes the deal here: the contact name through its own field on deal
+// detail, and brand, scope and payment terms through Ubah deal (#55).
+// Settings are changed through Pengaturan.
 //
 // Every value is synthetic. The links are bearer tokens of the disposable
 // test database; comparisons about them are booleans so failures do not
 // print them.
-import type { APIResponse, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { expect } from "../support/test";
 import { loadFixtureManifest } from "../support/manifest";
 import { primaryNav } from "../support/nav";
@@ -38,12 +35,17 @@ function statusAction(page: Page, name: string) {
   return page.getByRole("region", { name: "Status pembayaran" }).getByRole("button", { name, exact: true });
 }
 
-// The deal's PATCH endpoint, called the way the app's own pages call it.
-async function patchDeal(page: Page, dealId: string, data: Record<string, string>): Promise<APIResponse> {
-  const origin = new URL(page.url()).origin;
-  const response = await page.request.patch(`/api/deals/${dealId}`, { data, headers: { Origin: origin } });
-  expect(response.ok(), `PATCH /api/deals/${dealId}`).toBe(true);
-  return response;
+// Ubah deal on deal detail, the way a person edits a deal.
+async function editDeal(page: Page, dealId: string, data: { brand: string; scope: string; paymentTerms: string }, isMobile: boolean) {
+  await page.goto(`/deal/${dealId}`);
+  await press(page.getByRole("button", { name: "Ubah deal" }), isMobile);
+  const dialog = page.getByRole("dialog", { name: "Ubah deal" });
+  await dialog.getByLabel("Nama brand").fill(data.brand);
+  await dialog.getByLabel("Scope pekerjaan").fill(data.scope);
+  await dialog.getByLabel("Syarat pembayaran (opsional)").fill(data.paymentTerms);
+  const saved = await responseTo(page, "PATCH", `/api/deals/${dealId}`, () => press(dialog.getByRole("button", { name: "Simpan perubahan" }), isMobile));
+  expect(saved.ok()).toBe(true);
+  await expect(page.getByRole("status").filter({ hasText: "Perubahan deal disimpan." })).toBeVisible();
 }
 
 async function saveContactName(page: Page, dealId: string, name: string, isMobile: boolean) {
@@ -107,7 +109,7 @@ test.describe("issued invoice documents are frozen (Decision A, CAP-INV-12)", { 
 
     await test.step("a new Draft follows the deal it was made from", async () => {
       invoiceId = await createInvoiceFromDeal(page, dealId, isMobile);
-      await patchDeal(page, dealId, DRAFT_EDIT);
+      await editDeal(page, dealId, DRAFT_EDIT, isMobile);
       await saveContactName(page, dealId, DRAFT_CONTACT, isMobile);
       const draftPdf = await ownerPdfText(page, invoiceId, testInfo, "draft.pdf");
       expectShows(draftPdf, frozenValues, [manifest.brands[dealId]], "the Draft's PDF");
@@ -122,7 +124,7 @@ test.describe("issued invoice documents are frozen (Decision A, CAP-INV-12)", { 
     });
 
     await test.step("deal and Settings edits after the link exists reach neither the owner's PDF nor the brand's page and PDF", async () => {
-      await patchDeal(page, dealId, AFTER_EDIT);
+      await editDeal(page, dealId, AFTER_EDIT, isMobile);
       await saveContactName(page, dealId, AFTER_CONTACT, isMobile);
       await saveBankName(page, AFTER_BANK, isMobile);
       // The deal itself did change.
@@ -171,7 +173,7 @@ test.describe("issued invoice documents are frozen (Decision A, CAP-INV-12)", { 
 
     const sent = await responseTo(page, "PATCH", `/api/invoices/${invoiceId}`, () => press(statusAction(page, "Tandai sudah dikirim"), isMobile));
     expect(sent.ok()).toBe(true);
-    await patchDeal(page, dealId, AFTER_EDIT);
+    await editDeal(page, dealId, AFTER_EDIT, isMobile);
 
     const ownerPdf = await ownerPdfText(page, invoiceId, testInfo, "owner-sent.pdf");
     expectShows(ownerPdf, [issuedBrand, "E2E fixture: ready to invoice, none created yet"], [AFTER_EDIT.brand, AFTER_EDIT.scope, AFTER_EDIT.paymentTerms], "the owner's PDF");

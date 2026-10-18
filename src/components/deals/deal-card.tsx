@@ -24,6 +24,7 @@ export function DealCard({
   isSaving,
   onStageChange,
   onCreateInvoice,
+  onEdit,
 }: {
   deal: DealRecord;
   language: Language;
@@ -33,6 +34,7 @@ export function DealCard({
   isSaving: boolean;
   onStageChange: (dealId: string, status: DealRecord["status"]) => void;
   onCreateInvoice: (dealId: string) => void;
+  onEdit: (dealId: string) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -156,6 +158,18 @@ export function DealCard({
                     {isSaving ? t("dashboard.saving") : t("dashboard.createInvoice")}
                   </button>
                 ) : null}
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={isSaving}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onEdit(deal.id);
+                  }}
+                  className="flex h-11 w-full items-center rounded-md px-3 text-left text-[13px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60"
+                >
+                  {t("deal.edit")}
+                </button>
                 <Link
                   href={`/deal/${deal.id}`}
                   role="menuitem"

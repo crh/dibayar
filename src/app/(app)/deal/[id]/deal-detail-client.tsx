@@ -15,6 +15,7 @@ import { DEAL_LIMITS } from "@/lib/deal-limits";
 import { formatPhone } from "@/lib/format/phone";
 import { fetchWithTimeout } from "@/lib/http";
 import { bodyField, IDEMPOTENCY_HEADER, idempotencyKeyFor, mutationErrorKey, sendMutation } from "@/lib/mutation";
+import { EditDealDialog } from "@/components/deals/edit-deal-dialog";
 
 export default function DealDetailClient({
   initialDeal,
@@ -37,6 +38,9 @@ export default function DealDetailClient({
   const [isChangingStage, setIsChangingStage] = useState(false);
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [nextActionMessage, setNextActionMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  // #55: the full edit of the deal's core fields.
+  const [isEditing, setIsEditing] = useState(false);
+  const [editMessage, setEditMessage] = useState<string | null>(null);
   // An invoice create whose outcome is unknown may have been stored, so its
   // key is kept for the next press: the server then returns that invoice
   // instead of creating a second one (#53).
@@ -119,15 +123,19 @@ export default function DealDetailClient({
     if (showContactRepair && whatsapp.kind === "invalid-number") contactWaInputRef.current?.focus();
   }, [showContactRepair, whatsapp.kind]);
 
+  // An emptied field clears the stored name: it is sent as null, and the
+  // result is read back before it is reported. Sending "nothing" for an empty
+  // field used to change nothing and still say "saved" (FIND-11).
   async function handleSaveContactName() {
     setIsSaving(true);
     setMessage(null);
+    const expected = contactName.trim() === "" ? null : contactName.trim();
 
     try {
       const response = await fetchWithTimeout(`/api/deals/${deal.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactName: contactName || undefined }),
+        body: JSON.stringify({ contactName: expected }),
       });
       const payload = await response.json();
       if (response.status === 400) {
@@ -138,9 +146,13 @@ export default function DealDetailClient({
         setMessage({ kind: "error", text: t(mutationErrorKey({ kind: "rejected", status: response.status, body: payload }, "deal.detailContactNameError")) });
         return;
       }
-      setDeal(payload.deal);
-      setContactName(payload.deal.contactName ?? "");
-      setMessage({ kind: "success", text: t("deal.detailContactNameSaved") });
+      const readBackResponse = await fetchWithTimeout(`/api/deals/${deal.id}`, { cache: "no-store" });
+      const readBackPayload = await readBackResponse.json();
+      const stored: DealRecord | undefined = readBackResponse.ok && readBackPayload.deal?.id === deal.id ? readBackPayload.deal : undefined;
+      if (!stored || (stored.contactName ?? null) !== expected) throw new Error("deal.detailContactNameError");
+      setDeal(stored);
+      setContactName(stored.contactName ?? "");
+      setMessage({ kind: "success", text: t(expected === null ? "deal.detailContactNameCleared" : "deal.detailContactNameSaved") });
     } catch {
       setMessage({ kind: "error", text: t("deal.detailContactNameError") });
     } finally {
@@ -210,10 +222,29 @@ export default function DealDetailClient({
             which sits inside its own horizontal-scroll carousel) --
             confirmed a genuine page-level horizontal-scroll bug, not
             hypothetical. */}
-        <h1 className="text-xl font-bold break-words text-ink">{deal.brand}</h1>
-        <p className="mt-1 text-[13px] font-semibold text-muted">
-          {t("deal.detailStatus")}: {t(PIPELINE_STAGE_KEYS[deal.status])}
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold break-words text-ink">{deal.brand}</h1>
+            <p className="mt-1 text-[13px] font-semibold text-muted">
+              {t("deal.detailStatus")}: {t(PIPELINE_STAGE_KEYS[deal.status])}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setEditMessage(null);
+              setIsEditing(true);
+            }}
+            className="inline-flex h-11 shrink-0 items-center rounded-full border border-line px-4 text-[13px] font-semibold text-ink hover:bg-surface"
+          >
+            {t("deal.edit")}
+          </button>
+        </div>
+        {editMessage ? (
+          <p role="status" className="mt-2 text-[13px] text-paid">
+            {t(editMessage)}
+          </p>
+        ) : null}
 
         <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
@@ -399,6 +430,21 @@ export default function DealDetailClient({
           ) : null}
         </div>
       </div>
+
+      <EditDealDialog
+        open={isEditing}
+        deal={deal}
+        invoiceNumber={invoice?.number ?? null}
+        t={t}
+        onClose={() => setIsEditing(false)}
+        onSaved={(saved) => {
+          setDeal(saved);
+          setContactName(saved.contactName ?? "");
+          setContactWaDraft(saved.contactWa);
+          setIsEditing(false);
+          setEditMessage("deal.editSaved");
+        }}
+      />
 
       <div className="rounded-xl border border-line bg-bg p-4">
         <h2 className="text-[15px] font-bold text-ink">{t("deal.detailHistoryTitle")}</h2>

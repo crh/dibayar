@@ -8,10 +8,11 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "../support/test";
 import { cardMenuEditAction, dealDetailEditAffordance } from "../support/deal-edit-affordance";
 
-// Today's card menu (src/components/deals/deal-card.tsx) and deal detail
-// (src/app/(app)/deal/[id]/deal-detail-client.tsx), reduced to their
-// controls: stage moves, Lihat detail, the read-only core details, the
-// contact-name field and the WhatsApp repair field.
+// The card menu (src/components/deals/deal-card.tsx) and deal detail
+// (src/app/(app)/deal/[id]/deal-detail-client.tsx) as they were before #55
+// shipped Ubah deal, reduced to their controls: stage moves, Lihat detail,
+// the read-only core details, the contact-name field and the WhatsApp repair
+// field. They stay the negative controls: none of these is a full edit.
 const TODAY_MENU = `
   <div role="menu">
     <button role="menuitem">Kembali ke Nego</button>

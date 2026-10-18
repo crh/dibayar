@@ -97,6 +97,96 @@ describe("DealDetailClient", () => {
   });
 });
 
+// #55: the full edit, from deal detail.
+describe("DealDetailClient Ubah deal (#55)", () => {
+  it("opens the editor, saves, and shows the deal as the server read it back, at the same stage", async () => {
+    const stored = { ...dealFixture, brand: "Kopi Baru", scope: "2 Reel", feeIdr: 3_000_000 };
+    const fetchMock = vi.fn(() => Promise.resolve(jsonResponse(200, { deal: stored })));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={dealFixture} history={historyFixture} now={new Date("2026-08-15T00:00:00.000Z")} />);
+
+    await user.click(screen.getByRole("button", { name: "Ubah deal" }));
+    const brand = screen.getByLabelText("Nama brand");
+    await user.clear(brand);
+    await user.type(brand, "Kopi Baru");
+    await user.clear(screen.getByLabelText("Scope pekerjaan"));
+    await user.type(screen.getByLabelText("Scope pekerjaan"), "2 Reel");
+    await user.clear(screen.getByLabelText(/^Fee \(Rp\)/));
+    await user.type(screen.getByLabelText(/^Fee \(Rp\)/), "3000000");
+    await user.click(screen.getByRole("button", { name: "Simpan perubahan" }));
+
+    expect(await screen.findByText("Perubahan deal disimpan.")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: "Kopi Baru" })).toBeTruthy();
+    expect(screen.getByText("Rp 3.000.000")).toBeTruthy();
+    expect(screen.getByText("2 Reel")).toBeTruthy();
+    expect(screen.getByText(/Tahap saat ini: Nego/)).toBeTruthy();
+    const patch = (fetchMock.mock.calls as unknown as Array<[string, RequestInit | undefined]>).find(([, init]) => init?.method === "PATCH");
+    expect(JSON.parse(patch![1]!.body as string)).not.toHaveProperty("status");
+  });
+
+  it("names the invoice the edit leaves alone when the deal has one", async () => {
+    const invoice = { id: "inv-1", userId: "user-1", dealId: "deal-1", number: "INV/2026/08/001", subtotalIdr: 2_500_000, withholdingTaxType: "NONE" as const, status: "SENT" as const, dueDate: null, createdAt: new Date(), updatedAt: new Date() };
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={{ ...dealFixture, status: "INVOICE" }} history={[]} initialInvoice={invoice} />);
+
+    await user.click(screen.getByRole("button", { name: "Ubah deal" }));
+
+    expect(screen.getByRole("note").textContent).toContain("INV/2026/08/001");
+  });
+});
+
+// FIND-11: emptying the contact name must clear it, and the page may only say
+// so once the server's copy shows it cleared.
+describe("DealDetailClient clearing the contact name (FIND-11)", () => {
+  const named = { ...dealFixture, contactName: "Budi" };
+
+  it("sends null for an emptied name, reads it back and says it was removed", async () => {
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) =>
+      Promise.resolve(jsonResponse(200, { deal: init?.method === "PATCH" ? { ...named, contactName: null } : { ...named, contactName: null } })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={named} history={[]} />);
+
+    await user.clear(screen.getByLabelText("Nama kontak"));
+    await user.click(screen.getByRole("button", { name: "Simpan" }));
+
+    expect(await screen.findByRole("status")).toHaveProperty("textContent", "Nama kontak dihapus");
+    expect(fetchMock.mock.calls[0]).toEqual(["/api/deals/deal-1", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ contactName: null }) })]);
+    expect((fetchMock.mock.calls[1][1] as RequestInit | undefined)?.method ?? "GET").toBe("GET");
+    expect(screen.getByLabelText("Nama kontak")).toHaveProperty("value", "");
+  });
+
+  it("a name of only spaces is a clear too, never stored as spaces", async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(jsonResponse(200, { deal: { ...named, contactName: null } })));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={named} history={[]} />);
+
+    await user.clear(screen.getByLabelText("Nama kontak"));
+    await user.type(screen.getByLabelText("Nama kontak"), "   ");
+    await user.click(screen.getByRole("button", { name: "Simpan" }));
+
+    await screen.findByRole("status");
+    expect((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body).toBe(JSON.stringify({ contactName: null }));
+  });
+
+  it("does not report success when the server's copy still has the old name", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(200, { deal: named }))));
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={named} history={[]} />);
+
+    await user.clear(screen.getByLabelText("Nama kontak"));
+    await user.click(screen.getByRole("button", { name: "Simpan" }));
+
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Nama kontak belum bisa disimpan. Coba lagi.");
+    expect(screen.queryByText("Nama kontak dihapus")).toBeNull();
+    expect(screen.queryByText("Nama kontak disimpan")).toBeNull();
+  });
+});
+
 describe("DealDetailClient WhatsApp action (T-18)", () => {
   it("offers a Buka WhatsApp button for a valid contact number, and never opens it on its own", () => {
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
