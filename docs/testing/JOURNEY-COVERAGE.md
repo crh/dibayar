@@ -8,16 +8,16 @@ An entry in this inventory is not proof that the action works. Only `automated_r
 
 ## Summary
 
-- Inventoried user-facing actions: **103** (2 not applicable, so the denominator is **101**)
-- Automated real-interaction coverage: **83/101 = 82.2%**
+- Inventoried user-facing actions: **110** (2 not applicable, so the denominator is **108**)
+- Automated real-interaction coverage: **89/108 = 82.4%**
 - P0 automated real-interaction coverage: **28/30 = 93.3%**
-- Manually verified (recorded): **1/101 = 1.0%**
+- Manually verified (recorded): **1/108 = 0.9%**
 - Outstanding P0/P1 actions: **8**
 
 | Status | P0 | P1 | P2 | Total |
 |---|---:|---:|---:|---:|
-| `automated_real_interaction` | 28 | 36 | 19 | 83 |
-| `automated_partial` | 0 | 7 | 8 | 15 |
+| `automated_real_interaction` | 28 | 41 | 20 | 89 |
+| `automated_partial` | 0 | 7 | 9 | 16 |
 | `manual_verified` | 1 | 0 | 0 | 1 |
 | `manual_pending` | 1 | 0 | 1 | 2 |
 | `not_covered` | 0 | 0 | 0 | 0 |
@@ -51,6 +51,7 @@ Every outstanding P0/P1 action above, plus every P0/P1 action that is automated 
 | SHARE-05 (P1, `automated_real_interaction`) | Physical / native device | MAN-SHARE-01 | Clipboard permission and the copy confirmation on real phone browsers differ from desktop Chromium, where the test grants clipboard access to its own context. Automated for real on desktop Chromium only. | No | The share-copy journey green in CI on the release head. MAN-SHARE-01 run on a phone and logged; if it was not run, the release PR says so. | Yes: A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built. |
 | A11Y-01 (P1, `automated_partial`) | Partial by classification rule | — | An axe scan is rendering evidence, not an interaction, so the classification rules cap this action at partial however many pages are scanned. Since 2026-10-11 the scans cover deal detail, the repair, expired-share and Settings-error states, the English interface and the phone layout (390px, desktop Chromium), plus one keyboard-only journey. No scan operates a screen reader. | No | CI job e2e-a11y green on the release head (it runs on every PR and push; it includes e2e/smoke/accessibility-states.spec.ts). No manual sign-off. | No: It cannot become automated_real_interaction under the current rules. Screen-reader behaviour is MAN-A11Y-01 (P2), on real devices. |
 | DEAL-CREATE-08 (P1, `automated_partial`)<br>DEAL-CREATE-09 (P1, `automated_partial`)<br>DEAL-CREATE-12 (P1, `automated_partial`)<br>DEAL-STAGE-06 (P1, `automated_partial`)<br>DEAL-INV-03 (P1, `automated_partial`) | Partial by classification rule | — | A lost answer, a dropped connection or a gateway page cannot be produced on purpose by the app or the test server, so each test injects exactly that one failure with page.route, which the classification rules cap at partial. Everything around it is real: the click, the page's own bounded wait, the retry with the same Idempotency-Key, and the stored rows (read with page.request). In the 'stored but never answered' cases the write itself reaches the real server (route.fetch). DEAL-CREATE-12 has no UI step at all: it sends concurrent and late repeats straight to the real API and database, which no click can time. (#53, #54 review) | No | CI e2e-critical green on the release head (e2e/deals/server-errors.spec.ts is @critical, chromium and chromium-mobile). No manual sign-off. | No: It cannot become automated_real_interaction under the current rules without a network-fault proxy in front of the test server; none is planned. |
+| DEAL-EDIT-01 (P1, `automated_real_interaction`) | Physical / native device | MAN-DEAL-02 | The edit dialog is driven for real on desktop Chromium and the 390 px Chromium project (and runs under WebKit 390 px emulation), but a real phone's keyboard, viewport resizing and native date picker cannot be driven from Playwright. | No | The deal-edit journeys green in CI on the release head. MAN-DEAL-02 run on a physical iPhone and Android phone and logged; if it was not run, the release PR says so. | Yes: A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built. |
 
 ## Findings
 
@@ -145,6 +146,13 @@ Test kinds: **R** = real interaction, **P** = partial (URL entry, `fill()` on a 
 | DEAL-DETAIL-03 | P1 | `automated_real_interaction` | Repair an invalid WhatsApp number on the deal | chromium, chromium-mobile | R: `deals/contact-repair.spec.ts` |
 | DEAL-DETAIL-04 | P2 | `automated_real_interaction` | Open WhatsApp chat with the brand contact | chromium, chromium-mobile | R: `deals/deal-whatsapp.spec.ts` |
 | DEAL-DETAIL-05 | P0 | `automated_real_interaction` | Create an invoice from deal detail and follow its link | chromium, chromium-mobile | R: `invoices/status-lifecycle.spec.ts` |
+| DEAL-EDIT-01 | P1 | `automated_real_interaction` | Edit a saved deal from its card menu (Ubah deal) | chromium, chromium-mobile | R: `deals/deal-edit.spec.ts`<br>R: `deals/deal-change-keeps-invoice.spec.ts` |
+| DEAL-EDIT-02 | P1 | `automated_real_interaction` | Edit a saved deal from deal detail, including a deal that already has an invoice | chromium, chromium-mobile | R: `deals/deal-edit.spec.ts`<br>R: `deals/deal-change-keeps-invoice.spec.ts` |
+| DEAL-EDIT-03 | P1 | `automated_real_interaction` | Change a deal's valid WhatsApp number | chromium, chromium-mobile | R: `deals/deal-edit.spec.ts` |
+| DEAL-EDIT-04 | P1 | `automated_real_interaction` | Clear an optional deal field after it was saved (contact name, payment terms, deadline) | chromium, chromium-mobile | R: `deals/deal-edit.spec.ts`<br>P: `deals/deal-edit.spec.ts` |
+| DEAL-EDIT-05 | P1 | `automated_real_interaction` | Invalid input and cancelling an edit | chromium, chromium-mobile | R: `deals/deal-edit.spec.ts` |
+| DEAL-EDIT-06 | P2 | `automated_real_interaction` | Ubah deal is offered on every stage's card | chromium, chromium-mobile | R: `deals/deal-edit.spec.ts` |
+| DEAL-EDIT-07 | P2 | `automated_partial` | A deal edit the server does not take (500, expired session) | chromium, chromium-mobile | P: `deals/deal-edit.spec.ts` |
 | DEAL-INV-01 | P0 | `automated_real_interaction` | Create an invoice from the card menu | chromium, chromium-mobile | R: `invoices/invoice-journeys.spec.ts` |
 | DEAL-INV-02 | P2 | `automated_partial` | Create-invoice action is not offered when ineligible | unit | P: `src/components/deals/deal-card.test.tsx` |
 | DEAL-INV-03 | P1 | `automated_partial` | Buat invoice with no usable answer never creates a second invoice | chromium, chromium-mobile | P: `deals/server-errors.spec.ts` |
@@ -174,7 +182,7 @@ Test kinds: **R** = real interaction, **P** = partial (URL entry, `fill()` on a 
 | INV-WA-03 | P1 | `automated_real_interaction` | Repair invalid contact on the invoice, save and send | chromium 390 (ux-audit, id+en), chromium, chromium-mobile | R: `tests/ux-audit/t27.verification.spec.ts`<br>R: `deals/patch-keeps-stage.spec.ts` |
 | INV-WA-04 | P2 | `automated_partial` | Contact load error and retry | unit | P: `src/app/(app)/invoice/[id]/invoice-detail-client.test.tsx` |
 | INV-PDF-01 | P1 | `automated_real_interaction` | Download the invoice PDF (owner) | chromium, chromium-mobile, manual: phones | R: `invoices/pdf-download.spec.ts`<br>P: `tests/ux-audit/fixtures.baseline.spec.ts` |
-| INV-DOC-01 | P1 | `automated_real_interaction` | An issued invoice's document is frozen against later deal and Settings edits (Decision A) | chromium, chromium-mobile | R: `invoices/document-snapshot.spec.ts`<br>P: `invoices/document-snapshot.spec.ts` |
+| INV-DOC-01 | P1 | `automated_real_interaction` | An issued invoice's document is frozen against later deal and Settings edits (Decision A) | chromium, chromium-mobile | R: `invoices/document-snapshot.spec.ts` |
 | INV-OWN-01 | P0 | `automated_real_interaction` | Another owner cannot view, read or change this owner's deal/invoice | chromium, chromium-mobile | R: `security/ownership-denial.spec.ts` |
 
 ### sharing

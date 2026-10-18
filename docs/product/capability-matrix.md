@@ -9,19 +9,16 @@ What a creator must be able to do, kept independently of the screens and of the 
 ## Summary
 
 - Capabilities: **46** (REQUIRED 35, PROPOSED 4, UNKNOWN 4, NOT_APPLICABLE 3)
-- REQUIRED and covered: **28/35**
-- REQUIRED with an open gap: **7**
-- REQUIRED with no action at all in the inventory: **7** (CAP-DEAL-05, CAP-DEAL-06, CAP-DEAL-08, CAP-DEAL-09, CAP-INV-02, CAP-INV-03, CAP-INV-10)
+- REQUIRED and covered: **31/35**
+- REQUIRED with an open gap: **4**
+- REQUIRED with no action at all in the inventory: **4** (CAP-DEAL-09, CAP-INV-02, CAP-INV-03, CAP-INV-10)
 
 ## Open gaps (REQUIRED, not covered)
 
 | ID | Pri | Capability | Kind | Tracked in | What is missing |
 |---|---|---|---|---|---|
-| CAP-DEAL-05 | P1 | Correct a saved deal's brand, scope, fee, deadline and payment terms | missing | #55 | No edit control for any core field: card menu offers only stage moves and Lihat detail; deal detail edits only the contact name (and an invalid WhatsApp number). PATCH /api/deals/[id] already accepts all fields. |
-| CAP-DEAL-06 | P1 | Change a deal's WhatsApp number when the brand contact changes | missing | #55 | The number field appears only when the stored number is invalid; a valid number cannot be changed. |
 | CAP-INV-02 | P1 | Choose PPh 21, PPh 23 or none for an invoice | missing | #57 | Both create paths hardcode withholdingTaxType NONE; no control anywhere. |
 | CAP-INV-10 | P1 | Correct an invoice issued with a wrong amount or PPh | missing | #56 | Only the due date of an invoice can change; Buat invoice is not offered again for an invoiced deal; no delete or void. |
-| CAP-DEAL-08 | P2 | Clear an optional deal field after it was saved | defect | FIND-11 | Emptying the contact name shows 'Nama kontak disimpan' but the old name returns after reload; deadline and payment terms cannot be edited at all (#55). |
 | CAP-DEAL-09 | P2 | Remove a deal logged by mistake | missing | #58 | DELETE /api/deals/[id] exists; no screen calls it. The inventory marks DEAL-DELETE-01 not applicable for that reason. |
 | CAP-INV-03 | P2 | See who an invoice is for and open its deal | missing | #59 | Invoice detail shows number, amount, PPh and due date only; links are the back link and the PDF. |
 
@@ -48,10 +45,10 @@ What a creator must be able to do, kept independently of the screens and of the 
 | CAP-DEAL-02 | REQUIRED | P0 | See my deals by pipeline stage and filter them | Masuk → Nego → Deal → Konten → Invoice → Dibayar board; stage filter survives reload, Back and Forward. | DEAL-LIST-01, DEAL-FILTER-01, DEAL-FILTER-02 |  | PRODUCT.md solution 2; dibayar-implementation-spec.md §4.2 |
 | CAP-DEAL-03 | REQUIRED | P0 | Move a deal to the next or previous stage by touch and keyboard | Card menu and deal detail offer the adjacent stages; the move persists with a history entry. | DEAL-STAGE-01, DEAL-STAGE-02, DEAL-STAGE-03, DEAL-STAGE-05 |  | dibayar-implementation-spec.md §4.2 F5 |
 | CAP-DEAL-04 | REQUIRED | P1 | See everything captured about a deal | Brand, fee, deadline, stage, scope, contact, payment terms, stage history and linked invoice on one page. | DEAL-DETAIL-01, NAV-10 |  | dibayar-implementation-spec.md §3.3 |
-| CAP-DEAL-05 | REQUIRED | P1 | Correct a saved deal's brand, scope, fee, deadline and payment terms | An edit action on the card or detail opens the deal's current values; Save stores only what changed and persists after reload; Cancel keeps the old values. | gap #55 |  | ROADMAP.md M1; dibayar-implementation-spec.md §3.3; issue #55 |
-| CAP-DEAL-06 | REQUIRED | P1 | Change a deal's WhatsApp number when the brand contact changes | The number can be edited on deal detail like the contact name. | gap #55 |  | dibayar-implementation-spec.md §4.3; issue #55 |
+| CAP-DEAL-05 | REQUIRED | P1 | Correct a saved deal's brand, scope, fee, deadline and payment terms | An edit action on the card or detail opens the deal's current values; Save stores only what changed and persists after reload; Cancel keeps the old values. | DEAL-EDIT-01, DEAL-EDIT-02 |  | ROADMAP.md M1; dibayar-implementation-spec.md §3.3; issue #55 |
+| CAP-DEAL-06 | REQUIRED | P1 | Change a deal's WhatsApp number when the brand contact changes | The number can be edited on deal detail like the contact name. | DEAL-EDIT-03 |  | dibayar-implementation-spec.md §4.3; issue #55 |
 | CAP-DEAL-07 | REQUIRED | P2 | Add or change the brand contact's name | Typed name saved from deal detail, shown after reload; the stage and history are untouched (FIND-10). | DEAL-DETAIL-02 |  | dibayar-implementation-spec.md §4.3 |
-| CAP-DEAL-08 | REQUIRED | P2 | Clear an optional deal field after it was saved | Emptying an optional field and saving clears it; the page never reports a save that did not happen. | gap FIND-11 |  | issue #55 item 4; FIND-11 |
+| CAP-DEAL-08 | REQUIRED | P2 | Clear an optional deal field after it was saved | Emptying an optional field and saving clears it; the page never reports a save that did not happen. | DEAL-EDIT-04 |  | issue #55 item 4; FIND-11 |
 | CAP-DEAL-09 | REQUIRED | P2 | Remove a deal logged by mistake | A delete action with explicit confirmation; an invoiced deal is refused with an explanation. | gap #58 |  | ROADMAP.md M1; SPEC_RECONCILIATION.md |
 | CAP-DEAL-10 | UNKNOWN |  | Close a deal that fell through in negotiation | Undecided. | — |  | PRODUCT.md solution 2; dibayar-implementation-spec.md §8 A |
 | CAP-DEAL-11 | REQUIRED | P2 | Message the brand contact on WhatsApp from the deal | Buka WhatsApp opens exactly one chat. | DEAL-DETAIL-04, DEAL-DETAIL-03, MAN-WA-01 |  | dibayar-implementation-spec.md §4.3 |
@@ -89,4 +86,4 @@ What a creator must be able to do, kept independently of the screens and of the 
 
 Informational: an inventory action outside every capability is not an error (navigation details, detectors), but a long list here means the capability model has drifted.
 
-`AUTH-08`, `HOME-04`, `HOME-08`, `HOME-09`, `NAV-05`, `NAV-06`, `NAV-07`, `NAV-09`, `DEAL-CREATE-03`, `DEAL-CREATE-04`, `DEAL-CREATE-10`, `DEAL-CREATE-11`, `DEAL-STAGE-04`, `DEAL-INV-02`, `INV-WA-04`, `PUB-07`, `A11Y-03`
+`AUTH-08`, `HOME-04`, `HOME-08`, `HOME-09`, `NAV-05`, `NAV-06`, `NAV-07`, `NAV-09`, `DEAL-CREATE-03`, `DEAL-CREATE-04`, `DEAL-CREATE-10`, `DEAL-CREATE-11`, `DEAL-STAGE-04`, `DEAL-EDIT-05`, `DEAL-EDIT-06`, `DEAL-EDIT-07`, `DEAL-INV-02`, `INV-WA-04`, `PUB-07`, `A11Y-03`

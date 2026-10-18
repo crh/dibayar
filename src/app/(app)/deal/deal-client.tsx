@@ -8,6 +8,7 @@ import { useLanguage } from "@/components/language-switcher";
 import { DealBoard } from "@/components/deals/deal-board";
 import { StageFilter } from "@/components/deals/stage-filter";
 import { AddDealDialog } from "@/components/deals/add-deal-dialog";
+import { EditDealDialog } from "@/components/deals/edit-deal-dialog";
 import {
   DEAL_FORM_FIELDS,
   DealForm,
@@ -118,6 +119,9 @@ export default function DealClient({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingDealId, setPendingDealId] = useState<string | null>(null);
+  // #55: the deal whose edit dialog is open, from its card's menu.
+  const [editingDealId, setEditingDealId] = useState<string | null>(null);
+  const editingDeal = editingDealId ? deals.find((deal) => deal.id === editingDealId) ?? null : null;
   const hasStrippedDialogParam = useRef(false);
   const dealFormRef = useRef<HTMLFormElement>(null);
   // A create whose outcome is unknown (no answer, dropped connection, 5xx)
@@ -376,7 +380,27 @@ export default function DealClient({
         stageFilter={stageFilter}
         onStageChange={handleStageChange}
         onCreateInvoice={handleCreateInvoice}
+        onEdit={(dealId) => {
+          setError(null);
+          setSuccessMessage(null);
+          setEditingDealId(dealId);
+        }}
       />
+
+      {editingDeal ? (
+        <EditDealDialog
+          open
+          deal={editingDeal}
+          invoiceNumber={invoices.find((invoice) => invoice.dealId === editingDeal.id)?.number ?? null}
+          t={t}
+          onClose={() => setEditingDealId(null)}
+          onSaved={(saved) => {
+            setDeals((current) => current.map((deal) => (deal.id === saved.id ? saved : deal)));
+            setEditingDealId(null);
+            setSuccessMessage("deal.editSaved");
+          }}
+        />
+      ) : null}
 
       <AddDealDialog
         open={isDialogOpen}

@@ -108,3 +108,48 @@ describe("dealPatchSchema", () => {
     expect(dealPatchSchema.safeParse({ feeIdr: -1 }).success).toBe(false);
   });
 });
+
+// FIND-11: omitted leaves a field alone; null or blank text clears it.
+describe("dealPatchSchema clearing optional fields", () => {
+  it("clears the contact name, payment terms and deadline with null", () => {
+    expect(dealPatchSchema.parse({ contactName: null, paymentTerms: null, deadline: null })).toEqual({ contactName: null, paymentTerms: null, deadline: null });
+  });
+
+  it("treats blank text as a clear, never as an empty or spaces-only value", () => {
+    expect(dealPatchSchema.parse({ contactName: "", paymentTerms: "   " })).toEqual({ contactName: null, paymentTerms: null });
+  });
+
+  it("still trims and keeps real text", () => {
+    expect(dealPatchSchema.parse({ contactName: "  Budi  ", paymentTerms: "30 hari" })).toEqual({ contactName: "Budi", paymentTerms: "30 hari" });
+  });
+
+  it("parses a deadline date and never turns null into 1970", () => {
+    expect(dealPatchSchema.parse({ deadline: "2026-11-30" })).toEqual({ deadline: new Date("2026-11-30T00:00:00.000Z") });
+    expect(dealPatchSchema.parse({ deadline: null }).deadline).toBeNull();
+    expect(dealPatchSchema.safeParse({ deadline: "bukan tanggal" }).success).toBe(false);
+  });
+
+  it("does not let required fields be cleared", () => {
+    expect(dealPatchSchema.safeParse({ brand: null }).success).toBe(false);
+    expect(dealPatchSchema.safeParse({ scope: null }).success).toBe(false);
+    expect(dealPatchSchema.safeParse({ contactWa: null }).success).toBe(false);
+    expect(dealPatchSchema.safeParse({ feeIdr: null }).success).toBe(false);
+  });
+
+  it("still enforces the length limits", () => {
+    expect(dealPatchSchema.safeParse({ contactName: "x".repeat(10_000) }).success).toBe(false);
+    expect(dealPatchSchema.safeParse({ paymentTerms: "x".repeat(10_000) }).success).toBe(false);
+  });
+});
+
+describe("feeIdr", () => {
+  it("accepts a number or digits, and refuses null, blank text and booleans instead of storing Rp 0", () => {
+    expect(dealPatchSchema.parse({ feeIdr: 2_500_000 })).toEqual({ feeIdr: 2_500_000 });
+    expect(dealPatchSchema.parse({ feeIdr: "2500000" })).toEqual({ feeIdr: 2_500_000 });
+    for (const value of [null, "", "  ", false, "abc", 1.5]) {
+      expect(dealPatchSchema.safeParse({ feeIdr: value }).success, String(value)).toBe(false);
+      expect(dealInputSchema.safeParse({ brand: "B", contactWa: "628123456789", scope: "S", feeIdr: value }).success, String(value)).toBe(false);
+    }
+  });
+});
+

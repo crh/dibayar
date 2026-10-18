@@ -31,7 +31,7 @@ inventory entry points at a check that is not defined here.
   | MAN-REL-01 | Release smoke on the hosted environment | Blocked |
   | MAN-DUE-01 (P0) | Native date picker on real phones | Blocked, unless Chris accepts the risk in the release PR |
   | MAN-AUTH-01 (P0) | Real Google sign-in, a third party | Blocked, unless Chris accepts the risk in the release PR |
-  | MAN-DEAL-01, MAN-WA-01, MAN-PDF-01, MAN-SHARE-01 (P1) | Phone-only remainder of flows that are automated on Chromium | Not blocked; the release PR lists each one as run or not run |
+  | MAN-DEAL-01, MAN-DEAL-02, MAN-WA-01, MAN-PDF-01, MAN-SHARE-01 (P1) | Phone-only remainder of flows that are automated on Chromium | Not blocked; the release PR lists each one as run or not run |
   | MAN-A11Y-01 (P2) | Screen reader | Not blocked |
 
   A FAIL on any of them is a finding, whatever the table says about a
@@ -86,6 +86,38 @@ Inventory: DEAL-CREATE-07.
 Automated since Zero Routine Phase 2B: the required-field check and the
 optional text fields (`e2e/deals/create-validation.spec.ts`). Only the
 deadline picker still needs this check.
+
+### MAN-DEAL-02 — Edit a saved deal on a phone (P1)
+
+Inventory: DEAL-EDIT-01 (#55). Run on a physical iPhone (Safari) and a
+physical Android phone (Chrome), in id and en.
+
+1. On the deal board, tap a card's **⋮** and then **Ubah deal**. Expected:
+   a full-screen dialog titled **Ubah deal** with every field filled in from
+   the deal; nothing sticks out sideways; the keyboard does not hide the
+   field being typed in; **Simpan perubahan** and **Batal** are reachable by
+   scrolling the dialog and are easy to tap.
+2. Change the brand, the WhatsApp number (to another valid number), the fee
+   and the payment terms. Tap **Tenggat** and choose a different date in the
+   phone's own picker. Save. Expected: "Perubahan deal disimpan.", the card
+   shows the new brand and fee, the deal is still in the same column.
+3. Reload. Open the deal (⋮ → Lihat detail). Expected: every changed value,
+   the chosen deadline, the same stage, no new stage-history entry.
+4. On deal detail tap **Ubah deal**, clear the deadline with the picker's own
+   clear/reset control (if the phone offers one), clear the payment terms,
+   save, reload. Expected: both are empty. Note on the run log if the picker
+   has no way to clear a date.
+5. Tap **Ubah deal**, change the brand, tap **Batal**. Expected: "Buang
+   perubahan yang belum disimpan?" with **Lanjut mengubah** and **Buang
+   perubahan**; the first keeps the typed brand, the second closes without
+   saving (reload shows the old brand).
+6. On a deal that already has an invoice, open **Ubah deal**. Expected: the
+   note naming the invoice. Change the fee and save; open the invoice and the
+   brand's link: amount, number, PPh and due date are unchanged.
+
+Automated (Chromium desktop and 390 px, and WebKit 390 px emulation):
+`e2e/deals/deal-edit.spec.ts` and `e2e/deals/deal-change-keeps-invoice.spec.ts`.
+Only the real phones, their keyboards and their date pickers need this check.
 
 ### MAN-AUTH-01 — Real Google sign-in and sign-out (P0)
 

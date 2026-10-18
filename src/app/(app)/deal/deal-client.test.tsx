@@ -709,3 +709,51 @@ describe("DealClient when the server cannot answer (#53)", () => {
     expect(screen.queryByRole("menuitem", { name: "Buat invoice" })).toBeNull();
   });
 });
+
+// #55: Ubah deal from the card's menu.
+describe("DealClient edit from the board card (#55)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("edits a deal from its card menu: the card shows the saved values, at the same stage", async () => {
+    const stored = { ...dealFixture, brand: "Acme Baru", feeIdr: 2_000_000 };
+    const fetchMock = vi.fn(() => Promise.resolve({ ok: true, status: 200, json: async () => ({ deal: stored }) }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Acme" }));
+    await user.click(screen.getByRole("menuitem", { name: "Ubah deal" }));
+    const dialog = screen.getByRole("dialog", { name: "Ubah deal" });
+    expect(dialog).toBeTruthy();
+    await user.clear(screen.getByLabelText("Nama brand"));
+    await user.type(screen.getByLabelText("Nama brand"), "Acme Baru");
+    await user.clear(screen.getByLabelText(/^Fee \(Rp\)/));
+    await user.type(screen.getByLabelText(/^Fee \(Rp\)/), "2000000");
+    await user.click(screen.getByRole("button", { name: "Simpan perubahan" }));
+
+    expect(await screen.findByText("Perubahan deal disimpan.")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const card = screen.getByRole("heading", { name: "Acme Baru" }).closest("article")!;
+    expect(card.textContent).toMatch(/Rp\s2\.000\.000/);
+    const masuk = screen.getByRole("region", { name: /Masuk/ });
+    expect(masuk.textContent).toContain("Acme Baru");
+  });
+
+  it("returns keyboard focus to the card's actions button when the editor closes", async () => {
+    const user = userEvent.setup();
+    render(<DealClient initialDeals={[dealFixture]} initialInvoices={[]} initialDialogOpen={false} />);
+
+    const actions = screen.getByRole("button", { name: "Aksi lain untuk deal Acme" });
+    await user.click(actions);
+    screen.getByRole("menuitem", { name: "Ubah deal" }).focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("dialog", { name: "Ubah deal" })).toBeTruthy();
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(actions);
+  });
+});
+

@@ -6,11 +6,9 @@
 // deal's deadline as its due date when it is created (src/lib/invoices.ts).
 // After that, number, amount, PPh and due date belong to the invoice: the
 // owner and the brand must keep seeing the figures that were sent, whatever
-// happens to the deal. Today the only deal change a person can make on a
-// deal that already has an invoice is the contact name on deal detail, so
-// that is the change driven here. When #55 adds editing of the fee,
-// deadline and other fields, extend this journey with those edits rather
-// than writing a second one.
+// happens to the deal. The journey changes the contact name on deal detail,
+// then the brand, scope, fee and payment terms through Ubah deal (#55), and
+// checks the owner's and the brand's view of the invoice after each.
 //
 // Decision A (issue #55, approved 2026-10-18; CAP-INV-12): the brand, scope,
 // payment terms and contact name on the document are frozen with the issuer
@@ -41,6 +39,8 @@ async function ownerInvoiceFigures(page: Page, number: string, brand: string, is
   };
 }
 
+const EDITED = { brand: "E2E Brand Terkirim Diubah", scope: "Scope yang diubah setelah invoice", fee: "9100000", paymentTerms: "Termin yang diubah setelah invoice" };
+
 // What the brand sees on the shared link.
 async function recipientFigures(recipient: Page, link: string) {
   const response = await recipient.goto(link);
@@ -53,6 +53,7 @@ async function recipientFigures(recipient: Page, link: string) {
     due: text.match(/Jatuh tempo[^.]*?\d{4}/)?.[0] ?? null,
     pph: text.match(/PPh 2[13][^R]*/)?.[0]?.trim() ?? null,
     showsNewContactName: text.includes(NEW_CONTACT_NAME),
+    showsAnyEditedValue: Object.values(EDITED).some((value) => text.includes(value)) || text.includes("9.100.000"),
   };
 }
 
@@ -60,8 +61,8 @@ test.describe("a deal change leaves its issued invoice alone (CAP-INV-11)", () =
   test.beforeEach(reseedFixtures);
   test.afterEach(reseedFixtures);
 
-  test("after the contact name of an invoiced deal is changed, the invoice keeps its number, amount, PPh and due date for the owner and the brand", { tag: "@critical" }, async ({ page, browser, baseURL, isMobile }) => {
-    test.setTimeout(60_000);
+  test("after the contact name, brand, scope, fee and payment terms of an invoiced deal are changed, the invoice keeps its number, amount, PPh, due date and document for the owner and the brand", { tag: "@critical" }, async ({ page, browser, baseURL, isMobile }) => {
+    test.setTimeout(90_000);
     const manifest = loadFixtureManifest();
     const dealId = manifest.deals.invoiceSent;
     const brand = manifest.brands[dealId];
@@ -98,8 +99,24 @@ test.describe("a deal change leaves its issued invoice alone (CAP-INV-11)", () =
       await expect(page.getByLabel("Nama kontak", { exact: true })).toHaveValue(NEW_CONTACT_NAME);
       await expect(page.getByText("Tahap saat ini: Invoice")).toBeVisible();
 
-      // The owner's invoice, after a fresh load from the list.
-      const ownerAfter = await ownerInvoiceFigures(page, number, brand, isMobile);
+      // Ubah deal (#55) on the same page: brand, scope, fee, payment terms.
+      await press(page.getByRole("button", { name: "Ubah deal" }), isMobile);
+      const dialog = page.getByRole("dialog", { name: "Ubah deal" });
+      await expect(dialog.getByRole("note")).toContainText(`Deal ini sudah punya invoice ${number}`);
+      await dialog.getByLabel("Nama brand").fill(EDITED.brand);
+      await dialog.getByLabel("Scope pekerjaan").fill(EDITED.scope);
+      await dialog.getByLabel(/^Fee \(Rp\)/).fill(EDITED.fee);
+      await dialog.getByLabel("Syarat pembayaran (opsional)").fill(EDITED.paymentTerms);
+      const edited = await responseTo(page, "PATCH", `/api/deals/${dealId}`, () => press(dialog.getByRole("button", { name: "Simpan perubahan" }), isMobile));
+      expect(edited.ok()).toBe(true);
+      await expect(page.getByRole("status").filter({ hasText: "Perubahan deal disimpan." })).toBeVisible();
+      await page.reload();
+      await expect(page.getByRole("heading", { level: 1, name: EDITED.brand })).toBeVisible();
+      await expect(page.getByText("Tahap saat ini: Invoice")).toBeVisible();
+
+      // The owner's invoice, after a fresh load from the list (which names
+      // the deal, so by its new brand).
+      const ownerAfter = await ownerInvoiceFigures(page, number, EDITED.brand, isMobile);
       expect(ownerAfter).toEqual(ownerBefore);
       expect(ownerAfter.details).toContain("PPh 21");
       expect(ownerAfter.details).toContain("Rp 6.000.000");
@@ -112,22 +129,17 @@ test.describe("a deal change leaves its issued invoice alone (CAP-INV-11)", () =
       expect(brandAfter.pph).toBe(brandBefore.pph);
       // Decision A: the issued document keeps the contact it was issued with.
       expect(brandAfter.showsNewContactName, "a contact name saved after issue is not on the brand's page").toBe(false);
+      expect(brandAfter.showsAnyEditedValue, "no deal edit made after issue is on the brand's page").toBe(false);
     } finally {
       await recipientContext.close();
     }
   });
 
-  // Expected failure, never counted as coverage. It documents that a saved
-  // deal's core details cannot be edited (#55, CAP-DEAL-05) and is meant to
-  // start passing -- which fails the run -- the day an edit ships, in the
-  // card menu or on deal detail (an edit action, or the core fields made
-  // editable in place): then remove test.fail, turn this into the edit
-  // journey, map it in docs/testing/journey-coverage.json, and close the gap
-  // in docs/product/capabilities.json. What counts as an edit, and what does
-  // not, is in e2e/support/deal-edit-affordance.ts and proved by
-  // e2e/deals/deal-edit-affordance.spec.ts.
-  test("a saved deal can be edited from its card menu or its detail page (#55)", async ({ page, isMobile }, testInfo) => {
-    test.fail(true, "#55: no edit for a saved deal's brand, scope, fee, deadline or payment terms");
+  // Formerly the #55 expected-failure tripwire. The edit now exists, so the
+  // same detector (e2e/support/deal-edit-affordance.ts, with its controls in
+  // e2e/deals/deal-edit-affordance.spec.ts) must find it in both places; the
+  // edit itself is driven in e2e/deals/deal-edit.spec.ts.
+  test("a saved deal can be edited from its card menu and from its detail page (#55)", { tag: "@critical" }, async ({ page, isMobile }) => {
     const manifest = loadFixtureManifest();
     const dealId = manifest.deals.nego;
     const brand = manifest.brands[dealId];
@@ -135,14 +147,10 @@ test.describe("a deal change leaves its issued invoice alone (CAP-INV-11)", () =
     const card = page.locator("article", { hasText: brand });
     await press(card.getByRole("button", { name: `Aksi lain untuk deal ${brand}` }), isMobile);
     await page.getByRole("menu").getByRole("menuitem").first().waitFor();
-    let found = await cardMenuEditAction(page);
-    if (found === null) {
-      await press(page.getByRole("menuitem", { name: "Lihat detail" }), isMobile);
-      await expect(page).toHaveURL(new RegExp(`/deal/${dealId}$`));
-      await expect(page.getByRole("heading", { level: 1, name: brand })).toBeVisible();
-      found = await dealDetailEditAffordance(page);
-    }
-    testInfo.annotations.push({ type: "#55 edit affordance", description: found ?? "none on the card menu or deal detail" });
-    expect(found, "no full edit of a saved deal on its card menu or its detail page").not.toBeNull();
+    expect(await cardMenuEditAction(page), "the card menu offers the edit").toBe('card menu item "Ubah deal"');
+    await press(page.getByRole("menuitem", { name: "Lihat detail" }), isMobile);
+    await expect(page).toHaveURL(new RegExp(`/deal/${dealId}$`));
+    await expect(page.getByRole("heading", { level: 1, name: brand })).toBeVisible();
+    expect(await dealDetailEditAffordance(page), "deal detail offers the edit").toBe('deal detail action "Ubah deal"');
   });
 });

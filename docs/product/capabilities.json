@@ -149,8 +149,7 @@
       "classification": "REQUIRED",
       "priority": "P1",
       "rationale": [{ "source": "ROADMAP.md M1", "says": "Deal capture flow ... create/read/update/delete smoke verified (update was exercised through the API only: DAILY_LOG line 67)" }, { "source": "dibayar-implementation-spec.md §3.3", "says": "scope empty → Belum diisi ... with an inline edit affordance" }, { "source": "issue #55", "says": "The deal owner can safely correct and update a saved deal without deleting and recreating it" }],
-      "verification": { "actions": [] },
-      "gap": { "kind": "missing", "ref": "#55", "summary": "No edit control for any core field: card menu offers only stage moves and Lihat detail; deal detail edits only the contact name (and an invalid WhatsApp number). PATCH /api/deals/[id] already accepts all fields.", "evidence": "Audit 2026-10-17 exploration on chromium, chromium-mobile and WebKit 390px; expected-failure tripwire in e2e/deals/deal-change-keeps-invoice.spec.ts, which looks for an edit on the card menu and on deal detail (an edit action or core fields editable in place), with controls in e2e/deals/deal-edit-affordance.spec.ts" }
+      "verification": { "actions": ["DEAL-EDIT-01", "DEAL-EDIT-02"] }
     },
     {
       "id": "CAP-DEAL-06",
@@ -164,8 +163,7 @@
       "priority": "P1",
       "rationale": [{ "source": "dibayar-implementation-spec.md §4.3", "says": "Kontak: Name, WhatsApp number rendered normalised, inline-editable" }, { "source": "issue #55", "says": "Prepopulate ... contact WhatsApp" }],
       "decisions": ["Repairing a number WhatsApp cannot open is already possible (DEAL-DETAIL-03, INV-WA-03, HOME-04); that is a different capability."],
-      "verification": { "actions": [] },
-      "gap": { "kind": "missing", "ref": "#55", "summary": "The number field appears only when the stored number is invalid; a valid number cannot be changed.", "evidence": "Audit 2026-10-17: no editable WhatsApp field on deal detail for a valid number in any of the three browser setups" }
+      "verification": { "actions": ["DEAL-EDIT-03"] }
     },
     {
       "id": "CAP-DEAL-07",
@@ -191,8 +189,7 @@
       "classification": "REQUIRED",
       "priority": "P2",
       "rationale": [{ "source": "issue #55 item 4", "says": "Handle clearing optional values deliberately (especially date/null contract)" }, { "source": "FIND-11", "says": "Recommended behaviour: an emptied field clears the name" }],
-      "verification": { "actions": [] },
-      "gap": { "kind": "defect", "ref": "FIND-11", "summary": "Emptying the contact name shows 'Nama kontak disimpan' but the old name returns after reload; deadline and payment terms cannot be edited at all (#55).", "evidence": "Re-confirmed 2026-10-17 in chromium, chromium-mobile and WebKit 390px" }
+      "verification": { "actions": ["DEAL-EDIT-04"] }
     },
     {
       "id": "CAP-DEAL-09",
@@ -407,7 +404,7 @@
       "decisions": ["Covered today for the only deal change a person can make on an invoiced deal (contact name). #55 must extend the pinned journey with fee and deadline edits."],
       "verification": {
         "actions": ["DEAL-DETAIL-02"],
-        "tests": [{ "action": "DEAL-DETAIL-02", "file": "e2e/deals/deal-change-keeps-invoice.spec.ts", "title": "after the contact name of an invoiced deal is changed, the invoice keeps its number, amount, PPh and due date for the owner and the brand" }]
+        "tests": [{ "action": "DEAL-DETAIL-02", "file": "e2e/deals/deal-change-keeps-invoice.spec.ts", "title": "after the contact name, brand, scope, fee and payment terms of an invoiced deal are changed, the invoice keeps its number, amount, PPh, due date and document for the owner and the brand" }]
       }
     },
     {

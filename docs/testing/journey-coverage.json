@@ -1522,7 +1522,7 @@
       "interaction": "Board card menu -> Lihat detail; type the name in Nama kontak; Simpan; reload",
       "expected": "Nama kontak disimpan; the name persists after reload; the deal stays in its stage and gains no history entry",
       "persisted": "Deal.contactName",
-      "alternates": "Save error (a 401 after session expiry is exercised in e2e/journeys/resilience-permissions.spec.ts); clearing a saved name (FIND-11, open)",
+      "alternates": "Save error (a 401 after session expiry is exercised in e2e/journeys/resilience-permissions.spec.ts); clearing a saved name (FIND-11, fixed: DEAL-EDIT-04)",
       "scope": [
         "chromium",
         "chromium-mobile"
@@ -1538,7 +1538,7 @@
         },
         {
           "file": "e2e/deals/deal-change-keeps-invoice.spec.ts",
-          "title": "after the contact name of an invoiced deal is changed, the invoice keeps its number, amount, PPh and due date for the owner and the brand",
+          "title": "after the contact name, brand, scope, fee and payment terms of an invoiced deal are changed, the invoice keeps its number, amount, PPh, due date and document for the owner and the brand",
           "kind": "real",
           "note": "Contact name changed on an invoiced deal (Invoice stage) through board -> card menu -> Lihat detail; the issued invoice keeps number, amount, PPh and due date on the owner page and the recipient page after reload (CAP-INV-11, #55)."
         }
@@ -1624,6 +1624,226 @@
         }
       ],
       "evidence": "Added 2026-10-03 (pilot)"
+    },
+    {
+      "id": "DEAL-EDIT-01",
+      "domain": "deals",
+      "route": "/deal, /deal/[id]",
+      "action": "Edit a saved deal from its card menu (Ubah deal)",
+      "persona": "owner",
+      "preconditions": "A saved deal (base seed)",
+      "interaction": "Board card ⋮ -> Ubah deal; the dialog is prefilled; type new brand, WhatsApp number, scope, fee and payment terms (desktop Chromium also types the deadline with the keyboard); Simpan perubahan; reload; open deal detail",
+      "expected": "'Perubahan deal disimpan.'; only the changed fields are sent and never a stage; after reload the card and deal detail show every new value, the deal is at the same stage and has no new history entry; no sideways scroll at 390 px",
+      "persisted": "Deal brand, contactWa, scope, feeIdr, paymentTerms, deadline",
+      "alternates": "Phone date picker and keyboard (MAN-DEAL-02)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "evidence": "#55 implementation 2026-10-18",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "Ubah deal from the card menu changes brand, WhatsApp number, scope, fee and payment terms; the deal keeps its stage and history, and the change survives a reload",
+          "kind": "real",
+          "note": "Card menu and dialog driven by click/tap; text fields typed (fill() on desktop, tapped and typed on the phone project); the request body is checked for exactly the changed fields; values asserted on the board and deal detail after reload"
+        },
+        {
+          "file": "e2e/deals/deal-change-keeps-invoice.spec.ts",
+          "title": "a saved deal can be edited from its card menu and from its detail page (#55)",
+          "kind": "real",
+          "note": "The former #55 expected-failure tripwire, now passing: its detector finds Ubah deal in the card menu and on deal detail"
+        }
+      ],
+      "manualCheck": "MAN-DEAL-02"
+    },
+    {
+      "id": "DEAL-EDIT-02",
+      "domain": "deals",
+      "route": "/deal, /deal/[id]",
+      "action": "Edit a saved deal from deal detail, including a deal that already has an invoice",
+      "persona": "owner",
+      "preconditions": "A saved deal (base seed)",
+      "interaction": "Deal detail -> Ubah deal; change fields; Simpan perubahan; reload",
+      "expected": "The dialog names the existing invoice and says the edit does not change its amount, number, PPh or due date, nor a sent or shared invoice's content; saved values persist after reload at the same stage; the invoice keeps its figures and document for the owner and the brand",
+      "persisted": "Deal fields",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "evidence": "#55 implementation 2026-10-18",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "Ubah deal on deal detail clears the contact name and payment terms, and they stay empty after a reload (CAP-DEAL-08)",
+          "kind": "real",
+          "note": "Ubah deal on the invoiced deal's detail page; the invoice note is asserted"
+        },
+        {
+          "file": "e2e/deals/deal-change-keeps-invoice.spec.ts",
+          "title": "after the contact name, brand, scope, fee and payment terms of an invoiced deal are changed, the invoice keeps its number, amount, PPh, due date and document for the owner and the brand",
+          "kind": "real",
+          "note": "Board -> Lihat detail -> contact name, then Ubah deal for brand, scope, fee and payment terms; the owner's invoice and the brand's page keep number, amount, PPh, due date and every issued text after reload (CAP-INV-11, CAP-INV-12)"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-EDIT-03",
+      "domain": "deals",
+      "route": "/deal, /deal/[id]",
+      "action": "Change a deal's valid WhatsApp number",
+      "persona": "owner",
+      "preconditions": "A saved deal (base seed)",
+      "interaction": "Ubah deal -> Kontak WhatsApp -> a new valid number -> Simpan perubahan; reload",
+      "expected": "The new number is stored in its normalized form and shown on deal detail after reload",
+      "persisted": "Deal.contactWa",
+      "alternates": "An invalid number: DEAL-EDIT-05",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "evidence": "#55 implementation 2026-10-18",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "Ubah deal from the card menu changes brand, WhatsApp number, scope, fee and payment terms; the deal keeps its stage and history, and the change survives a reload",
+          "kind": "real",
+          "note": "0812 7777 6655 typed over the seeded valid number; '+62 812-7777-6655' asserted on deal detail after reload"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-EDIT-04",
+      "domain": "deals",
+      "route": "/deal, /deal/[id]",
+      "action": "Clear an optional deal field after it was saved (contact name, payment terms, deadline)",
+      "persona": "owner",
+      "preconditions": "A saved deal (base seed)",
+      "interaction": "Ubah deal -> empty the field -> Simpan perubahan; or deal detail's own contact-name field emptied -> Simpan; reload",
+      "expected": "The field is sent as null and is empty after reload; deal detail says 'Nama kontak dihapus' only after the server's copy shows it cleared (FIND-11 fixed)",
+      "persisted": "Deal.contactName, Deal.paymentTerms, Deal.deadline",
+      "alternates": "Deadline clearing uses fill(\"\") on the native date input (partial); a phone's picker is MAN-DEAL-02",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "evidence": "#55 implementation 2026-10-18",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "Ubah deal on deal detail clears the contact name and payment terms, and they stay empty after a reload (CAP-DEAL-08)",
+          "kind": "real",
+          "note": "Contact name and payment terms emptied in the editor; body {contactName:null,paymentTerms:null}; empty after reload"
+        },
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "emptying the contact name field on deal detail clears it and says so, after a reload too (FIND-11)",
+          "kind": "real",
+          "note": "FIND-11 regression: deal detail's contact-name field emptied and saved; body {contactName:null}; 'Nama kontak dihapus'; empty after reload"
+        },
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "clearing the deadline in the editor removes it (partial: fill on a native date input)",
+          "kind": "partial",
+          "note": "fill() on the native date input to set and then clear the deadline"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-EDIT-05",
+      "domain": "deals",
+      "route": "/deal, /deal/[id]",
+      "action": "Invalid input and cancelling an edit",
+      "persona": "owner",
+      "preconditions": "A saved deal (base seed)",
+      "interaction": "Ubah deal -> type an unusable WhatsApp number -> Simpan perubahan; Batal -> Lanjut mengubah; Batal -> Buang perubahan; reload",
+      "expected": "The field is marked and focused with its message and nothing is sent; Batal with unsaved changes asks first and keeps the edit on Lanjut mengubah; Buang perubahan closes and nothing is stored; Batal with no changes closes at once",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "evidence": "#55 implementation 2026-10-18",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "a WhatsApp number WhatsApp cannot open is refused on its field and nothing is sent; Batal then asks before throwing the edit away, and nothing changed",
+          "kind": "real",
+          "note": "No PATCH request is observed; the stored number is unchanged after reload"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-EDIT-06",
+      "domain": "deals",
+      "route": "/deal, /deal/[id]",
+      "action": "Ubah deal is offered on every stage's card",
+      "persona": "owner",
+      "preconditions": "A saved deal (base seed)",
+      "interaction": "Board -> each card's ⋮ menu",
+      "expected": "Each of the seven fixture cards (all six stages) offers Ubah deal",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "evidence": "#55 implementation 2026-10-18",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "every stage's card offers Ubah deal",
+          "kind": "real",
+          "note": "Menus opened and closed with Escape"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-EDIT-07",
+      "domain": "deals",
+      "route": "/deal, /deal/[id]",
+      "action": "A deal edit the server does not take (500, expired session)",
+      "persona": "owner",
+      "preconditions": "A saved deal (base seed)",
+      "interaction": "Ubah deal -> change -> Simpan perubahan, with the PATCH answered 500 or 401",
+      "expected": "The dialog stays open with the edit and an actionable message ('belum pasti tersimpan' after reading the server's copy back; 'sesi kamu sudah berakhir'); no success message; nothing stored",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "evidence": "#55 implementation 2026-10-18",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "says so, keeps the dialog and the edit, and stores nothing (500)",
+          "kind": "partial",
+          "note": "page.route stub; stored deal read with page.request"
+        },
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "says so, keeps the dialog and the edit, and stores nothing (401)",
+          "kind": "partial",
+          "note": "page.route stub; stored deal read with page.request"
+        }
+      ]
     },
     {
       "id": "DEAL-INV-01",
@@ -2426,7 +2646,7 @@
       "action": "An issued invoice's document is frozen against later deal and Settings edits (Decision A)",
       "persona": "owner and brand contact (recipient)",
       "preconditions": "A deal at the Invoice stage with no invoice (base seed)",
-      "interaction": "Deal detail -> Buat invoice; edit the deal while the invoice is a Draft; invoice detail -> Buat tautan berbagi; edit the deal's contact name on deal detail and the bank name in Pengaturan; Unduh PDF as owner and as the brand; Buat ulang tautan, Cabut tautan, Buat tautan berbagi; Tandai sudah dikirim",
+      "interaction": "Deal detail -> Buat invoice; edit the deal with Ubah deal while the invoice is a Draft; invoice detail -> Buat tautan berbagi; edit the deal's contact name on deal detail and the bank name in Pengaturan; Unduh PDF as owner and as the brand; Buat ulang tautan, Cabut tautan, Buat tautan berbagi; Tandai sudah dikirim",
       "expected": "An unshared Draft's PDF follows the deal; from the first share link (or Tandai sudah dikirim, whichever is first) the owner's PDF, the brand's page and the brand's PDF keep the brand, contact name, scope, payment terms, issuer and bank details of that moment, through link rotation, revoke and re-share and the move to Terkirim; owner and brand PDFs have the same text",
       "persisted": "InvoiceSnapshot (one row per invoice, never updated)",
       "alternates": "Tandai sudah dikirim before any link (second test); an invoice exposed without a snapshot is frozen at its next read (unit and database tests); migration backfill (npm run test:snapshot-db)",
@@ -2442,13 +2662,13 @@
           "file": "e2e/invoices/document-snapshot.spec.ts",
           "title": "a Draft follows its deal and Settings until its first share link; from then on the owner's PDF, the brand's page and its PDF keep that copy through rotate, revoke, re-share and Terkirim",
           "kind": "real",
-          "note": "Share, rotate, revoke, re-share, Terkirim, the contact-name edit and the Settings edit are all visible controls, and the frozen outcome is asserted on the owner's PDF, the brand's page and the brand's PDF after reloads. Brand, scope and payment terms are additionally changed through the deal's PATCH endpoint (page.request), because no UI edits them before #55's editor; that part alone is partial"
+          "note": "Share, rotate, revoke, re-share, Terkirim, the contact-name edit, the Ubah deal edit of brand, scope and payment terms, and the Settings edit are all visible controls; the frozen outcome is asserted on the owner's PDF, the brand's page and the brand's PDF after reloads"
         },
         {
           "file": "e2e/invoices/document-snapshot.spec.ts",
           "title": "Tandai sudah dikirim freezes a Draft that has no link yet; a link made later shows the copy from that moment",
-          "kind": "partial",
-          "note": "Tandai sudah dikirim and Buat tautan berbagi are clicked; the deal change in between goes through the deal's PATCH endpoint (page.request) until #55's editor ships"
+          "kind": "real",
+          "note": "Tandai sudah dikirim, Ubah deal and Buat tautan berbagi are clicked/tapped"
         }
       ]
     },
@@ -3453,6 +3673,20 @@
       "futureAutomation": {
         "exists": false,
         "strategy": "It cannot become automated_real_interaction under the current rules without a network-fault proxy in front of the test server; none is planned."
+      }
+    },
+    {
+      "actions": [
+        "DEAL-EDIT-01"
+      ],
+      "category": "physical_device",
+      "manualCheck": "MAN-DEAL-02",
+      "reason": "The edit dialog is driven for real on desktop Chromium and the 390 px Chromium project (and runs under WebKit 390 px emulation), but a real phone's keyboard, viewport resizing and native date picker cannot be driven from Playwright.",
+      "blocksRelease": false,
+      "releaseEvidence": "The deal-edit journeys green in CI on the release head. MAN-DEAL-02 run on a physical iPhone and Android phone and logged; if it was not run, the release PR says so.",
+      "futureAutomation": {
+        "exists": true,
+        "strategy": "A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built."
       }
     }
   ],

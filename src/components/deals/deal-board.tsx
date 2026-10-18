@@ -15,6 +15,7 @@ function StageColumn({
   invoices,
   onStageChange,
   onCreateInvoice,
+  onEdit,
   className = "",
   collapsed = false,
 }: {
@@ -27,6 +28,7 @@ function StageColumn({
   invoices: InvoiceRecord[];
   onStageChange: (dealId: string, status: DealRecord["status"]) => void;
   onCreateInvoice: (dealId: string) => void;
+  onEdit: (dealId: string) => void;
   className?: string;
   collapsed?: boolean;
 }) {
@@ -86,6 +88,7 @@ function StageColumn({
                 isSaving={isSaving}
                 onStageChange={onStageChange}
                 onCreateInvoice={onCreateInvoice}
+                onEdit={onEdit}
               />
             ))
           ) : (
@@ -107,6 +110,7 @@ export function DealBoard({
   stageFilter,
   onStageChange,
   onCreateInvoice,
+  onEdit,
 }: {
   deals: DealRecord[];
   invoices: InvoiceRecord[];
@@ -117,6 +121,7 @@ export function DealBoard({
   stageFilter: StageValue | null;
   onStageChange: (dealId: string, status: DealRecord["status"]) => void;
   onCreateInvoice: (dealId: string) => void;
+  onEdit: (dealId: string) => void;
 }) {
   const visibleStages = stageFilter ? PIPELINE_STAGES.filter((stage) => stage.value === stageFilter) : PIPELINE_STAGES;
 
@@ -150,6 +155,7 @@ export function DealBoard({
             invoices={invoices}
             onStageChange={onStageChange}
             onCreateInvoice={onCreateInvoice}
+            onEdit={onEdit}
             collapsed={collapsed}
             className={
               stageFilter
