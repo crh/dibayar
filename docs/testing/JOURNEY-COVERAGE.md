@@ -8,18 +8,18 @@ An entry in this inventory is not proof that the action works. Only `automated_r
 
 ## Summary
 
-- Inventoried user-facing actions: **110** (2 not applicable, so the denominator is **108**)
-- Automated real-interaction coverage: **89/108 = 82.4%**
-- P0 automated real-interaction coverage: **28/30 = 93.3%**
-- Manually verified (recorded): **1/108 = 0.9%**
-- Outstanding P0/P1 actions: **8**
+- Inventoried user-facing actions: **112** (2 not applicable, so the denominator is **110**)
+- Automated real-interaction coverage: **90/110 = 81.8%**
+- P0 automated real-interaction coverage: **29/32 = 90.6%**
+- Manually verified (recorded): **1/110 = 0.9%**
+- Outstanding P0/P1 actions: **9**
 
 | Status | P0 | P1 | P2 | Total |
 |---|---:|---:|---:|---:|
-| `automated_real_interaction` | 28 | 41 | 20 | 89 |
+| `automated_real_interaction` | 29 | 41 | 20 | 90 |
 | `automated_partial` | 0 | 7 | 9 | 16 |
 | `manual_verified` | 1 | 0 | 0 | 1 |
-| `manual_pending` | 1 | 0 | 1 | 2 |
+| `manual_pending` | 2 | 0 | 1 | 3 |
 | `not_covered` | 0 | 0 | 0 | 0 |
 | `blocked` | 0 | 0 | 0 | 0 |
 | `not_applicable` | 0 | 1 | 1 | 2 |
@@ -28,6 +28,7 @@ An entry in this inventory is not proof that the action works. Only `automated_r
 
 | ID | Priority | Status | Action | Next step |
 |---|---|---|---|---|
+| AUTH-10 | P0 | `manual_pending` | Real Google sign-in by an uninvited account is refused before any account is created | MAN-AUTH-02 |
 | INV-DUE-03 | P0 | `manual_pending` | Pick a date in the native picker -> saved -> reload | Selecting inside a native picker is not drivable/observable from Playwright |
 | A11Y-01 | P1 | `automated_partial` | No serious/critical automatically detectable violations | Stays partial by rule: an axe scan is rendering evidence, not an interaction. Widened 2026-10-11 to deal detail, the repair, expired-share and Settings-error states, the English interface and the phone layout; zero serious or critical findings, nothing excluded. Not scanned: the regenerate/revoke confirmations in the phone layout, the public page in English. Screen-reader behaviour is not automated at all (MAN-A11Y-01) |
 | DEAL-CREATE-07 | P1 | `automated_partial` | Optional fields: contact name, deadline (native date input), payment terms | Text fields automated in Phase 2B on both projects. 2026-10-11: the deadline is now typed with the keyboard on desktop Chromium (saved, shown on card and detail after reload, becomes the new invoice's due date; a second value; and no deadline -> no due date). The action stays partial: on a phone the deadline can only be chosen in the OS date picker, which no test drives, and MAN-DEAL-01 on a real phone is still pending |
@@ -52,6 +53,7 @@ Every outstanding P0/P1 action above, plus every P0/P1 action that is automated 
 | A11Y-01 (P1, `automated_partial`) | Partial by classification rule | — | An axe scan is rendering evidence, not an interaction, so the classification rules cap this action at partial however many pages are scanned. Since 2026-10-11 the scans cover deal detail, the repair, expired-share and Settings-error states, the English interface and the phone layout (390px, desktop Chromium), plus one keyboard-only journey. No scan operates a screen reader. | No | CI job e2e-a11y green on the release head (it runs on every PR and push; it includes e2e/smoke/accessibility-states.spec.ts). No manual sign-off. | No: It cannot become automated_real_interaction under the current rules. Screen-reader behaviour is MAN-A11Y-01 (P2), on real devices. |
 | DEAL-CREATE-08 (P1, `automated_partial`)<br>DEAL-CREATE-09 (P1, `automated_partial`)<br>DEAL-CREATE-12 (P1, `automated_partial`)<br>DEAL-STAGE-06 (P1, `automated_partial`)<br>DEAL-INV-03 (P1, `automated_partial`) | Partial by classification rule | — | A lost answer, a dropped connection or a gateway page cannot be produced on purpose by the app or the test server, so each test injects exactly that one failure with page.route, which the classification rules cap at partial. Everything around it is real: the click, the page's own bounded wait, the retry with the same Idempotency-Key, and the stored rows (read with page.request). In the 'stored but never answered' cases the write itself reaches the real server (route.fetch). DEAL-CREATE-12 has no UI step at all: it sends concurrent and late repeats straight to the real API and database, which no click can time. (#53, #54 review) | No | CI e2e-critical green on the release head (e2e/deals/server-errors.spec.ts is @critical, chromium and chromium-mobile). No manual sign-off. | No: It cannot become automated_real_interaction under the current rules without a network-fault proxy in front of the test server; none is planned. |
 | DEAL-EDIT-01 (P1, `automated_real_interaction`) | Physical / native device | MAN-DEAL-02 | The edit dialog is driven for real on desktop Chromium and the 390 px Chromium project (and runs under WebKit 390 px emulation), but a real phone's keyboard, viewport resizing and native date picker cannot be driven from Playwright. | No | The deal-edit journeys green in CI on the release head. MAN-DEAL-02 run on a physical iPhone and Android phone and logged; if it was not run, the release PR says so. | Yes: A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built. |
+| AUTH-10 (P0, `manual_pending`) | Third-party auth | MAN-AUTH-02 | The refusal happens in Auth.js's signIn callback during a real Google OAuth callback, which the suite never performs (no Google traffic, no stored Google credential). The callback's decision is unit-tested (src/auth.test.ts); the hosted round trip, and that no User row is left behind, need a real uninvited Google account. | Yes | MAN-AUTH-02 logged PASS on staging for the release candidate, with the environment's allowlist configured by Chris. | No: Not planned, for the same reason as AUTH-03 (MAN-AUTH-01). |
 
 ## Findings
 
@@ -86,6 +88,8 @@ Test kinds: **R** = real interaction, **P** = partial (URL entry, `fill()` on a 
 | AUTH-06 | P2 | `automated_real_interaction` | Sign out from Settings with in-app confirm | chromium, chromium-mobile | R: `auth/settings-sign-out.spec.ts` |
 | AUTH-07 | P2 | `automated_real_interaction` | Session expiry mid-use | chromium, chromium-mobile | R: `auth/session-expiry.spec.ts` |
 | AUTH-08 | P2 | `automated_real_interaction` | Legacy /dashboard URL redirects to Beranda | chromium, chromium-mobile | R: `smoke/secondary-nav.spec.ts`<br>P: `smoke/secondary-nav.spec.ts` |
+| AUTH-09 | P0 | `automated_real_interaction` | An existing session for an account not on the pilot allowlist reaches no creator data | chromium, chromium-mobile | R: `security/pilot-access.spec.ts`<br>P: `security/pilot-access.spec.ts` |
+| AUTH-10 | P0 | `manual_pending` | Real Google sign-in by an uninvited account is refused before any account is created | manual: staging | — |
 
 ### home
 

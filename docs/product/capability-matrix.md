@@ -86,4 +86,4 @@ What a creator must be able to do, kept independently of the screens and of the 
 
 Informational: an inventory action outside every capability is not an error (navigation details, detectors), but a long list here means the capability model has drifted.
 
-`AUTH-08`, `HOME-04`, `HOME-08`, `HOME-09`, `NAV-05`, `NAV-06`, `NAV-07`, `NAV-09`, `DEAL-CREATE-03`, `DEAL-CREATE-04`, `DEAL-CREATE-10`, `DEAL-CREATE-11`, `DEAL-STAGE-04`, `DEAL-EDIT-05`, `DEAL-EDIT-06`, `DEAL-EDIT-07`, `DEAL-INV-02`, `INV-WA-04`, `PUB-07`, `A11Y-03`
+`AUTH-08`, `AUTH-09`, `AUTH-10`, `HOME-04`, `HOME-08`, `HOME-09`, `NAV-05`, `NAV-06`, `NAV-07`, `NAV-09`, `DEAL-CREATE-03`, `DEAL-CREATE-04`, `DEAL-CREATE-10`, `DEAL-CREATE-11`, `DEAL-STAGE-04`, `DEAL-EDIT-05`, `DEAL-EDIT-06`, `DEAL-EDIT-07`, `DEAL-INV-02`, `INV-WA-04`, `PUB-07`, `A11Y-03`
