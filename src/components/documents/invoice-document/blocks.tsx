@@ -88,13 +88,20 @@ export function TaxBlock({ tax }: { tax: InvoiceDocumentModel["tax"] }) {
   );
 }
 
+// The "Syarat pembayaran" heading belongs to the terms text, so a document
+// with a due date but no payment terms shows the due-date line alone (no
+// empty heading or value).
 export function TermsBlock({ terms }: { terms: NonNullable<InvoiceDocumentModel["terms"]> }) {
   return (
     <div>
-      <h2 className="text-[13px] font-bold text-muted">Syarat pembayaran</h2>
-      <p className="mt-1 break-words text-[14px] text-ink">{terms.text}</p>
+      {terms.text ? (
+        <>
+          <h2 className="text-[13px] font-bold text-muted">Syarat pembayaran</h2>
+          <p className="mt-1 break-words text-[14px] text-ink">{terms.text}</p>
+        </>
+      ) : null}
       {terms.dueDateLabel ? (
-        <p className="mt-1 text-[14px] text-ink">
+        <p className={`${terms.text ? "mt-1 " : ""}text-[14px] text-ink`}>
           <span className="text-muted">Jatuh tempo: </span>
           {terms.dueDateLabel}
         </p>

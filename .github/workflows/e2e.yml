@@ -26,6 +26,29 @@ jobs:
       # so it must run explicitly or a regression in the inverted exit-code
       # behavior/branch allowlist could merge with green CI (PR #16 Codex P2).
       - run: npm run test:vercel-ignore-build
+      # The vendored Impeccable launcher must only run an engine binary whose
+      # SHA-256 is committed and whose version matches (PR #37 Codex P1/P2).
+      # `npx impeccable update` silently restores the unchecked upstream
+      # launcher; this is what notices. Mock engines only, no network.
+      - run: npm run test:impeccable-launcher
+      # User-action inventory (docs/testing/journey-coverage.json): rejects
+      # duplicate IDs, invalid statuses/priorities, a stale generated report,
+      # and test references that are not tests Playwright registers
+      # (`playwright test --list`) or that are skipped / fixme'd / expected
+      # to fail in a claimed project. No build/browser/DB, so it adds
+      # seconds. It does not enforce a coverage percentage -- no threshold is
+      # a gate until Chris approves one.
+      - run: npm run test:journey-coverage
+      - run: npm run coverage:journeys
+      # Product capabilities (docs/product/capabilities.json), kept apart
+      # from the inventory above: every REQUIRED capability maps to an
+      # inventory action driven for real, a manual check, or an open gap with
+      # an issue/finding; a mapped action that is deleted or re-marked not
+      # applicable fails, so a requirement cannot vanish through the
+      # inventory. Static and deterministic, seconds. The LLM explorer in
+      # docs/product/COMPLETENESS-AUDIT.md is not part of CI.
+      - run: npm run test:capability-coverage
+      - run: npm run coverage:capabilities
       # Every E2E/UX-audit job below builds with `next build --webpack`
       # (see docs/testing/E2E.md) for a reproducible browser-test target, so
       # nothing else in this workflow exercises the default Turbopack build
@@ -71,12 +94,33 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      # Firefox and WebKit are here for the diagnostics self-test at the end
+      # of this job only; the journeys in this job run in Chromium.
+      - run: npx playwright install --with-deps chromium firefox webkit
+      # e2e/invoices/pdf-download.spec.ts reads the downloaded invoice PDFs
+      # with pdftotext (poppler-utils, e2e/support/pdf.ts) -- not preinstalled
+      # on the ubuntu-latest runner image. Same package the ux-audit job uses.
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+          pdftotext -v
       - run: npx prisma migrate deploy
+      # Decision A invoice snapshot against real PostgreSQL: the migration on
+      # a populated old-schema database (replayed in its own throwaway
+      # schema), backfill provenance, idempotence, the immutability trigger
+      # and the freeze statement under concurrency.
+      - run: npm run test:snapshot-db
       - run: npm run test:e2e:critical
+      # The inventory's "real" claims against this actual run: a referenced
+      # real test that ran here but was skipped, failed, or expected to fail
+      # is an error; claims whose tests are not @critical are listed as not
+      # exercised by this run.
+      - run: npm run coverage:journeys -- --results test-results/e2e/results.json
       # Negative control for the browserDiagnostics fixture itself (see
-      # docs/testing/E2E.md) -- needs only the Chromium install above, no
-      # database or build, so it runs here rather than its own job.
+      # docs/testing/E2E.md) -- no database or build, so it runs here rather
+      # than its own job. Its Auth.js provider-logo cases run in Chromium,
+      # Firefox and WebKit, because each engine words a cancelled request its
+      # own way and the guard lists all three.
       - run: npm run test:diagnostics-selftest
       - if: failure()
         uses: actions/upload-artifact@v4
@@ -187,6 +231,10 @@ jobs:
             test-results/e2e
           retention-days: 7
 
+  # Scheduled acceptance signal (weekdays) and manual dispatch. The full
+  # journey-coverage verification lives in its own workflow
+  # (journey-coverage-full.yml), so no job of that lane can change this
+  # workflow run's result.
   e2e-cross-browser:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -218,6 +266,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium firefox webkit
+      # e2e/invoices/pdf-download.spec.ts reads the downloaded invoice PDFs
+      # with pdftotext (poppler-utils, e2e/support/pdf.ts) -- not preinstalled
+      # on the ubuntu-latest runner image. Same package the ux-audit job uses.
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
+          pdftotext -v
       - run: npx prisma migrate deploy
       - run: npm run test:e2e:all-browsers
       - if: always()

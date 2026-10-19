@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { auth } from "@/auth";
 import { listInvoicesWithDealBrand, type InvoiceWithDealBrand } from "@/lib/invoices";
@@ -57,5 +57,32 @@ describe("/invoice route", () => {
     expect(screen.getByRole("heading", { name: "Invoice", level: 1 })).toBeDefined();
     expect(screen.getByText("Acme")).toBeDefined();
     expect(mockedListInvoicesWithDealBrand).toHaveBeenCalledWith(expect.anything(), "user-1");
+  });
+
+  // PR #34 review: the list derives overdue from "now". The page must fix
+  // that moment when it renders, or a browser hydrating after Jakarta
+  // midnight would build a different list than the server sent.
+  describe("status is derived against the page's own render time", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("keeps the server's grouping when the clock passes Jakarta midnight before the list renders in the browser", async () => {
+      mockedAuth.mockResolvedValue({
+        user: { id: "user-1", name: "Chris", email: "chris@example.com" },
+        expires: "2099-01-01T00:00:00.000Z",
+      } as never);
+      // Due 18 Jul. Not overdue at 23:59 on the 18th in Jakarta; overdue at 00:01 on the 19th.
+      mockedListInvoicesWithDealBrand.mockResolvedValue([{ ...invoiceFixture, dueDate: new Date("2026-07-18T00:00:00.000Z") }]);
+      vi.useFakeTimers({ toFake: ["Date"] });
+
+      vi.setSystemTime(new Date("2026-07-18T16:59:00.000Z"));
+      const page = await InvoicePage();
+      vi.setSystemTime(new Date("2026-07-18T17:01:00.000Z"));
+      render(page);
+
+      expect(screen.getByRole("heading", { level: 2, name: "Terkirim" })).toBeDefined();
+      expect(screen.queryByRole("heading", { level: 2, name: "Terlambat" })).toBeNull();
+    });
   });
 });

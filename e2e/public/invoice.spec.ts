@@ -3,6 +3,7 @@ import { loadFixtureManifest } from "../support/manifest";
 import { assertNoSeriousA11yViolations } from "../support/a11y";
 import { ownerSessionCookie } from "../support/auth";
 import { reseedFixtures } from "../support/reseed";
+import { shownShareLink } from "../support/share-links";
 
 test.describe("recipient invoice journey", { tag: ["@critical", "@a11y"] }, () => {
   test.use({ storageState: { cookies: [], origins: [] } });
@@ -81,7 +82,8 @@ test.describe("recipient invoice journey", { tag: ["@critical", "@a11y"] }, () =
   // horizontal-scroll bug, fixed with `break-words` on both blocks.
   //
   // Mutates shared owner Settings (issuerName), so unlike this file's other
-  // read-only tests it reseeds itself at the end -- not relying on the
+  // read-only tests it reseeds itself at the end (it also creates and shares an
+// invoice) -- not relying on the
   // file's own beforeEach(reseedFixtures), which only protects tests that
   // run *after* it, not the revoked-token test's own assertions or
   // whatever runs in the next project/file within this invocation.
@@ -101,7 +103,18 @@ test.describe("recipient invoice journey", { tag: ["@critical", "@a11y"] }, () =
       await ownerPage.getByRole("button", { name: "Simpan pengaturan" }).click();
       await expect(ownerPage.getByText("Tersimpan")).toBeVisible();
 
-      await page.goto(`/i/${manifest.shareTokens.active}`);
+      // Decision A (CAP-INV-12): the seeded invoice was shared before this
+      // save and keeps its issuer name, so the long name is checked on an
+      // invoice made and shared after it.
+      await ownerPage.goto(`/deal/${manifest.deals.invoicePending}`);
+      await ownerPage.getByRole("button", { name: "Buat invoice" }).click();
+      await ownerPage.getByRole("link", { name: /^Lihat invoice / }).click();
+      await expect(ownerPage).toHaveURL(/\/invoice\/[^/]+$/);
+      await ownerPage.getByRole("button", { name: "Buat tautan berbagi" }).click();
+      const link = await shownShareLink(ownerPage);
+      expect(/\/i\/[^/]+$/.test(link), "the shown link is a public invoice link").toBe(true);
+
+      await page.goto(link);
       await expect(page.getByText(longIssuer, { exact: true })).toBeVisible();
 
       const hasHorizontalOverflow = await page.evaluate(

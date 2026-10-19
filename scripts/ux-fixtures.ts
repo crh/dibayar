@@ -11,8 +11,8 @@ import {
 import { createOrRegenerateShare, getShareState, type InvoiceShareDb } from "../src/lib/invoice-share";
 
 const action = process.argv[2];
-if (!['seed', 'verify', 'cleanup'].includes(action ?? '')) {
-  throw new Error('Usage: npm run ux:fixtures -- seed|verify|cleanup');
+if (!['seed', 'verify', 'cleanup', 'restore-invalid-contact'].includes(action ?? '')) {
+  throw new Error('Usage: npm run ux:fixtures -- seed|verify|cleanup|restore-invalid-contact');
 }
 
 const connectionString = process.env.DATABASE_URL;
@@ -318,7 +318,7 @@ async function verify() {
     ownerSettingsComplete: owner?.settings != null
       && ownerSettingsRequiredFields.every((field) => (owner.settings?.[field] ?? '').trim() !== ''),
     zeroSettingsMissing: zero?.settings == null,
-    overdueShareRecoverable: overdueShareState.kind === 'state' && overdueShareState.active && overdueShareState.path !== null,
+    overdueShareRecoverable: overdueShareState.kind === 'state' && overdueShareState.status === 'active' && overdueShareState.path !== null,
     // UX-audit "many-deals" fixture: at least 4 cards in MASUK (1 original +
     // 3 many-fixture) so the desktop board actually renders a dense column,
     // not just one card per stage.
@@ -342,6 +342,19 @@ async function verify() {
   console.log(JSON.stringify({ action: 'verify', host: normalizedHost, prefix, checks }));
 }
 
+// Puts the invalid-phone fixture's number ('not-a-phone') back on its deal
+// after tests/ux-audit/t27.verification.spec.ts repairs it through the UI.
+// Written straight to the row: since #50 the API refuses a number WhatsApp
+// can't open, so it can no longer be restored through PATCH /api/deals/:id.
+async function restoreInvalidContact() {
+  const result = await prisma.deal.updateMany({
+    where: { id: `${prefix}-deal-masuk`, userId: ids.owner },
+    data: { contactWa: 'not-a-phone' },
+  });
+  if (result.count !== 1) throw new Error(`Invalid-contact restore expected 1 row, updated ${result.count}`);
+  console.log(JSON.stringify({ action: 'restore-invalid-contact', host: normalizedHost, prefix, updated: result.count }));
+}
+
 async function cleanup() {
   await cleanupRows();
   const remaining = await prisma.user.count({ where: { id: { in: Object.values(ids) } } });
@@ -354,6 +367,7 @@ async function main() {
   try {
     if (action === 'seed') await seed();
     else if (action === 'verify') await verify();
+    else if (action === 'restore-invalid-contact') await restoreInvalidContact();
     else await cleanup();
   } finally {
     await prisma.$disconnect();

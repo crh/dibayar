@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, formatDateLong, formatMonthYearLabel, getCalendarDate, getCalendarYearMonth } from "./date";
+import { formatDate, formatDateLong, formatMonthYearLabel, getCalendarDate, getCalendarYearMonth, isValidDateOnlyString } from "./date";
 
 describe("formatDate", () => {
   it("formats an August date with the Indonesian short month", () => {
@@ -120,6 +120,32 @@ describe("getCalendarDate", () => {
   it("throws on a malformed ISO timestamp string (out-of-range hour/minute/second)", () => {
     expect(() => getCalendarDate("2026-08-01T99:99:99Z", "UTC")).toThrow();
   });
+});
+
+describe("year-below-1000 values (FIND-03 legacy rows)", () => {
+  it("zero-pads the calendar year so it round-trips through the strict parser", () => {
+    const legacy = new Date("0002-01-15T00:00:00.000Z");
+    expect(getCalendarDate(legacy, "UTC")).toBe("0002-01-15");
+    expect(() => formatDate(getCalendarDate(legacy, "UTC"))).not.toThrow();
+  });
+
+  it("formats a year-0002 date as year 2, never as 1902 (Date.UTC's two-digit-year quirk)", () => {
+    expect(formatDate("0002-01-15")).not.toContain("1902");
+    expect(formatDate(new Date("0002-01-15T00:00:00.000Z"))).not.toContain("1902");
+  });
+});
+
+describe("isValidDateOnlyString", () => {
+  it.each(["2026-08-01", "2028-02-29", "0002-01-15"])("accepts the real calendar date %s", (value) => {
+    expect(isValidDateOnlyString(value)).toBe(true);
+  });
+
+  it.each(["2026-02-30", "2027-02-29", "2026-13-01", "2026-1-5", "2026-08-01T00:00:00.000Z", " 2026-08-01", "", "not-a-date"])(
+    "rejects %j without throwing",
+    (value) => {
+      expect(isValidDateOnlyString(value)).toBe(false);
+    },
+  );
 });
 
 describe("getCalendarYearMonth", () => {

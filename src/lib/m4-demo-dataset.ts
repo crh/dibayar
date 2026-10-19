@@ -38,7 +38,7 @@ export function checkM4DemoTarget(connectionString: string | undefined, confirm:
 }
 
 type DealStage = "MASUK" | "NEGO" | "DEAL" | "KONTEN" | "INVOICE" | "DIBAYAR";
-type InvoiceTarget = "DRAFT" | "SENT" | "OVERDUE" | "PAID";
+type InvoiceTarget = "DRAFT" | "SENT" | "PAID";
 
 export type M4DemoDeal = {
   key: string;
@@ -115,7 +115,9 @@ export const M4_DEMO_DEALS: readonly M4DemoDeal[] = [
       feeIdr: 2_500_000,
       paymentTerms: "NET 7, dipotong PPh 21",
     },
-    invoice: { withholdingTaxType: "PPH21", dueOffsetDays: -4, statusPath: ["DRAFT", "SENT", "OVERDUE"] },
+    // Stored SENT: overdue is never set by hand. Due 4 days ago, so the app
+    // shows it as Terlambat and Beranda lists it for chasing.
+    invoice: { withholdingTaxType: "PPH21", dueOffsetDays: -4, statusPath: ["DRAFT", "SENT"] },
   },
   {
     key: "paid",
@@ -149,4 +151,22 @@ export const M4_DEMO_SETTINGS = {
 export function jakartaDateOffset(now: Date, offsetDays: number): Date {
   const [year, month, day] = getJakartaCalendarDate(now).split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day + offsetDays));
+}
+
+// The same Jakarta calendar day as a yyyy-mm-dd string: the only form the
+// invoice due-date contract accepts (src/lib/due-date.ts). Read back from the
+// UTC-midnight Date, so it names exactly the day jakartaDateOffset stores.
+export function jakartaDateOnlyOffset(now: Date, offsetDays: number): string {
+  return jakartaDateOffset(now, offsetDays).toISOString().slice(0, 10);
+}
+
+// The createInvoice payload scripts/m4-demo-data.ts sends for a demo deal. It
+// goes through the same strict invoiceCreateSchema as the public API, so the
+// due date is a yyyy-mm-dd string, never a Date.
+export function buildM4DemoInvoiceInput(dealId: string, invoice: NonNullable<M4DemoDeal["invoice"]>, now: Date) {
+  return {
+    dealId,
+    withholdingTaxType: invoice.withholdingTaxType,
+    dueDate: jakartaDateOnlyOffset(now, invoice.dueOffsetDays),
+  };
 }

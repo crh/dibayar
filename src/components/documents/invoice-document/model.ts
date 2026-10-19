@@ -53,9 +53,10 @@ export type InvoiceDocumentModel = {
   scope: { description: string; amountLabel: string };
   total: { amountLabel: string };
   tax: { label: string };
-  // Terms empty -> the whole block is omitted (not just the terms line);
-  // dueDateLabel null -> only that one line is omitted, block still renders.
-  terms: { text: string; dueDateLabel: string | null } | null;
+  // Payment terms and the due date are independent (FIND-08): each line is
+  // omitted when its own value is null, and the block is null only when both
+  // are. A due date is shown even when the deal has no payment terms.
+  terms: { text: string | null; dueDateLabel: string | null } | null;
   bank: {
     bankName: string; // "—" when missing
     accountNumber: string;
@@ -82,7 +83,7 @@ function formatDueDate(value: Date | string | null): string | null {
 export function buildInvoiceDocumentModel(input: InvoiceDocumentInput): InvoiceDocumentModel {
   const { invoice, deal, settings } = input;
   const amountLabel = formatMoney(invoice.subtotalIdr);
-  const paymentTerms = deal.paymentTerms?.trim() || "";
+  const paymentTerms = deal.paymentTerms?.trim() || null;
   const dueDateLabel = formatDueDate(invoice.dueDate);
 
   const bankName = settings.bankName.trim();
@@ -112,7 +113,7 @@ export function buildInvoiceDocumentModel(input: InvoiceDocumentInput): InvoiceD
     },
     total: { amountLabel },
     tax: { label: withholdingTaxLabel(invoice.withholdingTaxType) },
-    terms: paymentTerms ? { text: paymentTerms, dueDateLabel } : null,
+    terms: paymentTerms || dueDateLabel ? { text: paymentTerms, dueDateLabel } : null,
     bank: {
       bankName: bankName || EMPTY_DASH,
       accountNumber: accountNumber || EMPTY_DASH,

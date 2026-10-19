@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { E2E_OWNER_SESSION_TOKEN } from "./e2e/support/fixture-ids";
+import { E2E_OWNER_SESSION_TOKEN, E2E_PILOT_ALLOWED_EMAILS } from "./e2e/support/fixture-ids";
 
 // Journey/E2E layer for real user flows -- URL, App Router navigation,
 // History API, auth, cross-component interaction. Deliberately separate
@@ -40,6 +40,12 @@ const authenticatedStorageState = {
 
 export default defineConfig({
   testDir: "./e2e",
+  // Only Playwright specs. The default testMatch also matches *.test.mjs,
+  // which made every run and every --list import
+  // e2e/support/diagnostics-selftest.test.mjs -- a node:test file that
+  // spawns its own nested Playwright run (CI runs it separately via
+  // `npm run test:diagnostics-selftest`).
+  testMatch: /\.spec\.ts$/,
   outputDir: "test-results/e2e",
   globalSetup: "./e2e/global-setup.ts",
   globalTeardown: "./e2e/global-teardown.ts",
@@ -124,6 +130,11 @@ export default defineConfig({
     : {
         // next start auto-loads .env.local itself, same as next build/dev.
         command: `npm run start -- --hostname 127.0.0.1 --port ${port}`,
+        // The suite always runs with the pilot gate enforced (src/lib/
+        // pilot-access.ts): only the two invited fixture owners are on the
+        // allowlist, the uninvited fixture user is not. Overrides any value
+        // in .env.local.
+        env: { ...process.env, PILOT_ACCESS_MODE: "allowlist", PILOT_ALLOWED_EMAILS: E2E_PILOT_ALLOWED_EMAILS },
         url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

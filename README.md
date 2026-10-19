@@ -33,3 +33,9 @@ The application uses Next.js, TypeScript, Tailwind CSS, Prisma, PostgreSQL, Auth
 Root-level `DIBAYAR-*-RECEIPT.md` and handoff files are evidence records, not current status. Prefer `STATE.md` and the current-truth audit for present state, and check the receipt date/commit before relying on deployment claims. Historical evidence should be archived or removed only after confirming it is no longer needed.
 
 Receipt-style evidence is organized under [`docs/receipts/`](docs/receipts/); superseded standalone receipts are under [`docs/receipts/archive/`](docs/receipts/archive/). The current-truth audit is under [`docs/status/`](docs/status/).
+
+## Source code rights
+
+**All rights reserved.** Public availability of this repository does not grant an open-source license. Unless the relevant copyright holder expressly permits it, no permission is granted to copy, modify, redistribute, deploy, or use the original Dibayar source code or project-specific documentation to build another product, beyond rights provided by applicable law and GitHub's Terms of Service.
+
+Third-party dependencies, fonts, and vendored components remain governed by their respective licenses and notices. This statement does not restrict permissions those licenses grant.

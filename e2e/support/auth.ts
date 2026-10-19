@@ -16,7 +16,12 @@
 // guardrails in scripts/e2e-fixtures.ts refuse to run against anything but
 // 127.0.0.1:55432/dibayar_test.
 import type { Cookie } from "@playwright/test";
-import { E2E_OTHER_OWNER_SESSION_TOKEN, E2E_OWNER_SESSION_TOKEN } from "./fixture-ids";
+import {
+  E2E_OTHER_OWNER_SESSION_TOKEN,
+  E2E_OWNER_SESSION_TOKEN,
+  E2E_OWNER_SIGNOUT_SESSION_TOKEN,
+  E2E_UNINVITED_SESSION_TOKEN,
+} from "./fixture-ids";
 
 const SESSION_COOKIE_NAME = "authjs.session-token";
 
@@ -46,6 +51,19 @@ export function otherOwnerSessionCookie(baseURL: string): Cookie {
   return sessionCookie(baseURL, E2E_OTHER_OWNER_SESSION_TOKEN);
 }
 
+// The owner's second, disposable session (see e2e/support/fixture-ids.ts):
+// for journeys that end or expire a session, which must never touch the
+// shared one. Reseed before using it; an earlier test may have consumed it.
+export function disposableOwnerSessionCookie(baseURL: string): Cookie {
+  return sessionCookie(baseURL, E2E_OWNER_SIGNOUT_SESSION_TOKEN);
+}
+
 export function unauthenticatedStorageState() {
   return { cookies: [], origins: [] };
+}
+
+// A real session row for the uninvited fixture user (not on the E2E
+// server's pilot allowlist); see e2e/security/pilot-access.spec.ts.
+export function uninvitedSessionCookie(baseURL: string): Cookie {
+  return sessionCookie(baseURL, E2E_UNINVITED_SESSION_TOKEN);
 }

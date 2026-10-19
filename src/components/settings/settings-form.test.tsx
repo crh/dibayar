@@ -188,6 +188,37 @@ describe("SettingsForm — required validation", () => {
   });
 });
 
+describe("SettingsForm — field limits and server-refused fields (#50)", () => {
+  it("caps every field at the length the server accepts", () => {
+    vi.stubGlobal("fetch", makeFetchMock());
+    renderForm();
+
+    expect(screen.getByLabelText("Email").getAttribute("maxlength")).toBe("254");
+    for (const element of document.querySelectorAll("form input:not([type=hidden]), form textarea")) {
+      expect(element.getAttribute("maxlength"), element.outerHTML.slice(0, 80)).not.toBeNull();
+    }
+  });
+
+  it("marks the field a 400 names instead of saying 'couldn't save, try again'", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      makeFetchMock([{ status: 400, body: { error: "x", fields: { issuerEmail: ["Email tidak valid"] } } }]),
+    );
+    renderForm();
+
+    const email = screen.getByLabelText("Email");
+    await user.clear(email);
+    await user.type(email, "budi@contoh.id");
+    await user.click(screen.getByRole("button", { name: "Simpan pengaturan" }));
+
+    expect(await screen.findByText("Email tidak valid.")).toBeDefined();
+    expect(screen.getByText("Periksa kembali isian yang ditandai.")).toBeDefined();
+    expect(email.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.queryByText("Gagal menyimpan. Coba lagi.")).toBeNull();
+  });
+});
+
 describe("SettingsForm — save lifecycle", () => {
   it("shows saving then saved, and the saved indicator clears after 2s", async () => {
     const fetchMock = makeFetchMock([{ status: 200, body: { settings: baseSettings } }]);
@@ -222,6 +253,34 @@ describe("SettingsForm — save lifecycle", () => {
 
     expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Gagal menyimpan. Coba lagi.");
     expect(screen.getByRole("heading", { name: "Identitas penerbit" })).toBeDefined();
+  });
+
+  it.each([
+    [401, "Belum tersimpan karena sesi kamu sudah berakhir. Muat ulang halaman untuk masuk lagi."],
+    [403, "Belum tersimpan karena permintaan ditolak demi keamanan. Muat ulang halaman, lalu coba lagi."],
+    [429, "Belum tersimpan karena terlalu banyak percobaan. Tunggu sebentar, lalu coba lagi."],
+  ])("a save refused with %i says what to do next (#53)", async (status, message) => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetchMock([{ status, body: { error: "raw server text" } }]));
+    renderForm();
+
+    await user.click(screen.getByRole("button", { name: "Simpan pengaturan" }));
+
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", message);
+    expect(document.body.textContent).not.toContain("raw server text");
+  });
+
+  it("a save with no answer says it may not be saved, and the form stays editable (#53)", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    }));
+    renderForm();
+
+    await user.click(screen.getByRole("button", { name: "Simpan pengaturan" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("belum pasti tersimpan");
+    expect(screen.getByRole("button", { name: "Simpan pengaturan" })).toHaveProperty("disabled", false);
   });
 
   it("PATCHes the exact form payload and adopts the server-returned view on success", async () => {

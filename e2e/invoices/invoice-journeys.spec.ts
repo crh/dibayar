@@ -1,6 +1,7 @@
 import { expect, test } from "../support/test";
 import { loadFixtureManifest } from "../support/manifest";
 import { reseedFixtures } from "../support/reseed";
+import { keepWhatsAppLocal, parseWhatsAppLink, trackOpenedPages } from "../support/follow-up";
 
 // Money is formatted with a non-breaking space after "Rp" (see
 // src/lib/format/money.ts and CLAUDE.md's IDR formatting rule) -- a plain
@@ -74,7 +75,8 @@ test.describe("invoice journeys", { tag: "@critical" }, () => {
 
     await page.getByRole("button", { name: "Buat ulang tautan" }).click();
     await page.getByRole("button", { name: "Ya, buat tautan baru" }).click();
-    await expect(linkTrack.locator("span[title]")).not.toHaveAttribute("title", firstLink!);
+    // Polled as a boolean so a failure never prints the link.
+    await expect.poll(async () => (await linkTrack.locator("span[title]").getAttribute("title")) === firstLink, { message: "the shown link changes" }).toBe(false);
 
     await page.getByRole("button", { name: "Cabut tautan" }).click();
     await page.getByRole("button", { name: "Ya, cabut tautan" }).click();
@@ -108,6 +110,16 @@ test.describe("invoice journeys", { tag: "@critical" }, () => {
     // not toast timing: wait for the PATCH that saves the due date to
     // resolve (the real "did it save" signal), then prove persistence with
     // a reload, exactly as this test already did for the value itself.
+    //
+    // Wait for hydration before fill(): the date input is server-rendered,
+    // so fill() can land before React attaches onChange; hydration then
+    // restores the controlled value (2099-12-31) and no PATCH is ever sent.
+    // That was the intermittent failure seen under CPU contention, and it
+    // reproduces every time with 20x CDP CPU throttling (2026-10-04 Phase 2A
+    // receipt). "Kirim lewat WhatsApp" is server-rendered disabled and only
+    // enabled by client effects (contact + share fetches), so once it is
+    // enabled the page has hydrated.
+    await expect(page.getByRole("button", { name: "Kirim lewat WhatsApp" })).toBeEnabled();
     const savePatch = page.waitForResponse(patchUrl);
     await dueDate.fill("2030-01-15");
     expect((await savePatch).ok()).toBe(true);
@@ -123,8 +135,11 @@ test.describe("invoice journeys", { tag: "@critical" }, () => {
     await expect(dueDate).toHaveValue("");
   });
 
-  test("WhatsApp action opens a saved-template message with the invoice link", async ({ page }) => {
+  test("WhatsApp action opens a saved-template message with the invoice link", async ({ page, context }) => {
     const manifest = loadFixtureManifest();
+    // wa.me is answered locally (it used to load the real wa.me redirect to
+    // api.whatsapp.com); the popup's URL is still the exact link the app built.
+    await keepWhatsAppLocal(context);
     await page.goto(`/invoice/${manifest.invoices.sent}`);
 
     const action = page.getByRole("button", { name: "Kirim lewat WhatsApp" });
@@ -134,10 +149,9 @@ test.describe("invoice journeys", { tag: "@critical" }, () => {
       action.click(),
     ]);
 
-    await expect.poll(() => popup.url()).toContain("api.whatsapp.com/send");
-    const popupUrl = new URL(popup.url());
-    expect(popupUrl.searchParams.get("phone")).toBe("628110000006");
-    const message = popupUrl.searchParams.get("text");
+    await expect.poll(() => popup.url()).toMatch(/^https:\/\/wa\.me\//);
+    const { number, text: message } = parseWhatsAppLink(popup.url());
+    expect(number).toBe("628110000006");
     expect(message).toContain("E2E Brand Invoice Terkirim");
     expect(message).toContain("E2E/SENT/001");
     expect(message).toMatch(/Rp\s6\.000\.000/);
@@ -157,25 +171,35 @@ test.describe("invoice journeys", { tag: "@critical" }, () => {
   // and cross-browser, without depending on any one engine's own
   // popup-blocking heuristics (which differ and aren't Playwright-
   // controllable anyway).
-  test("a blocked WhatsApp popup falls back to a clickable manual link", async ({ page }) => {
+  //
+  // Runs in every engine and follows the fallback link (answered locally).
+  // The real-blocker version is whatsapp/popup-blocker.spec.ts (Chromium).
+  test("a blocked WhatsApp popup falls back to a clickable manual link", async ({ page, context }) => {
     const manifest = loadFixtureManifest();
+    await keepWhatsAppLocal(context);
     await page.addInitScript(() => {
       window.open = () => null;
     });
     await page.goto(`/invoice/${manifest.invoices.sent}`);
 
     await expect(page.getByText("Buka WhatsApp")).toHaveCount(0);
-    await page.getByRole("button", { name: "Kirim lewat WhatsApp" }).click();
+    const action = page.getByRole("button", { name: "Kirim lewat WhatsApp" });
+    await expect(action).toBeEnabled();
+    const opened = trackOpenedPages(context);
+    await action.click();
 
     const fallbackLink = page.getByRole("link", { name: "Buka WhatsApp" });
     await expect(fallbackLink).toBeVisible();
+    expect(opened).toHaveLength(0);
     // buildWhatsAppShareUrl builds a wa.me link directly (see
-    // src/lib/whatsapp.ts); it only resolves to api.whatsapp.com/send on
-    // an actual navigation/redirect, which this test deliberately never
-    // triggers -- the point here is the fallback link itself exists and
-    // is correctly addressed, not the redirect target.
+    // src/lib/whatsapp.ts).
     const href = await fallbackLink.getAttribute("href");
     expect(href).toContain("https://wa.me/628110000006");
+    expect(parseWhatsAppLink(href!).text).toContain("E2E/SENT/001");
     expect(await fallbackLink.getAttribute("target")).toBe("_blank");
+    const [popup] = await Promise.all([page.waitForEvent("popup"), fallbackLink.click()]);
+    await expect.poll(() => popup.url()).toMatch(/^https:\/\/wa\.me\/628110000006\?text=/);
+    expect(opened).toEqual([popup]);
+    await popup.close();
   });
 });

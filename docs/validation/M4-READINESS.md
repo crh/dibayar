@@ -69,7 +69,7 @@ deal/invoice/settings functions. It refuses any database other than the Neon
 | Kopi Lereng Merapi | Nego | — | active negotiation, notes |
 | Serum Daun Kelor | Konten (deadline +5d) | DRAFT, no PPh | deliverables in progress; draft excluded from summary |
 | Dompet Rapi | Invoice | SENT, PPh 23, due +3d | due-soon + WhatsApp reminder |
-| Teh Tarik Nusantara | Invoice | OVERDUE, PPh 21, due −4d | overdue chase |
+| Teh Tarik Nusantara | Invoice | SENT, PPh 21, due −4d (shown as Terlambat: overdue is derived from the due date) | overdue chase |
 | Batik Sekar Ayu | Dibayar | PAID, no PPh | completed/paid |
 
 Expected summary right after seeding: 3 invoices, gross Rp 8.250.000, estimated

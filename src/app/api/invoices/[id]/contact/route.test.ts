@@ -39,6 +39,7 @@ describe("GET /api/invoices/[id]/contact", () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
     mockedGetOwnedInvoiceContact.mockResolvedValue({
       deal: { contactWa: "628123456789", brand: "Kopi Nusantara" },
+      snapshot: null,
     });
 
     await GET(req("invoice-1"), makeContext("invoice-1"));
@@ -56,17 +57,32 @@ describe("GET /api/invoices/[id]/contact", () => {
     expect(await response.json()).toEqual({ error: "Invoice tidak ditemukan." });
   });
 
-  it("returns the contact WhatsApp number and brand for the owner", async () => {
+  it("returns the contact WhatsApp number and brand for the owner; a Draft's document brand is the deal's", async () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
     mockedGetOwnedInvoiceContact.mockResolvedValue({
       deal: { contactWa: "628123456789", brand: "Kopi Nusantara" },
+      snapshot: null,
     });
 
     const response = await GET(req("invoice-1"), makeContext("invoice-1"));
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ contactWa: "628123456789", brand: "Kopi Nusantara" });
+    expect(await response.json()).toEqual({ contactWa: "628123456789", brand: "Kopi Nusantara", documentBrand: "Kopi Nusantara" });
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+  });
+
+  // Decision A: the WhatsApp message names the brand on the frozen
+  // document, even after the deal's brand was edited.
+  it("returns the frozen document's brand separately from the deal's current brand", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" } } as never);
+    mockedGetOwnedInvoiceContact.mockResolvedValue({
+      deal: { contactWa: "628123456789", brand: "Kopi Nusantara Baru" },
+      snapshot: { brand: "Kopi Nusantara" },
+    });
+
+    const response = await GET(req("invoice-1"), makeContext("invoice-1"));
+
+    expect(await response.json()).toEqual({ contactWa: "628123456789", brand: "Kopi Nusantara Baru", documentBrand: "Kopi Nusantara" });
   });
 
   it("returns a controlled 500 without leaking database details", async () => {

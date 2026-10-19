@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { InvoiceRecord } from "@/lib/invoices";
-import { deriveInvoiceDisplayStatus, getDueDateCalendarDate } from "@/lib/invoice-date-status";
+import { deriveInvoiceDisplayStatus } from "@/lib/invoice-date-status";
+import { DUE_DATE_MAX, DUE_DATE_MIN, storedDueDateToInputValue } from "@/lib/due-date";
 import { buildInvoiceWhatsApp, normalizeWhatsAppNumber } from "@/lib/whatsapp";
+import { openWhatsAppPopup, type WhatsAppPopup } from "@/lib/whatsapp-popup";
 import { useLanguage } from "@/components/language-switcher";
 import { MoneyDisplay, StatusChip, Button, fieldClassName } from "@/components/design-system";
 import { ShareLinkField } from "@/components/invoices/share-link-field";
@@ -12,6 +14,7 @@ import { DateField, type DateFieldCommitResult } from "@/components/date-field";
 import type { Language } from "@/lib/i18n";
 import { triggerPaidHaptic } from "@/lib/haptics";
 import { fetchWithTimeout } from "@/lib/http";
+import { bodyField, mutationErrorKey, sendMutation } from "@/lib/mutation";
 import { PPH_RATES } from "@/lib/income-summary";
 import { formatMoney } from "@/lib/format/money";
 import { formatDate as formatDateCentral } from "@/lib/format/date";
@@ -32,10 +35,9 @@ const NEXT_ACTIONS: Record<InvoiceRecord["status"], NextAction[]> = {
     { status: "DUE", labelKey: "invoice.markDue" },
     { status: "PAID", labelKey: "invoice.markPaid" },
   ],
-  DUE: [
-    { status: "OVERDUE", labelKey: "invoice.markOverdue" },
-    { status: "PAID", labelKey: "invoice.markPaid" },
-  ],
+  // No action leads to OVERDUE: it is derived from the due date, never set
+  // by hand (FIND-01; the server rejects it too, see ALLOWED_STATUS_TRANSITIONS).
+  DUE: [{ status: "PAID", labelKey: "invoice.markPaid" }],
   OVERDUE: [{ status: "PAID", labelKey: "invoice.markPaid" }],
   // T-19: undo, not a forward step -- kept visually distinct (secondary
   // variant) so it doesn't read as just another "mark as..." action.
@@ -106,7 +108,12 @@ type ShareState =
   | { kind: "loading" }
   | { kind: "load-error"; message: string }
   | { kind: "inactive"; error: string | null }
-  | { kind: "active"; link: string | null; expiresAt: string | null; error: string | null };
+  // The link is dead and is neither shown nor sent (FIND-07); only the date
+  // it ended is kept, to say so.
+  | { kind: "expired"; expiresAt: string; error: string | null }
+  // `linkRecoverable` is false when the server couldn't recover the path and
+  // `link`, if any, came from this tab's sessionStorage cache.
+  | { kind: "active"; link: string | null; linkRecoverable: boolean; expiresAt: string | null; error: string | null };
 
 function isValidExpiry(value: unknown): value is string | null | undefined {
   return value === undefined || value === null || (typeof value === "string" && !Number.isNaN(Date.parse(value)));
@@ -114,11 +121,13 @@ function isValidExpiry(value: unknown): value is string | null | undefined {
 
 function isValidGetPayload(
   payload: unknown,
-): payload is { active: boolean; path?: string | null; expiresAt?: string | null } {
+): payload is { active: boolean; expired?: boolean; path?: string | null; expiresAt?: string | null } {
   if (typeof payload !== "object" || payload === null) return false;
-  const { active, path, expiresAt } = payload as { active?: unknown; path?: unknown; expiresAt?: unknown };
+  const { active, expired, path, expiresAt } = payload as { active?: unknown; expired?: unknown; path?: unknown; expiresAt?: unknown };
   const validPath = path === undefined || path === null || (typeof path === "string" && SHARE_PATH_PATTERN.test(path));
-  return typeof active === "boolean" && validPath && isValidExpiry(expiresAt);
+  // An expired share is never also active, and always says when it ended.
+  const validExpired = expired === undefined || expired === false || (expired === true && active === false && typeof expiresAt === "string");
+  return typeof active === "boolean" && validPath && validExpired && isValidExpiry(expiresAt);
 }
 
 function isValidCreatePayload(payload: unknown): payload is { active: true; path: string; expiresAt?: string | null } {
@@ -133,13 +142,13 @@ function isValidRevokePayload(payload: unknown): payload is { active: false } {
 
 function withMutationError(prev: ShareState, message: string): ShareState {
   if (prev.kind === "inactive") return { kind: "inactive", error: message };
-  if (prev.kind === "active") return { ...prev, error: message };
+  if (prev.kind === "active" || prev.kind === "expired") return { ...prev, error: message };
   return { kind: "load-error", message };
 }
 
 function clearMutationError(prev: ShareState): ShareState {
   if (prev.kind === "inactive") return { kind: "inactive", error: null };
-  if (prev.kind === "active") return { ...prev, error: null };
+  if (prev.kind === "active" || prev.kind === "expired") return { ...prev, error: null };
   return prev;
 }
 
@@ -180,7 +189,11 @@ function useShareState(invoiceId: string) {
       }
       if (!payload.active) {
         clearCachedSharePath(invoiceId);
-        setShare({ kind: "inactive", error: null });
+        setShare(
+          payload.expired && payload.expiresAt
+            ? { kind: "expired", expiresAt: payload.expiresAt, error: null }
+            : { kind: "inactive", error: null },
+        );
         return;
       }
       // Prefer the server's own decrypted path -- it's authoritative and
@@ -193,6 +206,7 @@ function useShareState(invoiceId: string) {
       setShare({
         kind: "active",
         link: resolvedPath ? `${window.location.origin}${resolvedPath}` : null,
+        linkRecoverable: Boolean(payload.path),
         expiresAt: payload.expiresAt ?? null,
         error: null,
       });
@@ -215,11 +229,13 @@ function useShareState(invoiceId: string) {
     loadShareState();
   }, [loadShareState]);
 
-  const createOrRegenerate = useCallback(async () => {
+  // Both link-issuing requests answer in the same shape and leave the page
+  // in the same state: an active share showing the returned link.
+  const requestLink = useCallback(async (endpoint: "share" | "share/ensure") => {
     setPendingAction("create");
     setShare((prev) => clearMutationError(prev));
     try {
-      const response = await fetchWithTimeout(`/api/invoices/${invoiceId}/share`, { method: "POST" });
+      const response = await fetchWithTimeout(`/api/invoices/${invoiceId}/${endpoint}`, { method: "POST" });
       const payload = await response.json();
       if (!mountedRef.current) return null;
       if (!response.ok || !isValidCreatePayload(payload)) {
@@ -231,6 +247,7 @@ function useShareState(invoiceId: string) {
       setShare({
         kind: "active",
         link,
+        linkRecoverable: true,
         expiresAt: payload.expiresAt ?? null,
         error: null,
       });
@@ -242,6 +259,16 @@ function useShareState(invoiceId: string) {
       if (mountedRef.current) setPendingAction(null);
     }
   }, [invoiceId]);
+
+  // The explicit, destructive operation: always a new token, so a link
+  // already sent stops working ("Buat tautan berbagi" / "Buat ulang tautan").
+  const createOrRegenerate = useCallback(() => requestLink("share"), [requestLink]);
+
+  // A link to send: the server reuses the invoice's usable link and issues a
+  // new one only when there is none or it has expired (ensureShare, the same
+  // contract as the Beranda reminder). The server decides, so an expired link
+  // is never sent, even from a page that loaded before it expired.
+  const ensureLink = useCallback(() => requestLink("share/ensure"), [requestLink]);
 
   const revoke = useCallback(async () => {
     setPendingAction("revoke");
@@ -263,7 +290,7 @@ function useShareState(invoiceId: string) {
     }
   }, [invoiceId]);
 
-  return { share, setShare, isBusy, pendingAction, retryLoad, createOrRegenerate, revoke };
+  return { share, setShare, isBusy, pendingAction, retryLoad, createOrRegenerate, ensureLink, revoke };
 }
 
 // §4.5 item 3: just the link field + copy/regenerate/revoke management. The
@@ -332,6 +359,22 @@ function ShareSection({
             className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
           >
             {isBusy ? t("invoice.creating") : t("invoice.create")}
+          </button>
+        </>
+      ) : null}
+
+      {share.kind === "expired" ? (
+        <>
+          {share.error ? <p role="alert" className="mt-3 text-[13px] text-overdue">{t(share.error)}</p> : null}
+          <p className="mt-3 text-[14px] font-semibold text-overdue">{t("invoice.shareExpired")}</p>
+          <p className="mt-1 text-[13px] text-muted">{t("invoice.shareExpiredOn", { date: formatDateCentral(share.expiresAt) })}</p>
+          <button
+            type="button"
+            disabled={isBusy}
+            onClick={handleCreateOrRegenerate}
+            className="mt-4 inline-flex h-11 items-center rounded-full bg-primary px-4 text-[14px] font-semibold text-surface disabled:cursor-wait disabled:opacity-60"
+          >
+            {isBusy ? t("invoice.creating") : t("invoice.createNew")}
           </button>
         </>
       ) : null}
@@ -425,12 +468,16 @@ export default function InvoiceDetailClient({
   initialInvoice,
   now,
   hasIncompleteIssuer = false,
+  documentFrozen = false,
   templateSend = DEFAULT_TEMPLATE_SEND,
   templateChase = DEFAULT_TEMPLATE_CHASE,
 }: {
   initialInvoice: InvoiceRecord;
   now?: Date;
   hasIncompleteIssuer?: boolean;
+  // Decision A: the document was sent or shared and no longer follows the
+  // deal or Settings.
+  documentFrozen?: boolean;
   templateSend?: string;
   templateChase?: string;
 }) {
@@ -438,6 +485,9 @@ export default function InvoiceDetailClient({
   const [invoice, setInvoice] = useState(initialInvoice);
   const [contactWa, setContactWa] = useState<string | null>(null);
   const [brand, setBrand] = useState<string | null>(null);
+  // The brand the invoice document names (its snapshot once frozen), used
+  // in the WhatsApp message so it matches the linked invoice.
+  const [documentBrand, setDocumentBrand] = useState<string | null>(null);
   const [contactStatus, setContactStatus] = useState<ContactStatus>("loading");
   const [contactWaDraft, setContactWaDraft] = useState("");
   const [isSavingContactWa, setIsSavingContactWa] = useState(false);
@@ -450,9 +500,26 @@ export default function InvoiceDetailClient({
 
   const referenceNow = now ?? new Date();
   const normalizedDueDate = normalizeDueDate(invoice.dueDate);
+  // A stored due date outside the supported contract (e.g. a legacy year-0002
+  // row from before the API enforced it) renders as an explicit, correctable
+  // problem in the field rather than crashing the page or posing as a date.
+  const storedDueDateValue = invoice.dueDate ? storedDueDateToInputValue(invoice.dueDate) : null;
+  const hasInvalidStoredDueDate = invoice.dueDate !== null && storedDueDateValue === null;
+  const dueDateRange = { min: formatDateCentral(DUE_DATE_MIN), max: formatDateCentral(DUE_DATE_MAX) };
   const displayStatus = deriveInvoiceDisplayStatus({ status: invoice.status, dueDate: normalizedDueDate }, referenceNow);
   const isOverdue = displayStatus === "OVERDUE";
+  // Actions follow the stored status (what the server will accept), minus
+  // "mark due" on an invoice already shown as overdue.
+  const nextActions = NEXT_ACTIONS[invoice.status].filter((action) => !(isOverdue && action.status === "DUE"));
   const shareState = useShareState(invoice.id);
+  // Decision A: the document freezes the moment the invoice leaves Draf or
+  // gets a share row (active or expired). The server's answer at page load is
+  // the start; a move or a link made on this page latches it too, so the
+  // notice below is right without a reload. Nothing here ever unlatches it:
+  // a revoked link leaves the snapshot in place.
+  const [frozenOnPage, setFrozenOnPage] = useState(documentFrozen);
+  const exposedOnPage = invoice.status !== "DRAFT" || shareState.share.kind === "active" || shareState.share.kind === "expired";
+  if (exposedOnPage && !frozenOnPage) setFrozenOnPage(true);
   const [isSharingToWhatsApp, setIsSharingToWhatsApp] = useState(false);
 
   // Split from the retry trigger below so the effect only ever invokes a
@@ -467,6 +534,7 @@ export default function InvoiceDetailClient({
       .then(({ response, payload }) => {
         if (cancelled) return;
         if (typeof payload.brand === "string") setBrand(payload.brand);
+        if (typeof payload.documentBrand === "string") setDocumentBrand(payload.documentBrand);
         if (response.ok && typeof payload.contactWa === "string") {
           setContactWa(payload.contactWa);
           setContactWaDraft(payload.contactWa);
@@ -502,6 +570,17 @@ export default function InvoiceDetailClient({
   // making the owner close the repair panel and press the primary button
   // again.
   async function handleSaveContactWa() {
+    // Opened by the tap itself, before the save's awaits, so it is not
+    // blocked for lacking a user gesture (see openWhatsAppPopup). A draft that
+    // can't be a WhatsApp number even before saving never opens a tab.
+    // A number WhatsApp can't open is refused by the server too; say what is
+    // wrong with it rather than "try again", and send nothing (#50).
+    if (!normalizeWhatsAppNumber(contactWaDraft)) {
+      setContactWaMessage({ kind: "error", text: t("dealForm.error.contactWa") });
+      return;
+    }
+    const popup = openWhatsAppPopup(t("whatsapp.opening"));
+    let handedOff = false;
     setIsSavingContactWa(true);
     setContactWaMessage(null);
     try {
@@ -511,6 +590,10 @@ export default function InvoiceDetailClient({
         body: JSON.stringify({ contactWa: contactWaDraft }),
       });
       const payload = await response.json();
+      if (response.status === 400) {
+        setContactWaMessage({ kind: "error", text: t("dealForm.error.contactWa") });
+        return;
+      }
       if (!response.ok || typeof payload.deal?.contactWa !== "string") throw new Error("invoice.contactRepairError");
       const readBackResponse = await fetchWithTimeout(`/api/deals/${invoice.dealId}`);
       const readBackPayload = await readBackResponse.json();
@@ -525,13 +608,15 @@ export default function InvoiceDetailClient({
       if (normalizeWhatsAppNumber(savedNumber)) {
         setShowContactRepair(false);
         setContactWaMessage({ kind: "success", text: t("invoice.contactRepairSaved") });
-        await sendWhatsApp(savedNumber);
+        handedOff = true;
+        await sendWhatsApp(savedNumber, popup);
       } else {
         setContactWaMessage({ kind: "error", text: t("invoice.contactRepairError") });
       }
     } catch {
       setContactWaMessage({ kind: "error", text: t("invoice.contactRepairError") });
     } finally {
+      if (!handedOff) popup?.close();
       setIsSavingContactWa(false);
     }
   }
@@ -545,8 +630,14 @@ export default function InvoiceDetailClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
+      // A 5xx may be a gateway that gave up while the change was being
+      // stored: read it back below, as for no answer at all.
+      if (response.status >= 500) throw new Error("invoice.statusUpdateUnknown");
       const payload = await response.json();
-      if (!response.ok) throw new Error("invoice.statusUpdateError");
+      if (!response.ok) {
+        setError(mutationErrorKey({ kind: "rejected", status: response.status, body: payload }, "invoice.statusUpdateError"));
+        return;
+      }
       setInvoice(payload.invoice);
       if (status === "PAID" && invoice.status !== "PAID") {
         triggerPaidHaptic();
@@ -554,7 +645,12 @@ export default function InvoiceDetailClient({
         window.setTimeout(() => setPaidMoment(false), 2600);
       }
     } catch {
-      setError("invoice.statusUpdateError");
+      // No answer, a dropped connection, a gateway page or a 5xx: it may
+      // have been stored, so show what the server holds rather than guess (#53).
+      const check = await sendMutation(`/api/invoices/${invoice.id}`, { cache: "no-store" });
+      const stored = check.kind === "ok" ? bodyField<InvoiceRecord>(check.body, "invoice") : undefined;
+      if (stored) setInvoice(stored);
+      if (stored?.status !== status) setError("error.connection");
     } finally {
       setIsSaving(false);
     }
@@ -578,35 +674,62 @@ export default function InvoiceDetailClient({
 
   // The owner's own Settings template (templateSend normally, templateChase
   // once the invoice is overdue -- T-21), resolved with the real
-  // invoice/deal tokens. Ensures a share link exists first (creating one on
-  // demand), so this is always usable as the entry point to the invoice's
-  // public link -- it never duplicates the share management state in
-  // ShareSection below, it just drives the same hook. window.open's return
-  // value is the only reliable signal a popup blocker fired (F15): when
-  // blocked, a direct link takes its place instead of failing silently.
-  async function sendWhatsApp(number: string) {
+  // invoice/deal tokens. Asks the server for a link to send first
+  // (ensureLink: the existing usable link, or a new one when there is none or
+  // it has expired -- FIND-07), so this is always usable as the entry point
+  // to the invoice's public link -- it never duplicates the share management
+  // state in ShareSection below, it just drives the same hook. `popup` was opened by
+  // the click itself (openWhatsAppPopup); null means the browser blocked it
+  // (F15), and a direct link then takes its place instead of failing
+  // silently. FIND-04: the old window.open(href, ..., "noopener") returned
+  // null even when WhatsApp opened, so that link always appeared.
+  async function sendWhatsApp(number: string, popup: WhatsAppPopup | null) {
     setWhatsAppBlockedHref(null);
     setIsSharingToWhatsApp(true);
+    let handedOff = false;
     try {
-      const link = shareState.share.kind === "active" && shareState.share.link
-        ? shareState.share.link
-        : await shareState.createOrRegenerate();
+      // One exception: a link the server can't recover (a share older than
+      // tokenCiphertext) that this tab still remembers. The server could only
+      // answer by replacing it, so send the remembered one, as before.
+      const { share } = shareState;
+      const link = share.kind === "active" && share.link && !share.linkRecoverable
+        ? share.link
+        : await shareState.ensureLink();
       if (!link) return;
+
+      // The link may have just frozen the document (Decision A), possibly
+      // with a brand edited elsewhere since this page loaded: name the brand
+      // the frozen document has. If that cannot be read, the brand loaded
+      // with the page is used, as before.
+      let messageBrand = documentBrand ?? brand ?? "";
+      try {
+        const fresh = await fetchWithTimeout(`/api/invoices/${invoice.id}/contact`, { cache: "no-store" });
+        const payload = fresh.ok ? await fresh.json() : null;
+        if (typeof payload?.documentBrand === "string") {
+          messageBrand = payload.documentBrand;
+          setDocumentBrand(payload.documentBrand);
+        }
+      } catch {
+        // keep messageBrand
+      }
 
       const result = buildInvoiceWhatsApp({
         contactWa: number,
         shareUrl: link,
         template: isOverdue ? templateChase : templateSend,
-        brand: brand ?? "",
+        brand: messageBrand,
         invoiceNumber: invoice.number,
         totalIdr: invoice.subtotalIdr,
-        dueDate: invoice.dueDate,
+        // An unusable legacy date is left out of the message rather than
+        // sent to the brand as "15 Jan 2".
+        dueDate: hasInvalidStoredDueDate ? null : invoice.dueDate,
       });
       if (result.kind === "ok") {
-        const win = window.open(result.href, "_blank", "noopener,noreferrer");
-        if (!win) setWhatsAppBlockedHref(result.href);
+        handedOff = popup?.navigate(result.href) ?? false;
+        if (!handedOff) setWhatsAppBlockedHref(result.href);
       }
     } finally {
+      if (!handedOff) popup?.close();
       setIsSharingToWhatsApp(false);
     }
   }
@@ -623,7 +746,7 @@ export default function InvoiceDetailClient({
       return;
     }
     setShowContactRepair(false);
-    await sendWhatsApp(contactWa ?? "");
+    await sendWhatsApp(contactWa ?? "", openWhatsAppPopup(t("whatsapp.opening")));
   }
 
   const isContactUnusable = contactStatus === "loaded" && !normalizeWhatsAppNumber(contactWa ?? "");
@@ -632,8 +755,6 @@ export default function InvoiceDetailClient({
     contactStatus === "loaded" &&
     shareState.share.kind !== "loading" &&
     !isShareLinkStale;
-
-  const dueDateValue = invoice.dueDate ? getDueDateCalendarDate(normalizeDueDate(invoice.dueDate)!) : "";
 
   return (
     <main className="mx-auto flex w-full max-w-[720px] flex-col gap-6 px-5 py-8 sm:px-8 lg:max-w-[1120px]">
@@ -667,7 +788,7 @@ export default function InvoiceDetailClient({
               </p>
             </div>
           ) : (
-            <p className="mt-3 text-[14px] text-muted">{t("invoice.dueLabel", { date: formatDate(normalizedDueDate, t("invoice.notSet")) })}</p>
+            <p className="mt-3 text-[14px] text-muted">{t("invoice.dueLabel", { date: hasInvalidStoredDueDate ? t("invoice.dueDateInvalidStored") : formatDate(normalizedDueDate, t("invoice.notSet")) })}</p>
           )}
         </header>
 
@@ -701,7 +822,7 @@ export default function InvoiceDetailClient({
             >
               {isOverdue ? t("invoice.sendReminder") : t("invoice.shareViaWhatsApp")}
             </Button>
-            {NEXT_ACTIONS[invoice.status].map((action) => (
+            {nextActions.map((action) => (
               <Button
                 key={action.status}
                 type="button"
@@ -754,7 +875,7 @@ export default function InvoiceDetailClient({
             </div>
           ) : null}
           {/* F15 fallback: rendered whenever the most recent send attempt's
-              window.open() came back blocked, whether that attempt came
+              popup came back blocked, whether that attempt came
               from the primary button directly or from a repair save --
               independent of showContactRepair so it still surfaces after
               the repair panel above closes on a successful save. */}
@@ -829,20 +950,26 @@ export default function InvoiceDetailClient({
             <DateField
               id="invoice-due-date"
               label={t("invoice.dueDateFieldLabel")}
-              value={dueDateValue}
+              value={storedDueDateValue ?? ""}
               lang={language === "id" ? "id-ID" : "en-US"}
+              min={DUE_DATE_MIN}
+              max={DUE_DATE_MAX}
               emptyLabel={t("invoice.notSet")}
               clearLabel={t("invoice.dueDateClear")}
               savingLabel={t("invoice.saving")}
               savedLabel={t("invoice.dueDateSaved")}
               errorLabel={t("invoice.dueDateUpdateError")}
+              invalidInputLabel={t("invoice.dueDateInvalidInput", dueDateRange)}
+              invalidStored={hasInvalidStoredDueDate}
+              invalidStoredLabel={t("invoice.dueDateInvalidStored")}
+              invalidStoredHint={t("invoice.dueDateInvalidStoredHint", dueDateRange)}
               onCommit={saveDueDate}
             />
           </div>
 
           {hasIncompleteIssuer ? (
             <div role="status" className="mt-4 rounded-md border border-due bg-due-tint px-4 py-3 text-[14px] text-ink">
-              {t("invoice.settingsDependencyNotice")}
+              {t(frozenOnPage ? "invoice.settingsFrozenNotice" : "invoice.settingsDependencyNotice")}
             </div>
           ) : null}
         </section>

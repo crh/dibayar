@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { DealRecord, DealStageTransitionRecord } from "@/lib/deals";
@@ -97,6 +97,96 @@ describe("DealDetailClient", () => {
   });
 });
 
+// #55: the full edit, from deal detail.
+describe("DealDetailClient Ubah deal (#55)", () => {
+  it("opens the editor, saves, and shows the deal as the server read it back, at the same stage", async () => {
+    const stored = { ...dealFixture, brand: "Kopi Baru", scope: "2 Reel", feeIdr: 3_000_000 };
+    const fetchMock = vi.fn(() => Promise.resolve(jsonResponse(200, { deal: stored })));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={dealFixture} history={historyFixture} now={new Date("2026-08-15T00:00:00.000Z")} />);
+
+    await user.click(screen.getByRole("button", { name: "Ubah deal" }));
+    const brand = screen.getByLabelText("Nama brand");
+    await user.clear(brand);
+    await user.type(brand, "Kopi Baru");
+    await user.clear(screen.getByLabelText("Scope pekerjaan"));
+    await user.type(screen.getByLabelText("Scope pekerjaan"), "2 Reel");
+    await user.clear(screen.getByLabelText(/^Fee \(Rp\)/));
+    await user.type(screen.getByLabelText(/^Fee \(Rp\)/), "3000000");
+    await user.click(screen.getByRole("button", { name: "Simpan perubahan" }));
+
+    expect(await screen.findByText("Perubahan deal disimpan.")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: "Kopi Baru" })).toBeTruthy();
+    expect(screen.getByText("Rp 3.000.000")).toBeTruthy();
+    expect(screen.getByText("2 Reel")).toBeTruthy();
+    expect(screen.getByText(/Tahap saat ini: Nego/)).toBeTruthy();
+    const patch = (fetchMock.mock.calls as unknown as Array<[string, RequestInit | undefined]>).find(([, init]) => init?.method === "PATCH");
+    expect(JSON.parse(patch![1]!.body as string)).not.toHaveProperty("status");
+  });
+
+  it("names the invoice the edit leaves alone when the deal has one", async () => {
+    const invoice = { id: "inv-1", userId: "user-1", dealId: "deal-1", number: "INV/2026/08/001", subtotalIdr: 2_500_000, withholdingTaxType: "NONE" as const, status: "SENT" as const, dueDate: null, createdAt: new Date(), updatedAt: new Date() };
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={{ ...dealFixture, status: "INVOICE" }} history={[]} initialInvoice={invoice} />);
+
+    await user.click(screen.getByRole("button", { name: "Ubah deal" }));
+
+    expect(screen.getByRole("note").textContent).toContain("INV/2026/08/001");
+  });
+});
+
+// FIND-11: emptying the contact name must clear it, and the page may only say
+// so once the server's copy shows it cleared.
+describe("DealDetailClient clearing the contact name (FIND-11)", () => {
+  const named = { ...dealFixture, contactName: "Budi" };
+
+  it("sends null for an emptied name, reads it back and says it was removed", async () => {
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) =>
+      Promise.resolve(jsonResponse(200, { deal: init?.method === "PATCH" ? { ...named, contactName: null } : { ...named, contactName: null } })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={named} history={[]} />);
+
+    await user.clear(screen.getByLabelText("Nama kontak"));
+    await user.click(screen.getByRole("button", { name: "Simpan" }));
+
+    expect(await screen.findByRole("status")).toHaveProperty("textContent", "Nama kontak dihapus");
+    expect(fetchMock.mock.calls[0]).toEqual(["/api/deals/deal-1", expect.objectContaining({ method: "PATCH", body: JSON.stringify({ contactName: null }) })]);
+    expect((fetchMock.mock.calls[1][1] as RequestInit | undefined)?.method ?? "GET").toBe("GET");
+    expect(screen.getByLabelText("Nama kontak")).toHaveProperty("value", "");
+  });
+
+  it("a name of only spaces is a clear too, never stored as spaces", async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(jsonResponse(200, { deal: { ...named, contactName: null } })));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={named} history={[]} />);
+
+    await user.clear(screen.getByLabelText("Nama kontak"));
+    await user.type(screen.getByLabelText("Nama kontak"), "   ");
+    await user.click(screen.getByRole("button", { name: "Simpan" }));
+
+    await screen.findByRole("status");
+    expect((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body).toBe(JSON.stringify({ contactName: null }));
+  });
+
+  it("does not report success when the server's copy still has the old name", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(200, { deal: named }))));
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={named} history={[]} />);
+
+    await user.clear(screen.getByLabelText("Nama kontak"));
+    await user.click(screen.getByRole("button", { name: "Simpan" }));
+
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Nama kontak belum bisa disimpan. Coba lagi.");
+    expect(screen.queryByText("Nama kontak dihapus")).toBeNull();
+    expect(screen.queryByText("Nama kontak disimpan")).toBeNull();
+  });
+});
+
 describe("DealDetailClient WhatsApp action (T-18)", () => {
   it("offers a Buka WhatsApp button for a valid contact number, and never opens it on its own", () => {
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
@@ -160,6 +250,43 @@ describe("DealDetailClient WhatsApp action (T-18)", () => {
     expect(screen.getByRole("button", { name: "Buka WhatsApp" })).toBeDefined();
     expect(openSpy).not.toHaveBeenCalled();
     openSpy.mockRestore();
+  });
+});
+
+describe("DealDetailClient field messages (#50)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("a repair number WhatsApp can't open is not sent, and the message says what is wrong", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={{ ...dealFixture, contactWa: "not-a-phone" }} history={[]} />);
+
+    await user.click(screen.getByRole("button", { name: "Buka WhatsApp" }));
+    const input = screen.getByLabelText("Perbaiki nomor WhatsApp");
+    await user.clear(input);
+    await user.type(input, "1");
+    await user.click(screen.getByRole("button", { name: "Simpan nomor" }));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("alert").map((alert) => alert.textContent)).toContain(
+      "Nomor WhatsApp belum valid. Contoh: 0812 3456 7890.",
+    );
+    expect(document.activeElement).toBe(input);
+  });
+
+  it("a contact name the server refuses says it is too long, not 'try again'", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(jsonResponse(400, { fields: { contactName: ["x"] } }))));
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={dealFixture} history={[]} />);
+
+    expect(screen.getByLabelText("Nama kontak").getAttribute("maxlength")).toBe("120");
+    await user.type(screen.getByLabelText("Nama kontak"), "Budi");
+    await user.click(screen.getByRole("button", { name: "Simpan" }));
+
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", "Nama kontak maksimal 120 karakter.");
   });
 });
 
@@ -310,5 +437,87 @@ describe("DealDetailClient — next action (deal↔invoice continuity)", () => {
     );
 
     expect(screen.queryByText(/Telat/)).toBeNull();
+  });
+});
+
+describe("DealDetailClient when the server cannot answer (#53)", () => {
+  const invoice: InvoiceRecord = {
+    id: "inv-1",
+    userId: "user-1",
+    dealId: "deal-1",
+    number: "INV/2026/09/001",
+    subtotalIdr: 2_500_000,
+    withholdingTaxType: "NONE",
+    status: "DRAFT",
+    dueDate: null,
+    createdAt: new Date("2026-09-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-09-01T00:00:00.000Z"),
+  };
+
+  function calls(fetchMock: ReturnType<typeof vi.fn>) {
+    return fetchMock.mock.calls.map(([url, init]) => `${(init as RequestInit | undefined)?.method ?? "GET"} ${url}`);
+  }
+
+  function keyOf(fetchMock: ReturnType<typeof vi.fn>, call: number) {
+    return ((fetchMock.mock.calls[call][1] as RequestInit).headers as Record<string, string>)["Idempotency-Key"];
+  }
+
+  it.each([
+    ["no answer", () => Promise.reject(new TypeError("Failed to fetch"))],
+    ["a 502 gateway page", () => Promise.resolve({ ok: false, status: 502, json: async () => { throw new SyntaxError("<html>"); } })],
+    ["a JSON 504", () => Promise.resolve(jsonResponse(504, { message: "upstream timed out" }))],
+  ])("an invoice create with %s says so, and Buat invoice again resends it with the same key and shows the stored invoice", async (_case, firstAnswer) => {
+    const fetchMock = vi.fn().mockImplementationOnce(firstAnswer).mockResolvedValueOnce(jsonResponse(200, { invoice }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={{ ...dealFixture, status: "INVOICE" }} history={[]} />);
+
+    await user.click(screen.getByRole("button", { name: "Buat invoice" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("invoice ini belum pasti dibuat");
+
+    await user.click(screen.getByRole("button", { name: "Buat invoice" }));
+    expect(await screen.findByRole("link", { name: "Lihat invoice INV/2026/09/001 →" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Buat invoice" })).toBeNull();
+    expect(calls(fetchMock)).toEqual(["POST /api/invoices", "POST /api/invoices"]);
+    expect(keyOf(fetchMock, 0)).toMatch(/^[A-Za-z0-9-]{16,100}$/);
+    expect(keyOf(fetchMock, 1)).toBe(keyOf(fetchMock, 0));
+  });
+
+  it("after a definite refusal, Buat invoice again gets a new key", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse(403, { error: "x" })).mockResolvedValueOnce(jsonResponse(201, { invoice }));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={{ ...dealFixture, status: "INVOICE" }} history={[]} />);
+
+    await user.click(screen.getByRole("button", { name: "Buat invoice" }));
+    await screen.findByRole("alert");
+    await user.click(screen.getByRole("button", { name: "Buat invoice" }));
+
+    await screen.findByRole("link", { name: "Lihat invoice INV/2026/09/001 →" });
+    expect(keyOf(fetchMock, 1)).not.toBe(keyOf(fetchMock, 0));
+  });
+
+  it("a contact name refused for an expired session says to sign in again, and keeps what was typed", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(401, { error: "raw server text" })));
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={dealFixture} history={[]} />);
+
+    const input = screen.getByLabelText("Nama kontak", { selector: "input" }) as HTMLInputElement;
+    await user.type(input, "Rina");
+    await user.click(screen.getByRole("button", { name: "Simpan" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Belum tersimpan karena sesi kamu sudah berakhir. Muat ulang halaman untuk masuk lagi.");
+    expect(input.value).toBe("Rina");
+  });
+
+  it("a stage move refused for an expired session says to sign in again", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => jsonResponse(401, { error: "raw server text" })));
+    const user = userEvent.setup();
+    render(<DealDetailClient initialDeal={dealFixture} history={[]} />);
+
+    await user.click(screen.getByRole("button", { name: "Lanjut ke Deal" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe("Belum tersimpan karena sesi kamu sudah berakhir. Muat ulang halaman untuk masuk lagi.");
+    expect(screen.getByText(/Tahap saat ini: Nego/)).toBeDefined();
   });
 });

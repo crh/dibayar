@@ -24,6 +24,18 @@ function collectSpecs(node, acc = []) {
   return acc;
 }
 
+// One spec as one project ran it. The report lists a spec once per project
+// (or once with a test per project, depending on the Playwright version);
+// either way this picks out that project's tests.
+function inProject(specs, project) {
+  return specs
+    .map((spec) => {
+      const tests = (spec.tests ?? []).filter((t) => t.projectName === project);
+      return { title: spec.title, tests, ok: tests.length > 0 && tests.every((t) => t.status === "expected") };
+    })
+    .filter((spec) => spec.tests.length > 0);
+}
+
 function specErrorText(spec) {
   const messages = [];
   for (const t of spec.tests ?? []) {
@@ -55,7 +67,9 @@ test("browserDiagnostics negative control: fixture fails on a real pageerror and
 
   const report = JSON.parse(readFileSync(REPORT_PATH, "utf8"));
   const specs = collectSpecs({ suites: report.suites });
-  const byTitle = Object.fromEntries(specs.map((spec) => [spec.title, spec]));
+  // Every spec runs in Chromium; the assertions below that name no engine are
+  // about that run.
+  const byTitle = Object.fromEntries(inProject(specs, "chromium").map((spec) => [spec.title, spec]));
 
   const pageErrorSpec = byTitle["fails a test on a deliberate unhandled page error"];
   assert.ok(pageErrorSpec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
@@ -116,4 +130,62 @@ test("browserDiagnostics negative control: fixture fails on a real pageerror and
   const optedInSpec = byTitle["suppresses a deliberate 400 matching expectedErrorResponses (control)"];
   assert.ok(optedInSpec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
   assert.equal(optedInSpec.ok, true, "an opted-in 400 must still pass (suppressed)");
+  // The `status` form of expectedErrorResponses: only the named 5xx is
+  // suppressed.
+  const optedIn500Spec = byTitle["suppresses a deliberate 500 matching an expectedErrorResponses status (control)"];
+  assert.ok(optedIn500Spec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
+  assert.equal(optedIn500Spec.ok, true, "an opted-in 500 must pass (suppressed)");
+
+  const statuslessSpec = byTitle["fails a test on a 500 at an address opted in without a status"];
+  assert.ok(statuslessSpec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
+  assert.equal(statuslessSpec.ok, false, "a 500 must still fail when the opt-in names no status");
+  assert.match(specErrorText(statuslessSpec), /500 https:\/\/example\.invalid\/synthetic-500-statusless-optin/);
+
+  const otherStatusSpec = byTitle["fails a test on a 503 at an address opted in for a 500"];
+  assert.ok(otherStatusSpec, `spec not found in report. Titles seen: ${Object.keys(byTitle).join(", ")}`);
+  assert.equal(otherStatusSpec.ok, false, "a 5xx other than the named one must still fail");
+  assert.match(specErrorText(otherStatusSpec), /503 https:\/\/example\.invalid\/synthetic-500-opted-in/);
+
+  // The Auth.js provider-logo rule (PR #46): only the cancelled logo itself
+  // is dropped. Checked in each engine, with that engine's own wording for a
+  // request it cancelled: the control passes only while that wording is in
+  // ABORTED_ERROR_TEXTS (e2e/support/test.ts), and the two "cancelled, but
+  // not the logo" cases show the wording really was produced.
+  for (const [project, cancelled, refused] of [
+    ["chromium", /net::ERR_ABORTED/, /net::ERR_CONNECTION_REFUSED/],
+    ["firefox", /NS_BINDING_ABORTED/, /NS_ERROR_CONNECTION_REFUSED/],
+    ["webkit", /Load request cancelled/, /Blocked by Web Inspector/],
+  ]) {
+    const ran = inProject(specs, project);
+    const inEngine = Object.fromEntries(ran.map((spec) => [spec.title, spec]));
+    const seen = `Titles seen in ${project}: ${Object.keys(inEngine).join(", ") || "none"}`;
+    // A missing browser must not look like a pass: every test ran, none skipped.
+    for (const spec of ran) {
+      for (const t of spec.tests) assert.notEqual(t.status, "skipped", `"${spec.title}" was skipped in ${project}`);
+    }
+
+    const cancelledLogoSpec = inEngine["suppresses a cancelled Auth.js provider logo (control)"];
+    assert.ok(cancelledLogoSpec, `control spec did not run in ${project}. ${seen}`);
+    assert.equal(
+      cancelledLogoSpec.ok,
+      true,
+      `a cancelled Auth.js provider logo must pass (suppressed) in ${project}:\n${specErrorText(cancelledLogoSpec)}`,
+    );
+
+    const logo = /authjs\.dev\/img\/providers\/google\.svg/;
+    for (const [title, address, detail] of [
+      ["fails a test on an Auth.js provider logo that fails without being cancelled", logo, refused],
+      ["fails a test on an Auth.js provider logo answered with a 5xx", /503 https:\/\/authjs\.dev\/img\/providers\/google\.svg/, null],
+      ["fails a test on a cancelled authjs.dev request that is not a provider logo", /authjs\.dev\/img\/synthetic-not-a-provider-logo\.svg/, cancelled],
+      ["fails a test on a cancelled provider-logo path on another host", /example\.invalid\/img\/providers\/google\.svg/, cancelled],
+    ]) {
+      const spec = inEngine[title];
+      assert.ok(spec, `spec did not run in ${project}. ${seen}`);
+      assert.equal(spec.ok, false, `"${title}" must be reported as failed in ${project}`);
+      const text = specErrorText(spec);
+      assert.match(text, /Unexpected browser diagnostics/, `${project}: ${title}`);
+      const expected = detail ? new RegExp(`${address.source} — ${detail.source}`) : address;
+      assert.match(text, expected, `${project}: ${title}`);
+    }
+  }
 });

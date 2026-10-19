@@ -27,6 +27,7 @@ function renderCard(props: Partial<React.ComponentProps<typeof DealCard>> = {}, 
   const t = (key: string, values?: Record<string, string>) => translate(language, key, values);
   const onStageChange = vi.fn();
   const onCreateInvoice = vi.fn();
+  const onEdit = vi.fn();
   const utils = render(
     <DealCard
       deal={makeDeal()}
@@ -37,10 +38,11 @@ function renderCard(props: Partial<React.ComponentProps<typeof DealCard>> = {}, 
       isSaving={false}
       onStageChange={onStageChange}
       onCreateInvoice={onCreateInvoice}
+      onEdit={onEdit}
       {...props}
     />,
   );
-  return { ...utils, onStageChange, onCreateInvoice };
+  return { ...utils, onStageChange, onCreateInvoice, onEdit };
 }
 
 describe("DealCard", () => {
@@ -238,4 +240,38 @@ describe("DealCard", () => {
 
     expect(detailLink.getAttribute("href")).toBe("/deal/deal-1");
   });
+
+  // #55: a saved deal can be edited from its card, at every stage.
+  it.each(["MASUK", "NEGO", "DEAL", "KONTEN", "INVOICE", "DIBAYAR"] as const)("offers Ubah deal in the overflow menu at stage %s, closing the menu and asking to edit this deal", async (status) => {
+    const user = userEvent.setup();
+    const { onEdit } = renderCard({ deal: makeDeal({ status }) });
+
+    await user.click(screen.getByRole("button", { name: "Aksi lain untuk deal Kopi Nusantara" }));
+    await user.click(screen.getByRole("menuitem", { name: "Ubah deal" }));
+
+    expect(onEdit).toHaveBeenCalledWith("deal-1");
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("labels the edit item in English under the English UI", async () => {
+    const user = userEvent.setup();
+    renderCard({}, "en");
+
+    await user.click(screen.getByRole("button", { name: /Kopi Nusantara/ }));
+
+    expect(screen.getByRole("menuitem", { name: "Edit deal" })).toBeTruthy();
+  });
+
+  it("moves focus to the card's actions button when Ubah deal is chosen, so the editor can return focus there", async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    const actions = screen.getByRole("button", { name: "Aksi lain untuk deal Kopi Nusantara" });
+    await user.click(actions);
+    screen.getByRole("menuitem", { name: "Ubah deal" }).focus();
+    await user.keyboard("{Enter}");
+
+    expect(document.activeElement).toBe(actions);
+  });
 });
+

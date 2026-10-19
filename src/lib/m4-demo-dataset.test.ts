@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { summarizeMonthlyIncome } from "./income-summary";
 import { DUE_SOON_WINDOW_DAYS, selectAttentionInvoices } from "./invoice-date-status";
-import type { InvoiceRecord } from "./invoices";
+import { ALLOWED_STATUS_TRANSITIONS, createInvoice, type InvoiceCreateDb, type InvoiceRecord, type InvoiceTransactionClient } from "./invoices";
 import {
   M4_DEMO_DEALS,
   M4_DEMO_STAGING_ENDPOINT,
+  buildM4DemoInvoiceInput,
   checkM4DemoTarget,
   jakartaDateOffset,
+  jakartaDateOnlyOffset,
 } from "./m4-demo-dataset";
 
 const stagingPooled = `postgresql://u:p@${M4_DEMO_STAGING_ENDPOINT}-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require`;
@@ -45,6 +47,66 @@ describe("jakartaDateOffset", () => {
   });
 });
 
+describe("jakartaDateOnlyOffset", () => {
+  it("names the Jakarta calendar day as yyyy-mm-dd, matching jakartaDateOffset", () => {
+    // 16:59:59Z is 23:59:59 Jakarta; 17:00Z is already the next Jakarta day.
+    expect(jakartaDateOnlyOffset(new Date("2026-09-30T16:59:59Z"), 0)).toBe("2026-09-30");
+    expect(jakartaDateOnlyOffset(new Date("2026-09-30T17:00:00Z"), 0)).toBe("2026-10-01");
+    expect(jakartaDateOnlyOffset(new Date("2026-09-30T17:00:00Z"), 31)).toBe("2026-11-01");
+    expect(jakartaDateOnlyOffset(new Date("2026-09-30T17:00:00Z"), -1)).toBe("2026-09-30");
+  });
+});
+
+describe("buildM4DemoInvoiceInput", () => {
+  // A fake that runs the real createInvoice (and so the strict public
+  // invoiceCreateSchema) and records what would be written.
+  function makeCreateDb() {
+    const created: Array<{ dueDate: Date | null }> = [];
+    const tx = {
+      $queryRaw: async () => [{ lastSequence: 1 }],
+      invoice: {
+        create: async ({ data }: { data: { dueDate: Date | null } }) => {
+          created.push(data);
+          return { id: `inv-${created.length}`, ...data };
+        },
+      },
+    } as unknown as InvoiceTransactionClient;
+    const db: InvoiceCreateDb = {
+      deal: { findFirst: async () => ({ id: "deal-1", userId: "demo", feeIdr: 1_000_000, deadline: null }) },
+      $transaction: async (fn) => fn(tx),
+    } as InvoiceCreateDb;
+    return { db, created };
+  }
+
+  // Just before Jakarta midnight and just after it, where a UTC/Jakarta
+  // confusion would shift the stored day.
+  it.each(["2026-09-30T16:59:59Z", "2026-09-30T17:00:00Z"])(
+    "every demo invoice passes createInvoice's strict schema with no day shift (now=%s)",
+    async (nowIso) => {
+      const now = new Date(nowIso);
+      for (const demo of M4_DEMO_DEALS) {
+        if (!demo.invoice) continue;
+        const input = buildM4DemoInvoiceInput("deal-1", demo.invoice, now);
+        expect(input.dueDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+        const { db, created } = makeCreateDb();
+        await expect(createInvoice(db, "demo", input)).resolves.not.toBeNull();
+        // Stored as UTC midnight of exactly the Jakarta day the dataset means.
+        expect(created[0].dueDate?.toISOString()).toBe(jakartaDateOffset(now, demo.invoice.dueOffsetDays).toISOString());
+      }
+    },
+  );
+
+  it("regression: the previous Date payload is rejected by the strict schema", async () => {
+    const { db, created } = makeCreateDb();
+    const now = new Date("2026-09-30T07:00:00Z");
+    await expect(
+      createInvoice(db, "demo", { dealId: "deal-1", withholdingTaxType: "NONE", dueDate: jakartaDateOffset(now, 7) }),
+    ).rejects.toThrow();
+    expect(created).toHaveLength(0);
+  });
+});
+
 describe("M4_DEMO_DEALS", () => {
   const now = new Date("2026-09-30T07:00:00Z");
 
@@ -77,12 +139,11 @@ describe("M4_DEMO_DEALS", () => {
   });
 
   it("uses only invoice transitions the app allows, starting from DRAFT", () => {
-    const allowed: Record<string, string[]> = { DRAFT: ["SENT"], SENT: ["DUE", "OVERDUE", "PAID"], DUE: ["OVERDUE", "PAID"], OVERDUE: ["PAID"] };
     for (const deal of M4_DEMO_DEALS) {
       if (!deal.invoice) continue;
       const path = deal.invoice.statusPath;
       expect(path[0]).toBe("DRAFT");
-      for (let i = 1; i < path.length; i += 1) expect(allowed[path[i - 1]]).toContain(path[i]);
+      for (let i = 1; i < path.length; i += 1) expect(ALLOWED_STATUS_TRANSITIONS[path[i - 1]]).toContain(path[i]);
     }
   });
 
