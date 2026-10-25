@@ -56,41 +56,61 @@ test.describe("deal create/update journeys", { tag: "@critical" }, () => {
     // per-test opt-in rather than baked into the shared fixture.
     test.use({ expectedErrorResponses: [{ method: "POST", pathname: "/api/deals" }] });
 
-    // E2E-IMPROVEMENT-PLAN.md C3: proves the existing server-side 400
-    // contract (deal-validation.ts's contactWa: min(6)) end-to-end through
-    // the real UI, not just the API test suite. deal-form.tsx's WhatsApp
-    // field has no client-side minlength/pattern -- only `required` -- so
-    // a too-short number (here, 5 digits) passes native HTML validation
-    // and genuinely reaches the server, unlike the earlier investigation
-    // into the due-date field (a native <input type="date"> mostly
-    // refuses to hold malformed text at all, making it a poor fit for
-    // this kind of test).
-    test("a server-rejected deal (WhatsApp number too short) shows an error and saves nothing", async ({ page }) => {
+    // #50: on an iPhone a tester typed a one-digit WhatsApp number. The
+    // browser's `required` let it through, the server refused it (400), and
+    // all the dialog said was "Deal belum bisa disimpan." -- nothing about
+    // which field or why. The form now checks the number the way WhatsApp
+    // needs it (normalizeWhatsAppNumber) before sending, and says so on the
+    // field.
+    test("a WhatsApp number WhatsApp can't open is stopped on the field with a message, nothing is sent, and once corrected the deal saves", async ({ page }) => {
       await page.goto("/deal?tambah=1");
       const dialog = page.getByRole("dialog", { name: "Tambah deal" });
-      const brand = `E2E Should Not Save ${Date.now()}`;
+      const creates: string[] = [];
+      page.on("request", (request) => {
+        if (request.method() === "POST" && new URL(request.url()).pathname === "/api/deals") creates.push(request.url());
+      });
+      const brand = `E2E Nomor Satu Digit ${Date.now()}`;
       await dialog.getByLabel("Nama brand").fill(brand);
-      // deal-validation.ts requires at least 6 chars; deal-form.tsx applies
-      // no client-side length constraint, so this reaches the server.
-      await dialog.getByLabel("Kontak WhatsApp").fill("12345");
+      const wa = dialog.getByLabel("Kontak WhatsApp");
+      await wa.fill("1");
       await dialog.getByLabel("Scope pekerjaan").fill("E2E server-validation check");
       await dialog.getByLabel("Fee (Rp)").fill("1000000");
+      await dialog.getByRole("button", { name: "Simpan deal" }).click();
 
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole("alert")).toHaveText("Periksa kembali isian yang ditandai.");
+      await expect(wa).toHaveAttribute("aria-invalid", "true");
+      await expect(wa).toHaveAccessibleDescription("Nomor WhatsApp belum valid. Contoh: 0812 3456 7890.");
+      await expect(wa).toBeFocused();
+      await expect(dialog.getByText("Deal belum bisa disimpan.")).toHaveCount(0);
+      expect(creates).toEqual([]);
+
+      // Correcting the number clears its message, and the same form saves.
+      await wa.fill("0812 3456 7890");
+      await expect(wa).not.toHaveAttribute("aria-invalid", "true");
       const createResponse = page.waitForResponse(
         (response) => response.request().method() === "POST" && new URL(response.url()).pathname === "/api/deals",
       );
       await dialog.getByRole("button", { name: "Simpan deal" }).click();
-      expect((await createResponse).status()).toBe(400);
-
-      // The dialog stays open and shows an error -- deal-client.tsx's
-      // handleSubmit only closes it and clears the form on the success path.
-      await expect(dialog).toBeVisible();
-      await expect(dialog.getByRole("alert")).toHaveText("Deal belum bisa disimpan.");
-      await expect(dialog.getByLabel("Nama brand")).toHaveValue(brand);
-
-      await dialog.getByRole("button", { name: "Tutup" }).click();
-      await expect(page.getByText(brand, { exact: true })).toHaveCount(0);
+      expect((await createResponse).status()).toBe(201);
+      await expect(dialog).toHaveCount(0);
       await page.reload();
+      await expect(page.locator("article", { hasText: brand })).toHaveCount(1);
+    });
+
+    // The server keeps the same rule for anything that does not come through
+    // the form, and names the field when it refuses.
+    test("the API refuses a WhatsApp number WhatsApp can't open, naming contactWa, and saves nothing", async ({ page, baseURL }) => {
+      const brand = `E2E API Nomor Pendek ${Date.now()}`;
+      for (const contactWa of ["1", "123456"]) {
+        const response = await page.request.post("/api/deals", {
+          headers: { origin: new URL(baseURL!).origin },
+          data: { brand, contactWa, scope: "E2E server-validation check", feeIdr: 1_000_000 },
+        });
+        expect(response.status()).toBe(400);
+        expect(Object.keys(((await response.json()) as { fields: Record<string, unknown> }).fields)).toEqual(["contactWa"]);
+      }
+      await page.goto("/deal");
       await expect(page.getByText(brand, { exact: true })).toHaveCount(0);
     });
   });

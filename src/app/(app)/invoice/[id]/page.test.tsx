@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { getOwnedInvoice, type InvoiceRecord } from "@/lib/invoices";
 import { getUserLanguage } from "@/lib/user-language";
 import { getUserSettings } from "@/lib/user-settings";
+import { resolveOwnerInvoiceDocument } from "@/lib/invoice-snapshot";
 import InvoiceDetailPage from "./page";
 
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
@@ -23,6 +24,11 @@ vi.mock("@/lib/user-settings", async () => {
   return { ...actual, getUserSettings: vi.fn() };
 });
 
+vi.mock("@/lib/invoice-snapshot", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/invoice-snapshot")>("@/lib/invoice-snapshot");
+  return { ...actual, resolveOwnerInvoiceDocument: vi.fn() };
+});
+
 const { notFound, redirect } = vi.hoisted(() => ({
   notFound: vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND");
@@ -37,16 +43,18 @@ vi.mock("./invoice-detail-client", () => ({
   default: ({
     initialInvoice,
     hasIncompleteIssuer,
+    documentFrozen,
     templateSend,
     templateChase,
   }: {
     initialInvoice: InvoiceRecord;
     hasIncompleteIssuer: boolean;
+    documentFrozen: boolean;
     templateSend: string;
     templateChase: string;
   }) => (
     <div data-testid="invoice-detail-client">
-      {initialInvoice.number} · {String(hasIncompleteIssuer)} · {templateSend} · {templateChase}
+      {initialInvoice.number} · {String(hasIncompleteIssuer)} · {String(documentFrozen)} · {templateSend} · {templateChase}
     </div>
   ),
 }));
@@ -55,6 +63,7 @@ const mockedAuth = vi.mocked(auth);
 const mockedGetOwnedInvoice = vi.mocked(getOwnedInvoice);
 const mockedGetUserLanguage = vi.mocked(getUserLanguage);
 const mockedGetUserSettings = vi.mocked(getUserSettings);
+const mockedResolve = vi.mocked(resolveOwnerInvoiceDocument);
 
 const invoiceFixture: InvoiceRecord = {
   id: "invoice-1",
@@ -82,11 +91,33 @@ const completeSettings = {
   updatedAt: null,
 };
 
+function documentWith(settings: Partial<typeof completeSettings>, frozen = true) {
+  const merged = { ...completeSettings, ...settings };
+  return {
+    frozen,
+    input: {
+      invoice: { id: invoiceFixture.id, number: invoiceFixture.number, subtotalIdr: invoiceFixture.subtotalIdr, withholdingTaxType: invoiceFixture.withholdingTaxType, dueDate: null, createdAt: invoiceFixture.createdAt },
+      deal: { brand: "Brand", contactName: null, scope: "Scope", paymentTerms: null },
+      settings: {
+        issuerName: merged.issuerName,
+        issuerAddress: merged.issuerAddress,
+        issuerWhatsapp: merged.issuerWhatsapp,
+        issuerEmail: merged.issuerEmail,
+        bankName: merged.bankName,
+        bankAccountNumber: merged.bankAccountNumber,
+        bankAccountHolder: merged.bankAccountHolder,
+      },
+    },
+  };
+}
+
 beforeEach(() => {
   notFound.mockClear();
   redirect.mockClear();
   mockedGetUserLanguage.mockResolvedValue("id");
   mockedGetUserSettings.mockResolvedValue(completeSettings);
+  mockedResolve.mockReset();
+  mockedResolve.mockResolvedValue(documentWith({}));
 });
 
 describe("/invoice/:id", () => {
@@ -117,20 +148,35 @@ describe("/invoice/:id", () => {
     render(page);
 
     expect(screen.getByTestId("invoice-detail-client").textContent).toBe(
-      "INV-2026-001 · false · Halo {brand}, invoice terlampir. · Halo {brand}, mohon dicek invoicenya.",
+      "INV-2026-001 · false · true · Halo {brand}, invoice terlampir. · Halo {brand}, mohon dicek invoicenya.",
     );
+    expect(mockedResolve).toHaveBeenCalledWith(expect.anything(), invoiceFixture);
   });
 
-  it("flags an incomplete issuer profile so the client can warn before sending", async () => {
+  it("flags an incomplete issuer profile on a Draft that still follows Settings, so the client can warn before sending", async () => {
     mockedAuth.mockResolvedValue({ user: { id: "user-1" }, expires: "2099-01-01T00:00:00.000Z" } as never);
-    mockedGetOwnedInvoice.mockResolvedValue(invoiceFixture);
-    mockedGetUserSettings.mockResolvedValue({ ...completeSettings, bankAccountNumber: "" });
+    mockedGetOwnedInvoice.mockResolvedValue({ ...invoiceFixture, status: "DRAFT" });
+    mockedResolve.mockResolvedValue(documentWith({ bankAccountNumber: "" }, false));
 
     const page = await InvoiceDetailPage({ params: Promise.resolve({ id: "invoice-1" }) });
     render(page);
 
     expect(screen.getByTestId("invoice-detail-client").textContent).toBe(
-      "INV-2026-001 · true · Halo {brand}, invoice terlampir. · Halo {brand}, mohon dicek invoicenya.",
+      "INV-2026-001 · true · false · Halo {brand}, invoice terlampir. · Halo {brand}, mohon dicek invoicenya.",
     );
+  });
+
+  // Decision A: the notice follows the document the brand has, not today's
+  // Settings. A frozen invoice issued without bank details stays incomplete
+  // after Settings are completed; one issued complete is not flagged after
+  // Settings are emptied.
+  it("judges a frozen invoice by its snapshot, not by the current Settings", async () => {
+    mockedAuth.mockResolvedValue({ user: { id: "user-1" }, expires: "2099-01-01T00:00:00.000Z" } as never);
+    mockedGetOwnedInvoice.mockResolvedValue(invoiceFixture);
+    mockedGetUserSettings.mockResolvedValue({ ...completeSettings, bankName: "", bankAccountNumber: "" });
+    mockedResolve.mockResolvedValue(documentWith({}, true));
+
+    render(await InvoiceDetailPage({ params: Promise.resolve({ id: "invoice-1" }) }));
+    expect(screen.getByTestId("invoice-detail-client").textContent).toContain("INV-2026-001 · false · true");
   });
 });

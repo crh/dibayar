@@ -44,7 +44,11 @@ export async function GET(_request: Request, context: RouteContext) {
       return json({ error: "Invoice tidak ditemukan." }, 404);
     }
 
-    return json(result.active ? { active: true, path: result.path, expiresAt: result.expiresAt } : { active: false });
+    // `active` is true only for a link that opens right now. An expired
+    // share is not active and its path is never sent to the client.
+    if (result.status === "active") return json({ active: true, path: result.path, expiresAt: result.expiresAt });
+    if (result.status === "expired") return json({ active: false, expired: true, expiresAt: result.expiresAt });
+    return json({ active: false });
   } catch {
     return json({ error: "Status berbagi belum bisa dimuat. Coba lagi." }, 500);
   }

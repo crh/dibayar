@@ -10,8 +10,12 @@ import type { DealRecord, DealStageTransitionRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
 import { isOverdueByDueDate, daysUntilDue } from "@/lib/invoice-date-status";
 import { PIPELINE_STAGES, PIPELINE_STAGE_KEYS } from "@/components/deals/deal-stages";
-import { buildDealWhatsApp } from "@/lib/whatsapp";
+import { buildDealWhatsApp, normalizeWhatsAppNumber } from "@/lib/whatsapp";
+import { DEAL_LIMITS } from "@/lib/deal-limits";
 import { formatPhone } from "@/lib/format/phone";
+import { fetchWithTimeout } from "@/lib/http";
+import { bodyField, IDEMPOTENCY_HEADER, idempotencyKeyFor, mutationErrorKey, sendMutation } from "@/lib/mutation";
+import { EditDealDialog } from "@/components/deals/edit-deal-dialog";
 
 export default function DealDetailClient({
   initialDeal,
@@ -34,6 +38,13 @@ export default function DealDetailClient({
   const [isChangingStage, setIsChangingStage] = useState(false);
   const [isCreatingInvoice, setIsCreatingInvoice] = useState(false);
   const [nextActionMessage, setNextActionMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  // #55: the full edit of the deal's core fields.
+  const [isEditing, setIsEditing] = useState(false);
+  const [editMessage, setEditMessage] = useState<string | null>(null);
+  // An invoice create whose outcome is unknown may have been stored, so its
+  // key is kept for the next press: the server then returns that invoice
+  // instead of creating a second one (#53).
+  const pendingInvoiceCreate = useRef<{ key: string; body: string } | null>(null);
 
   const stageIndex = PIPELINE_STAGES.findIndex((stage) => stage.value === deal.status);
   const previousStage = stageIndex > 0 ? PIPELINE_STAGES[stageIndex - 1] : null;
@@ -45,16 +56,25 @@ export default function DealDetailClient({
     setIsChangingStage(true);
     setNextActionMessage(null);
     try {
-      const response = await fetch(`/api/deals/${deal.id}`, {
+      const result = await sendMutation(`/api/deals/${deal.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error("dashboard.dealError");
-      setDeal(payload.deal);
-    } catch {
-      setNextActionMessage({ kind: "error", text: t("dashboard.dealError") });
+      const saved = result.kind === "ok" ? bodyField<DealRecord>(result.body, "deal") : undefined;
+      if (saved) {
+        setDeal(saved);
+        return;
+      }
+      if (result.kind === "unknown") {
+        // It may have been stored: show what the server holds.
+        const check = await sendMutation(`/api/deals/${deal.id}`, { cache: "no-store" });
+        const stored = check.kind === "ok" ? bodyField<DealRecord>(check.body, "deal") : undefined;
+        if (stored) setDeal(stored);
+        if (stored?.status !== status) setNextActionMessage({ kind: "error", text: t("error.connection") });
+        return;
+      }
+      setNextActionMessage({ kind: "error", text: t(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.dealError") : "dashboard.dealError") });
     } finally {
       setIsChangingStage(false);
     }
@@ -63,18 +83,29 @@ export default function DealDetailClient({
   async function handleCreateInvoice() {
     setIsCreatingInvoice(true);
     setNextActionMessage(null);
+
+    const body = JSON.stringify({ dealId: deal.id, withholdingTaxType: "NONE" });
+    const key = idempotencyKeyFor(pendingInvoiceCreate.current, body);
+    pendingInvoiceCreate.current = { key, body };
+
     try {
-      const response = await fetch("/api/invoices", {
+      const result = await sendMutation("/api/invoices", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dealId: deal.id, withholdingTaxType: "NONE" }),
+        headers: { "Content-Type": "application/json", [IDEMPOTENCY_HEADER]: key },
+        body,
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error("dashboard.invoiceError");
-      setInvoice(payload.invoice);
-      setNextActionMessage({ kind: "success", text: t("deal.detailInvoiceCreatedLinkPrefix") });
-    } catch {
-      setNextActionMessage({ kind: "error", text: t("dashboard.invoiceError") });
+      if (result.kind === "unknown") {
+        setNextActionMessage({ kind: "error", text: t("dashboard.invoiceUnknown") });
+        return;
+      }
+      pendingInvoiceCreate.current = null;
+      const created = result.kind === "ok" ? bodyField<InvoiceRecord>(result.body, "invoice") : undefined;
+      if (created) {
+        setInvoice(created);
+        setNextActionMessage({ kind: "success", text: t("deal.detailInvoiceCreatedLinkPrefix") });
+      } else {
+        setNextActionMessage({ kind: "error", text: t(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.invoiceError") : "dashboard.invoiceError") });
+      }
     } finally {
       setIsCreatingInvoice(false);
     }
@@ -92,21 +123,36 @@ export default function DealDetailClient({
     if (showContactRepair && whatsapp.kind === "invalid-number") contactWaInputRef.current?.focus();
   }, [showContactRepair, whatsapp.kind]);
 
+  // An emptied field clears the stored name: it is sent as null, and the
+  // result is read back before it is reported. Sending "nothing" for an empty
+  // field used to change nothing and still say "saved" (FIND-11).
   async function handleSaveContactName() {
     setIsSaving(true);
     setMessage(null);
+    const expected = contactName.trim() === "" ? null : contactName.trim();
 
     try {
-      const response = await fetch(`/api/deals/${deal.id}`, {
+      const response = await fetchWithTimeout(`/api/deals/${deal.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactName: contactName || undefined }),
+        body: JSON.stringify({ contactName: expected }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error("deal.detailContactNameError");
-      setDeal(payload.deal);
-      setContactName(payload.deal.contactName ?? "");
-      setMessage({ kind: "success", text: t("deal.detailContactNameSaved") });
+      if (response.status === 400) {
+        setMessage({ kind: "error", text: t("dealForm.error.contactName") });
+        return;
+      }
+      if (!response.ok) {
+        setMessage({ kind: "error", text: t(mutationErrorKey({ kind: "rejected", status: response.status, body: payload }, "deal.detailContactNameError")) });
+        return;
+      }
+      const readBackResponse = await fetchWithTimeout(`/api/deals/${deal.id}`, { cache: "no-store" });
+      const readBackPayload = await readBackResponse.json();
+      const stored: DealRecord | undefined = readBackResponse.ok && readBackPayload.deal?.id === deal.id ? readBackPayload.deal : undefined;
+      if (!stored || (stored.contactName ?? null) !== expected) throw new Error("deal.detailContactNameError");
+      setDeal(stored);
+      setContactName(stored.contactName ?? "");
+      setMessage({ kind: "success", text: t(expected === null ? "deal.detailContactNameCleared" : "deal.detailContactNameSaved") });
     } catch {
       setMessage({ kind: "error", text: t("deal.detailContactNameError") });
     } finally {
@@ -117,18 +163,33 @@ export default function DealDetailClient({
   // Repairing the number never opens WhatsApp itself -- it only unblocks the
   // separate "Buka WhatsApp" button above, which the user still has to click.
   async function handleSaveContactWa() {
-    setIsSavingContactWa(true);
     setContactWaMessage(null);
+    // A number WhatsApp can't open is refused by the server too; say what is
+    // wrong with it rather than "try again" (#50).
+    if (!normalizeWhatsAppNumber(contactWaDraft)) {
+      setContactWaMessage({ kind: "error", text: t("dealForm.error.contactWa") });
+      contactWaInputRef.current?.focus();
+      return;
+    }
+    setIsSavingContactWa(true);
 
     try {
-      const response = await fetch(`/api/deals/${deal.id}`, {
+      const response = await fetchWithTimeout(`/api/deals/${deal.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contactWa: contactWaDraft }),
       });
       const payload = await response.json();
-      if (!response.ok || typeof payload.deal?.contactWa !== "string") throw new Error("deal.detailWhatsAppNumberError");
-      const readBackResponse = await fetch(`/api/deals/${deal.id}`, { cache: "no-store" });
+      if (response.status === 400) {
+        setContactWaMessage({ kind: "error", text: t("dealForm.error.contactWa") });
+        return;
+      }
+      if (!response.ok) {
+        setContactWaMessage({ kind: "error", text: t(mutationErrorKey({ kind: "rejected", status: response.status, body: payload }, "deal.detailWhatsAppNumberError")) });
+        return;
+      }
+      if (typeof payload.deal?.contactWa !== "string") throw new Error("deal.detailWhatsAppNumberError");
+      const readBackResponse = await fetchWithTimeout(`/api/deals/${deal.id}`, { cache: "no-store" });
       const readBackPayload = await readBackResponse.json();
       if (
         !readBackResponse.ok ||
@@ -161,10 +222,29 @@ export default function DealDetailClient({
             which sits inside its own horizontal-scroll carousel) --
             confirmed a genuine page-level horizontal-scroll bug, not
             hypothetical. */}
-        <h1 className="text-xl font-bold break-words text-ink">{deal.brand}</h1>
-        <p className="mt-1 text-[13px] font-semibold text-muted">
-          {t("deal.detailStatus")}: {t(PIPELINE_STAGE_KEYS[deal.status])}
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold break-words text-ink">{deal.brand}</h1>
+            <p className="mt-1 text-[13px] font-semibold text-muted">
+              {t("deal.detailStatus")}: {t(PIPELINE_STAGE_KEYS[deal.status])}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setEditMessage(null);
+              setIsEditing(true);
+            }}
+            className="inline-flex h-11 shrink-0 items-center rounded-full border border-line px-4 text-[13px] font-semibold text-ink hover:bg-surface"
+          >
+            {t("deal.edit")}
+          </button>
+        </div>
+        {editMessage ? (
+          <p role="status" className="mt-2 text-[13px] text-paid">
+            {t(editMessage)}
+          </p>
+        ) : null}
 
         <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
@@ -259,6 +339,7 @@ export default function DealDetailClient({
           <div className="mt-1.5 flex flex-col gap-2 min-[360px]:flex-row min-[360px]:items-center">
             <input
               id="contactName"
+              maxLength={DEAL_LIMITS.contactName}
               value={contactName}
               onChange={(event) => setContactName(event.target.value)}
               placeholder={t("deal.detailContactNameEmpty")}
@@ -316,6 +397,7 @@ export default function DealDetailClient({
                       ref={contactWaInputRef}
                       id="contactWa"
                       inputMode="tel"
+                      maxLength={DEAL_LIMITS.contactWa}
                       value={contactWaDraft}
                       onChange={(event) => setContactWaDraft(event.target.value)}
                       className={`${fieldClassName} w-full min-[360px]:min-w-0 min-[360px]:flex-1`}
@@ -348,6 +430,21 @@ export default function DealDetailClient({
           ) : null}
         </div>
       </div>
+
+      <EditDealDialog
+        open={isEditing}
+        deal={deal}
+        invoiceNumber={invoice?.number ?? null}
+        t={t}
+        onClose={() => setIsEditing(false)}
+        onSaved={(saved) => {
+          setDeal(saved);
+          setContactName(saved.contactName ?? "");
+          setContactWaDraft(saved.contactWa);
+          setIsEditing(false);
+          setEditMessage("deal.editSaved");
+        }}
+      />
 
       <div className="rounded-xl border border-line bg-bg p-4">
         <h2 className="text-[15px] font-bold text-ink">{t("deal.detailHistoryTitle")}</h2>

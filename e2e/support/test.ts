@@ -17,7 +17,34 @@ type BrowserDiagnostics = {
 // this shared fixture's always-on behavior. Match narrowly (method +
 // pathname), same reasoning as the /i/ case: a 4xx anywhere else stays a
 // real, actionable diagnostic.
-type ExpectedErrorResponse = { method: string; pathname: string };
+//
+// `status` narrows the opt-in to that one status and is the only way to
+// expect a 5xx: a spec that makes the server itself fail on purpose (a write
+// the test database refuses) names the exact 500 it causes. Without `status`
+// the opt-in covers 4xx only, so a 5xx on an opted-in address still fails.
+type ExpectedErrorResponse = { method: string; pathname: string; status?: number };
+
+// Opt-in for a test that deliberately makes one request fail with no
+// response at all -- a dropped connection (route.abort) or a request the app
+// gives up on itself (fetchWithTimeout's abort) -- to prove the page says so
+// (#53). Same shape and narrowness as expectedErrorResponses: method +
+// pathname, per test. Only that request's own failure, and the browser's
+// "Failed to load resource: net::..." console line for that pathname, are
+// dropped; every other failed request is still reported.
+type ExpectedFailedRequest = { method: string; pathname: string };
+
+// Opt-in for a test that deliberately makes the app itself report an error
+// to the console -- today only the route-error-boundary journey, where a
+// server component really throws and React logs that it did. Like
+// expectedErrorResponses this is per test (`test.use(...)`). It is one
+// pattern for the message, so any other console error in the same test is
+// still a failure. (One RegExp, not a list: Playwright reads a two-element
+// array option as its own [value, options] form.)
+type ExpectedConsoleError = RegExp | null;
+
+// How each engine reports a request it cancelled itself: Chromium, Firefox,
+// WebKit.
+const ABORTED_ERROR_TEXTS = new Set(["net::ERR_ABORTED", "NS_BINDING_ABORTED", "Load request cancelled"]);
 
 function errorMessage(error: Error): string {
   return error.stack ?? error.message;
@@ -31,10 +58,14 @@ function errorMessage(error: Error): string {
 export const test = base.extend<{
   browserDiagnostics: BrowserDiagnostics;
   expectedErrorResponses: ExpectedErrorResponse[];
+  expectedConsoleError: ExpectedConsoleError;
+  expectedFailedRequests: ExpectedFailedRequest[];
 }>({
   expectedErrorResponses: [[], { option: true }],
+  expectedConsoleError: [null, { option: true }],
+  expectedFailedRequests: [[], { option: true }],
   browserDiagnostics: [
-    async ({ page, expectedErrorResponses }, useFixture, testInfo) => {
+    async ({ page, expectedErrorResponses, expectedConsoleError, expectedFailedRequests }, useFixture, testInfo) => {
       const diagnostics: BrowserDiagnostics = {
         pageErrors: [],
         consoleErrors: [],
@@ -93,8 +124,16 @@ export const test = base.extend<{
       // (see its type comment above) -- same correlation mechanism, same
       // narrowness guarantee.
       const pendingExpectedResponseUrls = new Map<string, number>();
+      const isExpectedFailedPath = (rawUrl: string) => {
+        if (!URL.canParse(rawUrl)) return false;
+        const { pathname } = new URL(rawUrl);
+        return expectedFailedRequests.some((expected) => expected.pathname === pathname);
+      };
       const onConsole = (message: ConsoleMessage) => {
         if (message.type() === "error") {
+          // The console line and the requestfailed event are not ordered, so
+          // this matches the opted-in pathname rather than waiting for the event.
+          if (/^Failed to load resource: net::[A-Z_]+$/.test(message.text()) && isExpectedFailedPath(message.location().url)) return;
           if (/^Failed to load resource: the server responded with a status of \d+ \(.+\)$/.test(message.text())) {
             const url = message.location().url;
             const pending = pendingExpectedResponseUrls.get(url) ?? 0;
@@ -103,13 +142,17 @@ export const test = base.extend<{
               return;
             }
           }
+          if (expectedConsoleError?.test(message.text())) return;
           diagnostics.consoleErrors.push(message.text());
         }
       };
-      const onRequestFailed = (request: { url(): string; failure(): { errorText?: string } | null }) => {
+      const onRequestFailed = (request: { url(): string; method(): string; failure(): { errorText?: string } | null }) => {
         const failure = request.failure();
         const url = new URL(request.url());
         const errorText = failure?.errorText ?? "";
+        if (expectedFailedRequests.some((expected) => expected.method === request.method() && expected.pathname === url.pathname)) {
+          return;
+        }
         // Next App Router cancels superseded RSC navigations by design when a
         // second history/router update wins the race. These requests carry
         // the internal `_rsc` query marker; keep all other failed requests
@@ -118,24 +161,61 @@ export const test = base.extend<{
         // "NS_BINDING_ABORTED", WebKit "Load request cancelled" (all three
         // confirmed via repeated local e2e-cross-browser Firefox+WebKit
         // runs surfacing this exact race under load).
+        if (ABORTED_ERROR_TEXTS.has(errorText) && url.searchParams.has("_rsc")) return;
+        // The tab icon is fetched by the browser itself, not by the page, and
+        // Firefox cancels that fetch when a navigation starts before it has
+        // finished (seen as "favicon.ico?<hash> — NS_BINDING_ABORTED" in
+        // roughly one run in eight of journeys that click a link right after
+        // a page load). Only a cancelled favicon is dropped; a favicon that
+        // fails any other way, or answers 5xx, is still reported.
+        if (ABORTED_ERROR_TEXTS.has(errorText) && url.pathname === "/favicon.ico") return;
+        // Auth.js's built-in sign-in page shows each provider's logo from
+        // authjs.dev (for Google, /img/providers/google.svg). A test that
+        // lands on sign-in and moves on before that image has loaded makes
+        // Firefox and WebKit report the cancelled image; Chromium does not.
+        // It failed seven sign-out/expired-session tests in the first
+        // e2e-cross-browser run that included them (CI run 38132454448).
+        // Only a cancelled provider logo from that host is dropped; one that
+        // fails any other way is still reported.
         if (
-          (errorText === "net::ERR_ABORTED" || errorText === "NS_BINDING_ABORTED" || errorText === "Load request cancelled")
-          && url.searchParams.has("_rsc")
+          ABORTED_ERROR_TEXTS.has(errorText)
+          && url.origin === "https://authjs.dev"
+          && url.pathname.startsWith("/img/providers/")
         ) return;
-        diagnostics.failedRequests.push(`${request.url()}${errorText ? ` — ${errorText}` : ""}`);
+        // A link whose response is a file (Content-Disposition: attachment,
+        // e.g. Unduh PDF) starts as a navigation that the browser then turns
+        // into a download, and reports the navigation request as failed.
+        // Failures are held here and dropped at teardown only if this page
+        // really did get a download for that exact URL (the two events are
+        // not ordered); anything else is still reported.
+        // The wording differs per engine (WebKit: "Frame load interrupted"),
+        // so every failure is held back, whatever its text.
+        abortedRequests.push({ url: request.url(), entry: `${request.url()}${errorText ? ` — ${errorText}` : ""}` });
+      };
+      const abortedRequests: Array<{ url: string; entry: string }> = [];
+      const downloadedUrls = new Set<string>();
+      const onDownload = (download: { url(): string }) => {
+        downloadedUrls.add(download.url());
       };
       const onResponse = (response: { status(): number; url(): string; request(): { method(): string } }) => {
-        if (response.status() >= 500) diagnostics.serverErrors.push(`${response.status()} ${response.url()}`);
-        if (response.status() < 400 || response.status() >= 500) return;
+        const status = response.status();
+        if (status < 400) return;
 
         const url = new URL(response.url());
+        const isOptedIn = expectedErrorResponses.some(
+          (expected) =>
+            expected.method === response.request().method()
+            && expected.pathname === url.pathname
+            && (expected.status === undefined ? status < 500 : expected.status === status),
+        );
+        if (status >= 500 && !isOptedIn) {
+          diagnostics.serverErrors.push(`${status} ${response.url()}`);
+          return;
+        }
         // The invalid-token journey's own 404 -- see the onConsole comment
         // above. Only /i/ paths qualify: a 404 anywhere else in the app
         // stays a real, actionable diagnostic.
-        const isPublicInvalidTokenNotFound = response.status() === 404 && url.pathname.startsWith("/i/");
-        const isOptedIn = expectedErrorResponses.some(
-          (expected) => expected.method === response.request().method() && expected.pathname === url.pathname,
-        );
+        const isPublicInvalidTokenNotFound = status === 404 && url.pathname.startsWith("/i/");
         // Keyed by the exact URL, not just counted, so a pending entry for
         // one URL can never be consumed by a console message about a
         // different one.
@@ -148,6 +228,7 @@ export const test = base.extend<{
       page.on("console", onConsole);
       page.on("requestfailed", onRequestFailed);
       page.on("response", onResponse);
+      page.on("download", onDownload);
 
       try {
         await useFixture(diagnostics);
@@ -156,6 +237,10 @@ export const test = base.extend<{
         page.off("console", onConsole);
         page.off("requestfailed", onRequestFailed);
         page.off("response", onResponse);
+        page.off("download", onDownload);
+        for (const aborted of abortedRequests) {
+          if (!downloadedUrls.has(aborted.url)) diagnostics.failedRequests.push(aborted.entry);
+        }
 
         const hasDiagnostics = Object.values(diagnostics).some((entries) => entries.length > 0);
         if (hasDiagnostics) {

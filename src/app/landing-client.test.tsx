@@ -46,11 +46,11 @@ describe("LandingClient", () => {
 
   it("replaces it with the honest access sentence, in both languages", () => {
     const { unmount } = render(<LandingClient initialLanguage="id" />);
-    expect(screen.getByText("Dibayar masih dalam uji terbatas. Masuk dengan akun Google untuk mencoba.")).toBeDefined();
+    expect(screen.getByText("Dibayar masih dalam pilot terbatas, khusus kreator yang diundang. Masuk dengan akun Google yang didaftarkan untuk pilot.")).toBeDefined();
     unmount();
 
     render(<LandingClient initialLanguage="en" />);
-    expect(screen.getByText("Dibayar is in limited testing. Sign in with Google to try it.")).toBeDefined();
+    expect(screen.getByText("Dibayar is in a limited, invite-only pilot. Sign in with the Google account registered for the pilot.")).toBeDefined();
   });
 
   it("renders all six pipeline stage chips", () => {

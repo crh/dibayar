@@ -21,13 +21,18 @@ import {
   E2E_OTHER_OWNER_SESSION_TOKEN,
   E2E_OWNER_SESSION_TOKEN,
   E2E_OWNER_SIGNOUT_SESSION_TOKEN,
+  E2E_UNINVITED_DEAL_BRAND,
+  E2E_UNINVITED_SESSION_TOKEN,
+  E2E_UNINVITED_USER_ID,
 } from "../e2e/support/fixture-ids";
 import { FIXTURE_FUTURE_DATE, FIXTURE_PAST_DATE } from "../src/lib/e2e-fixture-dates";
+import { getJakartaCalendarDate } from "../src/lib/invoice-date-status";
 import { encryptShareToken } from "../src/lib/share-token-crypto";
+import { freezeInvoiceDocument } from "../src/lib/invoice-snapshot";
 
 const action = process.argv[2];
-if (!["seed", "verify", "cleanup"].includes(action ?? "")) {
-  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup");
+if (!["seed", "verify", "cleanup", "legacy-due-date", "legacy-invalid-contact", "follow-up-states", "follow-up-expired-share", "income-boundaries", "status-consistency", "expire-disposable-session", "incomplete-issuer-settings", "invoice-table-outage", "end-invoice-table-outage", "invoice-write-refusal", "end-invoice-write-refusal"].includes(action ?? "")) {
+  throw new Error("Usage: tsx scripts/e2e-fixtures.ts seed|verify|cleanup|legacy-due-date|legacy-invalid-contact|follow-up-states|follow-up-expired-share|income-boundaries|status-consistency|expire-disposable-session|incomplete-issuer-settings|invoice-table-outage|end-invoice-table-outage|invoice-write-refusal|end-invoice-write-refusal");
 }
 
 const connectionString = process.env.DATABASE_URL;
@@ -64,7 +69,7 @@ const manifestPath = path.resolve(".hermes-runtime/e2e-fixtures/fixtures.json");
 // database has a deliberately small connection budget.
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString, max: 1 }) });
 
-const ids = { owner: `${prefix}-owner`, otherOwner: E2E_OTHER_OWNER_ID };
+const ids = { owner: `${prefix}-owner`, otherOwner: E2E_OTHER_OWNER_ID, uninvited: E2E_UNINVITED_USER_ID };
 
 // A real, database-backed Auth.js session row -- not a bypass endpoint. See
 // e2e/support/auth.ts, which sets this value as the `authjs.session-token`
@@ -74,6 +79,7 @@ const sessionTokens = {
   owner: E2E_OWNER_SESSION_TOKEN,
   ownerSignout: E2E_OWNER_SIGNOUT_SESSION_TOKEN,
   otherOwner: E2E_OTHER_OWNER_SESSION_TOKEN,
+  uninvited: E2E_UNINVITED_SESSION_TOKEN,
 };
 
 const dealIds = {
@@ -107,10 +113,100 @@ const shareTokens = {
   invalid: `${prefix}-public-invalid-token-do-not-share`,
 };
 
+// Opt-in overlay for the follow-up / overdue / contact-repair journeys
+// (applyFollowUpStates below). These rows are deliberately NOT part of the
+// base seed: the base seed has an empty Beranda follow-up queue and seven
+// deals, and the checked-in @visual baselines (Beranda, deal board, invoice
+// list) capture exactly that. Only specs that need these states apply the
+// overlay, after reseedFixtures(); the next `seed` removes them again (they
+// hang off the fixture owner, so cleanupRows() cascades them away).
+//
+// Due dates are relative to the Asia/Jakarta calendar date at the moment the
+// overlay is applied -- unlike FIXTURE_FUTURE_DATE/FIXTURE_PAST_DATE, they
+// are never captured in a screenshot, and the follow-up queue's reasons
+// ("Telat N hari", "Jatuh tempo hari ini", ...) only exist relative to today.
+// Each offset sits on a boundary of selectAttentionInvoices()
+// (src/lib/invoice-date-status.ts, DUE_SOON_WINDOW_DAYS = 7).
+const followUp = {
+  deals: {
+    overdueStored: `${prefix}-deal-overdue-stored`,
+    overdueSent: `${prefix}-deal-overdue-sent`,
+    dueToday: `${prefix}-deal-due-today`,
+    dueWindowEdge: `${prefix}-deal-due-window-edge`,
+    dueOutsideWindow: `${prefix}-deal-due-outside-window`,
+    invalidContact: `${prefix}-deal-invalid-contact`,
+  },
+  invoices: {
+    // Stored OVERDUE: invoice detail offers only "Tandai lunas"
+    // (NEXT_ACTIONS.OVERDUE in invoice-detail-client.tsx).
+    overdueStored: `${prefix}-invoice-overdue-stored`,
+    // Stored SENT, due yesterday: displayed as overdue purely by derivation
+    // (deriveInvoiceDisplayStatus); the only status action left is "Tandai lunas".
+    overdueSent: `${prefix}-invoice-overdue-sent`,
+    dueToday: `${prefix}-invoice-due-today`,
+    dueWindowEdge: `${prefix}-invoice-due-window-edge`,
+    dueOutsideWindow: `${prefix}-invoice-due-outside-window`,
+  },
+  // Whole Jakarta-calendar days from "today" to each invoice's due date.
+  dueOffsetDays: { overdueStored: -5, overdueSent: -1, dueToday: 0, dueWindowEdge: 7, dueOutsideWindow: 8 },
+  // 8 digits that keep no 62/0/8 prefix: normalizeWhatsAppNumber() rejects
+  // it (< 9 digits). dealInputSchema refuses it since #50, but deals saved
+  // before then can still hold such a number, so it is written straight to
+  // the row -- the state the repair flows exist for.
+  invalidContactWa: "12345678",
+  // Token of the expired share that `follow-up-expired-share` puts on the
+  // stored-OVERDUE invoice (FIND-05: a reminder must not send it).
+  expiredShareToken: `${prefix}-follow-up-expired-token-do-not-share`,
+} as const;
+
+const followUpBrands = {
+  [followUp.deals.overdueStored]: "E2E Brand Telat Tersimpan",
+  [followUp.deals.overdueSent]: "E2E Brand Telat Terkirim",
+  [followUp.deals.dueToday]: "E2E Brand Jatuh Tempo Hari Ini",
+  [followUp.deals.dueWindowEdge]: "E2E Brand Jatuh Tempo Tujuh Hari",
+  [followUp.deals.dueOutsideWindow]: "E2E Brand Jatuh Tempo Delapan Hari",
+  [followUp.deals.invalidContact]: "E2E Brand Kontak Tidak Valid",
+} as const;
+
+// Opt-in overlay for the Beranda "Net ditagihkan bulan ini" card (HOME-01).
+// Four invoices that sit on the rule's edges (src/lib/income-summary.ts:
+// non-DRAFT invoices created inside the current Asia/Jakarta month). Only
+// `monthStart` may be counted; the other three carry large amounts so that
+// counting any of them is unmistakable. Amounts and tax types are repeated
+// as literals in e2e/home/monthly-income.spec.ts on purpose.
+const incomeBoundaries = {
+  // DRAFT, created now: excluded by status.
+  draft: `${prefix}-income-draft`,
+  // SENT, created 1 ms before this Jakarta month began: excluded.
+  previousMonth: `${prefix}-income-previous-month`,
+  // SENT with PPh 23, created at the first instant of this Jakarta month: included.
+  monthStart: `${prefix}-income-month-start`,
+  // SENT, created at the first instant of next Jakarta month: excluded.
+  nextMonth: `${prefix}-income-next-month`,
+} as const;
+
+// Opt-in overlay for "one status rule everywhere" (FIND-01/FIND-06), applied
+// on top of `follow-up-states`. Five invoices whose stored status and due
+// date disagree or could be mistaken: the list, invoice detail and Beranda
+// must all show the status deriveInvoiceDisplayStatus() gives.
+const statusConsistency = {
+  rows: {
+    // Stored DUE, due yesterday: shown as overdue.
+    dueOverdue: { id: `${prefix}-status-due-overdue`, number: "E2E/STATUS/008", brand: "E2E Brand Status Tempo Lewat", status: "DUE", dueOffsetDays: -1 },
+    // Stored OVERDUE from before overdue became date-derived, due in 8 days: shown as sent.
+    legacyOverdueFuture: { id: `${prefix}-status-legacy-future`, number: "E2E/STATUS/009", brand: "E2E Brand Status Lama Belum Tempo", status: "OVERDUE", dueOffsetDays: 8 },
+    // Stored OVERDUE with no due date: shown as sent.
+    legacyOverdueNoDate: { id: `${prefix}-status-legacy-no-date`, number: "E2E/STATUS/010", brand: "E2E Brand Status Lama Tanpa Tanggal", status: "OVERDUE", dueOffsetDays: null },
+    // DRAFT and PAID with a past due date: always shown as stored.
+    draftPastDue: { id: `${prefix}-status-draft-past-due`, number: "E2E/STATUS/011", brand: "E2E Brand Status Draf Lewat Tempo", status: "DRAFT", dueOffsetDays: -1 },
+    paidPastDue: { id: `${prefix}-status-paid-past-due`, number: "E2E/STATUS/012", brand: "E2E Brand Status Lunas Lewat Tempo", status: "PAID", dueOffsetDays: -1 },
+  },
+} as const;
+
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
 
 async function cleanupRows() {
-  await prisma.user.deleteMany({ where: { id: { in: [ids.owner, ids.otherOwner] } } });
+  await prisma.user.deleteMany({ where: { id: { in: [ids.owner, ids.otherOwner, ids.uninvited] } } });
 }
 
 async function seed() {
@@ -136,11 +232,20 @@ async function seed() {
   await prisma.user.create({
     data: { id: ids.otherOwner, name: "E2E Fixture Other Owner", email: `${prefix}-other-owner@example.invalid`, language: "id" },
   });
+  // Pilot-access fixture: a real account with its own data and a valid
+  // session, but not on the E2E server's pilot allowlist.
+  await prisma.user.create({
+    data: { id: ids.uninvited, name: "E2E Fixture Uninvited", email: `${prefix}-uninvited@example.invalid`, language: "id" },
+  });
+  await prisma.deal.create({
+    data: { id: `${prefix}-uninvited-deal`, userId: ids.uninvited, brand: E2E_UNINVITED_DEAL_BRAND, contactWa: "628110000099", scope: "E2E fixture: uninvited creator", feeIdr: 1_000_000, status: DealStatus.MASUK },
+  });
   await prisma.session.createMany({
     data: [
       { sessionToken: sessionTokens.owner, userId: ids.owner, expires: sessionExpiry },
       { sessionToken: sessionTokens.ownerSignout, userId: ids.owner, expires: sessionExpiry },
       { sessionToken: sessionTokens.otherOwner, userId: ids.otherOwner, expires: sessionExpiry },
+      { sessionToken: sessionTokens.uninvited, userId: ids.uninvited, expires: sessionExpiry },
     ],
   });
 
@@ -208,6 +313,19 @@ async function seed() {
     },
   });
 
+  // The seeded SENT and PAID invoices were "issued" before any test runs, so
+  // their documents are frozen now (Decision A, issue #55) through the app's
+  // own statement, with the deal and Settings above -- a later deal or
+  // Settings change in a journey must not reach them. They are already past
+  // DRAFT, so the statement labels them RECONSTRUCTED_LATE. The overlays
+  // below add invoices without a snapshot on purpose: those are frozen at
+  // their first share link or document read, as the app does for invoices
+  // the previous version sent.
+  for (const invoiceId of [invoiceIds.sent, invoiceIds.paid]) {
+    const frozen = await freezeInvoiceDocument(prisma, invoiceId, ids.owner, "STATUS_CHANGE");
+    if (frozen !== 1) throw new Error(`E2E fixture snapshot expected 1 row for ${invoiceId}, wrote ${frozen}`);
+  }
+
   const manifest = {
     schemaVersion: 1,
     prefix,
@@ -220,6 +338,12 @@ async function seed() {
     brands,
     invoices: invoiceIds,
     shareTokens,
+    // Only present in the database after `follow-up-states`; see followUp.
+    followUp: { ...followUp, brands: followUpBrands },
+    // Only present in the database after `income-boundaries`.
+    incomeBoundaries,
+    // Only present in the database after `status-consistency`.
+    statusConsistency,
   };
   await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
@@ -267,6 +391,10 @@ async function verify() {
     otherOwnerHasNoDeals: otherOwner?.deals.length === 0,
     otherOwnerHasNoInvoices: otherOwner?.invoices.length === 0,
     otherOwnerSessionPresent: otherOwner?.sessions.some((session) => session.sessionToken === sessionTokens.otherOwner) === true,
+    // The pilot-access journey needs this account to be real, own data and
+    // hold a valid session; only the allowlist may stop it.
+    uninvitedSessionPresent: (await prisma.session.count({ where: { sessionToken: sessionTokens.uninvited, userId: ids.uninvited } })) === 1,
+    uninvitedOwnsOneDeal: (await prisma.deal.count({ where: { userId: ids.uninvited } })) === 1,
   };
   if (Object.values(checks).some((value) => !value)) throw new Error(`E2E fixture verification failed: ${JSON.stringify(checks)}`);
   console.log(JSON.stringify({ action: "verify", host: normalizedHost, prefix, checks }));
@@ -274,16 +402,334 @@ async function verify() {
 
 async function cleanup() {
   await cleanupRows();
-  const remaining = await prisma.user.count({ where: { id: { in: [ids.owner, ids.otherOwner] } } });
+  const remaining = await prisma.user.count({ where: { id: { in: [ids.owner, ids.otherOwner, ids.uninvited] } } });
   if (remaining !== 0) throw new Error(`E2E fixture cleanup read-back failed: ${remaining} users remain`);
   await rm(manifestPath, { force: true });
   console.log(JSON.stringify({ action: "cleanup", host: normalizedHost, prefix, remainingUsers: remaining }));
 }
 
+// Writes the exact malformed value FIND-03 let through the API (year 0002)
+// straight onto the seeded SENT invoice, bypassing the app, so the suite can
+// prove a pre-existing bad row neither crashes nor gets silently rewritten.
+// Only ever touches this fixture owner's row on the guarded disposable
+// target above; the next `seed` restores the normal value.
+async function legacyDueDate() {
+  const result = await prisma.invoice.updateMany({
+    where: { id: invoiceIds.sent, userId: ids.owner },
+    data: { dueDate: new Date("0002-01-15T00:00:00.000Z") },
+  });
+  if (result.count !== 1) throw new Error(`E2E legacy due-date write expected 1 row, updated ${result.count}`);
+  console.log(JSON.stringify({ action: "legacy-due-date", host: normalizedHost, prefix, updated: result.count }));
+}
+
+// The deal e2e/deals/patch-keeps-stage.spec.ts creates, given the number a
+// deal saved before #50 could hold: dealInputSchema now refuses it, so the
+// app itself can no longer write it. Matched by this fixture owner and the
+// spec's brand (repeated there as a literal); the next `seed` removes it.
+const LEGACY_INVALID_CONTACT_BRAND = "E2E Brand Nomor Diperbaiki";
+
+async function legacyInvalidContact() {
+  const result = await prisma.deal.updateMany({
+    where: { userId: ids.owner, brand: LEGACY_INVALID_CONTACT_BRAND },
+    data: { contactWa: followUp.invalidContactWa },
+  });
+  if (result.count !== 1) throw new Error(`E2E legacy invalid-contact write expected 1 row, updated ${result.count}`);
+  console.log(JSON.stringify({ action: "legacy-invalid-contact", host: normalizedHost, prefix, updated: result.count }));
+}
+
+// UTC midnight of the Jakarta calendar date `offsetDays` from today -- the
+// same date-only encoding the due-date field writes (Invoice.dueDate).
+function jakartaDueDate(today: string, offsetDays: number): Date {
+  const [year, month, day] = today.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + offsetDays));
+}
+
+// Adds the follow-up overlay (see followUp above) on top of a fresh seed.
+// Refuses to run unless the base seed is present and the overlay is not, so
+// it can't silently stack on a half-applied state.
+async function applyFollowUpStates() {
+  const ownerDeals = await prisma.deal.findMany({ where: { userId: ids.owner }, select: { id: true } });
+  const baseDealIds = new Set<string>(Object.values(dealIds));
+  if (ownerDeals.length !== baseDealIds.size || ownerDeals.some((deal) => !baseDealIds.has(deal.id))) {
+    throw new Error(`E2E follow-up overlay needs a fresh seed first (found ${ownerDeals.length} owner deals)`);
+  }
+
+  const today = getJakartaCalendarDate(new Date());
+  const now = new Date();
+  const d = followUp.deals;
+  const dealRows = [
+    { id: d.overdueStored, userId: ids.owner, brand: followUpBrands[d.overdueStored], contactWa: "628110000008", scope: "E2E fixture: invoice stored as overdue", feeIdr: 8_000_000, status: DealStatus.INVOICE },
+    { id: d.overdueSent, userId: ids.owner, brand: followUpBrands[d.overdueSent], contactWa: "628110000009", scope: "E2E fixture: sent invoice due yesterday", feeIdr: 9_000_000, status: DealStatus.INVOICE },
+    { id: d.dueToday, userId: ids.owner, brand: followUpBrands[d.dueToday], contactWa: "628110000010", scope: "E2E fixture: invoice due today", feeIdr: 1_100_000, status: DealStatus.INVOICE },
+    { id: d.dueWindowEdge, userId: ids.owner, brand: followUpBrands[d.dueWindowEdge], contactWa: "628110000011", scope: "E2E fixture: invoice due in seven days", feeIdr: 1_200_000, status: DealStatus.INVOICE },
+    { id: d.dueOutsideWindow, userId: ids.owner, brand: followUpBrands[d.dueOutsideWindow], contactWa: "628110000012", scope: "E2E fixture: invoice due in eight days", feeIdr: 1_300_000, status: DealStatus.INVOICE },
+    { id: d.invalidContact, userId: ids.owner, brand: followUpBrands[d.invalidContact], contactWa: followUp.invalidContactWa, scope: "E2E fixture: WhatsApp number needs repair", feeIdr: 1_400_000, status: DealStatus.NEGO },
+  ];
+  await prisma.deal.createMany({ data: dealRows });
+  await prisma.dealStageTransition.createMany({
+    data: dealRows.map((deal) => ({ id: `${deal.id}-initial-transition`, dealId: deal.id, fromStatus: null, toStatus: deal.status, createdAt: now })),
+  });
+
+  const i = followUp.invoices;
+  const offsets = followUp.dueOffsetDays;
+  // No InvoiceShare rows: the reminder journeys start from "no link yet",
+  // so the link in the message is the one the reminder itself created.
+  await prisma.invoice.createMany({
+    data: [
+      { id: i.overdueStored, userId: ids.owner, dealId: d.overdueStored, number: "E2E/OVERDUE/003", subtotalIdr: 8_000_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.OVERDUE, dueDate: jakartaDueDate(today, offsets.overdueStored) },
+      { id: i.overdueSent, userId: ids.owner, dealId: d.overdueSent, number: "E2E/OVERDUE/004", subtotalIdr: 9_000_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.SENT, dueDate: jakartaDueDate(today, offsets.overdueSent) },
+      { id: i.dueToday, userId: ids.owner, dealId: d.dueToday, number: "E2E/DUE/005", subtotalIdr: 1_100_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.SENT, dueDate: jakartaDueDate(today, offsets.dueToday) },
+      { id: i.dueWindowEdge, userId: ids.owner, dealId: d.dueWindowEdge, number: "E2E/DUE/006", subtotalIdr: 1_200_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.SENT, dueDate: jakartaDueDate(today, offsets.dueWindowEdge) },
+      { id: i.dueOutsideWindow, userId: ids.owner, dealId: d.dueOutsideWindow, number: "E2E/DUE/007", subtotalIdr: 1_300_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.SENT, dueDate: jakartaDueDate(today, offsets.dueOutsideWindow) },
+    ],
+  });
+
+  const applied = await prisma.invoice.count({ where: { userId: ids.owner, id: { in: Object.values(i) } } });
+  if (applied !== Object.keys(i).length) throw new Error(`E2E follow-up overlay read-back expected ${Object.keys(i).length} invoices, found ${applied}`);
+  console.log(JSON.stringify({ action: "follow-up-states", host: normalizedHost, prefix, jakartaToday: today, deals: dealRows.length, invoices: applied }));
+}
+
+// Gives the overlay's stored-OVERDUE invoice a share that has already
+// expired, with a recoverable path -- the state a real invoice reaches 90
+// days after its link was made. Written straight to the row because the app
+// offers no way to backdate an expiry. Needs the overlay, and refuses to
+// overwrite a share that is already there.
+async function followUpExpiredShare() {
+  const invoiceId = followUp.invoices.overdueStored;
+  const invoice = await prisma.invoice.findFirst({ where: { id: invoiceId, userId: ids.owner }, select: { id: true, share: { select: { id: true } } } });
+  if (!invoice) throw new Error("E2E expired-share overlay needs follow-up-states first");
+  if (invoice.share) throw new Error("E2E expired-share overlay refuses to replace an existing share");
+
+  await prisma.invoiceShare.create({
+    data: {
+      id: `${prefix}-share-follow-up-expired`,
+      invoiceId,
+      tokenHash: sha256(followUp.expiredShareToken),
+      tokenCiphertext: encryptShareToken(followUp.expiredShareToken),
+      expiresAt: FIXTURE_PAST_DATE,
+    },
+  });
+  console.log(JSON.stringify({ action: "follow-up-expired-share", host: normalizedHost, prefix, shares: 1 }));
+}
+
+// Adds the income-boundary invoices (see incomeBoundaries above) on top of a
+// fresh seed. Month edges are computed here from the Jakarta calendar date
+// (UTC+7, no DST), not with the app's own getJakartaMonthBounds, so the
+// fixture does not inherit a mistake in the code it is there to check.
+async function applyIncomeBoundaries() {
+  const ownerInvoices = await prisma.invoice.count({ where: { userId: ids.owner } });
+  if (ownerInvoices !== Object.keys(invoiceIds).length) {
+    throw new Error(`E2E income overlay needs a fresh seed first (found ${ownerInvoices} owner invoices)`);
+  }
+
+  const now = new Date();
+  const [year, month] = getJakartaCalendarDate(now).split("-").map(Number);
+  const JAKARTA_OFFSET_MS = 7 * 60 * 60 * 1000;
+  const monthStart = new Date(Date.UTC(year, month - 1, 1) - JAKARTA_OFFSET_MS);
+  const nextMonthStart = new Date(Date.UTC(year, month, 1) - JAKARTA_OFFSET_MS);
+  const b = incomeBoundaries;
+  const rows = [
+    { id: b.draft, number: "E2E/INCOME/DRAFT", subtotalIdr: 50_000_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.DRAFT, createdAt: now },
+    { id: b.previousMonth, number: "E2E/INCOME/PREV", subtotalIdr: 40_000_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.SENT, createdAt: new Date(monthStart.getTime() - 1) },
+    { id: b.monthStart, number: "E2E/INCOME/START", subtotalIdr: 2_000_000, withholdingTaxType: WithholdingTaxType.PPH23, status: InvoiceStatus.SENT, createdAt: monthStart },
+    { id: b.nextMonth, number: "E2E/INCOME/NEXT", subtotalIdr: 30_000_000, withholdingTaxType: WithholdingTaxType.NONE, status: InvoiceStatus.SENT, createdAt: nextMonthStart },
+  ];
+  await prisma.deal.createMany({
+    data: rows.map((row) => ({ id: `${row.id}-deal`, userId: ids.owner, brand: `E2E Brand ${row.number}`, contactWa: "628110000020", scope: "E2E fixture: income boundary", feeIdr: row.subtotalIdr, status: DealStatus.INVOICE })),
+  });
+  await prisma.dealStageTransition.createMany({
+    data: rows.map((row) => ({ id: `${row.id}-deal-initial-transition`, dealId: `${row.id}-deal`, fromStatus: null, toStatus: DealStatus.INVOICE, createdAt: now })),
+  });
+  await prisma.invoice.createMany({
+    data: rows.map((row) => ({ ...row, userId: ids.owner, dealId: `${row.id}-deal`, dueDate: FIXTURE_FUTURE_DATE })),
+  });
+
+  const applied = await prisma.invoice.count({ where: { userId: ids.owner, id: { in: Object.values(b) } } });
+  if (applied !== rows.length) throw new Error(`E2E income overlay read-back expected ${rows.length} invoices, found ${applied}`);
+  console.log(JSON.stringify({ action: "income-boundaries", host: normalizedHost, prefix, jakartaMonth: `${year}-${String(month).padStart(2, "0")}`, invoices: applied }));
+}
+
+// Adds the status-consistency invoices (see statusConsistency above). Needs
+// the follow-up overlay, whose invoices cover the stored-SENT and
+// stored-OVERDUE cases, and refuses to run twice.
+async function applyStatusConsistency() {
+  const followUpInvoices = await prisma.invoice.count({ where: { userId: ids.owner, id: { in: Object.values(followUp.invoices) } } });
+  if (followUpInvoices !== Object.keys(followUp.invoices).length) throw new Error("E2E status-consistency overlay needs follow-up-states first");
+  const rows = Object.values(statusConsistency.rows);
+  const existing = await prisma.invoice.count({ where: { userId: ids.owner, id: { in: rows.map((row) => row.id) } } });
+  if (existing !== 0) throw new Error("E2E status-consistency overlay is already applied");
+
+  const today = getJakartaCalendarDate(new Date());
+  const now = new Date();
+  await prisma.deal.createMany({
+    data: rows.map((row) => ({ id: `${row.id}-deal`, userId: ids.owner, brand: row.brand, contactWa: "628110000030", scope: "E2E fixture: invoice status consistency", feeIdr: 2_000_000, status: row.status === "PAID" ? DealStatus.DIBAYAR : DealStatus.INVOICE })),
+  });
+  await prisma.dealStageTransition.createMany({
+    data: rows.map((row) => ({ id: `${row.id}-deal-initial-transition`, dealId: `${row.id}-deal`, fromStatus: null, toStatus: row.status === "PAID" ? DealStatus.DIBAYAR : DealStatus.INVOICE, createdAt: now })),
+  });
+  await prisma.invoice.createMany({
+    data: rows.map((row) => ({
+      id: row.id,
+      userId: ids.owner,
+      dealId: `${row.id}-deal`,
+      number: row.number,
+      subtotalIdr: 2_000_000,
+      withholdingTaxType: WithholdingTaxType.NONE,
+      status: InvoiceStatus[row.status],
+      dueDate: row.dueOffsetDays === null ? null : jakartaDueDate(today, row.dueOffsetDays),
+    })),
+  });
+
+  const applied = await prisma.invoice.count({ where: { userId: ids.owner, id: { in: rows.map((row) => row.id) } } });
+  if (applied !== rows.length) throw new Error(`E2E status-consistency overlay read-back expected ${rows.length} invoices, found ${applied}`);
+  console.log(JSON.stringify({ action: "status-consistency", host: normalizedHost, prefix, jakartaToday: today, invoices: applied }));
+}
+
+// Makes the owner's disposable session (the one the sign-out journey uses)
+// already expired, the state a real session reaches once its lifetime has
+// run out: the row stays, its `expires` is in the past, and Auth.js rejects
+// and deletes it on the next request. The shared owner session every other
+// test's cookie relies on is not touched. The next `seed` restores it.
+async function expireDisposableSession() {
+  const result = await prisma.session.updateMany({
+    where: { sessionToken: sessionTokens.ownerSignout, userId: ids.owner },
+    data: { expires: new Date(Date.now() - 60_000) },
+  });
+  if (result.count !== 1) throw new Error(`E2E session expiry expected 1 row, updated ${result.count}`);
+  console.log(JSON.stringify({ action: "expire-disposable-session", host: normalizedHost, prefix, updated: result.count }));
+}
+
+// Removes the fixture owner's UserSettings row: the state of an account that
+// has never saved Pengaturan (no issuer name, no bank account). The settings
+// form cannot produce it, because it refuses to save an empty required
+// field. Only this owner's row on the guarded disposable target; the next
+// `seed` restores the complete settings.
+async function incompleteIssuerSettings() {
+  const result = await prisma.userSettings.deleteMany({ where: { userId: ids.owner } });
+  if (result.count !== 1) throw new Error(`E2E incomplete-issuer overlay expected 1 settings row, removed ${result.count}`);
+  console.log(JSON.stringify({ action: "incomplete-issuer-settings", host: normalizedHost, prefix, removed: result.count }));
+}
+
+// A database failure the app can really hit, on the disposable test database
+// only: while the outage lasts, the Invoice table is not where the app looks
+// for it, so every query on it fails the way a missing relation does and the
+// server component that ran it throws. Nothing is deleted; the table is
+// renamed and renamed back, rows, indexes and foreign keys included.
+//
+// There is no production code path behind this and no request is stubbed: it
+// is the failure-injection seam for the route error boundary (NAV-08).
+// Because a broken table would fail every later spec, the outage is ended in
+// three places: by the test, by its afterEach, and by every other action of
+// this script before it does anything else (endInvoiceTableOutage below).
+const OUTAGE_TABLE = "Invoice__e2e_outage";
+
+// A rename needs an exclusive lock; give up after five seconds instead of
+// waiting for another session forever.
+const RENAME_LOCK_TIMEOUT = "SET lock_timeout = '5s'";
+
+async function invoiceTableOutage() {
+  await prisma.$executeRawUnsafe(RENAME_LOCK_TIMEOUT);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "Invoice" RENAME TO "${OUTAGE_TABLE}"`);
+  console.log(JSON.stringify({ action: "invoice-table-outage", host: normalizedHost, prefix, table: "Invoice", available: false }));
+}
+
+// Idempotent: does nothing when there is no outage.
+async function endInvoiceTableOutage(): Promise<boolean> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
+    `SELECT to_regclass('public."${OUTAGE_TABLE}"') IS NOT NULL AS "exists"`,
+  );
+  if (!rows[0]?.exists) return false;
+  const current = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
+    `SELECT to_regclass('public."Invoice"') IS NOT NULL AS "exists"`,
+  );
+  if (current[0]?.exists) {
+    throw new Error(`Both "Invoice" and "${OUTAGE_TABLE}" exist in the test database (a schema change ran during a left-over outage?). Drop the one that should not be there by hand; no fixture action will run until then.`);
+  }
+  await prisma.$executeRawUnsafe(RENAME_LOCK_TIMEOUT);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "${OUTAGE_TABLE}" RENAME TO "Invoice"`);
+  return true;
+}
+
+// A failed write the app can really hit, on the disposable test database
+// only, and on one row only: while the refusal lasts, the database rejects
+// every UPDATE of the fixture owner's SENT invoice (a row trigger that raises
+// an error), so the app's own PATCH handler reaches the database, fails
+// there, and answers 500. Reads of that invoice, and reads and writes of
+// every other row, are untouched; nothing is renamed, deleted or changed.
+//
+// Like the outage above, there is no production code path behind this and no
+// request is stubbed: it is the failure-injection seam for a save that fails
+// on the server (INV-DUE-06). It is narrower than the outage on purpose (one
+// row, writes only), so a left-over refusal cannot fail a spec that does not
+// update that invoice. It is still ended in three places: by the test, by its
+// afterEach, and by every other action of this script before it does
+// anything else.
+const REFUSAL_TRIGGER = "e2e_refuse_invoice_write";
+const REFUSED_INVOICE_ID = `${prefix}-invoice-sent`;
+
+async function refusalTriggerExists(): Promise<boolean> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
+    `SELECT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = '${REFUSAL_TRIGGER}' AND NOT tgisinternal) AS "exists"`,
+  );
+  return Boolean(rows[0]?.exists);
+}
+
+async function invoiceWriteRefusal() {
+  // The id goes into DDL, which takes no parameters.
+  if (!/^[A-Za-z0-9-]+$/.test(REFUSED_INVOICE_ID)) throw new Error("E2E write refusal: unexpected fixture invoice id");
+  await prisma.$executeRawUnsafe(
+    `CREATE OR REPLACE FUNCTION public.${REFUSAL_TRIGGER}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'e2e write refusal: invoice % is read-only for this test', OLD.id; END $$`,
+  );
+  // CREATE TRIGGER waits for writers of the table; DROP TRIGGER (below) for
+  // readers too. Give up after five seconds instead of waiting forever.
+  await prisma.$executeRawUnsafe(RENAME_LOCK_TIMEOUT);
+  await prisma.$executeRawUnsafe(
+    `CREATE TRIGGER ${REFUSAL_TRIGGER} BEFORE UPDATE ON public."Invoice" FOR EACH ROW WHEN (OLD.id = '${REFUSED_INVOICE_ID}') EXECUTE FUNCTION public.${REFUSAL_TRIGGER}()`,
+  );
+  console.log(JSON.stringify({ action: "invoice-write-refusal", host: normalizedHost, prefix, invoice: "sent", writable: false }));
+}
+
+// Idempotent: does nothing (and takes no lock) when there is no refusal.
+async function endInvoiceWriteRefusal(): Promise<boolean> {
+  if (!(await refusalTriggerExists())) return false;
+  await prisma.$executeRawUnsafe(RENAME_LOCK_TIMEOUT);
+  await prisma.$executeRawUnsafe(`DROP TRIGGER IF EXISTS ${REFUSAL_TRIGGER} ON public."Invoice"`);
+  await prisma.$executeRawUnsafe(`DROP FUNCTION IF EXISTS public.${REFUSAL_TRIGGER}()`);
+  return true;
+}
+
 async function main() {
   try {
+    if (action === "invoice-table-outage") {
+      await invoiceTableOutage();
+      return;
+    }
+    // Every other action first makes sure no outage was left behind.
+    const ended = await endInvoiceTableOutage();
+    if (action === "end-invoice-table-outage") {
+      console.log(JSON.stringify({ action: "end-invoice-table-outage", host: normalizedHost, prefix, table: "Invoice", available: true, wasOut: ended }));
+      return;
+    }
+    // ...and no write refusal either.
+    const refusalEnded = await endInvoiceWriteRefusal();
+    if (action === "end-invoice-write-refusal") {
+      console.log(JSON.stringify({ action: "end-invoice-write-refusal", host: normalizedHost, prefix, invoice: "sent", writable: true, wasRefusing: refusalEnded }));
+      return;
+    }
+    if (action === "invoice-write-refusal") {
+      await invoiceWriteRefusal();
+      return;
+    }
     if (action === "seed") await seed();
     else if (action === "verify") await verify();
+    else if (action === "legacy-due-date") await legacyDueDate();
+    else if (action === "legacy-invalid-contact") await legacyInvalidContact();
+    else if (action === "follow-up-states") await applyFollowUpStates();
+    else if (action === "follow-up-expired-share") await followUpExpiredShare();
+    else if (action === "income-boundaries") await applyIncomeBoundaries();
+    else if (action === "status-consistency") await applyStatusConsistency();
+    else if (action === "expire-disposable-session") await expireDisposableSession();
+    else if (action === "incomplete-issuer-settings") await incompleteIssuerSettings();
     else await cleanup();
   } finally {
     await prisma.$disconnect();

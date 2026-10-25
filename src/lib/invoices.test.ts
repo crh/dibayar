@@ -1,13 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
+import { IdempotencyConflictError } from "./idempotency";
 import {
+  ALLOWED_STATUS_TRANSITIONS,
   createInvoice,
+  createInvoiceOnce,
   getOwnedInvoice,
   getOwnedInvoiceContact,
   listInvoices,
   listInvoicesWithDealBrand,
+  updateInvoiceDueDate,
   updateInvoiceStatus,
   type InvoiceContactDb,
+  type InvoiceDueDateDb,
   type InvoiceCreateDb,
+  type InvoiceCreateOnceDb,
   type InvoiceListDb,
   type InvoiceReadDb,
   type InvoiceRecord,
@@ -28,6 +34,7 @@ function makeDb(options: {
     data: Omit<InvoiceRecord, "id" | "createdAt" | "updatedAt">;
   }) => Promise<InvoiceRecord>;
   rejectTransactionAfterQuery?: boolean;
+  storedByKey?: InvoiceRecord | null;
 }) {
   const {
     deal = ownedDeal,
@@ -35,6 +42,7 @@ function makeDb(options: {
     queryRawImpl,
     invoiceCreateImpl,
     rejectTransactionAfterQuery = false,
+    storedByKey = null,
   } = options;
 
   const queryRaw = vi.fn(queryRawImpl ?? (async () => sequenceRows));
@@ -58,8 +66,11 @@ function makeDb(options: {
     invoice: { create: invoiceCreate },
   } as unknown as InvoiceTransactionClient;
 
-  const db: InvoiceCreateDb = {
+  const invoiceFindFirst = vi.fn(async () => storedByKey);
+
+  const db: InvoiceCreateOnceDb = {
     deal: { findFirst: dealFindFirst },
+    invoice: { findFirst: invoiceFindFirst },
     $transaction: vi.fn(async (fn) => {
       if (rejectTransactionAfterQuery) {
         await queryRaw();
@@ -69,7 +80,7 @@ function makeDb(options: {
     }),
   };
 
-  return { db, dealFindFirst, queryRaw, invoiceCreate };
+  return { db, dealFindFirst, queryRaw, invoiceCreate, invoiceFindFirst };
 }
 
 describe("createInvoice", () => {
@@ -204,6 +215,26 @@ describe("createInvoice", () => {
     expect(invoiceCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({ dueDate: null }),
     });
+  });
+
+  it("does not inherit an out-of-range legacy deal deadline", async () => {
+    const { db, invoiceCreate } = makeDb({
+      deal: { ...ownedDeal, deadline: new Date("0002-01-15T00:00:00.000Z") },
+    });
+
+    await createInvoice(db, "user-1", { dealId: "deal-1" });
+
+    expect(invoiceCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ dueDate: null }),
+    });
+  });
+
+  it("rejects an out-of-range explicit due date before touching the database", async () => {
+    const { db, invoiceCreate } = makeDb({});
+
+    await expect(createInvoice(db, "user-1", { dealId: "deal-1", dueDate: "0002-01-15" })).rejects.toThrow();
+    expect(db.deal.findFirst).not.toHaveBeenCalled();
+    expect(invoiceCreate).not.toHaveBeenCalled();
   });
 
   it("propagates a database failure instead of swallowing it", async () => {
@@ -344,28 +375,28 @@ describe("getOwnedInvoice", () => {
 });
 
 describe("getOwnedInvoiceContact", () => {
-  function makeContactDb(record: { deal: { contactWa: string; brand: string } } | null) {
+  function makeContactDb(record: { deal: { contactWa: string; brand: string }; snapshot: { brand: string } | null } | null) {
     const findFirst = vi.fn(async () => record);
     const db = { invoice: { findFirst } } as unknown as InvoiceContactDb;
     return { db, findFirst };
   }
 
   it("returns the deal's WhatsApp contact and brand together (T-21: brand feeds the {brand} template token)", async () => {
-    const { db } = makeContactDb({ deal: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } });
+    const { db } = makeContactDb({ deal: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" }, snapshot: null });
 
     const result = await getOwnedInvoiceContact(db, "invoice-1", "user-1");
 
-    expect(result).toEqual({ deal: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } });
+    expect(result).toEqual({ deal: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" }, snapshot: null });
   });
 
-  it("queries by invoice ID and owner together, selecting only contactWa and brand", async () => {
+  it("queries by invoice ID and owner together, selecting only contactWa, the deal's brand and the snapshot's brand", async () => {
     const { db, findFirst } = makeContactDb(null);
 
     await getOwnedInvoiceContact(db, "invoice-1", "user-2");
 
     expect(findFirst).toHaveBeenCalledWith({
       where: { id: "invoice-1", userId: "user-2" },
-      select: { deal: { select: { contactWa: true, brand: true } } },
+      select: { deal: { select: { contactWa: true, brand: true } }, snapshot: { select: { brand: true } } },
     });
   });
 
@@ -385,8 +416,55 @@ describe("updateInvoiceStatus", () => {
       ...existingInvoice,
       status: data.status,
     }));
-    return { db: { invoice: { findFirst, update } } as unknown as InvoiceStatusDb, findFirst, update };
+    const writes: string[] = [];
+    update.mockImplementation(async ({ data }: { data: { status: InvoiceRecord["status"] } }) => {
+      writes.push(`status:${data.status}`);
+      return { ...existingInvoice, status: data.status };
+    });
+    const executeRaw = vi.fn(async (query: { values: unknown[] }) => {
+      writes.push(`freeze:${String(query.values[0])}`);
+      return 1;
+    });
+    const db = { invoice: { findFirst, update }, $executeRaw: executeRaw } as Record<string, unknown>;
+    const transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
+      writes.push("tx:begin");
+      return fn(db);
+    });
+    db.$transaction = transaction;
+    return { db: db as unknown as InvoiceStatusDb, findFirst, update, executeRaw, transaction, writes };
   }
+
+  // Decision A (issue #55): leaving DRAFT exposes the document, so the
+  // snapshot is written in the same transaction, before the status.
+  it("freezes the document before writing the status, in one transaction, when a Draft is sent", async () => {
+    const { db, executeRaw, writes } = makeStatusDb(existingInvoice);
+
+    await updateInvoiceStatus(db, "invoice-1", "user-1", "SENT");
+
+    expect(writes).toEqual(["tx:begin", "freeze:STATUS_CHANGE", "status:SENT"]);
+    const query = executeRaw.mock.calls[0][0] as unknown as { values: unknown[]; strings: string[] };
+    expect(query.values).toEqual(["STATUS_CHANGE", "invoice-1", "user-1"]);
+    expect(query.strings.join("?")).toMatch(/ON CONFLICT \("invoiceId"\) DO NOTHING/);
+  });
+
+  it("asks for the snapshot on later moves too (a no-op in the database once frozen), never a different write", async () => {
+    const { db, writes } = makeStatusDb({ ...existingInvoice, status: "PAID" });
+
+    await updateInvoiceStatus(db, "invoice-1", "user-1", "SENT");
+
+    expect(writes).toEqual(["tx:begin", "freeze:STATUS_CHANGE", "status:SENT"]);
+  });
+
+  it("freezes nothing for a refused transition or a foreign invoice", async () => {
+    const refused = makeStatusDb(existingInvoice);
+    const foreign = makeStatusDb(null);
+
+    await updateInvoiceStatus(refused.db, "invoice-1", "user-1", "PAID");
+    await updateInvoiceStatus(foreign.db, "invoice-1", "user-2", "SENT");
+
+    expect(refused.executeRaw).not.toHaveBeenCalled();
+    expect(foreign.executeRaw).not.toHaveBeenCalled();
+  });
 
   it("updates an owned draft invoice to SENT", async () => {
     const { db, findFirst, update } = makeStatusDb(existingInvoice);
@@ -431,6 +509,42 @@ describe("updateInvoiceStatus", () => {
     });
   });
 
+  // FIND-01: overdue is derived from the due date, never assigned by hand.
+  it.each(["DRAFT", "SENT", "DUE", "PAID"] as const)("rejects a manual %s to OVERDUE transition without writing", async (from) => {
+    const { db, update } = makeStatusDb({ ...existingInvoice, status: from });
+
+    const result = await updateInvoiceStatus(db, "invoice-1", "user-1", "OVERDUE");
+
+    expect(result).toEqual({ kind: "invalid-transition" });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("allows no transition into OVERDUE from any status", () => {
+    for (const targets of Object.values(ALLOWED_STATUS_TRANSITIONS)) expect(targets).not.toContain("OVERDUE");
+  });
+
+  it.each([
+    ["SENT", "DUE"],
+    ["SENT", "PAID"],
+    ["DUE", "PAID"],
+  ] as const)("still allows %s to %s", async (from, to) => {
+    const { db, update } = makeStatusDb({ ...existingInvoice, status: from });
+
+    const result = await updateInvoiceStatus(db, "invoice-1", "user-1", to);
+
+    expect(result).toMatchObject({ kind: "updated", invoice: { status: to } });
+    expect(update).toHaveBeenCalledWith({ where: { id: "invoice-1", userId: "user-1" }, data: { status: to } });
+  });
+
+  it("keeps a legacy stored OVERDUE invoice payable", async () => {
+    const { db, update } = makeStatusDb({ ...existingInvoice, status: "OVERDUE" });
+
+    const result = await updateInvoiceStatus(db, "invoice-1", "user-1", "PAID");
+
+    expect(result).toMatchObject({ kind: "updated", invoice: { status: "PAID" } });
+    expect(update).toHaveBeenCalledWith({ where: { id: "invoice-1", userId: "user-1" }, data: { status: "PAID" } });
+  });
+
   it("rejects PAID to any status other than SENT (T-19 undo is the only PAID transition)", async () => {
     const { db, update } = makeStatusDb({ ...existingInvoice, status: "PAID" });
 
@@ -438,5 +552,112 @@ describe("updateInvoiceStatus", () => {
 
     expect(result).toEqual({ kind: "invalid-transition" });
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateInvoiceDueDate", () => {
+  const owned = { id: "invoice-1", userId: "user-1" } as InvoiceRecord;
+
+  function makeDueDateDb(found: InvoiceRecord | null) {
+    const findFirst = vi.fn(async () => found);
+    const update = vi.fn(async (args: { data: { dueDate: Date | null } }) => ({ ...owned, dueDate: args.data.dueDate }) as InvoiceRecord);
+    return { db: { invoice: { findFirst, update } } as unknown as InvoiceDueDateDb, findFirst, update };
+  }
+
+  it("updates an owned invoice, scoped by id and owner together", async () => {
+    const { db, findFirst, update } = makeDueDateDb(owned);
+    const dueDate = new Date("2030-01-15T00:00:00.000Z");
+
+    const result = await updateInvoiceDueDate(db, "invoice-1", "user-1", dueDate);
+
+    expect(result.kind).toBe("updated");
+    expect(findFirst).toHaveBeenCalledWith({ where: { id: "invoice-1", userId: "user-1" } });
+    expect(update).toHaveBeenCalledWith({ where: { id: "invoice-1", userId: "user-1" }, data: { dueDate } });
+  });
+
+  it("clears with null", async () => {
+    const { db, update } = makeDueDateDb(owned);
+
+    await updateInvoiceDueDate(db, "invoice-1", "user-1", null);
+
+    expect(update).toHaveBeenCalledWith({ where: { id: "invoice-1", userId: "user-1" }, data: { dueDate: null } });
+  });
+
+  it("returns not-found without writing for another owner's invoice", async () => {
+    const { db, update } = makeDueDateDb(null);
+
+    expect(await updateInvoiceDueDate(db, "invoice-1", "user-2", new Date("2030-01-15T00:00:00.000Z"))).toEqual({ kind: "not-found" });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["year 0002", new Date("0002-01-15T00:00:00.000Z")],
+    ["2100-01-01", new Date("2100-01-01T00:00:00.000Z")],
+    ["an invalid Date", new Date(Number.NaN)],
+  ])("refuses %s without reading or writing (defense in depth behind the schema)", async (_case, dueDate) => {
+    const { db, findFirst, update } = makeDueDateDb(owned);
+
+    expect(await updateInvoiceDueDate(db, "invoice-1", "user-1", dueDate)).toEqual({ kind: "invalid-due-date" });
+    expect(findFirst).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe("createInvoiceOnce (#53)", () => {
+  const key = "5b0f7c2e-8a41-4d7e-9a35-1c2b3d4e5f60";
+  const stored: InvoiceRecord = {
+    id: "invoice-stored",
+    userId: "user-1",
+    dealId: "deal-1",
+    number: "INV/2026/07/001",
+    subtotalIdr: 1_500_000,
+    withholdingTaxType: "NONE",
+    status: "DRAFT",
+    dueDate: null,
+    idempotencyKey: key,
+    createdAt: new Date("2026-07-15T00:00:00.000Z"),
+    updatedAt: new Date("2026-07-15T00:00:00.000Z"),
+  };
+
+  it("stores the key on the new invoice and looks it up by owner and key", async () => {
+    const { db, invoiceCreate, invoiceFindFirst } = makeDb({});
+
+    const result = await createInvoiceOnce(db, "user-1", { dealId: "deal-1" }, key);
+
+    expect(result?.replayed).toBe(false);
+    expect(invoiceFindFirst).toHaveBeenCalledWith({ where: { userId: "user-1", idempotencyKey: key } });
+    expect(invoiceCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ idempotencyKey: key, dealId: "deal-1" }) });
+  });
+
+  it("returns the stored invoice for a repeat, without numbering or writing another", async () => {
+    const { db, invoiceCreate, queryRaw } = makeDb({ storedByKey: stored });
+
+    await expect(createInvoiceOnce(db, "user-1", { dealId: "deal-1" }, key)).resolves.toEqual({ record: stored, replayed: true });
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(invoiceCreate).not.toHaveBeenCalled();
+  });
+
+  it("refuses a key stored for another deal or tax type", async () => {
+    await expect(
+      createInvoiceOnce(makeDb({ storedByKey: { ...stored, dealId: "deal-2" } }).db, "user-1", { dealId: "deal-1" }, key),
+    ).rejects.toBeInstanceOf(IdempotencyConflictError);
+    await expect(
+      createInvoiceOnce(makeDb({ storedByKey: stored }).db, "user-1", { dealId: "deal-1", withholdingTaxType: "PPH23" }, key),
+    ).rejects.toBeInstanceOf(IdempotencyConflictError);
+  });
+
+  it("is null for a deal that is not the user's, before any key lookup", async () => {
+    const { db, invoiceFindFirst } = makeDb({ deal: null, storedByKey: stored });
+
+    await expect(createInvoiceOnce(db, "user-1", { dealId: "deal-1" }, key)).resolves.toBeNull();
+    expect(invoiceFindFirst).not.toHaveBeenCalled();
+  });
+
+  it("creates as before without a key", async () => {
+    const { db, invoiceCreate, invoiceFindFirst } = makeDb({});
+
+    await expect(createInvoiceOnce(db, "user-1", { dealId: "deal-1" }, null)).resolves.toMatchObject({ replayed: false });
+    expect(invoiceFindFirst).not.toHaveBeenCalled();
+    expect(invoiceCreate).toHaveBeenCalledWith({ data: expect.not.objectContaining({ idempotencyKey: expect.anything() }) });
   });
 });

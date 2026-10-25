@@ -720,13 +720,17 @@ async function runPdfParity(page: Page, baseURL: string) {
     if (!taxBlock) throw new Error("Missing HTML tax block");
     add("tax", "Pajak potong", text(taxBlock.querySelector(":scope > p:nth-child(2)")), "Pajak potong");
 
+    // The due date is shown with or without payment terms (FIND-08), so it
+    // is looked up on its own, as the PDF side does.
     const termsBlock = directChildren.find((child) => text(child.querySelector(":scope > h2")) === "Syarat pembayaran");
     if (termsBlock) {
       const termLines = Array.from(termsBlock.querySelectorAll(":scope > p")).map((element) => text(element));
       add("terms", "Syarat pembayaran", termLines[0] ?? "", "Syarat pembayaran");
-      const dueLine = termLines.find((line) => line.startsWith("Jatuh tempo: "));
-      if (dueLine) add("dueDate", "Jatuh tempo", valueAfter(dueLine, "Jatuh tempo: "), "Jatuh tempo");
     }
+    const dueLine = directChildren
+      .flatMap((child) => Array.from(child.querySelectorAll(":scope > p")).map((element) => text(element)))
+      .find((line) => line.startsWith("Jatuh tempo: "));
+    if (dueLine) add("dueDate", "Jatuh tempo", valueAfter(dueLine, "Jatuh tempo: "), "Jatuh tempo");
 
     const bankBlock = directChildren.find((child) => text(child.querySelector(":scope > div > h2")) === "Pembayaran ke");
     if (!bankBlock) throw new Error("Missing HTML bank block");
@@ -839,16 +843,20 @@ async function exerciseInvalidContactFlow(page: Page, context: BrowserContext, b
       await expect(page.getByRole("link", { name: language === "id" ? "Buka WhatsApp" : "Open WhatsApp", exact: true })).toBeVisible();
       f15VerifiedLanguages.add(language);
     } finally {
-      const restore = await page.evaluate(async ({ dealId, contactWa }) => {
-        const response = await fetch(`/api/deals/${dealId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contactWa }),
-        });
+      // Restored in the database, not through PATCH: since #50 the API
+      // refuses a number WhatsApp can't open, which is exactly what this
+      // fixture holds. The read-back below still goes through the API.
+      execFileSync("npx", ["tsx", "--env-file-if-exists=.env.local", "scripts/ux-fixtures.ts", "restore-invalid-contact"], {
+        stdio: "inherit",
+        env: { ...process.env, UX_FIXTURE_CONFIRM: "non-production" },
+        timeout: 60_000,
+      });
+      const restore = await page.evaluate(async (dealId) => {
+        const response = await fetch(`/api/deals/${dealId}`, { cache: "no-store" });
         const payload = await response.json().catch(() => ({}));
         return { status: response.status, contactWa: (payload as { deal?: { contactWa?: unknown } }).deal?.contactWa };
-      }, { dealId: fixtures.deals.masuk, contactWa: originalContact });
-      expect(restore.status, "F15 cleanup PATCH must restore the original deal contact").toBe(200);
+      }, fixtures.deals.masuk);
+      expect(restore.status, "F15 cleanup read-back must succeed").toBe(200);
       expect(restore.contactWa, "F15 cleanup read-back must report the original contact value").toBe(originalContact);
       await page.reload({ waitUntil: "networkidle" });
     }

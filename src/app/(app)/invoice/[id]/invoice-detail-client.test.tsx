@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { LanguageProvider } from "@/components/language-switcher";
 import InvoiceDetailClient from "./invoice-detail-client";
 
 // getByRole's accessible-name matching preserves the money formatter's real
@@ -31,6 +32,7 @@ function makeFetchMock(
   options: {
     shareGet?: JsonResult;
     sharePost?: JsonResult | JsonResult[];
+    shareEnsure?: JsonResult;
     shareDelete?: JsonResult;
     statusPatch?: JsonResult;
     contactGet?: JsonResult;
@@ -47,17 +49,62 @@ function makeFetchMock(
         body: { active: true, path: "/i/deterministic-token", expiresAt: "2026-10-17T00:00:00.000Z" },
       }];
 
+  // What POST .../share/ensure answers unless a test sets shareEnsure: like
+  // the server, the link that already exists (the one GET reported, or the
+  // one the last POST .../share issued), otherwise a newly issued one.
+  type ShareBody = { active?: boolean; path?: string | null; expiresAt?: string | null };
+  const loaded = shareGet.body as ShareBody;
+  let usableShare: ShareBody | null = shareGet.status === 200 && loaded.active && loaded.path ? loaded : null;
+
   return vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
     if (url.endsWith("/contact") && method === "GET") return jsonResponse(contactGet);
     if (url.endsWith("/share") && method === "GET") return jsonResponse(shareGet);
     if (url.endsWith("/share") && method === "POST") {
       const next = sharePostQueue.length > 1 ? sharePostQueue.shift()! : sharePostQueue[0];
+      if (next.status === 200) usableShare = next.body as ShareBody;
       return jsonResponse(next);
+    }
+    if (url.endsWith("/share/ensure") && method === "POST") {
+      if (options.shareEnsure) return jsonResponse(options.shareEnsure);
+      if (usableShare) return jsonResponse({ status: 200, body: { active: true, path: usableShare.path, expiresAt: usableShare.expiresAt ?? null } });
+      const issued = sharePostQueue[0];
+      if (issued.status === 200) usableShare = issued.body as ShareBody;
+      return jsonResponse(issued);
     }
     if (url.endsWith("/share") && method === "DELETE") return jsonResponse(shareDelete);
     return jsonResponse(statusPatch);
   });
+}
+
+// The share requests that can issue a link, in order, as "POST /share" (always
+// a new token) or "POST /share/ensure" (reuse, new only when needed).
+function shareLinkRequests(fetchMock: ReturnType<typeof makeFetchMock>): string[] {
+  return fetchMock.mock.calls
+    .filter(([url, init]) => init?.method === "POST" && /\/share(\/ensure)?$/.test(url))
+    .map(([url]) => `POST ${url.replace("/api/invoices/invoice-1", "")}`);
+}
+
+// The WhatsApp hand-off (src/lib/whatsapp-popup.ts) opens a blank tab on the
+// click itself, then sends that tab to wa.me through a link in the tab's own
+// document. This stands in for that tab; href() is where it was sent.
+function stubWhatsAppTab() {
+  const tab = {
+    opener: window as Window | null,
+    closed: false,
+    document: document.implementation.createHTMLDocument(""),
+    close: vi.fn(() => {
+      tab.closed = true;
+    }),
+  };
+  const open = vi.spyOn(window, "open").mockImplementation(() => tab as unknown as Window);
+  const href = () => tab.document.querySelector("a")?.getAttribute("href") ?? null;
+  return { open, tab, href };
+}
+
+async function sentWhatsAppHref(wa: ReturnType<typeof stubWhatsAppTab>) {
+  await waitFor(() => expect(wa.href()).not.toBeNull());
+  return wa.href()!;
 }
 
 // This suite exercises Dibayar's Indonesian-language behavior in depth, so it
@@ -260,7 +307,9 @@ describe("InvoiceDetailClient", () => {
         statusPatch: { status: 200, body: { invoice: { ...draftInvoice, status: "SENT" } } },
       }),
     );
-    render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "PAID" }} />);
+    // A fixed "now" before the fixture's due date: an undone invoice that is
+    // already past due is shown as overdue and offers only "Tandai lunas".
+    render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "PAID" }} now={new Date("2026-07-24T00:00:00.000Z")} />);
 
     await user.click(await screen.findByRole("button", { name: "Batalkan status lunas" }));
 
@@ -292,6 +341,54 @@ describe("InvoiceDetailClient", () => {
       expect(screen.getByRole("button", { name: "Kirim lewat WhatsApp" })).toBeDefined();
     });
 
+    // FIND-01: overdue is never set by hand, in either language.
+    it.each([
+      ["id", "Tandai terlambat", "Tandai lunas"],
+      ["en", "Mark as overdue", "Mark as paid"],
+    ] as const)("offers no manual overdue action on a DUE invoice (%s)", async (language, removed, kept) => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(
+        <LanguageProvider initialLanguage={language}>
+          <InvoiceDetailClient
+            initialInvoice={{ ...draftInvoice, status: "DUE", dueDate: new Date("2026-07-30T00:00:00.000Z") }}
+            now={new Date("2026-07-24T00:00:00.000Z")}
+          />
+        </LanguageProvider>,
+      );
+
+      expect(await screen.findByRole("button", { name: kept })).toBeDefined();
+      expect(screen.queryByRole("button", { name: removed })).toBeNull();
+    });
+
+    it.each(["SENT", "DUE"] as const)("offers only Tandai lunas on a stored %s invoice that is shown as overdue", async (status) => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(
+        <InvoiceDetailClient
+          initialInvoice={{ ...draftInvoice, status, dueDate: new Date("2026-07-19T00:00:00.000Z") }}
+          now={new Date("2026-07-24T00:00:00.000Z")}
+        />,
+      );
+
+      expect(await screen.findByText("Terlambat")).toBeDefined();
+      expect(screen.getByRole("button", { name: "Tandai lunas" })).toBeDefined();
+      // Already shown as overdue: "mark due" would contradict the chip.
+      expect(screen.queryByRole("button", { name: "Tandai jatuh tempo" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Tandai terlambat" })).toBeNull();
+    });
+
+    it("still offers Tandai jatuh tempo on a SENT invoice that is not overdue", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(
+        <InvoiceDetailClient
+          initialInvoice={{ ...draftInvoice, status: "SENT", dueDate: new Date("2026-07-30T00:00:00.000Z") }}
+          now={new Date("2026-07-24T00:00:00.000Z")}
+        />,
+      );
+
+      expect(await screen.findByRole("button", { name: "Tandai jatuh tempo" })).toBeDefined();
+      expect(screen.getByRole("button", { name: "Tandai lunas" })).toBeDefined();
+    });
+
     it("derives OVERDUE at 00:01 Jakarta the day after the due date, and switches the primary action to Kirim pengingat", async () => {
       vi.stubGlobal("fetch", makeFetchMock());
       render(
@@ -312,7 +409,7 @@ describe("InvoiceDetailClient", () => {
   describe("Aksi utama WhatsApp (header)", () => {
     it("creates a share link first, then opens the send-template message, when not overdue", async () => {
       const user = userEvent.setup();
-      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const wa = stubWhatsAppTab();
       vi.stubGlobal("fetch", makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
         shareGet: { status: 200, body: { active: false } },
@@ -323,8 +420,7 @@ describe("InvoiceDetailClient", () => {
       const whatsappButton = await screen.findByRole("button", { name: "Kirim lewat WhatsApp" });
       await user.click(whatsappButton);
 
-      await waitFor(() => expect(open).toHaveBeenCalled());
-      const href = open.mock.calls[0]?.[0] as string;
+      const href = await sentWhatsAppHref(wa);
       expect(href).toContain(encodeURIComponent("INV/2026/07/001"));
       const message = decodeURIComponent(href.split("?text=")[1] ?? "");
       expect(message).toContain("Kopi Nusantara");
@@ -332,9 +428,106 @@ describe("InvoiceDetailClient", () => {
       expect(await screen.findByTitle(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
     });
 
-    it("opens WhatsApp directly, without creating a new link, when a link is already active", async () => {
+    // Decision A: the link may freeze the document with a brand edited
+    // elsewhere after this page loaded; the message names the frozen brand.
+    it("names the brand of the document the link just froze, not the one loaded with the page", async () => {
+      const user = userEvent.setup();
+      const wa = stubWhatsAppTab();
+      const base = makeFetchMock({ shareGet: { status: 200, body: { active: false } } });
+      let contactReads = 0;
+      vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.endsWith("/contact") && (init?.method ?? "GET") === "GET") {
+          contactReads += 1;
+          const documentBrand = contactReads === 1 ? "Brand Saat Halaman Dibuka" : "Brand Saat Dibekukan";
+          return { ok: true, status: 200, json: async () => ({ contactWa: "0812-3456-7890", brand: "Brand Deal", documentBrand }) };
+        }
+        return base(url, init);
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Kirim lewat WhatsApp" }));
+
+      const message = decodeURIComponent((await sentWhatsAppHref(wa)).split("?text=")[1] ?? "");
+      expect(message).toContain("Brand Saat Dibekukan");
+      expect(message).not.toContain("Brand Saat Halaman Dibuka");
+    });
+
+    it("opens exactly one tab, cut off from this page, and shows no Buka WhatsApp fallback once it opened (FIND-04)", async () => {
+      const user = userEvent.setup();
+      const wa = stubWhatsAppTab();
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Kirim lewat WhatsApp" }));
+
+      expect(await sentWhatsAppHref(wa)).toMatch(/^https:\/\/wa\.me\/6281234567890\?text=/);
+      expect(wa.open).toHaveBeenCalledTimes(1);
+      expect(wa.open).toHaveBeenCalledWith("", "_blank");
+      expect(wa.tab.opener).toBeNull();
+      expect(wa.tab.document.querySelector("a")?.rel).toBe("noreferrer");
+      expect(wa.tab.close).not.toHaveBeenCalled();
+      await waitFor(() => expect(screen.getByRole("button", { name: "Kirim lewat WhatsApp" })).toHaveProperty("disabled", false));
+      expect(screen.queryByRole("link", { name: "Buka WhatsApp" })).toBeNull();
+    });
+
+    it("shows a Buka WhatsApp link to the same message when the browser blocks the tab", async () => {
       const user = userEvent.setup();
       const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Kirim lewat WhatsApp" }));
+
+      const fallback = await screen.findByRole("link", { name: "Buka WhatsApp" });
+      expect(fallback.getAttribute("href")).toMatch(/^https:\/\/wa\.me\/6281234567890\?text=/);
+      expect(decodeURIComponent(fallback.getAttribute("href")!.split("?text=")[1] ?? "")).toContain("INV/2026/07/001");
+      expect(fallback.getAttribute("rel")).toBe("noopener noreferrer");
+      expect(open).toHaveBeenCalledTimes(1);
+    });
+
+    it("closes the blank tab and shows no fallback when the share link can't be created", async () => {
+      const user = userEvent.setup();
+      const wa = stubWhatsAppTab();
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+        sharePost: { status: 500, body: {} },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Kirim lewat WhatsApp" }));
+
+      await waitFor(() => expect(wa.tab.close).toHaveBeenCalled());
+      expect(wa.href()).toBeNull();
+      expect(screen.queryByRole("link", { name: "Buka WhatsApp" })).toBeNull();
+    });
+
+    it("shows the fallback instead of a second tab when the person already closed the blank one", async () => {
+      const user = userEvent.setup();
+      const wa = stubWhatsAppTab();
+      vi.stubGlobal("fetch", makeFetchMock({
+        contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+      }));
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      const button = await screen.findByRole("button", { name: "Kirim lewat WhatsApp" });
+      wa.open.mockImplementation(() => {
+        wa.tab.closed = true;
+        return wa.tab as unknown as Window;
+      });
+      await user.click(button);
+
+      expect(await screen.findByRole("link", { name: "Buka WhatsApp" })).toBeDefined();
+      expect(wa.href()).toBeNull();
+      expect(wa.open).toHaveBeenCalledTimes(1);
+    });
+
+    it("sends the link that is already active: asks the server for it and never rotates it", async () => {
+      const user = userEvent.setup();
+      const wa = stubWhatsAppTab();
       const fetchMock = makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
         shareGet: { status: 200, body: { active: false } },
@@ -346,17 +539,18 @@ describe("InvoiceDetailClient", () => {
       await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
       expect(await screen.findByTitle(`${window.location.origin}/i/deterministic-token`)).toBeDefined();
 
-      const postCallsBefore = fetchMock.mock.calls.filter((call) => call[1]?.method === "POST").length;
+      expect(shareLinkRequests(fetchMock)).toEqual(["POST /share"]);
       await user.click(screen.getByRole("button", { name: "Kirim lewat WhatsApp" }));
 
-      await waitFor(() => expect(open).toHaveBeenCalled());
-      const postCallsAfter = fetchMock.mock.calls.filter((call) => call[1]?.method === "POST").length;
-      expect(postCallsAfter).toBe(postCallsBefore);
+      const openedUrl = await sentWhatsAppHref(wa);
+      expect(openedUrl).toContain(encodeURIComponent(`${window.location.origin}/i/deterministic-token`));
+      // The send itself only asked for the existing link; nothing new was issued.
+      expect(shareLinkRequests(fetchMock)).toEqual(["POST /share", "POST /share/ensure"]);
     });
 
     it("sends the chase-template message (not the send template) once overdue, mentioning the due date", async () => {
       const user = userEvent.setup();
-      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const wa = stubWhatsAppTab();
       vi.stubGlobal("fetch", makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
         shareGet: { status: 200, body: { active: false } },
@@ -371,8 +565,7 @@ describe("InvoiceDetailClient", () => {
       );
       await user.click(await screen.findByRole("button", { name: "Kirim pengingat" }));
 
-      await waitFor(() => expect(open).toHaveBeenCalled());
-      const href = open.mock.calls[0]?.[0] as string;
+      const href = await sentWhatsAppHref(wa);
       const message = decodeURIComponent(href.split("?text=")[1] ?? "");
       expect(message).toContain("izin mengingatkan");
       expect(message).toContain("jatuh tempo 1 Jul 2026");
@@ -380,7 +573,7 @@ describe("InvoiceDetailClient", () => {
 
     it("uses a custom chase template from Settings instead of the default when overdue", async () => {
       const user = userEvent.setup();
-      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const wa = stubWhatsAppTab();
       vi.stubGlobal("fetch", makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
         shareGet: { status: 200, body: { active: false } },
@@ -396,14 +589,13 @@ describe("InvoiceDetailClient", () => {
       );
       await user.click(await screen.findByRole("button", { name: "Kirim pengingat" }));
 
-      await waitFor(() => expect(open).toHaveBeenCalled());
-      const message = decodeURIComponent((open.mock.calls[0]?.[0] as string).split("?text=")[1] ?? "");
+      const message = decodeURIComponent((await sentWhatsAppHref(wa)).split("?text=")[1] ?? "");
       expect(message).toBe("Tolong segera lunasi INV/2026/07/001, Kopi Nusantara. Link: https://dibayar.example/i/deterministic-token".replace("https://dibayar.example", window.location.origin));
     });
 
     it("drops the due-date line entirely when the invoice has no due date, even using the default send template", async () => {
       const user = userEvent.setup();
-      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const wa = stubWhatsAppTab();
       vi.stubGlobal("fetch", makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
         shareGet: { status: 200, body: { active: false } },
@@ -413,8 +605,7 @@ describe("InvoiceDetailClient", () => {
       render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: null }} />);
       await user.click(await screen.findByRole("button", { name: "Kirim lewat WhatsApp" }));
 
-      await waitFor(() => expect(open).toHaveBeenCalled());
-      const message = decodeURIComponent((open.mock.calls[0]?.[0] as string).split("?text=")[1] ?? "");
+      const message = decodeURIComponent((await sentWhatsAppHref(wa)).split("?text=")[1] ?? "");
       expect(message).not.toContain("Jatuh tempo");
       expect(message).not.toContain("Jatuh tempo .");
     });
@@ -422,7 +613,7 @@ describe("InvoiceDetailClient", () => {
     it("sends an Indonesian-only WhatsApp message even when the creator's UI language is English", async () => {
       window.localStorage.setItem("dibayar-language", "en");
       const user = userEvent.setup();
-      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const wa = stubWhatsAppTab();
       vi.stubGlobal("fetch", makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "+62 812-3456-7890" } },
         sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
@@ -432,8 +623,7 @@ describe("InvoiceDetailClient", () => {
       const whatsappButton = await screen.findByRole("button", { name: "Send on WhatsApp" });
       await user.click(whatsappButton);
 
-      await waitFor(() => expect(open).toHaveBeenCalled());
-      const href = open.mock.calls[0]?.[0] as string;
+      const href = await sentWhatsAppHref(wa);
       const message = decodeURIComponent(href.split("?text=")[1] ?? "");
       expect(message).not.toMatch(/reminder|overdue|thank you|due date/i);
     });
@@ -461,7 +651,7 @@ describe("InvoiceDetailClient", () => {
 
     it("writes a fixed contact number back to the deal, then sends WhatsApp directly with the repaired number (F15)", async () => {
       const user = userEvent.setup();
-      const open = vi.spyOn(window, "open").mockImplementation(() => ({}) as Window);
+      const wa = stubWhatsAppTab();
       const calls: Array<{ url: string; init?: RequestInit }> = [];
       vi.stubGlobal(
         "fetch",
@@ -470,7 +660,7 @@ describe("InvoiceDetailClient", () => {
           const method = init?.method ?? "GET";
           if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: { contactWa: "not-a-phone", brand: "Kopi Nusantara" } });
           if (url.endsWith("/share") && method === "GET") return jsonResponse({ status: 200, body: { active: false } });
-          if (url.endsWith("/share") && method === "POST") {
+          if (/\/share(\/ensure)?$/.test(url) && method === "POST") {
             return jsonResponse({ status: 200, body: { active: true, path: "/i/deterministic-token" } });
           }
           if (url.includes("/api/deals/") && method === "PATCH") {
@@ -494,23 +684,47 @@ describe("InvoiceDetailClient", () => {
       expect(patchCall?.url).toBe("/api/deals/deal-1");
       expect(JSON.parse(patchCall!.init!.body as string)).toEqual({ contactWa: "0812-3456-7890" });
 
-      await waitFor(() => expect(open).toHaveBeenCalled());
-      const href = open.mock.calls[0]?.[0] as string;
+      const href = await sentWhatsAppHref(wa);
       expect(href).toContain("6281234567890");
       expect(screen.queryByLabelText("Perbaiki nomor WhatsApp")).toBeNull();
       await waitFor(() => expect(screen.getByRole("button", { name: "Kirim lewat WhatsApp" })).toHaveProperty("disabled", false));
     });
 
+    it("does not save or open a tab for a repair number WhatsApp can't open, and says what is wrong (#50)", async () => {
+      const user = userEvent.setup();
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const calls: Array<{ url: string; init?: RequestInit }> = [];
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string, init?: RequestInit) => {
+          calls.push({ url, init });
+          if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: { contactWa: "not-a-phone", brand: "Kopi Nusantara" } });
+          if (url.endsWith("/share")) return jsonResponse({ status: 200, body: { active: false } });
+          return jsonResponse({ status: 500, body: {} });
+        }),
+      );
+
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+      await user.click(await screen.findByRole("button", { name: "Kirim lewat WhatsApp" }));
+      fireEvent.change(await screen.findByLabelText("Perbaiki nomor WhatsApp"), { target: { value: "1" } });
+      await user.click(screen.getByRole("button", { name: "Simpan & kirim" }));
+
+      expect(await screen.findByText("Nomor WhatsApp belum valid. Contoh: 0812 3456 7890.")).toBeDefined();
+      expect(calls.some((call) => call.init?.method === "PATCH")).toBe(false);
+      expect(open).not.toHaveBeenCalled();
+      expect(screen.queryByText("Nomor WhatsApp belum bisa disimpan. Coba lagi.")).toBeNull();
+    });
+
     it("shows a direct Buka WhatsApp link when the repaired number's send is popup-blocked (F15)", async () => {
       const user = userEvent.setup();
-      vi.spyOn(window, "open").mockImplementation(() => null);
+      const open = vi.spyOn(window, "open").mockImplementation(() => null);
       vi.stubGlobal(
         "fetch",
         vi.fn(async (url: string, init?: RequestInit) => {
           const method = init?.method ?? "GET";
           if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: { contactWa: "not-a-phone", brand: "Kopi Nusantara" } });
           if (url.endsWith("/share") && method === "GET") return jsonResponse({ status: 200, body: { active: false } });
-          if (url.endsWith("/share") && method === "POST") {
+          if (/\/share(\/ensure)?$/.test(url) && method === "POST") {
             return jsonResponse({ status: 200, body: { active: true, path: "/i/deterministic-token" } });
           }
           if (url.includes("/api/deals/") && method === "PATCH") {
@@ -531,6 +745,8 @@ describe("InvoiceDetailClient", () => {
 
       const fallback = await screen.findByRole("link", { name: "Buka WhatsApp" });
       expect(fallback.getAttribute("href")).toContain("6281234567890");
+      // One attempt, from the Simpan & kirim tap itself.
+      expect(open).toHaveBeenCalledTimes(1);
     });
 
     it("keeps the primary WhatsApp button available when the invoice has no due date, since a plain share never fabricates one", async () => {
@@ -546,7 +762,7 @@ describe("InvoiceDetailClient", () => {
 
     it("re-enables WhatsApp after a reload/new session by recovering the existing active link from the server (no regenerate needed)", async () => {
       const user = userEvent.setup();
-      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const wa = stubWhatsAppTab();
       const fetchMock = makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
         shareGet: {
@@ -562,11 +778,103 @@ describe("InvoiceDetailClient", () => {
 
       await user.click(whatsappButton);
 
-      // Reuses the recovered link directly -- no POST /share (no new token minted).
-      await waitFor(() => expect(open).toHaveBeenCalled());
-      expect(fetchMock.mock.calls.some((call) => call[1]?.method === "POST")).toBe(false);
-      const openedUrl = open.mock.calls[0]?.[0] as string;
+      // Reuses the recovered link -- never the rotating POST /share (no new token minted).
+      const openedUrl = await sentWhatsAppHref(wa);
+      expect(shareLinkRequests(fetchMock)).toEqual(["POST /share/ensure"]);
       expect(openedUrl).toContain(encodeURIComponent(`${window.location.origin}/i/recovered-token`));
+    });
+
+    // FIND-07: invoice detail used to send whatever link the page loaded,
+    // including one that had already expired.
+    describe("tautan kedaluwarsa (FIND-07)", () => {
+      const expiredGet = { status: 200, body: { active: false, expired: true, expiresAt: "2020-01-01T00:00:00.000Z" } };
+
+      it("sends a fresh link from the server when the share has expired, and then shows it as the active link", async () => {
+        const user = userEvent.setup();
+        const wa = stubWhatsAppTab();
+        const fetchMock = makeFetchMock({
+          contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+          shareGet: expiredGet,
+          shareEnsure: { status: 200, body: { active: true, path: "/i/fresh-token", expiresAt: "2026-12-30T00:00:00.000Z" } },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+        expect(await screen.findByText("Tautan berbagi sudah tidak berlaku.")).toBeDefined();
+        const whatsappButton = screen.getByRole("button", { name: "Kirim lewat WhatsApp" });
+        await waitFor(() => expect(whatsappButton).toHaveProperty("disabled", false));
+        await user.click(whatsappButton);
+
+        const openedUrl = await sentWhatsAppHref(wa);
+        expect(openedUrl).toContain(encodeURIComponent(`${window.location.origin}/i/fresh-token`));
+        expect(shareLinkRequests(fetchMock)).toEqual(["POST /share/ensure"]);
+        expect(await screen.findByTitle(`${window.location.origin}/i/fresh-token`)).toBeDefined();
+        expect(screen.getByText("Tautan aktif sampai 30 Des 2026.")).toBeDefined();
+        expect(screen.queryByText("Tautan berbagi sudah tidak berlaku.")).toBeNull();
+      });
+
+      it("sends the server's link, not the one the page loaded, when the server answers with a different one", async () => {
+        const user = userEvent.setup();
+        const wa = stubWhatsAppTab();
+        vi.stubGlobal("fetch", makeFetchMock({
+          contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+          // Loaded as active; by the time of the click it has expired and
+          // the server issues a replacement.
+          shareGet: { status: 200, body: { active: true, path: "/i/loaded-token", expiresAt: "2026-10-17T00:00:00.000Z" } },
+          shareEnsure: { status: 200, body: { active: true, path: "/i/replacement-token", expiresAt: "2027-01-15T00:00:00.000Z" } },
+        }));
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+        const whatsappButton = await screen.findByRole("button", { name: "Kirim lewat WhatsApp" });
+        await waitFor(() => expect(whatsappButton).toHaveProperty("disabled", false));
+        await user.click(whatsappButton);
+
+        const openedUrl = await sentWhatsAppHref(wa);
+        expect(openedUrl).toContain(encodeURIComponent(`${window.location.origin}/i/replacement-token`));
+        expect(openedUrl).not.toContain(encodeURIComponent(`${window.location.origin}/i/loaded-token`));
+        expect(await screen.findByTitle(`${window.location.origin}/i/replacement-token`)).toBeDefined();
+      });
+
+      it("closes the blank tab, sends nothing and says so when the server can't provide a link", async () => {
+        const user = userEvent.setup();
+        const wa = stubWhatsAppTab();
+        vi.stubGlobal("fetch", makeFetchMock({
+          contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+          shareGet: expiredGet,
+          shareEnsure: { status: 500, body: {} },
+        }));
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+        const whatsappButton = await screen.findByRole("button", { name: "Kirim lewat WhatsApp" });
+        await waitFor(() => expect(whatsappButton).toHaveProperty("disabled", false));
+        await user.click(whatsappButton);
+
+        expect((await screen.findByRole("alert")).textContent).toBe("Tautan berbagi belum bisa dibuat. Coba lagi.");
+        expect(wa.tab.close).toHaveBeenCalled();
+        expect(wa.href()).toBeNull();
+        // Still honestly expired: the failed request didn't turn it active.
+        expect(screen.getByText("Tautan berbagi sudah tidak berlaku.")).toBeDefined();
+      });
+
+      it("sends the link this tab remembers, without asking the server, when the server can't recover it (it could only replace it)", async () => {
+        const user = userEvent.setup();
+        const wa = stubWhatsAppTab();
+        window.sessionStorage.setItem("dibayar-share-path:invoice-1", "/i/remembered-token");
+        const fetchMock = makeFetchMock({
+          contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
+          shareGet: { status: 200, body: { active: true, path: null, expiresAt: "2026-10-17T00:00:00.000Z" } },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+        const whatsappButton = await screen.findByRole("button", { name: "Kirim lewat WhatsApp" });
+        await waitFor(() => expect(whatsappButton).toHaveProperty("disabled", false));
+        await user.click(whatsappButton);
+
+        const openedUrl = await sentWhatsAppHref(wa);
+        expect(openedUrl).toContain(encodeURIComponent(`${window.location.origin}/i/remembered-token`));
+        expect(shareLinkRequests(fetchMock)).toEqual([]);
+      });
     });
 
     it("still shows the stale-link disabled reason for a share that predates link recovery (no path returned)", async () => {
@@ -784,7 +1092,7 @@ describe("InvoiceDetailClient", () => {
 
     it("sends WhatsApp with the freshly regenerated link, not a stale recovered one", async () => {
       const user = userEvent.setup();
-      const open = vi.spyOn(window, "open").mockImplementation(() => null);
+      const wa = stubWhatsAppTab();
       vi.stubGlobal("fetch", makeFetchMock({
         contactGet: { status: 200, body: { contactWa: "0812-3456-7890" } },
         shareGet: { status: 200, body: { active: true, path: "/i/old-token", expiresAt: "2026-10-17T00:00:00.000Z" } },
@@ -801,8 +1109,7 @@ describe("InvoiceDetailClient", () => {
 
       await user.click(screen.getByRole("button", { name: "Kirim lewat WhatsApp" }));
 
-      await waitFor(() => expect(open).toHaveBeenCalled());
-      const openedUrl = open.mock.calls[0]?.[0] as string;
+      const openedUrl = await sentWhatsAppHref(wa);
       expect(openedUrl).toContain(encodeURIComponent(`${window.location.origin}/i/new-token`));
       expect(openedUrl).not.toContain(encodeURIComponent(`${window.location.origin}/i/old-token`));
     });
@@ -824,6 +1131,79 @@ describe("InvoiceDetailClient", () => {
       await user.click(screen.getByRole("button", { name: "Ya, cabut tautan" }));
 
       expect(await screen.findByText(/belum ada tautan berbagi/i)).toBeDefined();
+    });
+
+    // FIND-07: an expired share used to render as "Tautan berbagi aktif." /
+    // "Tautan aktif sampai 1 Jan 2020."
+    describe("tautan kedaluwarsa (FIND-07)", () => {
+      const expiredGet = { status: 200, body: { active: false, expired: true, expiresAt: "2020-01-01T00:00:00.000Z" } };
+
+      it("says the link has expired and when, and shows no active state, link or regenerate/revoke controls", async () => {
+        window.sessionStorage.setItem("dibayar-share-path:invoice-1", "/i/expired-token");
+        vi.stubGlobal("fetch", makeFetchMock({ shareGet: expiredGet }));
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+        expect(await screen.findByText("Tautan berbagi sudah tidak berlaku.")).toBeDefined();
+        expect(screen.getByText("Berakhir pada 1 Jan 2020. Penerima tidak bisa lagi membuka invoice lewat tautan ini.")).toBeDefined();
+        expect(screen.queryByText("Tautan berbagi aktif.")).toBeNull();
+        expect(screen.queryByText(/Tautan aktif/)).toBeNull();
+        expect(screen.queryByTestId("share-link-track")).toBeNull();
+        expect(screen.queryByRole("button", { name: "Buat ulang tautan" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "Cabut tautan" })).toBeNull();
+        expect(screen.getByRole("button", { name: "Buat tautan baru" }).className).toContain("h-11");
+        // The dead link is forgotten, not kept around to be reused.
+        expect(window.sessionStorage.getItem("dibayar-share-path:invoice-1")).toBeNull();
+      });
+
+      it("says so in English", async () => {
+        window.localStorage.setItem("dibayar-language", "en");
+        vi.stubGlobal("fetch", makeFetchMock({ shareGet: expiredGet }));
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+        expect(await screen.findByText("The sharing link has expired.")).toBeDefined();
+        expect(screen.getByText("It ended on 1 Jan 2020. Recipients can no longer open the invoice with this link.")).toBeDefined();
+        expect(screen.queryByText(/Link active/)).toBeNull();
+        expect(screen.queryByText("Sharing link is active.")).toBeNull();
+        expect(screen.getByRole("button", { name: "Create a new link" })).toBeDefined();
+      });
+
+      it("Buat tautan baru issues a new link in one step (no confirmation: the old link is already dead) and shows it as active", async () => {
+        const user = userEvent.setup();
+        const fetchMock = makeFetchMock({
+          shareGet: expiredGet,
+          sharePost: { status: 200, body: { active: true, path: "/i/new-token", expiresAt: "2026-12-30T00:00:00.000Z" } },
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+        await user.click(await screen.findByRole("button", { name: "Buat tautan baru" }));
+
+        expect(await screen.findByTitle(`${window.location.origin}/i/new-token`)).toBeDefined();
+        expect(screen.getByText("Tautan berbagi aktif.")).toBeDefined();
+        expect(screen.getByText("Tautan aktif sampai 30 Des 2026.")).toBeDefined();
+        expect(shareLinkRequests(fetchMock)).toEqual(["POST /share"]);
+      });
+
+      it("keeps the expired state and shows an error when the new link can't be created", async () => {
+        const user = userEvent.setup();
+        vi.stubGlobal("fetch", makeFetchMock({ shareGet: expiredGet, sharePost: { status: 500, body: {} } }));
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+        await user.click(await screen.findByRole("button", { name: "Buat tautan baru" }));
+
+        expect((await screen.findByRole("alert")).textContent).toBe("Tautan berbagi belum bisa dibuat. Coba lagi.");
+        expect(screen.getByText("Tautan berbagi sudah tidak berlaku.")).toBeDefined();
+      });
+
+      it("treats a malformed expired payload (expired but active, or no date) as a load error rather than guessing", async () => {
+        vi.stubGlobal("fetch", makeFetchMock({ shareGet: { status: 200, body: { active: true, expired: true, path: "/i/x", expiresAt: "2020-01-01T00:00:00.000Z" } } }));
+
+        render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
+
+        expect((await screen.findByRole("alert")).textContent).toBe("Status berbagi belum bisa dimuat. Coba lagi.");
+      });
     });
 
     it("shows a controlled Bahasa error when the share state cannot be loaded, with a retry", async () => {
@@ -931,6 +1311,86 @@ describe("InvoiceDetailClient", () => {
       );
     });
 
+    // FIND-03: a year-0002 row saved before the API enforced the due-date
+    // contract used to throw on render ("Gagal memuat." on every load).
+    describe("an unusable stored due date (legacy year-0002 row)", () => {
+      const legacyDueDate = new Date("0002-01-15T00:00:00.000Z");
+
+      it("renders the invoice, says the date is invalid in the header and field, and never shows it as a real date", async () => {
+        vi.stubGlobal("fetch", makeFetchMock());
+        render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: legacyDueDate }} />);
+        await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+        expect(screen.getByText("Jatuh tempo: Tanggal tidak valid")).toBeDefined();
+        expect(screen.getAllByText("Tanggal tidak valid").length).toBeGreaterThan(0);
+        expect(
+          screen.getByText("Tanggal jatuh tempo yang tersimpan tidak valid. Pilih tanggal baru antara 1 Jan 2000 dan 31 Des 2099, atau kosongkan."),
+        ).toBeDefined();
+        expect(screen.getByLabelText("Tanggal jatuh tempo").getAttribute("aria-invalid")).toBe("true");
+        expect(document.body.textContent).not.toMatch(/15 Jan (2|1902)\b/);
+      });
+
+      it("also survives the JSON-string form a fetch round-trip produces", async () => {
+        vi.stubGlobal("fetch", makeFetchMock());
+        render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: "0002-01-15T00:00:00.000Z" as unknown as Date }} />);
+        await screen.findByRole("button", { name: "Buat tautan berbagi" });
+
+        expect(screen.getByText("Jatuh tempo: Tanggal tidak valid")).toBeDefined();
+      });
+
+      it("localizes the invalid-date state in English", async () => {
+        window.localStorage.setItem("dibayar-language", "en");
+        vi.stubGlobal("fetch", makeFetchMock());
+        render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: legacyDueDate }} />);
+        await screen.findByRole("button", { name: "Create sharing link" });
+
+        expect(screen.getAllByText("Invalid date").length).toBeGreaterThan(0);
+        expect(screen.getByText("The saved due date is invalid. Choose a new date between 1 Jan 2000 and 31 Des 2099, or clear it.")).toBeDefined();
+      });
+
+      it("lets the owner clear it through Kosongkan, without repairing it automatically", async () => {
+        const user = userEvent.setup();
+        const calls: Array<{ url: string; init?: RequestInit }> = [];
+        vi.stubGlobal(
+          "fetch",
+          vi.fn(async (url: string, init?: RequestInit) => {
+            calls.push({ url, init });
+            const method = init?.method ?? "GET";
+            if (url.endsWith("/contact")) return jsonResponse({ status: 200, body: {} });
+            if (url.endsWith("/share") && method === "GET") return jsonResponse({ status: 200, body: { active: false } });
+            if (method === "PATCH") return jsonResponse({ status: 200, body: { invoice: { ...draftInvoice, dueDate: null } } });
+            return jsonResponse({ status: 200, body: {} });
+          }),
+        );
+        render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, dueDate: legacyDueDate }} />);
+        await screen.findByRole("button", { name: "Buat tautan berbagi" });
+        expect(calls.some((call) => call.init?.method === "PATCH")).toBe(false);
+
+        await user.click(screen.getByRole("button", { name: "Kosongkan" }));
+
+        await waitFor(() => expect(screen.getByText("Jatuh tempo: Belum ditentukan")).toBeDefined());
+        const patchCall = calls.find((call) => call.init?.method === "PATCH");
+        expect(JSON.parse(patchCall!.init!.body as string)).toEqual({ dueDate: null });
+      });
+
+      it("leaves the unusable date out of the WhatsApp message instead of sending it to the brand", async () => {
+        const user = userEvent.setup();
+        const wa = stubWhatsAppTab();
+        vi.stubGlobal("fetch", makeFetchMock({
+          contactGet: { status: 200, body: { contactWa: "0812-3456-7890", brand: "Kopi Nusantara" } },
+          shareGet: { status: 200, body: { active: false } },
+          sharePost: { status: 200, body: { active: true, path: "/i/deterministic-token" } },
+        }));
+        render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "SENT", dueDate: legacyDueDate }} />);
+
+        const whatsAppButtons = await screen.findAllByRole("button", { name: /Kirim (lewat WhatsApp|pengingat)/ });
+        await user.click(whatsAppButtons[0]);
+
+        const message = decodeURIComponent((await sentWhatsAppHref(wa)).split("?text=")[1] ?? "");
+        expect(message).not.toMatch(/15 Jan|jatuh tempo/i);
+      });
+    });
+
     it("no longer shows the browser-dependent format hint or the old Save/Clear button pair anywhere (T-20 deletion)", async () => {
       vi.stubGlobal("fetch", makeFetchMock());
       render(<InvoiceDetailClient initialInvoice={draftInvoice} />);
@@ -979,6 +1439,37 @@ describe("InvoiceDetailClient", () => {
       expect(
         await screen.findByText("Complete issuer and bank details in Settings so the invoice is complete."),
       ).toBeDefined();
+    });
+
+    // Decision A: a frozen invoice is not completed by Settings any more.
+    it("shows the frozen-invoice notice when the document is already frozen", async () => {
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={{ ...draftInvoice, status: "SENT" }} hasIncompleteIssuer documentFrozen />);
+
+      expect(await screen.findByText(/sudah dikirim atau dibagikan dengan identitas penerbit atau rekening yang belum lengkap/)).toBeDefined();
+      expect(screen.queryByText("Lengkapi identitas penerbit dan rekening di Pengaturan agar invoice lengkap.")).toBeNull();
+    });
+
+    it("switches to the frozen-invoice notice as soon as this page makes the Draft's first share link, without a reload", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal("fetch", makeFetchMock());
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} hasIncompleteIssuer documentFrozen={false} />);
+      expect(await screen.findByText("Lengkapi identitas penerbit dan rekening di Pengaturan agar invoice lengkap.")).toBeDefined();
+
+      await user.click(await screen.findByRole("button", { name: "Buat tautan berbagi" }));
+
+      expect(await screen.findByText(/sudah dikirim atau dibagikan dengan identitas penerbit/)).toBeDefined();
+      expect(screen.queryByText("Lengkapi identitas penerbit dan rekening di Pengaturan agar invoice lengkap.")).toBeNull();
+    });
+
+    it("switches to the frozen-invoice notice once this page marks the Draft sent", async () => {
+      const user = userEvent.setup();
+      vi.stubGlobal("fetch", makeFetchMock({ statusPatch: { status: 200, body: { invoice: { ...draftInvoice, status: "SENT" } } } }));
+      render(<InvoiceDetailClient initialInvoice={draftInvoice} hasIncompleteIssuer documentFrozen={false} />);
+
+      await user.click(await screen.findByRole("button", { name: "Tandai sudah dikirim" }));
+
+      expect(await screen.findByText(/sudah dikirim atau dibagikan dengan identitas penerbit/)).toBeDefined();
     });
 
     it("does not render the notice when issuer/bank details are complete", async () => {
@@ -1047,5 +1538,72 @@ describe("InvoiceDetailClient", () => {
 
       expect(screen.getByRole("link", { name: /Kembali ke dashboard/ }).className).toMatch(/ds-tap-target/);
     });
+  });
+});
+
+describe("InvoiceDetailClient status change when the server cannot answer (#53)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function withUnansweredStatusPatch(stored: unknown, patchAnswer?: { status: number; body: unknown }) {
+    const base = makeFetchMock();
+    return vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === "/api/invoices/invoice-1" && init?.method === "PATCH") {
+        if (patchAnswer) return jsonResponse(patchAnswer);
+        throw new TypeError("Failed to fetch");
+      }
+      if (url === "/api/invoices/invoice-1") return jsonResponse({ status: 200, body: { invoice: stored } });
+      return base(url, init);
+    });
+  }
+
+  const sent = { ...draftInvoice, status: "SENT" as const, dueDate: new Date("2026-07-30T00:00:00.000Z") };
+  const now = new Date("2026-07-24T00:00:00.000Z");
+
+  it("a Tandai lunas the server did store shows Lunas, with no error", async () => {
+    vi.stubGlobal("fetch", withUnansweredStatusPatch({ ...sent, status: "PAID" }));
+    const user = userEvent.setup();
+    render(<InvoiceDetailClient initialInvoice={sent} now={now} />);
+
+    await user.click(await screen.findByRole("button", { name: "Tandai lunas" }));
+
+    expect(await screen.findByRole("button", { name: "Batalkan status lunas" })).toBeDefined();
+    expect(screen.queryByText(/belum pasti tersimpan/)).toBeNull();
+  });
+
+  it("a Tandai lunas that was not stored keeps the status and says it may not be saved", async () => {
+    vi.stubGlobal("fetch", withUnansweredStatusPatch(sent));
+    const user = userEvent.setup();
+    render(<InvoiceDetailClient initialInvoice={sent} now={now} />);
+
+    await user.click(await screen.findByRole("button", { name: "Tandai lunas" }));
+
+    expect(await screen.findByText(/belum pasti tersimpan/)).toBeDefined();
+    expect(screen.getByRole("button", { name: "Tandai lunas" })).toHaveProperty("disabled", false);
+  });
+
+  // A gateway that gave up while the change was being stored can answer with
+  // JSON too, so a 5xx is read back like no answer (#54 review).
+  it.each([500, 502, 504])("a Tandai lunas answered with a JSON %i that the server did store shows Lunas, with no error", async (status) => {
+    vi.stubGlobal("fetch", withUnansweredStatusPatch({ ...sent, status: "PAID" }, { status, body: { message: "upstream timed out" } }));
+    const user = userEvent.setup();
+    render(<InvoiceDetailClient initialInvoice={sent} now={now} />);
+
+    await user.click(await screen.findByRole("button", { name: "Tandai lunas" }));
+
+    expect(await screen.findByRole("button", { name: "Batalkan status lunas" })).toBeDefined();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("a Tandai lunas answered with a JSON 502 that was not stored keeps the status and says it may not be saved", async () => {
+    vi.stubGlobal("fetch", withUnansweredStatusPatch(sent, { status: 502, body: { message: "Bad Gateway" } }));
+    const user = userEvent.setup();
+    render(<InvoiceDetailClient initialInvoice={sent} now={now} />);
+
+    await user.click(await screen.findByRole("button", { name: "Tandai lunas" }));
+
+    expect(await screen.findByText(/belum pasti tersimpan/)).toBeDefined();
+    expect(screen.getByRole("button", { name: "Tandai lunas" })).toHaveProperty("disabled", false);
   });
 });

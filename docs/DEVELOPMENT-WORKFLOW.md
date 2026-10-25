@@ -106,8 +106,22 @@ hotfix/*    urgent Production fix
   `claude/*`, `test/*`, `security/*`, `ux/*`) are classified by **purpose**, and
   are ordinary CI-only branches unless they are explicitly `preview/*`. Prefer
   the standard prefixes for new work.
-- Branch protection is not available on the repository's current GitHub plan,
-  so `main`/`staging` discipline is procedural. Do not push directly to either.
+- The public repository has an **active server-side branch ruleset**:
+  [Dibayar — protect main and staging](https://github.com/crh/dibayar/rules/24837655),
+  applied only to `main` and `staging` (verified 2026-10-10). It requires
+  pull requests, resolved review threads, and successful GitHub Actions checks
+  `lint-typecheck-test`, `e2e-critical`, `e2e-a11y`, and `ux-audit`;
+  it blocks deletions and force pushes, with no bypass actors. Do not push
+  directly to either branch. Ordinary feature/fix/chore branches are not targeted.
+  Merge and squash are allowed, but the merge-commit-only rule for
+  `staging -> main` and `main -> staging` remains procedural. Required status
+  checks are non-strict: merging does not require retesting the PR against
+  the latest base; inspect post-merge CI on `staging` and `main`.
+- Every local clone should also install the version-controlled pre-push guard
+  (`scripts/git-safeguards/install-hooks.sh`) as defense in depth. It blocks
+  local pushes, force pushes, creation, and deletion of `main`/`staging`.
+  It is per-clone and bypassable; see `docs/GIT-SAFEGUARDS-AND-BACKUPS.md`
+  for limitations and daily Git backups.
 - There is no `release/*` branch. Add release branches only if the project ever
   needs parallel release trains or long stabilization cycles.
 
@@ -127,7 +141,9 @@ feature|fix|chore/*  --PR-->  staging  --validate-->  PR  -->  main
 3. Validate on the staging environment (manual smoke, M4 sessions, migrations
    applied to the staging database).
 4. `staging -> main` is the **Production release PR**. It needs Chris's
-   explicit authorization (see [Authorization](#authorization)).
+   explicit authorization (see [Authorization](#authorization)). Its body
+   carries `REVIEW_CHECKLIST.md` Gate F (coverage gaps, manual UAT, known
+   defects); green CI alone is not release readiness.
 5. Merge feature/fix/chore PRs into `staging` with squash or merge commit.
    Merge `staging -> main` and `main -> staging` sync PRs with a **merge
    commit only** (never squash or rebase), so the two long-lived branches keep
@@ -238,9 +254,22 @@ client's trusted surface. Any change in the Google console needs Chris.
 
 ## Cleanup
 
-- Delete merged `feature/*`, `fix/*`, `chore/*`, `hotfix/*`, and `preview/*`
-  branches on merge (enable GitHub "Automatically delete head branches" so this
-  is not manual).
+- GitHub "Automatically delete head branches" stays **disabled** (Chris
+  decision, 2026-10-03): with it on, merging a `staging -> main` release PR
+  deletes `staging`. Do not re-enable it. Short-lived branches are therefore
+  cleaned up manually:
+  - After a PR from a `feature/*`, `fix/*`, `chore/*`, `hotfix/*`, or
+    `preview/*` branch merges, its author deletes that head branch (the PR
+    page's "Delete branch" button or `git push origin --delete <branch>`).
+  - On a `staging -> main` release PR, never click "Delete branch". The
+    pre-push guard also refuses `git push --delete` of `main`/`staging`, but
+    it does not cover the GitHub UI or API.
+  - At each release PR (or weekly), list merged branches still on `origin`
+    and delete the ones that are yours; for anyone else's, identify them and
+    stop (see [Authorization](#authorization)):
+    `git fetch --prune origin && git branch -r --merged origin/staging | grep -vE 'origin/(main|staging|HEAD)'`
+    (a squash-merged branch will not show as merged; check its PR with
+    `gh pr list --state merged --head <branch>`).
 - When a `preview/*` branch is merged, closed, or abandoned, its Neon branch and
   Vercel deployments must be removed promptly, not "eventually".
 - Monitor Neon branch capacity before opening a preview and whenever a

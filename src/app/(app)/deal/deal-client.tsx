@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { DealRecord } from "@/lib/deals";
 import type { InvoiceRecord } from "@/lib/invoices";
@@ -8,8 +8,19 @@ import { useLanguage } from "@/components/language-switcher";
 import { DealBoard } from "@/components/deals/deal-board";
 import { StageFilter } from "@/components/deals/stage-filter";
 import { AddDealDialog } from "@/components/deals/add-deal-dialog";
-import { DealForm, EMPTY_DEAL_FORM, type DealFormState } from "@/components/deals/deal-form";
+import { EditDealDialog } from "@/components/deals/edit-deal-dialog";
+import {
+  DEAL_FORM_FIELDS,
+  DealForm,
+  EMPTY_DEAL_FORM,
+  dealFormErrorsFromServer,
+  readDealFormFields,
+  validateDealForm,
+  type DealFormErrors,
+  type DealFormState,
+} from "@/components/deals/deal-form";
 import { isStageValue } from "@/components/deals/deal-stages";
+import { bodyField, IDEMPOTENCY_HEADER, idempotencyKeyFor, mutationErrorKey, sendMutation } from "@/lib/mutation";
 
 type DealClientProps = {
   initialDeals: DealRecord[];
@@ -104,10 +115,37 @@ export default function DealClient({
   const [isDialogOpen, setIsDialogOpen] = useState(initialDialogOpen);
   const [form, setForm] = useState<DealFormState>(EMPTY_DEAL_FORM);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<DealFormErrors>({});
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingDealId, setPendingDealId] = useState<string | null>(null);
+  // #55: the deal whose edit dialog is open, from its card's menu.
+  const [editingDealId, setEditingDealId] = useState<string | null>(null);
+  const editingDeal = editingDealId ? deals.find((deal) => deal.id === editingDealId) ?? null : null;
   const hasStrippedDialogParam = useRef(false);
+  const dealFormRef = useRef<HTMLFormElement>(null);
+  // A create whose outcome is unknown (no answer, dropped connection, 5xx)
+  // may have been stored, so its key is kept: the next press of the same
+  // submission sends it again and the server returns what was stored
+  // instead of writing a second deal or invoice (#53).
+  const pendingDealCreate = useRef<{ key: string; body: string } | null>(null);
+  const pendingInvoiceCreates = useRef(new Map<string, { key: string; body: string }>());
+
+  // FIND-13: ?tambah=1 arrives from the server with the dialog already open,
+  // so on a slow connection someone can type into it before this component's
+  // script has run. React leaves that text in the fields when it takes the
+  // page over, but `form` still says every field is empty, and the next
+  // render (the effect below causes one at once) would write that emptiness
+  // back over what was typed. So, once, before anything re-renders, take
+  // what the fields hold as the form's state. A layout effect, not an
+  // effect: it has to run before the effects below. When the dialog is
+  // opened from inside the app the fields were just created from `form`,
+  // and this changes nothing.
+  useLayoutEffect(() => {
+    const formElement = dealFormRef.current;
+    if (!formElement) return;
+    setForm((current) => readDealFormFields(formElement, current));
+  }, []);
 
   // The dialog-open URL flag (?tambah=1) from the global "+ Deal" action is a
   // one-shot trigger, not durable state: strip it once so reload/back don't
@@ -153,6 +191,7 @@ export default function DealClient({
   const closeDialog = useCallback(() => {
     setIsDialogOpen(false);
     setError(null);
+    setFieldErrors({});
     setForm(EMPTY_DEAL_FORM);
   }, []);
 
@@ -179,48 +218,104 @@ export default function DealClient({
     setDeals((current) => current.map((deal) => (deal.id === dealId ? { ...deal, status } : deal)));
 
     try {
-      const response = await fetch(`/api/deals/${dealId}`, {
+      const result = await sendMutation(`/api/deals/${dealId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error("dashboard.dealError");
-      setDeals((current) => current.map((deal) => (deal.id === dealId ? payload.deal : deal)));
-    } catch {
+      const saved = result.kind === "ok" ? bodyField<DealRecord>(result.body, "deal") : undefined;
+      if (saved) {
+        setDeals((current) => current.map((deal) => (deal.id === dealId ? saved : deal)));
+        return;
+      }
+      if (result.kind === "unknown") {
+        // It may have been stored: show what the server holds.
+        const check = await sendMutation(`/api/deals/${dealId}`, { cache: "no-store" });
+        const stored = check.kind === "ok" ? bodyField<DealRecord>(check.body, "deal") : undefined;
+        setDeals((current) => current.map((deal) => (deal.id === dealId ? (stored ?? previousDeal) : deal)));
+        if (stored?.status !== status) setError("error.connection");
+        return;
+      }
       setDeals((current) => current.map((deal) => (deal.id === dealId ? previousDeal : deal)));
-      setError("dashboard.dealError");
+      setError(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.dealError") : "dashboard.dealError");
     } finally {
       setPendingDealId(null);
     }
+  }
+
+  // Marks the fields, says so above the form, and puts the keyboard on the
+  // first one, so the person sees what to fix instead of a bare "could not
+  // be saved" (#50).
+  function showFieldErrors(errors: DealFormErrors) {
+    setFieldErrors(errors);
+    setError("dealForm.checkFields");
+    const first = DEAL_FORM_FIELDS.find((field) => errors[field]);
+    const element = first ? dealFormRef.current?.elements.namedItem(first) : null;
+    if (element instanceof HTMLElement) element.focus();
+  }
+
+  function handleFormChange(next: DealFormState) {
+    // Clear corrected fields and the summary only when no highlighted fields remain.
+    // Calculate from the current render instead of setting error state inside a state updater.
+    const changed = DEAL_FORM_FIELDS.filter((field) => fieldErrors[field] && next[field] !== form[field]);
+    if (changed.length > 0) {
+      const remaining = { ...fieldErrors };
+      for (const field of changed) delete remaining[field];
+      setFieldErrors(remaining);
+      if (Object.keys(remaining).length === 0 && error === "dealForm.checkFields") {
+        setError(null);
+      }
+    }
+    setForm(next);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setSuccessMessage(null);
+
+    const errors = validateDealForm(form);
+    if (Object.keys(errors).length > 0) {
+      showFieldErrors(errors);
+      return;
+    }
+    setFieldErrors({});
     setIsSaving(true);
 
+    const body = JSON.stringify({
+      ...form,
+      feeIdr: Number(form.feeIdr),
+      deadline: form.deadline || undefined,
+      contactName: form.contactName || undefined,
+      paymentTerms: form.paymentTerms || undefined,
+    });
+    const key = idempotencyKeyFor(pendingDealCreate.current, body);
+    pendingDealCreate.current = { key, body };
+
     try {
-      const response = await fetch("/api/deals", {
+      const result = await sendMutation("/api/deals", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          feeIdr: Number(form.feeIdr),
-          deadline: form.deadline || undefined,
-          contactName: form.contactName || undefined,
-          paymentTerms: form.paymentTerms || undefined,
-        }),
+        headers: { "Content-Type": "application/json", [IDEMPOTENCY_HEADER]: key },
+        body,
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error("dashboard.saveError");
-      setDeals((current) => [payload.deal, ...current]);
-      setForm(EMPTY_DEAL_FORM);
-      setSuccessMessage("dashboard.dealSaved");
-      setIsDialogOpen(false);
-    } catch {
-      setError("dashboard.saveError");
+      if (result.kind === "unknown") {
+        setError("dashboard.saveUnknown");
+        return;
+      }
+      // A definite answer: stored (now, or by an earlier attempt with this
+      // key) or refused, so this submission is settled.
+      pendingDealCreate.current = null;
+      const created = result.kind === "ok" ? bodyField<DealRecord>(result.body, "deal") : undefined;
+      if (created) {
+        setDeals((current) => [created, ...current.filter((existing) => existing.id !== created.id)]);
+        setForm(EMPTY_DEAL_FORM);
+        setSuccessMessage("dashboard.dealSaved");
+        setIsDialogOpen(false);
+        return;
+      }
+      const serverErrors = result.kind === "rejected" && result.status === 400 ? dealFormErrorsFromServer(bodyField(result.body, "fields")) : {};
+      if (Object.keys(serverErrors).length > 0) showFieldErrors(serverErrors);
+      else setError(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.saveError") : "dashboard.saveError");
     } finally {
       setIsSaving(false);
     }
@@ -231,18 +326,28 @@ export default function DealClient({
     setSuccessMessage(null);
     setIsSaving(true);
 
+    const body = JSON.stringify({ dealId, withholdingTaxType: "NONE" });
+    const key = idempotencyKeyFor(pendingInvoiceCreates.current.get(dealId) ?? null, body);
+    pendingInvoiceCreates.current.set(dealId, { key, body });
+
     try {
-      const response = await fetch("/api/invoices", {
+      const result = await sendMutation("/api/invoices", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dealId, withholdingTaxType: "NONE" }),
+        headers: { "Content-Type": "application/json", [IDEMPOTENCY_HEADER]: key },
+        body,
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error("dashboard.invoiceError");
-      setInvoices((current) => [payload.invoice, ...current]);
-      setSuccessMessage("dashboard.invoiceCreated");
-    } catch {
-      setError("dashboard.invoiceError");
+      if (result.kind === "unknown") {
+        setError("dashboard.invoiceUnknown");
+        return;
+      }
+      pendingInvoiceCreates.current.delete(dealId);
+      const created = result.kind === "ok" ? bodyField<InvoiceRecord>(result.body, "invoice") : undefined;
+      if (created) {
+        setInvoices((current) => [created, ...current.filter((existing) => existing.id !== created.id)]);
+        setSuccessMessage("dashboard.invoiceCreated");
+      } else {
+        setError(result.kind === "rejected" ? mutationErrorKey(result, "dashboard.invoiceError") : "dashboard.invoiceError");
+      }
     } finally {
       setIsSaving(false);
     }
@@ -275,7 +380,27 @@ export default function DealClient({
         stageFilter={stageFilter}
         onStageChange={handleStageChange}
         onCreateInvoice={handleCreateInvoice}
+        onEdit={(dealId) => {
+          setError(null);
+          setSuccessMessage(null);
+          setEditingDealId(dealId);
+        }}
       />
+
+      {editingDeal ? (
+        <EditDealDialog
+          open
+          deal={editingDeal}
+          invoiceNumber={invoices.find((invoice) => invoice.dealId === editingDeal.id)?.number ?? null}
+          t={t}
+          onClose={() => setEditingDealId(null)}
+          onSaved={(saved) => {
+            setDeals((current) => current.map((deal) => (deal.id === saved.id ? saved : deal)));
+            setEditingDealId(null);
+            setSuccessMessage("deal.editSaved");
+          }}
+        />
+      ) : null}
 
       <AddDealDialog
         open={isDialogOpen}
@@ -285,7 +410,7 @@ export default function DealClient({
         closeLabel={t("dashboard.close")}
       >
         {error && isDialogOpen ? <p role="alert" className="mb-3 ds-small text-overdue">{t(error)}</p> : null}
-        <DealForm formId="tambah-deal-form" form={form} onChange={setForm} onSubmit={handleSubmit} isSaving={isSaving} t={t} />
+        <DealForm formId="tambah-deal-form" formRef={dealFormRef} form={form} errors={fieldErrors} onChange={handleFormChange} onSubmit={handleSubmit} isSaving={isSaving} t={t} />
       </AddDealDialog>
     </main>
   );

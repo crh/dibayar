@@ -1,0 +1,3891 @@
+{
+  "schemaVersion": 1,
+  "inventoryDate": "2026-10-11",
+  "baseline": "origin/staging 390bc38 (PR #36 merged) + one-shot autopilot 2026-10-11 (PR #41 long journeys; PR #42 FIND-10 fix with DEAL-DETAIL-02; PR #43 six P2 actions; FIND-12 fix with NAV-08); release-readiness follow-up 2026-10-11 (INV-DUE-06 real through a database-refused write; A11Y-04 reclassified to partial; A11Y-01 and DEAL-CREATE-07 widened, both still partial)",
+  "classificationRules": [
+    "automated_real_interaction: a browser test reaches the action through the control a person sees (click, tap, keyboard, navigation) AND asserts the user-observable outcome; mutating actions must also assert persistence after reload/navigation.",
+    "Playwright fill() into a plain visible text/tel/number/textarea field counts as real typing (fill() requires the element to be visible, enabled and editable, and focuses it). fill() does NOT count for native-picker controls (date, select, file) or any control whose visible affordance is a different element from the DOM control (e.g. the opacity-0 date input under the due-date display).",
+    "automated_partial: the test uses page.goto to skip the in-app entry point, fill() on a picker control, page.request/API calls, page.evaluate fetch, stubs/mocks, component tests with fireEvent, or asserts only rendering (screenshots, axe scans, text presence).",
+    "A test that is test.skip()-ed or test.fixme()-ed in a project does not count for that project; a test.fail()-annotated (expected-failure) test never counts as coverage. `npm run coverage:journeys` enforces this: every titled reference must be a test Playwright itself registers (`playwright test --list`), and each claimed project needs a real test that its AST shows is not skipped, fixme'd or expected to fail there; a condition it cannot evaluate does not count. With `--results <playwright-json>` it also checks the claims against an actual run: CI does this for the @critical run on every PR, and the separate `Journey coverage (full)` workflow does it for every real claim (`--require-results`).",
+    "tests/ux-audit specs run in the CI ux-audit job, which is report-gated (scripts/ux-audit.ts), not a per-test exit-code gate; they are credited but called out as such.",
+    "A P0/P1 action that is not `automated_real_interaction` or `manual_verified`, or that still carries a manual check, must have an entry in the exception register (`exceptions` in the inventory): its category, why it is not fully automated, whether it blocks a release, the evidence a release needs, and whether an automation strategy exists. `npm run coverage:journeys` fails when an entry is missing, stale, or contradicts the action's status."
+  ],
+  "actions": [
+    {
+      "id": "AUTH-01",
+      "domain": "auth",
+      "route": "/deal (any protected route)",
+      "action": "Unauthenticated visit to a protected route redirects to sign-in",
+      "persona": "visitor (no session)",
+      "preconditions": "No session cookie",
+      "interaction": "Navigate to /deal",
+      "expected": "Lands on /api/auth/signin",
+      "persisted": "n/a",
+      "alternates": "Expired/deleted session behaves the same (AUTH-07)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/auth/session.spec.ts",
+          "title": "unauthenticated visitor hitting a protected route is redirected to sign-in",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "AUTH-02",
+      "domain": "auth",
+      "route": "/masuk",
+      "action": "Landing page 'sign in with Google' CTA starts sign-in",
+      "persona": "visitor",
+      "preconditions": "No session",
+      "interaction": "Open /masuk with no session; click Masuk dengan Google; choose Google on the Auth.js page",
+      "expected": "Auth.js sign-in page offering only Google, callbackUrl=/dashboard; choosing it redirects to Google's authorization endpoint with this app's /api/auth/callback/google",
+      "persisted": "n/a",
+      "alternates": "English landing via dibayar-language cookie",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/auth/sign-in-entry.spec.ts",
+          "title": "Masuk dengan Google on the landing page starts the Auth.js Google sign-in that returns to the dashboard",
+          "kind": "real",
+          "note": "The CTA click and the Auth.js page are unstubbed. The provider hand-off is read from Auth.js's own 302 without following it (route.fetch, maxRedirects 0), so its target is checked and Google is never contacted"
+        },
+        {
+          "file": "tests/ux-audit/baseline.landing.spec.ts",
+          "title": "",
+          "kind": "partial",
+          "note": "Renders and screenshots the landing page; never clicks the CTA"
+        }
+      ],
+      "followUp": "The real Google round trip stays AUTH-03 / MAN-AUTH-01. English landing CTA not driven",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08"
+    },
+    {
+      "id": "AUTH-03",
+      "domain": "auth",
+      "route": "/api/auth/signin -> Google -> /",
+      "action": "Real Google OAuth round trip",
+      "persona": "creator with Google account",
+      "preconditions": "Hosted environment with OAuth redirect configured",
+      "interaction": "Sign in with Google on staging",
+      "expected": "Returns authenticated to Beranda; User/Account rows exist in that environment's DB",
+      "persisted": "Session cookie",
+      "alternates": "Consent cancelled; account without prior User row",
+      "scope": [
+        "manual: staging"
+      ],
+      "priority": "P0",
+      "status": "manual_verified",
+      "manualCheck": "MAN-AUTH-01",
+      "evidence": "2026-09-30 staging smoke PASS (Google OAuth round trip) recorded in STATE.md latest_validation and docs/receipts/DIBAYAR-HOBBY-STAGING-ACTIVATION-2026-09-29.md; re-run before each release"
+    },
+    {
+      "id": "AUTH-04",
+      "domain": "auth",
+      "route": "/",
+      "action": "Authenticated entry to Beranda",
+      "persona": "owner",
+      "preconditions": "Valid session",
+      "interaction": "Navigate to /",
+      "expected": "Beranda headings render with seeded data",
+      "persisted": "n/a",
+      "alternates": "Data load error (HOME-09)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/auth/session.spec.ts",
+          "title": "authenticated Beranda loads with real seeded data",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "AUTH-05",
+      "domain": "auth",
+      "route": "account menu -> /api/auth/signout",
+      "action": "Sign out via account menu",
+      "persona": "owner",
+      "preconditions": "Valid session",
+      "interaction": "Open account menu, choose Keluar, confirm on Auth.js page",
+      "expected": "Next protected visit redirects to sign-in",
+      "persisted": "Session row deleted",
+      "alternates": "Cancel on the Auth.js confirm page",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/auth/session.spec.ts",
+          "title": "sign out via the account menu ends the session and returns to sign-in on the next protected visit",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "AUTH-06",
+      "domain": "auth",
+      "route": "/pengaturan",
+      "action": "Sign out from Settings with in-app confirm",
+      "persona": "owner",
+      "preconditions": "Valid session",
+      "interaction": "Reach Pengaturan through the nav -> Keluar -> Batal -> reload; Keluar -> Ya, keluar -> confirm on the Auth.js page",
+      "expected": "Keluar only asks; Batal removes the question and the session survives a reload; Ya, keluar leads to Auth.js's sign-out page, after which Pengaturan redirects to sign-in and shows no owner data",
+      "persisted": "Session row deleted on confirm: the same token presented from a fresh browser context is redirected to sign-in",
+      "alternates": "Cancel",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/auth/settings-sign-out.spec.ts",
+          "title": "Keluar asks first: Batal keeps the session, Ya, keluar ends it for that token",
+          "kind": "real",
+          "note": "Disposable owner session; reseeds before and after. The token-replay step is what proves the row is gone (signing out also clears the browser's cookie)"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
+    },
+    {
+      "id": "AUTH-07",
+      "domain": "auth",
+      "route": "any protected route",
+      "action": "Session expiry mid-use",
+      "persona": "owner",
+      "preconditions": "A page is open on a session whose row then expires (expires in the past; fixture action expire-disposable-session on the guarded test database)",
+      "interaction": "Reload; browser Back; click a primary-nav link; click Tandai lunas on an open invoice",
+      "expected": "Reload, Back and an in-app link all end on sign-in with no owner data and no 5xx; a status change is answered 401, the page shows 'Belum tersimpan karena sesi kamu sudah berakhir. Muat ulang halaman untuk masuk lagi.' (#53) and keeps the old status",
+      "persisted": "Nothing stored: the owner's valid session still sees the invoice as sent",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/auth/session-expiry.spec.ts",
+          "title": "reloading an open invoice after the session expired goes to sign-in, and Back shows no data",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/auth/session-expiry.spec.ts",
+          "title": "following a link in the app after the session expired goes to sign-in",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/auth/session-expiry.spec.ts",
+          "title": "Tandai lunas after the session expired is refused, says so, and stores nothing",
+          "kind": "real",
+          "note": "The 401 is the server's own answer to the expired session, not a stub"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
+    },
+    {
+      "id": "AUTH-08",
+      "domain": "auth",
+      "route": "/dashboard",
+      "action": "Legacy /dashboard URL redirects to Beranda",
+      "persona": "owner",
+      "preconditions": "Valid session",
+      "interaction": "Follow 'Kembali ke dashboard' on invoice detail (links to /dashboard); open /dashboard and /dashboard/invoices/[id] directly",
+      "expected": "Lands on / (Beranda); the old invoice address lands on /invoice/[id]; signed out, both end on sign-in with no data",
+      "persisted": "n/a",
+      "alternates": "Unauthenticated -> sign-in",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/smoke/secondary-nav.spec.ts",
+          "title": "invoice detail's Kembali ke dashboard lands on Beranda, with working Back and Forward",
+          "kind": "real",
+          "note": "The only in-app link to /dashboard"
+        },
+        {
+          "file": "e2e/smoke/secondary-nav.spec.ts",
+          "title": "the legacy /dashboard addresses redirect to Beranda and to the invoice",
+          "kind": "partial",
+          "note": "page.goto, as an old bookmark would arrive"
+        },
+        {
+          "file": "e2e/smoke/secondary-nav.spec.ts",
+          "title": "the legacy /dashboard addresses send a signed-out visitor to sign-in",
+          "kind": "partial",
+          "note": "page.goto without a session"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
+    },
+    {
+      "id": "AUTH-09",
+      "domain": "auth",
+      "route": "/ (any protected route), owner APIs, /api/auth/session",
+      "action": "An existing session for an account not on the pilot allowlist reaches no creator data",
+      "persona": "uninvited creator with a still-valid session",
+      "preconditions": "PILOT_ALLOWED_EMAILS set without this account; a valid Session row and own data",
+      "interaction": "Navigate to protected pages; call owner GET/POST APIs",
+      "expected": "Pages redirect to /akses-terbatas (no shell, no data, no email); APIs 401; /api/auth/session has no user",
+      "persisted": "No deal created",
+      "alternates": "Invited owner still reaches the app; recipient /i/ link and PDF work with no session",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/security/pilot-access.spec.ts",
+          "title": "an existing session for an uninvited account is sent to the invite-only page and sees no data",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/security/pilot-access.spec.ts",
+          "title": "the uninvited session is refused by owner APIs, reads and writes alike",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/security/pilot-access.spec.ts",
+          "title": "an invited owner still reaches the app; recipients still open a share link and its PDF with no session",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/security/pilot-access.spec.ts",
+          "title": "the invite-only page names no account and offers sign-in after an Auth.js AccessDenied",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "AUTH-10",
+      "domain": "auth",
+      "route": "/api/auth/signin -> Google -> /akses-terbatas",
+      "action": "Real Google sign-in by an uninvited account is refused before any account is created",
+      "persona": "uninvited creator with a Google account",
+      "preconditions": "Hosted environment with OAuth and PILOT_ALLOWED_EMAILS configured",
+      "interaction": "Sign in with an uninvited, then an invited Google account",
+      "expected": "Uninvited: invite-only page, no User row; invited: Beranda",
+      "persisted": "No User/Account row for the uninvited account",
+      "alternates": "Google email not verified; allowlist unset (everyone refused)",
+      "scope": [
+        "manual: staging"
+      ],
+      "priority": "P0",
+      "status": "manual_pending",
+      "manualCheck": "MAN-AUTH-02"
+    },
+    {
+      "id": "HOME-01",
+      "domain": "home",
+      "route": "/",
+      "action": "Net invoiced this month card shows the correct IDR total",
+      "persona": "owner",
+      "preconditions": "Invoices created this Jakarta month, plus a draft and invoices just outside the month",
+      "interaction": "Open Beranda through the nav",
+      "expected": "Rp total = net (subtotal minus estimated PPh) of non-draft invoices created in the current Jakarta month, with the month label and paid count",
+      "persisted": "n/a",
+      "alternates": "Month rollover; no invoices; load error",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/home/monthly-income.spec.ts",
+          "title": "the monthly card shows the net of this Jakarta month's non-draft invoices, and leaves out drafts and other months",
+          "kind": "real",
+          "note": "Expected totals are worked out in the spec from the fixture's literal amounts (base seed Rp 12.700.000; with the income-boundaries overlay Rp 14.660.000), not with summarizeMonthlyIncome(). The overlay adds a draft, an invoice 1 ms before the month, one at its first instant (the only one counted) and one at the first instant of next month"
+        },
+        {
+          "file": "e2e/auth/session.spec.ts",
+          "title": "authenticated Beranda loads with real seeded data",
+          "kind": "partial",
+          "note": "Asserts the heading only, not the amount"
+        },
+        {
+          "file": "src/lib/income-summary.test.ts",
+          "title": "",
+          "kind": "partial",
+          "note": "Pure calculation unit tests"
+        }
+      ],
+      "evidence": "Zero Routine Phase 2B, 2026-10-08"
+    },
+    {
+      "id": "HOME-02",
+      "domain": "home",
+      "route": "/",
+      "action": "Follow-up queue lists overdue / due-soon invoices with reasons",
+      "persona": "owner",
+      "preconditions": "Overdue and due-soon invoices exist",
+      "interaction": "Reach Beranda via the nav; read the Perlu dikejar rows; open a row; back; reload",
+      "expected": "Overdue rows first (most recently overdue first), then due-soon (nearest first); reason text 'Telat N hari' / 'Jatuh tempo hari ini' / 'Jatuh tempo N hari lagi' against the Jakarta calendar date; due in 8+ days, PAID and far-future invoices not listed",
+      "persisted": "n/a",
+      "alternates": "Empty queue; load error",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/home/follow-up-queue.spec.ts",
+          "title": "lists overdue and due-soon invoices with their reasons in order, and keeps them after reload",
+          "kind": "real",
+          "note": "Follow-up overlay: due -5 (stored OVERDUE), -1, 0, +7 and +8 Jakarta days; checks order, reasons, amounts, row -> detail agreement, browser back and reload"
+        },
+        {
+          "file": "tests/ux-audit/states/needs-chasing.spec.ts",
+          "title": "actionable: overdue and due-soon invoices both appear with the correct reason",
+          "kind": "partial",
+          "note": "Rendering assertion only (ux-audit job)"
+        }
+      ],
+      "evidence": "Added 2026-10-04 (Zero Routine Phase 2A, follow-up overlay)"
+    },
+    {
+      "id": "HOME-03",
+      "domain": "home",
+      "route": "/",
+      "action": "Send reminder from a follow-up queue row",
+      "persona": "owner",
+      "preconditions": "Overdue invoice with valid contact",
+      "interaction": "Click Kirim pengingat on the row",
+      "expected": "WhatsApp opens in exactly one new tab (wa.me, the deal's number) with the overdue reminder text built in follow-up-queue.tsx (buildWhatsAppReminderMessage -- not the Settings chase template) and a working public link: the invoice's existing share link when it is usable, a new one only when there is none or it has expired; the tab has no opener and gets no Referer; only a blocked popup shows a fallback link",
+      "persisted": "InvoiceShare: POST /api/invoices/:id/share/ensure (ensureShare) leaves a usable share untouched (same token, same expiry) and creates one only when none is usable; the link in the message is the active link after reload and opens for a session-less recipient, before and after further reminders",
+      "alternates": "Blocked popup; share creation failure; no share yet; expired share",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/home/follow-up-queue.spec.ts",
+          "title": "Kirim pengingat on an overdue row opens WhatsApp with the overdue reminder and a working invoice link",
+          "kind": "real",
+          "note": "Real interaction (visible Kirim pengingat, real popup; wa.me answered by a local stub so nothing is sent): exact number and message, no alert, no fallback link, then reload + session-less recipient opens the sent link"
+        },
+        {
+          "file": "e2e/home/follow-up-queue.spec.ts",
+          "title": "after the reminder popup opens, the row shows no blocked-popup fallback",
+          "kind": "real",
+          "note": "FIND-04 regression (was expected_failure): exactly one new tab, one wa.me request with no Referer, window.opener null in the WhatsApp page, no Buka WhatsApp link"
+        },
+        {
+          "file": "e2e/invoices/reminder-share-link.spec.ts",
+          "title": "reuses the invoice's active share link, which keeps working for the recipient",
+          "kind": "real",
+          "note": "FIND-05 regression: link made with Buat tautan berbagi on invoice detail, opened by a session-less recipient, then visible Kirim pengingat on Beranda -- same link in the message (compared as a boolean), only POST /share/ensure sent, recipient link still opens, same link on detail after reloads"
+        },
+        {
+          "file": "e2e/invoices/reminder-share-link.spec.ts",
+          "title": "sending the reminder twice sends the same link both times",
+          "kind": "real",
+          "note": "Two visible Kirim pengingat clicks: both messages carry the existing link, it still opens afterwards, invoice detail still shows it"
+        },
+        {
+          "file": "e2e/invoices/reminder-share-link.spec.ts",
+          "title": "with no share link yet, the first reminder creates one and the next reuses it",
+          "kind": "real",
+          "note": "Starts from 'Belum ada tautan berbagi'; the first reminder's link opens for a recipient and the second reminder carries the same one"
+        },
+        {
+          "file": "e2e/invoices/reminder-share-link.spec.ts",
+          "title": "an expired share link is not sent: the reminder makes a new working link",
+          "kind": "real",
+          "note": "Expired share put on the row by the follow-up-expired-share fixture action (the app cannot backdate an expiry); the click, message and recipient pages are real. The reminder carries a different, working link; the expired URL does not open (generic not-found, since the invoice's single share row was replaced)"
+        },
+        {
+          "file": "e2e/whatsapp/popup-blocker.spec.ts",
+          "title": "Beranda: Kirim pengingat on a queue row shows a Buka WhatsApp link and opens nothing",
+          "kind": "real",
+          "note": "Real popup blocker: Chromium's --block-new-web-contents switch makes window.open() return null from the browser itself (nothing in the page stubbed). No tab, no WhatsApp request, fallback link to the overdue reminder"
+        },
+        {
+          "file": "e2e/home/follow-up-queue.spec.ts",
+          "title": "a blocked reminder popup on a queue row shows a Buka WhatsApp fallback link",
+          "kind": "partial",
+          "note": "window.open stubbed to return null; runs in every engine and is the test that follows the fallback link (the real-blocker switch blocks that tab too)"
+        },
+        {
+          "file": "src/components/home/follow-up-queue.test.tsx",
+          "title": "",
+          "kind": "partial",
+          "note": "Component tests with mocked fetch and a fake tab: opened, blocked, share failure closes the tab, repair-and-send"
+        }
+      ],
+      "finding": "FIND-04",
+      "evidence": "Added 2026-10-04 (Zero Routine Phase 2A, follow-up overlay). FIND-04 fixed by fix/whatsapp-popup-fallback-2026-10-05 (2026-10-06). FIND-05 fixed by fix/reminder-share-link-reuse-2026-10-07 (2026-10-07)",
+      "followUp": "The real WhatsApp app hand-off and phone popup blockers stay MAN-WA-01",
+      "manualCheck": "MAN-WA-01"
+    },
+    {
+      "id": "HOME-04",
+      "domain": "home",
+      "route": "/",
+      "action": "Repair invalid number in a queue row, save and send",
+      "persona": "owner",
+      "preconditions": "Overdue invoice whose deal has an invalid WhatsApp number",
+      "interaction": "Type number, click Simpan & kirim",
+      "expected": "Number saved on the deal, WhatsApp opens",
+      "persisted": "Deal.contactWa",
+      "alternates": "Still-invalid number; save error",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "src/components/home/follow-up-queue.test.tsx",
+          "title": "",
+          "kind": "partial",
+          "note": "Component test with mocked fetch"
+        }
+      ]
+    },
+    {
+      "id": "HOME-05",
+      "domain": "home",
+      "route": "/ -> /invoice/[id]",
+      "action": "Open an invoice from the follow-up queue",
+      "persona": "owner",
+      "preconditions": "Queue has rows",
+      "interaction": "Click each row link in Perlu dikejar; Back; Forward; reload",
+      "expected": "Invoice detail for that row's own invoice (URL, number and amount); Back returns to the unchanged queue",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/home/beranda-links.spec.ts",
+          "title": "every follow-up row opens its own invoice, and Back returns to the queue",
+          "kind": "real",
+          "note": "Follow-up overlay; all four rows"
+        },
+        {
+          "file": "e2e/home/follow-up-queue.spec.ts",
+          "title": "lists overdue and due-soon invoices with their reasons in order, and keeps them after reload",
+          "kind": "real",
+          "note": "Opens the first row as part of HOME-02"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
+    },
+    {
+      "id": "HOME-06",
+      "domain": "home",
+      "route": "/ -> /deal/[id]",
+      "action": "Open a deal from 'deal terdekat'",
+      "persona": "owner",
+      "preconditions": "Deals with deadlines",
+      "interaction": "Click each row in 3 deal terdekat; Back; Forward; reload",
+      "expected": "Deal detail for the deal that row names (URL and heading); Back returns to Beranda",
+      "persisted": "n/a",
+      "alternates": "Empty list",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/home/beranda-links.spec.ts",
+          "title": "every deal terdekat row opens its own deal, and Back returns to Beranda",
+          "kind": "real",
+          "note": "Which three deals are listed is unit-tested (nearest-deals.test.tsx); this checks each listed row's link"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
+    },
+    {
+      "id": "HOME-07",
+      "domain": "home",
+      "route": "/",
+      "action": "'Lihat semua' links to Deal board / Invoice list",
+      "persona": "owner",
+      "preconditions": "Sections have content",
+      "interaction": "Click Lihat semua in Perlu dikejar, Back, then Lihat semua in 3 deal terdekat",
+      "expected": "Perlu dikejar -> /invoice (the invoice list), 3 deal terdekat -> /deal (the unfiltered board); reload, Back and Forward work",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/home/beranda-links.spec.ts",
+          "title": "Lihat semua opens the invoice list from Perlu dikejar and the deal board from 3 deal terdekat",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
+    },
+    {
+      "id": "HOME-08",
+      "domain": "home",
+      "route": "/",
+      "action": "New-user empty state with + Deal call to action",
+      "persona": "new owner (no data)",
+      "preconditions": "No deals or invoices",
+      "interaction": "View Beranda, click + Deal",
+      "expected": "Onboarding empty state; CTA opens deal board",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "tests/ux-audit/states/needs-chasing.spec.ts",
+          "title": "legitimate zero: fresh-user with no data at all shows the onboarding empty state, not a broken widget",
+          "kind": "partial",
+          "note": "Rendering only; CTA not clicked"
+        }
+      ]
+    },
+    {
+      "id": "HOME-09",
+      "domain": "home",
+      "route": "/",
+      "action": "Section load error and retry",
+      "persona": "owner",
+      "preconditions": "Deals/invoices query fails",
+      "interaction": "Click Coba lagi",
+      "expected": "Error card, retry reloads",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "unit"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "src/components/home/monthly-income.test.tsx",
+          "title": "",
+          "kind": "partial",
+          "note": "Component tests only; failure injection in E2E not built"
+        }
+      ]
+    },
+    {
+      "id": "NAV-01",
+      "domain": "global",
+      "route": "bottom nav (<640px)",
+      "action": "Bottom navigation between the four sections",
+      "persona": "owner (phone)",
+      "preconditions": "Authenticated, 390px",
+      "interaction": "Tap Deal, Invoice, Pengaturan, Beranda",
+      "expected": "Each route loads with its heading",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/smoke/mobile-nav.spec.ts",
+          "title": "bottom nav moves between Beranda, Deal, Invoice, and Pengaturan",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "NAV-02",
+      "domain": "global",
+      "route": "top bar / side nav (>=640px)",
+      "action": "Desktop primary navigation links",
+      "persona": "owner (desktop)",
+      "preconditions": "Authenticated, desktop",
+      "interaction": "Click Beranda/Deal/Invoice/Pengaturan in the top bar or side nav",
+      "expected": "Each route loads; current item marked",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/smoke/desktop-nav.spec.ts",
+          "title": "side nav moves between Beranda, Deal, Invoice, and Pengaturan at desktop width",
+          "kind": "real",
+          "note": ">=1024px SideNav; route, section content and aria-current per click"
+        },
+        {
+          "file": "e2e/smoke/desktop-nav.spec.ts",
+          "title": "top-bar nav moves between Beranda, Deal, Invoice, and Pengaturan at 800px",
+          "kind": "real",
+          "note": "640-1023px TopBar inline nav, via a viewport override inside the chromium project"
+        }
+      ]
+    },
+    {
+      "id": "NAV-03",
+      "domain": "global",
+      "route": "top bar + Deal (>=640px)",
+      "action": "Top bar + Deal opens the add-deal dialog",
+      "persona": "owner (desktop)",
+      "preconditions": "Authenticated, desktop",
+      "interaction": "Click + Deal (twice, without reload)",
+      "expected": "Dialog opens each time",
+      "persisted": "n/a",
+      "alternates": "Active stage filter is reset",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/add-deal-dialog.spec.ts",
+          "title": "TopBar + Deal actually opens the dialog",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/deals/add-deal-dialog.spec.ts",
+          "title": "TopBar + Deal reopens the dialog on a second click without a full reload",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "NAV-04",
+      "domain": "global",
+      "route": "floating + button (<640px)",
+      "action": "Floating + Deal button opens the add-deal dialog",
+      "persona": "owner (phone)",
+      "preconditions": "Authenticated, 390px, any screen",
+      "interaction": "Tap the floating + button",
+      "expected": "Add-deal dialog opens",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/mobile-create-entry.spec.ts",
+          "title": "tapping the floating + Deal button from Beranda creates a deal that persists with the typed values",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Added 2026-10-03 (pilot); before this no test tapped the FAB"
+    },
+    {
+      "id": "NAV-05",
+      "domain": "global",
+      "route": "top bar 'Deal siap ditagih' (>=1024px)",
+      "action": "Top bar shortcut to INVOICE-stage deals",
+      "persona": "owner (desktop)",
+      "preconditions": "Authenticated, >=1024px",
+      "interaction": "Click Deal siap ditagih",
+      "expected": "/deal?tahap=INVOICE with Invoice chip selected",
+      "persisted": "n/a",
+      "alternates": "From another filter",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/filter-navigation.spec.ts",
+          "title": "sequence B: /deal -> chip Dibayar -> TopBar New Invoice filters to Invoice",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "NAV-06",
+      "domain": "global",
+      "route": "account menu",
+      "action": "Open and dismiss the account menu (click, Escape)",
+      "persona": "owner",
+      "preconditions": "Authenticated",
+      "interaction": "Click the menu button; press Escape",
+      "expected": "Menu opens without covering the income figure; Escape closes it",
+      "persisted": "n/a",
+      "alternates": "Outside click; focus trap",
+      "scope": [
+        "chromium (ux-audit, 4 widths x 2 languages)"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "tests/ux-audit/t27.verification.spec.ts",
+          "title": "executes the 123-capture matrix and non-visual checks",
+          "kind": "real",
+          "note": "ux-audit job; report-gated"
+        }
+      ]
+    },
+    {
+      "id": "NAV-07",
+      "domain": "global",
+      "route": "account menu -> /pengaturan",
+      "action": "Account menu 'Pengaturan' item",
+      "persona": "owner",
+      "preconditions": "Authenticated",
+      "interaction": "Open the account menu (click/tap, or Enter from the keyboard), choose Pengaturan",
+      "expected": "Settings page with the owner's data; the menu is closed; reload, Back and Forward work; Escape closes the menu and returns focus without navigating",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/smoke/secondary-nav.spec.ts",
+          "title": "account menu Pengaturan opens Settings, closes the menu, and Back returns",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/smoke/secondary-nav.spec.ts",
+          "title": "account menu Pengaturan works from the keyboard",
+          "kind": "real",
+          "note": "Enter opens, Escape closes and returns focus, Enter on the item navigates; on the phone sheet the item is one Tab after Tutup"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
+    },
+    {
+      "id": "NAV-08",
+      "domain": "global",
+      "route": "(app) error boundary, seen on /invoice",
+      "action": "Route error boundary with retry",
+      "persona": "owner",
+      "preconditions": "A page's server component throws: the invoice list's query fails while the guarded fixture action invoice-table-outage holds the Invoice table of the test database out of reach",
+      "interaction": "Nav -> Invoice (or reload on /invoice); click/tap Coba lagi",
+      "expected": "'Gagal memuat.' and Coba lagi inside the working app shell; Coba lagi asks the server again: the card stays while the failure lasts and is replaced by the page once it is over",
+      "persisted": "n/a",
+      "alternates": "Failure on first load (reload); Back/Forward around the card",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "evidence": "One-shot autopilot 2026-10-11 (FIND-12 fix PR)",
+      "tests": [
+        {
+          "file": "e2e/smoke/route-error-retry.spec.ts",
+          "title": "a page whose data fails shows Gagal memuat. inside the app, and Coba lagi recovers once the data is back",
+          "kind": "real",
+          "note": "No stub and no application seam: the query really fails (table renamed on the disposable test database, renamed back by the test, its afterEach and every other fixture action). Also the FIND-12 regression"
+        },
+        {
+          "file": "e2e/smoke/route-error-retry.spec.ts",
+          "title": "a page that fails on first load shows the same card, and Coba lagi recovers it",
+          "kind": "real",
+          "note": "The same on a full document load"
+        },
+        {
+          "file": "src/app/(app)/error.test.tsx",
+          "title": "",
+          "kind": "partial",
+          "note": "Component test: Coba lagi calls retry, not reset"
+        }
+      ]
+    },
+    {
+      "id": "NAV-09",
+      "domain": "global",
+      "route": "/invoice/[id]",
+      "action": "Invoice detail back link",
+      "persona": "owner",
+      "preconditions": "On invoice detail",
+      "interaction": "Invoice list -> invoice -> click 'Kembali ke dashboard'",
+      "expected": "Lands on Beranda at / (via the /dashboard redirect) with Beranda marked current; reload stays; Back is the invoice, Forward is Beranda",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/smoke/secondary-nav.spec.ts",
+          "title": "invoice detail's Kembali ke dashboard lands on Beranda, with working Back and Forward",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
+    },
+    {
+      "id": "NAV-10",
+      "domain": "global",
+      "route": "/deal/[id]",
+      "action": "Deal detail back link",
+      "persona": "owner",
+      "preconditions": "On deal detail",
+      "interaction": "Deal board -> card menu -> Lihat detail -> click 'Kembali ke papan deal'",
+      "expected": "Deal board at /deal with the card visible and Deal marked current; reload stays; Back is the deal, Forward is the board",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/smoke/secondary-nav.spec.ts",
+          "title": "deal detail's Kembali ke papan deal returns to the board, with working Back and Forward",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Added 2026-10-10 (Staging Autopilot v2, Batch A)"
+    },
+    {
+      "id": "DEAL-LIST-01",
+      "domain": "deals",
+      "route": "/deal",
+      "action": "Deal board default view",
+      "persona": "owner",
+      "preconditions": "Deals in every stage",
+      "interaction": "Open /deal",
+      "expected": "Semua selected, all stages shown",
+      "persisted": "n/a",
+      "alternates": "Empty stage message",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/filter-navigation.spec.ts",
+          "title": "initial default: /deal shows Semua selected, no stage filter",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-FILTER-01",
+      "domain": "deals",
+      "route": "/deal",
+      "action": "Filter by stage chip; URL, Back and Forward stay consistent",
+      "persona": "owner",
+      "preconditions": "On /deal",
+      "interaction": "Click chips; browser Back/Forward",
+      "expected": "URL, chip pressed state and board content agree; no RSC navigation",
+      "persisted": "URL",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/filter-navigation.spec.ts",
+          "title": "chip navigation: Semua -> Invoice -> Dibayar -> Semua, invariant holds after every click",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/deals/filter-navigation.spec.ts",
+          "title": "browser Back steps to the previous chip state",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/deals/filter-navigation.spec.ts",
+          "title": "browser Back then Forward returns to the later chip state",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/deals/filter-navigation.spec.ts",
+          "title": "stage chip click causes zero /deal network requests (no unwanted RSC navigation)",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-FILTER-02",
+      "domain": "deals",
+      "route": "/deal?tahap=...",
+      "action": "Deep link and invalid stage parameter",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "Open /deal?tahap=INVOICE, reload; open an invalid value",
+      "expected": "Invoice chip selected after reload; invalid falls back to Semua",
+      "persisted": "URL",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/filter-navigation.spec.ts",
+          "title": "deep link /deal?tahap=INVOICE selects Invoice and survives reload",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/deals/filter-navigation.spec.ts",
+          "title": "invalid ?tahap value falls back to Semua without crashing",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-01",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "Create a deal on desktop: entry point -> form -> saved -> reload",
+      "persona": "owner (desktop)",
+      "preconditions": "Authenticated",
+      "interaction": "Click top bar + Deal, fill required fields, Simpan deal",
+      "expected": "Toast 'Deal disimpan', card on board, survives reload",
+      "persisted": "Deal row + initial stage transition",
+      "alternates": "DEAL-CREATE-03/04/05/06",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/desktop-create-entry.spec.ts",
+          "title": "clicking the top-bar + Deal from Beranda creates a deal whose stored values show on its detail page after reload",
+          "kind": "real",
+          "note": "Starts on Beranda, clicks the top-bar + Deal, fills every visible text field, saves, reloads, opens the card menu -> Lihat detail, and checks fee, scope, payment terms, contact name, WhatsApp, stage and history. Negative controls (2026-10-04): a non-clickable + Deal and a + Deal linking to plain /deal each fail it"
+        },
+        {
+          "file": "e2e/deals/deal-crud.spec.ts",
+          "title": "create a deal via the dialog, happy path",
+          "kind": "partial",
+          "note": "Opens the dialog with page.goto(/deal?tambah=1): the URL contract, not the entry point"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-02",
+      "domain": "deals",
+      "route": "/ -> FAB -> dialog",
+      "action": "Create a deal on a phone: FAB -> typed form -> saved -> reload -> detail",
+      "persona": "owner (phone)",
+      "preconditions": "Authenticated, 390px",
+      "interaction": "Tap FAB, tap each field and type, tap Simpan deal, reload, open the card menu -> Lihat detail",
+      "expected": "Toast, card persists, detail shows typed fee/scope at stage Masuk",
+      "persisted": "Deal row",
+      "alternates": "",
+      "scope": [
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/mobile-create-entry.spec.ts",
+          "title": "tapping the floating + Deal button from Beranda creates a deal that persists with the typed values",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Added 2026-10-03 (pilot)"
+    },
+    {
+      "id": "DEAL-CREATE-03",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "Close the add-deal dialog without saving",
+      "persona": "owner",
+      "preconditions": "Dialog open with typed values",
+      "interaction": "Click Tutup",
+      "expected": "Dialog closes, nothing created",
+      "persisted": "No row",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-crud.spec.ts",
+          "title": "opening the dialog and closing it without saving creates nothing",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Asserts on the open page only; no reload. Acceptable because no request is sent."
+    },
+    {
+      "id": "DEAL-CREATE-04",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "Close the add-deal dialog with Escape",
+      "persona": "owner (keyboard)",
+      "preconditions": "Dialog open",
+      "interaction": "Press Escape, then reload",
+      "expected": "Dialog closes and does not reopen",
+      "persisted": "URL param stripped",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/add-deal-dialog.spec.ts",
+          "title": "dialog can be closed with Escape, and does not reopen on reload once stripped",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-05",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "A WhatsApp number WhatsApp can't open is refused with a message on the field, and saves nothing",
+      "persona": "owner",
+      "preconditions": "Dialog open",
+      "interaction": "Enter a one-digit WhatsApp number (the #50 case), Simpan deal; then correct it and Simpan deal again",
+      "expected": "Nothing is sent; alert 'Periksa kembali isian yang ditandai.'; the WhatsApp field is marked invalid, focused and described by 'Nomor WhatsApp belum valid. Contoh: 0812 3456 7890.'; once corrected the same form saves exactly one deal. The API itself answers 400 naming contactWa for such a number",
+      "persisted": "No row for the refused attempt; one deal after the corrected submit",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-crud.spec.ts",
+          "title": "a WhatsApp number WhatsApp can't open is stopped on the field with a message, nothing is sent, and once corrected the deal saves",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/deals/deal-crud.spec.ts",
+          "title": "the API refuses a WhatsApp number WhatsApp can't open, naming contactWa, and saves nothing",
+          "kind": "partial",
+          "note": "Direct API request (page.request), not a UI interaction: proves the server keeps the rule for anything that bypasses the form"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-06",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "Required-field validation before submit",
+      "persona": "owner",
+      "preconditions": "Dialog open, required fields empty",
+      "interaction": "Open the dialog from Beranda (+ Deal: top bar, or the floating button on a phone); click Simpan deal with required fields missing",
+      "expected": "Browser validation: nothing is sent, the first missing required field gets focus, the dialog stays open with what was typed; once complete the same button saves",
+      "persisted": "No row for refused attempts; exactly one deal after the completed submit, present after reload",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08",
+      "tests": [
+        {
+          "file": "e2e/deals/create-validation.spec.ts",
+          "title": "Simpan deal with required fields missing sends nothing and points at the first missing field; completing them saves the deal",
+          "kind": "real",
+          "note": "The validation bubble is browser chrome, not DOM, so the test checks focus, each required field's validity state, zero POST /api/deals, and the still-open dialog; then fills the fields and saves"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-07",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "Optional fields: contact name, deadline (native date input), payment terms",
+      "persona": "owner",
+      "preconditions": "Dialog open",
+      "interaction": "Fill optional fields including picking a deadline",
+      "expected": "Values saved and shown on detail; deadline becomes the default invoice due date",
+      "persisted": "Deal fields",
+      "alternates": "Deadline picker on a real phone (MAN-DEAL-01)",
+      "scope": [
+        "chromium",
+        "chromium-mobile",
+        "manual: real phone"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "manualCheck": "MAN-DEAL-01",
+      "followUp": "Text fields automated in Phase 2B on both projects. 2026-10-11: the deadline is now typed with the keyboard on desktop Chromium (saved, shown on card and detail after reload, becomes the new invoice's due date; a second value; and no deadline -> no due date). The action stays partial: on a phone the deadline can only be chosen in the OS date picker, which no test drives, and MAN-DEAL-01 on a real phone is still pending",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08; release-readiness follow-up 2026-10-11",
+      "tests": [
+        {
+          "file": "e2e/deals/create-validation.spec.ts",
+          "title": "optional contact name and payment terms are saved and shown on the deal's detail page after reload",
+          "kind": "partial",
+          "note": "Real typing and real navigation for contact name and payment terms (saved, shown on detail, survive reload), both projects. Partial only because the action also includes the deadline, which this test does not set"
+        },
+        {
+          "file": "e2e/deals/create-validation.spec.ts",
+          "title": "a deal saved without the optional fields shows them as empty, not as leftover text",
+          "kind": "partial",
+          "note": "Also asserts 'Tanpa tenggat' on the card and detail and 'Tidak ditentukan' for payment terms"
+        },
+        {
+          "file": "e2e/deals/create-validation.spec.ts",
+          "title": "a deadline typed on the keyboard is saved, shown on the card and the detail page after reload, and becomes the new invoice's due date",
+          "kind": "partial",
+          "note": "Desktop chromium only: real keys into the native date input's segments, real navigation, reloads. Listed as partial because the action's phone path (the OS date picker) is not driven; skipped on chromium-mobile"
+        },
+        {
+          "file": "e2e/deals/create-validation.spec.ts",
+          "title": "a different typed deadline (a leap day) is the one stored, and a deal without one starts its invoice with no due date",
+          "kind": "partial",
+          "note": "Desktop chromium only; alternate value and the no-deadline default"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-08",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "A deal save with no usable answer (502 HTML or JSON page, dropped connection, no answer in time) says it may not be saved, and the retry sends the same Idempotency-Key",
+      "persona": "owner",
+      "preconditions": "Dialog open with a valid deal; the next POST /api/deals gets a 502 HTML or JSON page, is aborted, or is never answered (page.route)",
+      "interaction": "Simpan deal; then Simpan deal again",
+      "expected": "Within the bounded wait (fetchWithTimeout, 8 s) the dialog alert says 'Koneksi terputus atau server tidak memberi jawaban yang jelas, jadi deal ini belum pasti tersimpan. ...'; no 'Deal disimpan'; the typed values stay; the button is enabled. The second press sends the same body with the same Idempotency-Key and saves exactly one deal",
+      "persisted": "No row after the failed attempt; exactly one after the retry",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "evidence": "#53 server-error audit 2026-10-15; idempotency key 2026-10-16 (#54 review)",
+      "tests": [
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a save that gets a 502 HTML page says it may not be saved, keeps the form, and Simpan deal again saves exactly one deal",
+          "kind": "partial",
+          "note": "Real click and retry; the failure is injected with page.route (a stub), so by rule it is partial"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a save that gets a JSON 502 from a gateway says it may not be saved, keeps the form, and Simpan deal again saves exactly one deal",
+          "kind": "partial",
+          "note": "Real click and retry; the failure is injected with page.route (a stub), so by rule it is partial"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a save that gets no connection says it may not be saved, keeps the form, and Simpan deal again saves exactly one deal",
+          "kind": "partial",
+          "note": "Real click and retry; the failure is injected with page.route (a stub), so by rule it is partial"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a save that gets no answer in time says it may not be saved, keeps the form, and Simpan deal again saves exactly one deal",
+          "kind": "partial",
+          "note": "Real click and retry; the failure is injected with page.route (a stub), so by rule it is partial"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-09",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "A deal the server stored but whose answer was lost, or replaced by a gateway's JSON 504, is never saved twice",
+      "persona": "owner",
+      "preconditions": "The POST reaches the real server (route.fetch) and is stored; its answer is withheld or replaced by a JSON 504. Or: the first POST is held back until the retry is stored, then delivered",
+      "interaction": "Simpan deal; then Simpan deal again",
+      "expected": "The dialog alert says the deal may not be saved; the second press sends the same Idempotency-Key, the server answers 200 with the stored deal, the dialog closes with 'Deal disimpan'. An original delivered after its retry was stored gets 200 with that same deal",
+      "persisted": "Exactly one deal, also after reload",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "evidence": "#53 server-error audit 2026-10-15; idempotency key 2026-10-16 (#54 review)",
+      "tests": [
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a save the server stored but never answered says it may not be saved, and Simpan deal again shows that one deal instead of a second",
+          "kind": "partial",
+          "note": "The write is real (route.fetch reaches the server); only the lost answer is injected"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a save the server stored but a gateway answered with a JSON 504 says it may not be saved, and Simpan deal again shows that one deal instead of a second",
+          "kind": "partial",
+          "note": "The write is real (route.fetch); only the gateway's JSON answer is injected"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "an original that reaches the server after its retry was stored returns that deal instead of a second",
+          "kind": "partial",
+          "note": "Real retry through the UI; the held-back original is delivered with page.request"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-10",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "A deal save refused by the server's Origin check says to reload",
+      "persona": "owner",
+      "preconditions": "The next POST is sent to the real server with a foreign Origin header (route.fetch)",
+      "interaction": "Simpan deal; then Simpan deal again",
+      "expected": "The server answers 403 itself; the dialog alert says 'Belum tersimpan karena permintaan ditolak demi keamanan. Muat ulang halaman, lalu coba lagi.'; the form stays; the retry saves exactly one deal",
+      "persisted": "No row for the refused attempt",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "evidence": "#53 server-error audit 2026-10-15",
+      "tests": [
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a real 403 says to reload, keeps the form, stores nothing, and a second try saves",
+          "kind": "partial",
+          "note": "The 403 is the server's own answer, but the test rewrites the Origin header to cause it"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-11",
+      "domain": "deals",
+      "route": "/deal (dialog)",
+      "action": "A deal save after the session expired says to sign in again",
+      "persona": "owner",
+      "preconditions": "Dialog open and filled; the disposable session then expires (expire-disposable-session)",
+      "interaction": "Simpan deal; then reload",
+      "expected": "The server answers 401; the dialog alert says 'Belum tersimpan karena sesi kamu sudah berakhir. Muat ulang halaman untuk masuk lagi.'; the form stays; a reload ends on sign-in with no owner data",
+      "persisted": "Nothing stored (checked with the valid session)",
+      "alternates": "The typed form is lost on the reload to sign-in (not preserved across sign-in)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "evidence": "#53 server-error audit 2026-10-15",
+      "tests": [
+        {
+          "file": "e2e/auth/session-expiry.spec.ts",
+          "title": "Simpan deal after the session expired is refused, says to sign in again, keeps the form, and stores nothing",
+          "kind": "partial",
+          "note": "The 401 is the server's own answer to a really expired session; the dialog is opened with page.goto('/deal?tambah=1')"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-CREATE-12",
+      "domain": "deals",
+      "route": "POST /api/deals, POST /api/invoices",
+      "action": "Repeats of one create with the same Idempotency-Key store one row; a key reused for other content is refused",
+      "persona": "owner",
+      "preconditions": "Signed-in owner; six identical POSTs with one key sent at the same time (page.request, real database)",
+      "interaction": "API only: concurrent POST /api/deals and POST /api/invoices with one key; then the deal key with a different brand",
+      "expected": "One 201 and five 200s, all with the same row; a different body with a used key gets 409",
+      "persisted": "Exactly one deal or invoice per key; nothing for the refused body",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "evidence": "#54 review (Codex P1: a point-in-time read cannot prove a timed-out create will not commit) 2026-10-16",
+      "tests": [
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "repeats of one deal create sent at the same time store one deal, and each gets that deal",
+          "kind": "partial",
+          "note": "API-level against the real database, no UI interaction"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a key already used for a different deal is refused with 409 and stores nothing",
+          "kind": "partial",
+          "note": "API-level against the real database, no UI interaction"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "repeats of one invoice create sent at the same time make one invoice",
+          "kind": "partial",
+          "note": "API-level against the real database, no UI interaction"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-STAGE-01",
+      "domain": "deals",
+      "route": "/deal",
+      "action": "Move a deal to the next stage from its card menu",
+      "persona": "owner",
+      "preconditions": "Deal at Masuk",
+      "interaction": "Open card menu, choose Lanjut ke Nego, reload",
+      "expected": "Card under Nego, persists after reload",
+      "persisted": "Deal.status",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-crud.spec.ts",
+          "title": "moving a deal to the next stage via its card menu updates the board",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-STAGE-02",
+      "domain": "deals",
+      "route": "/deal/[id]",
+      "action": "Move a deal to the previous stage (Kembali ke ...)",
+      "persona": "owner",
+      "preconditions": "Deal past Masuk",
+      "interaction": "Click Kembali ke <stage> on detail or card menu, reload",
+      "expected": "Stage moves back, history records it",
+      "persisted": "Deal.status + transition",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/stage-back.spec.ts",
+          "title": "Kembali ke Nego on deal detail moves the deal back, records history, and survives reload",
+          "kind": "real",
+          "note": "Detail reached through the card menu; asserts stage, the next back/forward buttons, the 'Deal → Nego' history entry after reload, and the board filters"
+        },
+        {
+          "file": "e2e/deals/stage-back.spec.ts",
+          "title": "Kembali ke Deal from a board card's menu moves the card back, records history, and survives reload",
+          "kind": "real",
+          "note": "Card menu path; asserts the card leaves Konten and appears under Deal, after reload too, and the 'Konten → Deal' history entry"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-STAGE-03",
+      "domain": "deals",
+      "route": "/deal/[id]",
+      "action": "Move stage from deal detail; history entry persists",
+      "persona": "owner",
+      "preconditions": "Deal at Masuk",
+      "interaction": "Click Lanjut ke Nego, reload",
+      "expected": "'Masuk -> Nego' in history after reload",
+      "persisted": "DealStageTransition",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-crud.spec.ts",
+          "title": "moving a deal's stage records a stage-history entry that persists after reload",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-STAGE-04",
+      "domain": "deals",
+      "route": "/deal (desktop)",
+      "action": "Drag a deal card to another stage column",
+      "persona": "owner (desktop)",
+      "preconditions": "Desktop board",
+      "interaction": "Drag and drop card",
+      "expected": "PATCH succeeds, card in new column after reload",
+      "persisted": "Deal.status",
+      "alternates": "Touch drag on phones is not supported (menu instead)",
+      "scope": [
+        "chromium 1440 (ux-audit)"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "tests/ux-audit/t27.verification.spec.ts",
+          "title": "executes the 123-capture matrix and non-visual checks",
+          "kind": "real",
+          "note": "F5 drag evidence; ux-audit job, report-gated"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-STAGE-05",
+      "domain": "deals",
+      "route": "/deal",
+      "action": "Keyboard-only stage move via card menu",
+      "persona": "owner (keyboard)",
+      "preconditions": "Desktop board",
+      "interaction": "Tab to card action, Enter, choose item",
+      "expected": "Stage moves",
+      "persisted": "Deal.status",
+      "alternates": "",
+      "scope": [
+        "chromium (ux-audit)"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "tests/ux-audit/t27.verification.spec.ts",
+          "title": "executes the 123-capture matrix and non-visual checks",
+          "kind": "real",
+          "note": "ux-audit job, report-gated"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-STAGE-06",
+      "domain": "deals",
+      "route": "/deal",
+      "action": "A stage move with no answer ends, and shows what the server holds",
+      "persona": "owner",
+      "preconditions": "The next PATCH /api/deals/[id] is never answered; in one case it reaches the server first (route.fetch)",
+      "interaction": "Card menu -> Lanjut ke Nego; then again",
+      "expected": "Not stored: after the bounded wait the card is back in Masuk with the alert '... perubahan ini belum pasti tersimpan. ...', and the retry moves it. Stored: the page reads the deal back and keeps it in Nego with no alert",
+      "persisted": "MASUK after the unstored attempt, NEGO after the retry or the stored attempt",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "evidence": "#53 server-error audit 2026-10-15",
+      "tests": [
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a move that gets no answer in time ends, puts the card back, says so, and a second try moves it",
+          "kind": "partial",
+          "note": "Real click and retry; the failure is injected with page.route (a stub), so by rule it is partial"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a move the server stored but never answered shows the stored stage, with no error",
+          "kind": "partial",
+          "note": "The write is real (route.fetch); only the lost answer is injected"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-DETAIL-01",
+      "domain": "deals",
+      "route": "/deal -> /deal/[id]",
+      "action": "Open deal detail from a board card (card menu -> Lihat detail)",
+      "persona": "owner",
+      "preconditions": "Deal exists",
+      "interaction": "Tap the card's actions button, then Lihat detail",
+      "expected": "Detail with brand, fee, scope, stage",
+      "persisted": "n/a",
+      "alternates": "Board cards have no link of their own; the menu is the only card-level path",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/stage-back.spec.ts",
+          "title": "Kembali ke Nego on deal detail moves the deal back, records history, and survives reload",
+          "kind": "real",
+          "note": "Board card menu -> Lihat detail in both projects; asserts URL, brand, stage, fee and scope of the seeded deal"
+        }
+      ],
+      "evidence": "The create-deal journeys also open the new deal this way and check every stored value: e2e/deals/desktop-create-entry.spec.ts (chromium) and e2e/deals/mobile-create-entry.spec.ts (chromium-mobile). They are not listed as references because each is skipped in the other project, which the run-results check rejects for a real reference"
+    },
+    {
+      "id": "DEAL-DETAIL-02",
+      "domain": "deals",
+      "route": "/deal/[id]",
+      "action": "Edit and save contact name",
+      "persona": "owner",
+      "preconditions": "On detail",
+      "interaction": "Board card menu -> Lihat detail; type the name in Nama kontak; Simpan; reload",
+      "expected": "Nama kontak disimpan; the name persists after reload; the deal stays in its stage and gains no history entry",
+      "persisted": "Deal.contactName",
+      "alternates": "Save error (a 401 after session expiry is exercised in e2e/journeys/resilience-permissions.spec.ts); clearing a saved name (FIND-11, fixed: DEAL-EDIT-04)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/patch-keeps-stage.spec.ts",
+          "title": "a contact name typed on deal detail is saved, survives a reload, and leaves the deal's stage and history alone",
+          "kind": "real",
+          "note": "Base-seed Nego deal reached through the board card menu; fill() into the visible text field, Simpan clicked/tapped; value, stage, history and board column asserted after reload. Also the FIND-10 regression"
+        },
+        {
+          "file": "e2e/deals/deal-change-keeps-invoice.spec.ts",
+          "title": "after the contact name, brand, scope, fee and payment terms of an invoiced deal are changed, the invoice keeps its number, amount, PPh, due date and document for the owner and the brand",
+          "kind": "real",
+          "note": "Contact name changed on an invoiced deal (Invoice stage) through board -> card menu -> Lihat detail; the issued invoice keeps number, amount, PPh and due date on the owner page and the recipient page after reload (CAP-INV-11, #55)."
+        }
+      ],
+      "evidence": "One-shot autopilot 2026-10-11 (FIND-10 fix PR)"
+    },
+    {
+      "id": "DEAL-DETAIL-03",
+      "domain": "deals",
+      "route": "/deal/[id]",
+      "action": "Repair an invalid WhatsApp number on the deal",
+      "persona": "owner",
+      "preconditions": "Deal with invalid number",
+      "interaction": "Board card menu -> Lihat detail; click Buka WhatsApp; type the number in Perbaiki nomor WhatsApp; Simpan nomor; reload; Buka WhatsApp",
+      "expected": "Invalid number: no chat opens, the repair field appears focused; after save: number shown formatted (+62 ...), form gone; after reload Buka WhatsApp opens wa.me/<saved normalized number>; the deal stays in its stage with no new history entry (FIND-10)",
+      "persisted": "Deal.contactWa",
+      "alternates": "Still-invalid input",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/contact-repair.spec.ts",
+          "title": "an invalid number opens the repair form; the repaired number is saved, survives reload, and is used by Buka WhatsApp",
+          "kind": "real",
+          "note": "Follow-up overlay deal with contactWa 12345678; wa.me stubbed locally"
+        }
+      ],
+      "evidence": "Added 2026-10-04 (Zero Routine Phase 2A, follow-up overlay)"
+    },
+    {
+      "id": "DEAL-DETAIL-04",
+      "domain": "deals",
+      "route": "/deal/[id]",
+      "action": "Open WhatsApp chat with the brand contact",
+      "persona": "owner",
+      "preconditions": "Valid number",
+      "interaction": "Board card menu -> Lihat detail; click/tap Buka WhatsApp",
+      "expected": "Exactly one new tab at wa.me/<the deal's number>, no prefilled text, no Referer, no opener; the deal page is unchanged",
+      "persisted": "n/a",
+      "alternates": "Invalid number (DEAL-DETAIL-03); real phone and the WhatsApp app (MAN-WA-01)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "evidence": "One-shot autopilot 2026-10-11 (Phase 2)",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-whatsapp.spec.ts",
+          "title": "Buka WhatsApp on deal detail opens one chat with the deal's own number",
+          "kind": "real",
+          "note": "wa.me answered by a local stub (keepWhatsAppLocal), so the tab's address is the exact link the app built and nothing reaches WhatsApp"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-DETAIL-05",
+      "domain": "deals",
+      "route": "/deal/[id] -> /invoice/[id]",
+      "action": "Create an invoice from deal detail and follow its link",
+      "persona": "owner",
+      "preconditions": "INVOICE-stage deal without invoice",
+      "interaction": "Click Buat invoice, then Lihat invoice ... ->",
+      "expected": "Invoice created as DRAFT and opened",
+      "persisted": "Invoice row",
+      "alternates": "Create error",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/status-lifecycle.spec.ts",
+          "title": "an invoice created from the deal page moves DRAFT -> SENT -> DUE -> PAID -> SENT, persisting after every reload",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Added 2026-10-03 (pilot)"
+    },
+    {
+      "id": "DEAL-EDIT-01",
+      "domain": "deals",
+      "route": "/deal, /deal/[id]",
+      "action": "Edit a saved deal from its card menu (Ubah deal)",
+      "persona": "owner",
+      "preconditions": "A saved deal (base seed)",
+      "interaction": "Board card ⋮ -> Ubah deal; the dialog is prefilled; type new brand, WhatsApp number, scope, fee and payment terms (desktop Chromium also types the deadline with the keyboard); Simpan perubahan; reload; open deal detail",
+      "expected": "'Perubahan deal disimpan.'; only the changed fields are sent and never a stage; after reload the card and deal detail show every new value, the deal is at the same stage and has no new history entry; no sideways scroll at 390 px",
+      "persisted": "Deal brand, contactWa, scope, feeIdr, paymentTerms, deadline",
+      "alternates": "Phone date picker and keyboard (MAN-DEAL-02)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "evidence": "#55 implementation 2026-10-18",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "Ubah deal from the card menu changes brand, WhatsApp number, scope, fee and payment terms; the deal keeps its stage and history, and the change survives a reload",
+          "kind": "real",
+          "note": "Card menu and dialog driven by click/tap; text fields typed (fill() on desktop, tapped and typed on the phone project); the request body is checked for exactly the changed fields; values asserted on the board and deal detail after reload"
+        },
+        {
+          "file": "e2e/deals/deal-change-keeps-invoice.spec.ts",
+          "title": "a saved deal can be edited from its card menu and from its detail page (#55)",
+          "kind": "real",
+          "note": "The former #55 expected-failure tripwire, now passing: its detector finds Ubah deal in the card menu and on deal detail"
+        }
+      ],
+      "manualCheck": "MAN-DEAL-02"
+    },
+    {
+      "id": "DEAL-EDIT-02",
+      "domain": "deals",
+      "route": "/deal, /deal/[id]",
+      "action": "Edit a saved deal from deal detail, including a deal that already has an invoice",
+      "persona": "owner",
+      "preconditions": "A saved deal (base seed)",
+      "interaction": "Deal detail -> Ubah deal; change fields; Simpan perubahan; reload",
+      "expected": "The dialog names the existing invoice and says the edit does not change its amount, number, PPh or due date, nor a sent or shared invoice's content; saved values persist after reload at the same stage; the invoice keeps its figures and document for the owner and the brand",
+      "persisted": "Deal fields",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "evidence": "#55 implementation 2026-10-18",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "Ubah deal on deal detail clears the contact name and payment terms, and they stay empty after a reload (CAP-DEAL-08)",
+          "kind": "real",
+          "note": "Ubah deal on the invoiced deal's detail page; the invoice note is asserted"
+        },
+        {
+          "file": "e2e/deals/deal-change-keeps-invoice.spec.ts",
+          "title": "after the contact name, brand, scope, fee and payment terms of an invoiced deal are changed, the invoice keeps its number, amount, PPh, due date and document for the owner and the brand",
+          "kind": "real",
+          "note": "Board -> Lihat detail -> contact name, then Ubah deal for brand, scope, fee and payment terms; the owner's invoice and the brand's page keep number, amount, PPh, due date and every issued text after reload (CAP-INV-11, CAP-INV-12)"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-EDIT-03",
+      "domain": "deals",
+      "route": "/deal, /deal/[id]",
+      "action": "Change a deal's valid WhatsApp number",
+      "persona": "owner",
+      "preconditions": "A saved deal (base seed)",
+      "interaction": "Ubah deal -> Kontak WhatsApp -> a new valid number -> Simpan perubahan; reload",
+      "expected": "The new number is stored in its normalized form and shown on deal detail after reload",
+      "persisted": "Deal.contactWa",
+      "alternates": "An invalid number: DEAL-EDIT-05",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "evidence": "#55 implementation 2026-10-18",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "Ubah deal from the card menu changes brand, WhatsApp number, scope, fee and payment terms; the deal keeps its stage and history, and the change survives a reload",
+          "kind": "real",
+          "note": "0812 7777 6655 typed over the seeded valid number; '+62 812-7777-6655' asserted on deal detail after reload"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-EDIT-04",
+      "domain": "deals",
+      "route": "/deal, /deal/[id]",
+      "action": "Clear an optional deal field after it was saved (contact name, payment terms, deadline)",
+      "persona": "owner",
+      "preconditions": "A saved deal (base seed)",
+      "interaction": "Ubah deal -> empty the field -> Simpan perubahan; or deal detail's own contact-name field emptied -> Simpan; reload",
+      "expected": "The field is sent as null and is empty after reload; deal detail says 'Nama kontak dihapus' only after the server's copy shows it cleared (FIND-11 fixed)",
+      "persisted": "Deal.contactName, Deal.paymentTerms, Deal.deadline",
+      "alternates": "Deadline clearing uses fill(\"\") on the native date input (partial); a phone's picker is MAN-DEAL-02",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "evidence": "#55 implementation 2026-10-18",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "Ubah deal on deal detail clears the contact name and payment terms, and they stay empty after a reload (CAP-DEAL-08)",
+          "kind": "real",
+          "note": "Contact name and payment terms emptied in the editor; body {contactName:null,paymentTerms:null}; empty after reload"
+        },
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "emptying the contact name field on deal detail clears it and says so, after a reload too (FIND-11)",
+          "kind": "real",
+          "note": "FIND-11 regression: deal detail's contact-name field emptied and saved; body {contactName:null}; 'Nama kontak dihapus'; empty after reload"
+        },
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "clearing the deadline in the editor removes it (partial: fill on a native date input)",
+          "kind": "partial",
+          "note": "fill() on the native date input to set and then clear the deadline"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-EDIT-05",
+      "domain": "deals",
+      "route": "/deal, /deal/[id]",
+      "action": "Invalid input and cancelling an edit",
+      "persona": "owner",
+      "preconditions": "A saved deal (base seed)",
+      "interaction": "Ubah deal -> type an unusable WhatsApp number -> Simpan perubahan; Batal -> Lanjut mengubah; Batal -> Buang perubahan; reload",
+      "expected": "The field is marked and focused with its message and nothing is sent; Batal with unsaved changes asks first and keeps the edit on Lanjut mengubah; Buang perubahan closes and nothing is stored; Batal with no changes closes at once",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "evidence": "#55 implementation 2026-10-18",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "a WhatsApp number WhatsApp cannot open is refused on its field and nothing is sent; Batal then asks before throwing the edit away, and nothing changed",
+          "kind": "real",
+          "note": "No PATCH request is observed; the stored number is unchanged after reload"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-EDIT-06",
+      "domain": "deals",
+      "route": "/deal, /deal/[id]",
+      "action": "Ubah deal is offered on every stage's card",
+      "persona": "owner",
+      "preconditions": "A saved deal (base seed)",
+      "interaction": "Board -> each card's ⋮ menu",
+      "expected": "Each of the seven fixture cards (all six stages) offers Ubah deal",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "evidence": "#55 implementation 2026-10-18",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "every stage's card offers Ubah deal",
+          "kind": "real",
+          "note": "Menus opened and closed with Escape"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-EDIT-07",
+      "domain": "deals",
+      "route": "/deal, /deal/[id]",
+      "action": "A deal edit the server does not take (500, expired session)",
+      "persona": "owner",
+      "preconditions": "A saved deal (base seed)",
+      "interaction": "Ubah deal -> change -> Simpan perubahan, with the PATCH answered 500 or 401",
+      "expected": "The dialog stays open with the edit and an actionable message ('belum pasti tersimpan' after reading the server's copy back; 'sesi kamu sudah berakhir'); no success message; nothing stored",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "evidence": "#55 implementation 2026-10-18",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "says so, keeps the dialog and the edit, and stores nothing (500)",
+          "kind": "partial",
+          "note": "page.route stub; stored deal read with page.request"
+        },
+        {
+          "file": "e2e/deals/deal-edit.spec.ts",
+          "title": "says so, keeps the dialog and the edit, and stores nothing (401)",
+          "kind": "partial",
+          "note": "page.route stub; stored deal read with page.request"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-INV-01",
+      "domain": "deals",
+      "route": "/deal?tahap=INVOICE",
+      "action": "Create an invoice from the card menu",
+      "persona": "owner",
+      "preconditions": "INVOICE-stage deal without invoice",
+      "interaction": "Card menu -> Buat invoice, then reload and open /invoice",
+      "expected": "Toast, invoice listed",
+      "persisted": "Invoice row",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "create an invoice from a pending INVOICE-stage deal",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-INV-02",
+      "domain": "deals",
+      "route": "/deal, /deal/[id]",
+      "action": "Create-invoice action is not offered when ineligible",
+      "persona": "owner",
+      "preconditions": "Deal not at INVOICE, or already invoiced",
+      "interaction": "Open card menu / detail",
+      "expected": "No Buat invoice; existing invoice link instead",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "unit"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "src/components/deals/deal-card.test.tsx",
+          "title": "",
+          "kind": "partial",
+          "note": "Component tests"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-INV-03",
+      "domain": "deals",
+      "route": "/deal",
+      "action": "Buat invoice with no usable answer never creates a second invoice",
+      "persona": "owner",
+      "preconditions": "An INVOICE-stage deal without an invoice; the next POST /api/invoices gets a 502 HTML page, or is stored but never answered",
+      "interaction": "Card menu -> Buat invoice; then again",
+      "expected": "502: alert '... invoice ini belum pasti dibuat. ...', no 'Invoice dibuat'; the retry sends the same Idempotency-Key and creates exactly one. Stored but unanswered: the same alert; the retry gets the stored invoice back (200) and shows 'Invoice dibuat'; Buat invoice is no longer offered",
+      "persisted": "Exactly one invoice for the deal",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "evidence": "#53 server-error audit 2026-10-15; idempotency key 2026-10-16 (#54 review)",
+      "tests": [
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a create that gets a 502 HTML page says it may not be created, and Buat invoice again creates exactly one",
+          "kind": "partial",
+          "note": "Real click and retry; the failure is injected with page.route (a stub), so by rule it is partial"
+        },
+        {
+          "file": "e2e/deals/server-errors.spec.ts",
+          "title": "a create the server stored but never answered says it may not be created, and Buat invoice again shows that one invoice instead of a second",
+          "kind": "partial",
+          "note": "The write is real (route.fetch); only the lost answer is injected"
+        }
+      ]
+    },
+    {
+      "id": "DEAL-DELETE-01",
+      "domain": "deals",
+      "route": "DELETE /api/deals/[id]",
+      "action": "Delete a deal",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "",
+      "expected": "",
+      "persisted": "",
+      "alternates": "",
+      "scope": [],
+      "priority": "P2",
+      "status": "not_applicable",
+      "reason": "The API route exists but no UI control calls it (verified: no DELETE fetch to /api/deals in src). Not a user-facing action; re-inventory if a delete control ships. The capability itself is REQUIRED in docs/product/capabilities.json (CAP-DEAL-09) and tracked as a gap in #58; this row stays not applicable only because there is no control to drive."
+    },
+    {
+      "id": "DEAL-LAYOUT-01",
+      "domain": "deals",
+      "route": "/deal, /deal/[id] at 390px",
+      "action": "Long brand names keep card actions reachable and pages free of horizontal scroll",
+      "persona": "owner (phone)",
+      "preconditions": "Long unbreakable brand",
+      "interaction": "Create deal, tap card menu; open detail",
+      "expected": "Menu in viewport and usable; no page overflow",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/deals/deal-crud.spec.ts",
+          "title": "a long unbreakable brand name does not push the deal card's actions menu off-screen at 390px",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/deals/deal-crud.spec.ts",
+          "title": "a long unbreakable brand name does not cause horizontal page overflow on the deal detail page at 390px",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "INV-LIST-01",
+      "domain": "invoices",
+      "route": "/invoice -> /invoice/[id]",
+      "action": "Open an invoice from the list",
+      "persona": "owner",
+      "preconditions": "Invoices exist",
+      "interaction": "Click the invoice row",
+      "expected": "Each row is in the group, and shows the chip, of the status its detail page shows (derived from the due date: FIND-06); the detail opened from the row has the matching total",
+      "persisted": "n/a",
+      "alternates": "Empty list",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "invoice list navigates to invoice detail with matching totals",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/invoices/status-consistency.spec.ts",
+          "title": "a stored SENT invoice due yesterday is Terlambat on the list, its detail page and Beranda, with no status action that contradicts it",
+          "kind": "real",
+          "note": "Row found under Terlambat (not Terkirim), clicked, detail agrees; Back returns to the same group"
+        },
+        {
+          "file": "e2e/invoices/status-consistency.spec.ts",
+          "title": "a stored DUE invoice due yesterday is Terlambat on the list, its detail page and Beranda, with no status action that contradicts it",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/invoices/status-consistency.spec.ts",
+          "title": "the invoice list groups and labels every invoice by the status its detail page shows, and keeps doing so after reload",
+          "kind": "partial",
+          "note": "All four groups with every row's chip, before and after reload: stored SENT/DUE/OVERDUE due in the past under Terlambat; due today, in 7 and in 8 days and legacy stored OVERDUE under Terkirim; DRAFT and PAID with a past due date unmoved. Reached through the nav, but it asserts rendering only, so partial by rule"
+        },
+        {
+          "file": "src/components/invoices/invoice-list.test.tsx",
+          "title": "",
+          "kind": "partial",
+          "note": "Component test: grouping and chip per stored status and due date, Jakarta midnight boundary, English"
+        }
+      ],
+      "finding": "FIND-06",
+      "evidence": "FIND-06 regression added 2026-10-09"
+    },
+    {
+      "id": "INV-DUE-01",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Clear the due date and see the empty state after reload",
+      "persona": "owner",
+      "preconditions": "Invoice with a due date",
+      "interaction": "Click Kosongkan, reload",
+      "expected": "Empty label ('Belum ditentukan' / 'Not set'), input empty, Kosongkan hidden",
+      "persisted": "Invoice.dueDate = null",
+      "alternates": "Save error (INV-DUE-06)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/due-date-entry.spec.ts",
+          "title": "an invoice whose due date was cleared shows the empty state after reload",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "due date edits and clears persist after reload",
+          "kind": "partial",
+          "note": "Desktop only; skipped on chromium-mobile; waits for hydration before fill() (2026-10-04 flake fix)"
+        }
+      ]
+    },
+    {
+      "id": "INV-DUE-02",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Click/tap the visible empty due-date field opens the date picker",
+      "persona": "owner",
+      "preconditions": "Invoice with no due date",
+      "interaction": "Click (desktop) / tap (phone) on the visible 'Belum ditentukan' / 'Not set' text",
+      "expected": "Native date picker opens",
+      "persisted": "n/a",
+      "alternates": "Keyboard path (INV-DUE-04)",
+      "scope": [
+        "chromium",
+        "chromium-mobile",
+        "manual: real phones"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "clicking or tapping the visible empty due-date text opens the native date picker",
+          "kind": "real",
+          "note": "Clicks (chromium) or taps (chromium-mobile, 390px) the visible text's own on-screen position and asserts the native :open state; on Chromium a missing :open fails instead of skipping. Firefox/WebKit run it feature-detected (runtime skip), so they are not claimed here."
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "clicking or tapping the visible filled due-date text opens the native date picker",
+          "kind": "real",
+          "note": "Same entry point with a saved date shown"
+        }
+      ],
+      "manualCheck": "MAN-DUE-01",
+      "finding": "FIND-02",
+      "evidence": "FIND-02 fixed by PR #26 (merge b51fba1): DateField calls showPicker() on click. Emulated mobile is not a real phone; MAN-DUE-01 stays pending."
+    },
+    {
+      "id": "INV-DUE-03",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Pick a date in the native picker -> saved -> reload",
+      "persona": "owner",
+      "preconditions": "Picker open",
+      "interaction": "Choose a date in the OS/browser picker",
+      "expected": "Display shows the date, 'Tersimpan', persists after reload",
+      "persisted": "Invoice.dueDate",
+      "alternates": "Picker dismissed without choosing; change an existing date",
+      "scope": [
+        "manual: Android Chrome, iOS Safari, desktop Chrome/Safari/Firefox"
+      ],
+      "priority": "P0",
+      "status": "manual_pending",
+      "manualCheck": "MAN-DUE-01",
+      "tests": [
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "due date edits and clears persist after reload",
+          "kind": "partial",
+          "note": "fill() on the hidden input proves server persistence only; skipped on chromium-mobile; waits for hydration before fill() (2026-10-04 flake fix)"
+        }
+      ],
+      "reason": "Selecting inside a native picker is not drivable/observable from Playwright"
+    },
+    {
+      "id": "INV-DUE-04",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Desktop keyboard date entry after clicking the visible field",
+      "persona": "owner (desktop keyboard)",
+      "preconditions": "Invoice with no due date",
+      "interaction": "Click visible field (Escape if the picker opened), type the date segments, press Enter or leave the field",
+      "expected": "No save while typing; exactly one save of the complete date on Enter/leave; display shows the date; persists after reload; Kosongkan clears. Out-of-range years are refused with a hint and nothing is saved.",
+      "persisted": "Invoice.dueDate",
+      "alternates": "",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "keyboard year entry never sends a partial or out-of-range date, saves on Enter, survives reload, and clears",
+          "kind": "real",
+          "note": "Asserts zero PATCHes after every digit (passing through 0002-01-15), exactly one PATCH 2030-01-15 on Enter, none on leaving, reload, clear + reload"
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "a typed year outside the supported range is refused on leaving the field and nothing is saved",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "typing over an existing date never clears it mid-edit, and Escape restores it",
+          "kind": "real"
+        }
+      ],
+      "finding": "FIND-03",
+      "evidence": "FIND-03 fixed by PR #26 (merge b51fba1). Desktop Chromium only: segment order differs per engine/locale (real Indonesian-locale Chrome is covered by MAN-DUE-01)."
+    },
+    {
+      "id": "INV-DUE-05",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Due date shown consistently in header, list, queue and WhatsApp message",
+      "persona": "owner",
+      "preconditions": "Invoice in the Beranda queue",
+      "interaction": "Type a new due date with the keyboard on invoice detail (Enter); look at detail, the invoice list, the Beranda row; send WhatsApp from detail and from the row",
+      "expected": "The same Jakarta calendar date on every surface, and the Beranda count in Jakarta days, whatever the browser's timezone",
+      "persisted": "n/a",
+      "alternates": "Browser in another timezone (Pacific/Honolulu run); recipient page and PDF, including a deal with no payment terms (FIND-08, fixed)",
+      "scope": [
+        "chromium",
+        "unit"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/due-date-consistency.spec.ts",
+          "title": "a typed due date reads as the same Jakarta calendar date on detail, list, Beranda and WhatsApp (Asia/Jakarta)",
+          "kind": "real",
+          "note": "Follow-up overlay invoice due today -> typed to 3 Jakarta days ahead; header, field (also after reload), list row, queue row with 'Jatuh tempo 3 hari lagi', and both WhatsApp messages"
+        },
+        {
+          "file": "e2e/invoices/due-date-consistency.spec.ts",
+          "title": "a typed due date reads as the same Jakarta calendar date on detail, list, Beranda and WhatsApp (Pacific/Honolulu)",
+          "kind": "real",
+          "note": "Same journey in a UTC-10 browser, whose own calendar date is a day behind Jakarta's most of the day"
+        },
+        {
+          "file": "e2e/public/due-date-without-terms.spec.ts",
+          "title": "a recipient sees the due date on the page and in the PDF when the deal has no payment terms (Asia/Jakarta)",
+          "kind": "real",
+          "note": "FIND-08 regression. The recipient's page and both PDFs print the same Jakarta calendar date (long form) the owner's page shows, for a follow-up overlay invoice whose deal has no payment terms"
+        },
+        {
+          "file": "e2e/public/due-date-without-terms.spec.ts",
+          "title": "a recipient sees the due date on the page and in the PDF when the deal has no payment terms (Pacific/Honolulu)",
+          "kind": "real",
+          "note": "Same journey in a UTC-10 browser"
+        },
+        {
+          "file": "src/lib/invoice-date-status.test.ts",
+          "title": "",
+          "kind": "partial",
+          "note": "Pure date logic"
+        }
+      ],
+      "followUp": "Desktop Chromium only, like INV-DUE-04 (no segment keyboard on a phone; the native picker cannot be driven). Server-side midnight edge stays unit-level",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08"
+    },
+    {
+      "id": "INV-DUE-06",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Due-date save failure shows an error",
+      "persona": "owner",
+      "preconditions": "The server cannot store the change (the database refuses the write)",
+      "interaction": "Kosongkan (desktop and phone layout); type a new date and press Enter (desktop keyboard)",
+      "expected": "Error alert; the field reverts to the last saved date (not the attempted one); retry saves",
+      "persisted": "Unchanged",
+      "alternates": "A second try while the cause persists; reload while it persists. Choosing a date in a phone's native picker is INV-DUE-03 (MAN-DUE-01)",
+      "scope": [
+        "unit",
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "a Kosongkan the server fails to store shows the stored date again with an error, stores nothing, and clears once the server can store it",
+          "kind": "real",
+          "note": "Nothing is stubbed: the PATCH reaches the app's handler and the test database refuses the write (scripts/e2e-fixtures.ts invoiceWriteRefusal, a row trigger on the one fixture invoice), so the handler answers 500 itself. Entered from the invoice list; the stored date is read back by reloading the page. Both projects"
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "a typed date (Enter) the server fails to store shows the stored date again with an error, stores nothing, and retyping saves it once the server can",
+          "kind": "partial",
+          "note": "Desktop chromium only (keyboard path); the same database-refused write, nothing stubbed. Listed as partial only because it is skipped on chromium-mobile and a real reference must pass in every claimed project"
+        },
+        {
+          "file": "src/components/date-field.test.tsx",
+          "title": "",
+          "kind": "partial",
+          "note": "Component test with fireEvent.change and a mocked commit"
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "a failed Kosongkan shows the stored date again with an error, and a retry clears it",
+          "kind": "partial",
+          "note": "Kept: the failure is injected with page.route (a stub), so by rule it is partial"
+        },
+        {
+          "file": "e2e/invoices/due-date-integrity.spec.ts",
+          "title": "a failed typed date (Enter) shows the stored date again with an error, and retyping saves it",
+          "kind": "partial",
+          "note": "Desktop chromium; failure injected with page.route"
+        }
+      ],
+      "followUp": "Real since 2026-10-11 for a save the server fails to store (HTTP 500). Not covered: a save that never reaches the server (offline, timeout) other than through the page.route tests above, which stay partial. On the phone project the failing change is Kosongkan; a date chosen in the native picker is not drivable (INV-DUE-03)",
+      "evidence": "Release-readiness follow-up 2026-10-11"
+    },
+    {
+      "id": "INV-STATUS-01",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Mark a DRAFT invoice as sent",
+      "persona": "owner",
+      "preconditions": "DRAFT invoice",
+      "interaction": "Click Tandai sudah dikirim, reload",
+      "expected": "Chip Terkirim; actions Tandai jatuh tempo / Tandai lunas; persists",
+      "persisted": "Invoice.status = SENT",
+      "alternates": "Update error (INV-STATUS-07)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/status-lifecycle.spec.ts",
+          "title": "an invoice created from the deal page moves DRAFT -> SENT -> DUE -> PAID -> SENT, persisting after every reload",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Added 2026-10-03 (pilot)"
+    },
+    {
+      "id": "INV-STATUS-02",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Mark a SENT invoice as due",
+      "persona": "owner",
+      "preconditions": "SENT invoice",
+      "interaction": "Click Tandai jatuh tempo, reload",
+      "expected": "Chip Jatuh tempo; persists. The only status action then offered is Tandai lunas: there is no Tandai terlambat (FIND-01)",
+      "persisted": "Invoice.status = DUE",
+      "alternates": "Not offered on an invoice already shown as overdue (INV-STATUS-06)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/status-lifecycle.spec.ts",
+          "title": "an invoice created from the deal page moves DRAFT -> SENT -> DUE -> PAID -> SENT, persisting after every reload",
+          "kind": "real"
+        }
+      ],
+      "evidence": "Added 2026-10-03 (pilot). Since the FIND-01 fix (2026-10-09) the journey also asserts, before and after reload, that a DUE invoice offers Tandai lunas and no other status action",
+      "finding": "FIND-01"
+    },
+    {
+      "id": "INV-STATUS-03",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Mark an invoice as paid (from SENT or DUE)",
+      "persona": "owner",
+      "preconditions": "SENT or DUE invoice",
+      "interaction": "Click Tandai lunas, reload",
+      "expected": "Paid note and chip; persists",
+      "persisted": "Invoice.status = PAID",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/status-lifecycle.spec.ts",
+          "title": "an invoice created from the deal page moves DRAFT -> SENT -> DUE -> PAID -> SENT, persisting after every reload",
+          "kind": "real",
+          "note": "DUE -> PAID with reload"
+        },
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "mark an invoice paid, then undo",
+          "kind": "partial",
+          "note": "SENT -> PAID, immediate state only, no reload"
+        }
+      ]
+    },
+    {
+      "id": "INV-STATUS-04",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Undo paid status",
+      "persona": "owner",
+      "preconditions": "PAID invoice",
+      "interaction": "Click Batalkan status lunas, reload",
+      "expected": "Back to Terkirim; persists",
+      "persisted": "Invoice.status = SENT",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/status-lifecycle.spec.ts",
+          "title": "an invoice created from the deal page moves DRAFT -> SENT -> DUE -> PAID -> SENT, persisting after every reload",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "INV-STATUS-05",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Mark a DUE invoice as overdue",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "",
+      "expected": "",
+      "persisted": "",
+      "alternates": "",
+      "scope": [],
+      "priority": "P1",
+      "status": "not_applicable",
+      "reason": "Removed by product decision (Chris, 2026-10-09, FIND-01): overdue is derived from the due date against the Jakarta calendar day and cannot be set by hand. The 'Tandai terlambat' control no longer exists and the status API rejects any transition to OVERDUE. Not automated, because there is nothing left to do; that the control stays absent on a DUE invoice is asserted by the INV-STATUS-02 journey (e2e/invoices/status-lifecycle.spec.ts) and the rejected transitions by src/lib/invoices.test.ts. Re-inventory if a manual overdue ever returns.",
+      "finding": "FIND-01"
+    },
+    {
+      "id": "INV-STATUS-06",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Mark an overdue invoice as paid / send overdue reminder",
+      "persona": "owner",
+      "preconditions": "Invoice shown as overdue: its due date is in the past (Jakarta) and it is stored as SENT, DUE or OVERDUE",
+      "interaction": "Open from the invoice list; click Kirim pengingat; click Tandai lunas; reload; check list and Beranda",
+      "expected": "Chip Terlambat on the list, the detail page and Beranda, and only Tandai lunas as status action (no Tandai jatuh tempo, no Tandai terlambat), whichever status is stored; reminder uses the Settings chase template and carries the invoice's usable share link (the existing one, or a new one when there is none or it has expired -- never an expired link); after Tandai lunas: Lunas chip, Batalkan status lunas, gone from the queue, in the list's Lunas group",
+      "persisted": "Invoice.status = PAID. InvoiceShare: the reminder asks POST /api/invoices/:id/share/ensure, which leaves a usable share untouched and replaces an expired one",
+      "alternates": "A legacy invoice stored as OVERDUE whose due date is not past (or missing) reads Terkirim everywhere, is not in the Beranda queue, and still offers Tandai lunas",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/overdue-invoice.spec.ts",
+          "title": "an overdue invoice sends the chase reminder, then Tandai lunas persists across detail, list and Beranda",
+          "kind": "real",
+          "note": "Follow-up overlay invoice stored OVERDUE, due 5 Jakarta days ago; wa.me stubbed locally"
+        },
+        {
+          "file": "e2e/invoices/expired-share.spec.ts",
+          "title": "Kirim pengingat on invoice detail replaces an expired link with a working one, and the next reminder reuses it",
+          "kind": "real",
+          "note": "FIND-07 regression. Expired share from the follow-up-expired-share fixture action (the app cannot backdate an expiry); the recipient sees the expired page first. Visible Kirim pengingat on invoice detail: a different link that opens for a session-less recipient, only POST /share/ensure sent, shown as the active link also after reload, old URL then not-found; a second click sends the same link"
+        },
+        {
+          "file": "e2e/invoices/expired-share.spec.ts",
+          "title": "Kirim pengingat on invoice detail sends the active link that already exists and does not rotate it",
+          "kind": "real",
+          "note": "Link made with Buat tautan berbagi, page reloaded, two visible Kirim pengingat clicks: both carry that link, only POST /share/ensure sent, link still opens and is still shown after reload"
+        },
+        {
+          "file": "e2e/invoices/status-consistency.spec.ts",
+          "title": "a stored SENT invoice due yesterday is Terlambat on the list, its detail page and Beranda, with no status action that contradicts it",
+          "kind": "real",
+          "note": "FIND-06/FIND-01 regression. Follow-up overlay invoice stored SENT, due yesterday: found under Terlambat in the list, opened by its row, Terlambat chip and only Tandai lunas on detail (also after reload, Back and Forward), 'Telat 1 hari' on Beranda"
+        },
+        {
+          "file": "e2e/invoices/status-consistency.spec.ts",
+          "title": "a stored DUE invoice due yesterday is Terlambat on the list, its detail page and Beranda, with no status action that contradicts it",
+          "kind": "real",
+          "note": "Same journey for an invoice stored DUE, due yesterday (status-consistency overlay)"
+        },
+        {
+          "file": "e2e/invoices/status-consistency.spec.ts",
+          "title": "a legacy invoice stored as OVERDUE but not past due reads Terkirim everywhere and can still be marked paid",
+          "kind": "real",
+          "note": "Legacy stored OVERDUE with a due date in 8 days and with none: Terkirim on list and detail, Kirim lewat WhatsApp (not the reminder), absent from Beranda; visible Tandai lunas accepted by the server, Lunas after reload and in the list"
+        }
+      ],
+      "evidence": "Added 2026-10-04 (Zero Routine Phase 2A, follow-up overlay). Share-link evidence added 2026-10-08 with the FIND-07 fix. Stored SENT/DUE and legacy stored-OVERDUE evidence added 2026-10-09 with the FIND-01/FIND-06 fix",
+      "finding": "FIND-07"
+    },
+    {
+      "id": "INV-STATUS-07",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Status update failure shows an error",
+      "persona": "owner",
+      "preconditions": "The server refuses the PATCH (409 after the invoice was paid in another tab), or the PATCH fails",
+      "interaction": "Click/tap a status action",
+      "expected": "Alert 'Status invoice belum bisa diperbarui.', the shown status and actions stay, no paid moment; a reload shows what the server holds",
+      "persisted": "Unchanged",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "evidence": "One-shot autopilot 2026-10-11 (Phase 2)",
+      "tests": [
+        {
+          "file": "e2e/invoices/status-failure.spec.ts",
+          "title": "a status change the server refuses (the invoice was paid in another tab) shows an error and changes nothing",
+          "kind": "real",
+          "note": "No stub: the same owner marks the invoice paid in a second tab, then the first tab's Tandai jatuh tempo is answered 409 by the server itself (PAID -> DUE is not allowed)"
+        },
+        {
+          "file": "e2e/invoices/status-failure.spec.ts",
+          "title": "a failed Tandai lunas shows an error, keeps the status after a reload, and a second try works",
+          "kind": "partial",
+          "note": "Real click, reload and retry, but the failure is injected with page.route (a stub), so by rule it is partial"
+        }
+      ]
+    },
+    {
+      "id": "INV-WA-01",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Send invoice via WhatsApp",
+      "persona": "owner",
+      "preconditions": "Valid contact, settings templates",
+      "interaction": "Click Kirim lewat WhatsApp",
+      "expected": "Popup to WhatsApp with the saved template, number, amount, invoice link",
+      "persisted": "Share link reused when usable; created when absent or expired (POST /api/invoices/:id/share/ensure). The reuse/expired cases are driven on the overdue variant of this button (INV-STATUS-06, e2e/invoices/expired-share.spec.ts)",
+      "alternates": "INV-WA-02, INV-WA-03",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "WhatsApp action opens a saved-template message with the invoice link",
+          "kind": "real",
+          "note": "wa.me answered by a local stub (keepWhatsAppLocal); no request leaves the machine"
+        }
+      ],
+      "manualCheck": "MAN-WA-01"
+    },
+    {
+      "id": "INV-WA-02",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Blocked WhatsApp popup falls back to a manual link",
+      "persona": "owner",
+      "preconditions": "Popup blocked",
+      "interaction": "Click Kirim lewat WhatsApp",
+      "expected": "'Buka WhatsApp' link with the wa.me href only when the browser really blocked the tab; no link, and exactly one tab, after a successful open",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/whatsapp/popup-blocker.spec.ts",
+          "title": "invoice detail: Kirim lewat WhatsApp shows a Buka WhatsApp link and opens nothing",
+          "kind": "real",
+          "note": "Real popup blocker: Chromium's --block-new-web-contents switch makes window.open() return null from the browser itself (nothing in the page stubbed). Reached from Beranda -> Invoice -> the invoice; no tab, no WhatsApp request, fallback link to the saved-template message"
+        },
+        {
+          "file": "e2e/invoices/overdue-invoice.spec.ts",
+          "title": "after the reminder popup opens, invoice detail shows no blocked-popup fallback",
+          "kind": "real",
+          "note": "FIND-04 regression (was expected_failure): popup opened -> exactly one tab, one wa.me request with no Referer, window.opener null, no Buka WhatsApp link"
+        },
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "a blocked WhatsApp popup falls back to a clickable manual link",
+          "kind": "partial",
+          "note": "window.open stubbed to return null; runs in every engine and follows the fallback link (answered locally)"
+        }
+      ],
+      "finding": "FIND-04",
+      "followUp": "Real phone popup blockers and in-app browsers stay MAN-WA-01",
+      "evidence": "FIND-04 fixed by fix/whatsapp-popup-fallback-2026-10-05 (2026-10-06). Chromium only for the real blocker (the switch is Chromium's); Firefox/WebKit run the stubbed-blocker test",
+      "manualCheck": "MAN-WA-01"
+    },
+    {
+      "id": "INV-WA-03",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Repair invalid contact on the invoice, save and send",
+      "persona": "owner",
+      "preconditions": "Invalid contact on the deal",
+      "interaction": "Click WhatsApp, type number, Simpan & kirim",
+      "expected": "Number saved on deal, WhatsApp opens",
+      "persisted": "Deal.contactWa",
+      "alternates": "Still invalid",
+      "scope": [
+        "chromium 390 (ux-audit, id+en)",
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "tests/ux-audit/t27.verification.spec.ts",
+          "title": "executes the 123-capture matrix and non-visual checks",
+          "kind": "real",
+          "note": "F15 flow; ux-audit job, report-gated"
+        },
+        {
+          "file": "e2e/deals/patch-keeps-stage.spec.ts",
+          "title": "a WhatsApp number repaired from invoice detail leaves the deal at Invoice",
+          "kind": "real",
+          "note": "Invoice detail: Kirim lewat WhatsApp -> repair panel -> Simpan & kirim, on a deal at Invoice with an invoice (chromium, chromium-mobile). Also the FIND-10 regression for this surface: the deal stays at Invoice"
+        }
+      ]
+    },
+    {
+      "id": "INV-WA-04",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Contact load error and retry",
+      "persona": "owner",
+      "preconditions": "Contact GET fails",
+      "interaction": "Click Coba lagi",
+      "expected": "Alert, retry reloads contact",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "unit"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "src/app/(app)/invoice/[id]/invoice-detail-client.test.tsx",
+          "title": "",
+          "kind": "partial"
+        }
+      ]
+    },
+    {
+      "id": "INV-PDF-01",
+      "domain": "invoices",
+      "route": "/invoice/[id]",
+      "action": "Download the invoice PDF (owner)",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "Edit bank details in Settings; open the invoice from the list; click Unduh PDF",
+      "expected": "The browser downloads <number>.pdf; its text has the invoice number, issuer, brand, description, amount, tax, payment terms, due date and the bank details the invoice was issued with -- not bank details saved in Settings after it was shared (Decision A, CAP-INV-12; moved from SET-03)",
+      "persisted": "n/a",
+      "alternates": "Incomplete issuer settings",
+      "scope": [
+        "chromium",
+        "chromium-mobile",
+        "manual: phones"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/pdf-download.spec.ts",
+          "title": "Unduh PDF on invoice detail downloads a PDF with the invoice, issuer and the bank details it was issued with, not later Settings",
+          "kind": "real",
+          "note": "Bank details changed through Settings first; visible Unduh PDF click, the browser's download event, text read with pdftotext -layout and compared line by line with literal expected lines: the seeded invoice was shared before the change, so the PDF must keep the seeded bank details and print none of the new ones (Decision A). File kept only under the test's output directory"
+        },
+        {
+          "file": "tests/ux-audit/fixtures.baseline.spec.ts",
+          "title": "downloads owner and public PDFs for the same invoice and confirms they match",
+          "kind": "partial",
+          "note": "Fetches via request API; the button is never clicked"
+        }
+      ],
+      "manualCheck": "MAN-PDF-01",
+      "followUp": "How a phone's browser hands the PDF to its viewer/downloads stays MAN-PDF-01",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08"
+    },
+    {
+      "id": "INV-DOC-01",
+      "domain": "invoices",
+      "route": "/invoice/[id], /i/[token], /api/invoices/[id]/pdf, /api/public/invoices/[token]/pdf",
+      "action": "An issued invoice's document is frozen against later deal and Settings edits (Decision A)",
+      "persona": "owner and brand contact (recipient)",
+      "preconditions": "A deal at the Invoice stage with no invoice (base seed)",
+      "interaction": "Deal detail -> Buat invoice; edit the deal with Ubah deal while the invoice is a Draft; invoice detail -> Buat tautan berbagi; edit the deal's contact name on deal detail and the bank name in Pengaturan; Unduh PDF as owner and as the brand; Buat ulang tautan, Cabut tautan, Buat tautan berbagi; Tandai sudah dikirim",
+      "expected": "An unshared Draft's PDF follows the deal; from the first share link (or Tandai sudah dikirim, whichever is first) the owner's PDF, the brand's page and the brand's PDF keep the brand, contact name, scope, payment terms, issuer and bank details of that moment, through link rotation, revoke and re-share and the move to Terkirim; owner and brand PDFs have the same text",
+      "persisted": "InvoiceSnapshot (one row per invoice, never updated)",
+      "alternates": "Tandai sudah dikirim before any link (second test); an invoice exposed without a snapshot is frozen at its next read (unit and database tests); migration backfill (npm run test:snapshot-db)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "evidence": "Decision A implementation 2026-10-18 (issue #55)",
+      "tests": [
+        {
+          "file": "e2e/invoices/document-snapshot.spec.ts",
+          "title": "a Draft follows its deal and Settings until its first share link; from then on the owner's PDF, the brand's page and its PDF keep that copy through rotate, revoke, re-share and Terkirim",
+          "kind": "real",
+          "note": "Share, rotate, revoke, re-share, Terkirim, the contact-name edit, the Ubah deal edit of brand, scope and payment terms, and the Settings edit are all visible controls; the frozen outcome is asserted on the owner's PDF, the brand's page and the brand's PDF after reloads"
+        },
+        {
+          "file": "e2e/invoices/document-snapshot.spec.ts",
+          "title": "Tandai sudah dikirim freezes a Draft that has no link yet; a link made later shows the copy from that moment",
+          "kind": "real",
+          "note": "Tandai sudah dikirim, Ubah deal and Buat tautan berbagi are clicked/tapped"
+        }
+      ]
+    },
+    {
+      "id": "INV-OWN-01",
+      "domain": "invoices",
+      "route": "/deal/[id], /invoice/[id], APIs",
+      "action": "Another owner cannot view, read or change this owner's deal/invoice",
+      "persona": "second owner",
+      "preconditions": "Two owners",
+      "interaction": "Navigate/act as second owner",
+      "expected": "Not-found UI / 404; no data leak; lists scoped",
+      "persisted": "Unchanged",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/security/ownership-denial.spec.ts",
+          "title": "a second authenticated user cannot view, read via API, or move the primary owner's deal",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/security/ownership-denial.spec.ts",
+          "title": "a second authenticated user cannot view, read via API, or edit the primary owner's invoice",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/security/ownership-denial.spec.ts",
+          "title": "the second user's own board and invoice list never render the primary owner's data",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "SHARE-01",
+      "domain": "sharing",
+      "route": "/invoice/[id]",
+      "action": "Create a share link; it is recovered after reload",
+      "persona": "owner",
+      "preconditions": "No active share",
+      "interaction": "Click Buat tautan berbagi, reload",
+      "expected": "Link shown, same link after reload. An expired share reads 'Tautan berbagi sudah tidak berlaku.' with the date it ended (ID and EN), never as active, and offers Buat tautan baru",
+      "persisted": "InvoiceShare",
+      "alternates": "Expired share (Buat tautan baru, one step)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "share link can be created, recovered after reload, regenerated, and revoked",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/invoices/expired-share.spec.ts",
+          "title": "an expired share link is shown as expired, not active, in Indonesian and in English",
+          "kind": "real",
+          "note": "FIND-07 regression. Invoice detail reached from the Beranda row: expired text and end date, no active text, no link field, no regenerate/revoke; same after reload; then English via the real Settings language control"
+        },
+        {
+          "file": "e2e/invoices/expired-share.spec.ts",
+          "title": "Buat tautan baru on an expired share creates a working link in one step",
+          "kind": "real",
+          "note": "Visible Buat tautan baru: POST /share, active state, the new link opens for a session-less recipient and survives a reload"
+        }
+      ]
+    },
+    {
+      "id": "SHARE-02",
+      "domain": "sharing",
+      "route": "/invoice/[id]",
+      "action": "Regenerate a share link (with confirm)",
+      "persona": "owner",
+      "preconditions": "Active share",
+      "interaction": "Buat ulang tautan -> Ya, buat tautan baru",
+      "expected": "New link; the old link stops opening for a recipient and the new one opens",
+      "persisted": "Old token replaced (generic not-found for the recipient); new token after reload; a later Beranda reminder carries the new link",
+      "alternates": "Cancel (SHARE-04)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "share link can be created, recovered after reload, regenerated, and revoked",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/invoices/reminder-share-link.spec.ts",
+          "title": "Buat ulang tautan on invoice detail still replaces the link: the old one stops working, the new one opens",
+          "kind": "real",
+          "note": "Non-regression for FIND-05's fix: explicit Regenerate still sends POST /share and rotates. Session-less recipient gets 404 on the old link and the invoice on the new one; reload keeps the new link"
+        },
+        {
+          "file": "e2e/invoices/expired-share.spec.ts",
+          "title": "after Buat ulang tautan, the old link is dead and invoice detail reminders send the new one without rotating it again",
+          "kind": "real",
+          "note": "Non-regression for FIND-07's fix: Regenerate still sends POST /share; recipient gets 404 on the old link; two invoice-detail reminders then carry the new link via POST /share/ensure"
+        }
+      ]
+    },
+    {
+      "id": "SHARE-03",
+      "domain": "sharing",
+      "route": "/invoice/[id]",
+      "action": "Revoke a share link (with confirm)",
+      "persona": "owner",
+      "preconditions": "Active share",
+      "interaction": "Cabut tautan -> Ya, cabut tautan, reload",
+      "expected": "No-link state persists",
+      "persisted": "Share revoked",
+      "alternates": "Cancel (SHARE-04)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/invoice-journeys.spec.ts",
+          "title": "share link can be created, recovered after reload, regenerated, and revoked",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "SHARE-04",
+      "domain": "sharing",
+      "route": "/invoice/[id]",
+      "action": "Cancel the regenerate/revoke confirmation",
+      "persona": "owner",
+      "preconditions": "Confirm visible",
+      "interaction": "Buat ulang tautan -> Batal; Cabut tautan -> Batal; reload",
+      "expected": "Warning closes; no request sent; the same link is shown and still opens for the recipient, also after reload",
+      "persisted": "Unchanged",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08",
+      "tests": [
+        {
+          "file": "e2e/invoices/share-cancel.spec.ts",
+          "title": "Batal on Buat ulang tautan and on Cabut tautan leaves the link unchanged and working",
+          "kind": "real",
+          "note": "Invoice reached through the nav and list; zero share mutations recorded; link compared as a boolean; session-less recipient opens it before and after"
+        }
+      ]
+    },
+    {
+      "id": "SHARE-05",
+      "domain": "sharing",
+      "route": "/invoice/[id]",
+      "action": "Copy the share link",
+      "persona": "owner",
+      "preconditions": "Active share",
+      "interaction": "Click Salin (the link field copy button, accessible name \"Salin tautan invoice\")",
+      "expected": "The button reads \"Tersalin\" and the clipboard holds the full public link; on failure, an alert and a manual-copy field with the link",
+      "persisted": "n/a",
+      "alternates": "Clipboard denied",
+      "scope": [
+        "chromium",
+        "manual: phones"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/share-copy.spec.ts",
+          "title": "Salin copies the exact public invoice link to the clipboard and confirms it",
+          "kind": "real",
+          "note": "Clipboard permissions granted to the test context for the app origin only; reads the system clipboard back and requires origin + /i/<seeded token>, plus the 'Tersalin' feedback"
+        },
+        {
+          "file": "e2e/invoices/share-copy.spec.ts",
+          "title": "when the browser refuses the copy, Salin shows the manual-copy fallback with the full link",
+          "kind": "partial",
+          "note": "Clipboard-denied alternate: navigator.clipboard.writeText is stubbed to reject; the click and fallback UI are real"
+        },
+        {
+          "file": "src/components/invoices/share-link-field.test.tsx",
+          "title": "",
+          "kind": "partial",
+          "note": "Component test with mocked clipboard"
+        }
+      ],
+      "manualCheck": "MAN-SHARE-01"
+    },
+    {
+      "id": "PUB-01",
+      "domain": "public",
+      "route": "/i/[token]",
+      "action": "Recipient opens a valid share link",
+      "persona": "recipient (no session)",
+      "preconditions": "Active share",
+      "interaction": "Open the link",
+      "expected": "Invoice identity, totals, tax, payment details, due date (with or without payment terms); no owner controls",
+      "persisted": "n/a",
+      "alternates": "Deal with no payment terms: the due date is still shown and no payment-terms heading or text appears (FIND-08, fixed)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/public/invoice.spec.ts",
+          "title": "valid share link renders recipient-safe invoice content and PDF action",
+          "kind": "real"
+        },
+        {
+          "file": "e2e/public/due-date-without-terms.spec.ts",
+          "title": "a recipient sees the due date on the page and in the PDF when the deal has no payment terms (Asia/Jakarta)",
+          "kind": "real",
+          "note": "FIND-08 regression. Owner opens an invoice whose deal has no payment terms from the list and creates its share link with the visible button; a session-less recipient opens it: 'Jatuh tempo: <date>' visible, no 'Syarat pembayaran', no empty line, no controls; same after reload"
+        },
+        {
+          "file": "e2e/public/due-date-without-terms.spec.ts",
+          "title": "a recipient sees the due date on the page and in the PDF when the deal has no payment terms (Pacific/Honolulu)",
+          "kind": "real",
+          "note": "Same journey in a UTC-10 browser"
+        }
+      ]
+    },
+    {
+      "id": "PUB-02",
+      "domain": "public",
+      "route": "/i/[token]",
+      "action": "Invalid token shows generic not-found",
+      "persona": "recipient",
+      "preconditions": "",
+      "interaction": "Open an unknown token",
+      "expected": "Generic 404 state, no data",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/public/invoice.spec.ts",
+          "title": "invalid share link uses the generic not-found state",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "PUB-03",
+      "domain": "public",
+      "route": "/i/[token]",
+      "action": "Expired token shows an honest expired state",
+      "persona": "recipient",
+      "preconditions": "Expired share",
+      "interaction": "Open the link",
+      "expected": "Expired state, no invoice data",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/public/invoice.spec.ts",
+          "title": "expired share link shows an honest expired state without invoice data",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "PUB-04",
+      "domain": "public",
+      "route": "/i/[token]",
+      "action": "Revoked token stops working after reload",
+      "persona": "recipient + owner",
+      "preconditions": "Recipient page open",
+      "interaction": "Owner revokes in UI; recipient reloads",
+      "expected": "Generic not-found",
+      "persisted": "Share revoked",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/public/invoice.spec.ts",
+          "title": "revoked token becomes unusable to the recipient after reload",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "PUB-05",
+      "domain": "public",
+      "route": "/i/[token]",
+      "action": "Recipient downloads the PDF",
+      "persona": "recipient",
+      "preconditions": "Active share",
+      "interaction": "Open the share link with no session; click Unduh PDF",
+      "expected": "The browser downloads <number>.pdf with the invoice's content; an invalid token discloses nothing",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile",
+        "manual: phones"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/pdf-download.spec.ts",
+          "title": "a recipient's Unduh PDF downloads the same document the owner gets",
+          "kind": "real",
+          "note": "Recipient page in its own session-less context, opened with the link the owner's page shows; visible Unduh PDF click, real download event, text checked with pdftotext"
+        },
+        {
+          "file": "e2e/public/due-date-without-terms.spec.ts",
+          "title": "a recipient sees the due date on the page and in the PDF when the deal has no payment terms (Asia/Jakarta)",
+          "kind": "real",
+          "note": "FIND-08 regression. Recipient's visible Unduh PDF click on an invoice whose deal has no payment terms; pdftotext output has the 'Jatuh tempo: <date>' line between the tax line and the bank block and no 'Syarat pembayaran'"
+        },
+        {
+          "file": "e2e/public/invoice.spec.ts",
+          "title": "valid public PDF is downloadable without authentication",
+          "kind": "partial",
+          "note": "page.request.get, not a click"
+        },
+        {
+          "file": "e2e/public/invoice.spec.ts",
+          "title": "invalid public PDF does not disclose invoice content",
+          "kind": "partial"
+        }
+      ],
+      "manualCheck": "MAN-PDF-01",
+      "followUp": "Phone viewers stay MAN-PDF-01",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08"
+    },
+    {
+      "id": "PUB-06",
+      "domain": "public",
+      "route": "/i/[token] PDF vs owner PDF",
+      "action": "Recipient PDF matches owner PDF",
+      "persona": "recipient",
+      "preconditions": "",
+      "interaction": "Owner clicks Unduh PDF on invoice detail; recipient clicks Unduh PDF on the public page",
+      "expected": "Same business content: identical extracted text, line for line (not byte-for-byte; PDF metadata differs per render)",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/invoices/pdf-download.spec.ts",
+          "title": "a recipient's Unduh PDF downloads the same document the owner gets",
+          "kind": "real",
+          "note": "Both PDFs obtained by clicking; pdftotext output of the two compared for equality after whitespace normalization, with a per-line diff on mismatch"
+        },
+        {
+          "file": "e2e/public/due-date-without-terms.spec.ts",
+          "title": "a recipient sees the due date on the page and in the PDF when the deal has no payment terms (Asia/Jakarta)",
+          "kind": "real",
+          "note": "FIND-08 regression. Owner and recipient PDFs of an invoice with a due date and no payment terms, both clicked; extracted text equal"
+        },
+        {
+          "file": "tests/ux-audit/fixtures.baseline.spec.ts",
+          "title": "downloads owner and public PDFs for the same invoice and confirms they match",
+          "kind": "partial",
+          "note": "API-level parity; appropriate for this property"
+        }
+      ],
+      "evidence": "Zero Routine Phase 2B, 2026-10-08"
+    },
+    {
+      "id": "PUB-07",
+      "domain": "public",
+      "route": "/i/[token] at 390px",
+      "action": "Long issuer name does not overflow the public page",
+      "persona": "recipient (phone)",
+      "preconditions": "Long issuer name",
+      "interaction": "Open link at 390px",
+      "expected": "No horizontal scroll",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/public/invoice.spec.ts",
+          "title": "a long unbreakable issuer name does not cause horizontal overflow on the public invoice page",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "SET-01",
+      "domain": "settings",
+      "route": "/pengaturan",
+      "action": "Update issuer name and save; persists",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "Type name, Simpan pengaturan, reload",
+      "expected": "Tersimpan; value after reload",
+      "persisted": "UserSettings",
+      "alternates": "Save error",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P0",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/settings/settings.spec.ts",
+          "title": "update issuer and bank details, happy path",
+          "kind": "real",
+          "note": "Despite the title, only the issuer name is changed (see SET-03)"
+        }
+      ]
+    },
+    {
+      "id": "SET-02",
+      "domain": "settings",
+      "route": "/pengaturan",
+      "action": "Invalid issuer email is rejected",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "Enter bad email, save",
+      "expected": "Field error, not saved",
+      "persisted": "Unchanged",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/settings/settings.spec.ts",
+          "title": "invalid issuer email is rejected with a field-level error, nothing saved",
+          "kind": "real",
+          "note": "No reload check"
+        }
+      ]
+    },
+    {
+      "id": "SET-03",
+      "domain": "settings",
+      "route": "/pengaturan",
+      "action": "Update bank details; they persist and appear on the recipient page of an invoice shared afterwards",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "Edit bank name/account/holder, save, reload; create and share an invoice from the pending deal; open both that link and the earlier invoice's link as the recipient",
+      "expected": "Persisted after reload and navigation; shown in the recipient page's payment block (/i/<token>) of the invoice shared after the save; the invoice shared before the save keeps the details it was issued with (Decision A, CAP-INV-12)",
+      "persisted": "UserSettings bank fields",
+      "alternates": "Required-field errors",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/settings/bank-details.spec.ts",
+          "title": "edited bank details persist after reload and appear on the recipient's page of an invoice shared afterwards, not on one already shared",
+          "kind": "real",
+          "note": "Edits the three bank fields with synthetic values, saves, reloads, navigates away and back, then makes an invoice through Buat invoice and Buat tautan berbagi and opens its link in a separate session-less context with the project's device emulation: the 'Pembayaran ke' block has the new details; the seeded invoice's link still has the seeded ones. The PDF outcome is tracked under INV-PDF-01"
+        },
+        {
+          "file": "e2e/settings/bank-details.spec.ts",
+          "title": "clearing a required bank field shows a field error and saves nothing",
+          "kind": "real",
+          "note": "Required-field alternate: no PATCH is sent; reload shows the seeded values"
+        }
+      ],
+      "evidence": "Narrowed 2026-10-04 (PR #27 review): the PDF half of the original \"invoice/PDF\" wording is not exercised here and moved to INV-PDF-01, which stays partial"
+    },
+    {
+      "id": "SET-04",
+      "domain": "settings",
+      "route": "/pengaturan",
+      "action": "Edit WhatsApp templates; the next message uses them",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "Settings (through the nav): rewrite the send and reminder templates, save, reload; open a non-overdue invoice and an overdue one from the list; click the WhatsApp action on each",
+      "expected": "Both templates persist; the non-overdue invoice's message is exactly the edited send template with its tokens filled, the overdue one's the edited reminder template",
+      "persisted": "UserSettings templates",
+      "alternates": "Reset to default (SET-05)",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08",
+      "tests": [
+        {
+          "file": "e2e/settings/whatsapp-templates.spec.ts",
+          "title": "edited send and reminder templates persist and shape the next WhatsApp messages",
+          "kind": "real",
+          "note": "Follow-up overlay; each edited template uses every token once in an order the defaults never use, and the whole message is matched; wa.me answered by a local stub"
+        }
+      ]
+    },
+    {
+      "id": "SET-05",
+      "domain": "settings",
+      "route": "/pengaturan",
+      "action": "Reset a template to default",
+      "persona": "owner",
+      "preconditions": "Edited template",
+      "interaction": "Click/tap Kembalikan ke bawaan under a template (it saves by itself); reload",
+      "expected": "That template is the default again; the other template and every other setting are unchanged; the next WhatsApp message is built from the default",
+      "persisted": "UserSettings",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "evidence": "One-shot autopilot 2026-10-11 (Phase 2)",
+      "tests": [
+        {
+          "file": "e2e/settings/template-reset.spec.ts",
+          "title": "Kembalikan ke bawaan restores one template's default, leaves everything else, and the next message uses it",
+          "kind": "real",
+          "note": "Both templates are first edited and saved through the form; then each is reset in turn, with a reload after each and a WhatsApp message (local stub) after the first"
+        }
+      ]
+    },
+    {
+      "id": "SET-06",
+      "domain": "settings",
+      "route": "/pengaturan",
+      "action": "Switch interface language (Indonesia/English); persists across pages",
+      "persona": "owner",
+      "preconditions": "",
+      "interaction": "Click English, reload, open invoice detail; switch back",
+      "expected": "UI in English everywhere (e.g. due-date 'Not set'); persists",
+      "persisted": "User.language",
+      "alternates": "Rate-limited language PATCH",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/settings/language.spec.ts",
+          "title": "choosing English in Settings persists across reload and pages, and Indonesia switches it back",
+          "kind": "real",
+          "note": "Clicks English, reloads, navigates via the English nav to invoice detail ('Due date'), clears the due date with 'Clear' ('Due: Not set', also after reload), switches back with Indonesia and reloads. Reseeds before and after"
+        },
+        {
+          "file": "tests/ux-audit/t27.verification.spec.ts",
+          "title": "executes the 123-capture matrix and non-visual checks",
+          "kind": "partial",
+          "note": "Switches language via page.evaluate fetch to /api/me/language, never the buttons"
+        }
+      ],
+      "evidence": "The Production due-date report was in English ('Not set'). The rate-limited PATCH (429) alternate is not exercised in a browser"
+    },
+    {
+      "id": "SET-07",
+      "domain": "settings",
+      "route": "/pengaturan, /invoice/[id]",
+      "action": "Incomplete issuer settings warn on invoice detail",
+      "persona": "owner",
+      "preconditions": "The owner has never saved Pengaturan (no UserSettings row; guarded fixture action incomplete-issuer-settings)",
+      "interaction": "Pending deal -> Buat invoice -> the Draft; nav -> Pengaturan; save an incomplete form, then a complete one; back to the invoice; share it. Second test: share the Draft first, then complete Pengaturan",
+      "expected": "Notice on an unshared Draft and in Pengaturan, gone after the details are saved, also after reload; the Draft shared afterwards shows the brand the saved details. An invoice shared while details were missing keeps 'Detail rekening belum lengkap.' on the recipient page after Pengaturan is completed, and invoice detail says Pengaturan no longer changes it (Decision A, CAP-INV-12)",
+      "persisted": "UserSettings (created by the save)",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "evidence": "One-shot autopilot 2026-10-11 (Phase 2)",
+      "tests": [
+        {
+          "file": "e2e/settings/incomplete-issuer.spec.ts",
+          "title": "missing issuer and bank details warn on a Draft and in Pengaturan until they are saved; the Draft shared afterwards gives the brand the saved details",
+          "kind": "real",
+          "note": "The starting state is a fixture precondition (the form cannot produce it); every step after it is through the UI. The invoice notice is plain text with no link to Pengaturan, so the journey reaches Pengaturan through the navigation"
+        },
+        {
+          "file": "e2e/settings/incomplete-issuer.spec.ts",
+          "title": "an invoice shared while the details were missing keeps the gaps after Pengaturan is completed, and says so",
+          "kind": "real",
+          "note": "Decision A alternate: Buat tautan berbagi on the incomplete Draft, then the Pengaturan save; the owner's frozen-invoice notice and the recipient's 'Detail rekening belum lengkap.' remain after reloads"
+        }
+      ]
+    },
+    {
+      "id": "SET-08",
+      "domain": "settings",
+      "route": "/pengaturan",
+      "action": "Settings save failure shows an error",
+      "persona": "owner",
+      "preconditions": "The server rejects the save (400: issuer WhatsApp number over 32 characters, which the form does not limit), or the PATCH fails",
+      "interaction": "Edit fields; click/tap Simpan pengaturan",
+      "expected": "A field the server refuses is marked with its own message ('Email tidak valid.') under the alert 'Periksa kembali isian yang ditandai.'; any other failure shows 'Gagal menyimpan. Coba lagi.'; no 'Tersimpan', the typed values stay in the form; a reload shows the stored values. Every field is capped at the server's length",
+      "persisted": "Unchanged",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_real_interaction",
+      "evidence": "One-shot autopilot 2026-10-11 (Phase 2)",
+      "tests": [
+        {
+          "file": "e2e/settings/save-failure.spec.ts",
+          "title": "a save the server rejects (an email it refuses) marks that field, keeps what was typed, and stores nothing",
+          "kind": "real",
+          "note": "No stub: 'budi@contoh..id' passes the form's email pattern and the server's own (zod) validation answers 400 naming issuerEmail"
+        },
+        {
+          "file": "e2e/settings/save-failure.spec.ts",
+          "title": "a failed save shows an error and keeps the form; pressing Simpan again saves it",
+          "kind": "partial",
+          "note": "Real typing, click and retry, but the failure is injected with page.route (a stub), so by rule it is partial"
+        }
+      ]
+    },
+    {
+      "id": "A11Y-01",
+      "domain": "accessibility",
+      "route": "/, /deal, /deal/[id], /invoice, /invoice/[id], /pengaturan, /i/[token], add-deal dialog",
+      "action": "No serious/critical automatically detectable violations",
+      "persona": "assistive-technology user",
+      "preconditions": "",
+      "interaction": "Page load + axe scan",
+      "expected": "Zero serious/critical",
+      "persisted": "n/a",
+      "alternates": "Error states (number repair on deal and invoice detail, expired share, Settings field errors); English interface; phone layout (390px, desktop Chromium); keyboard-only use",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P1",
+      "status": "automated_partial",
+      "tests": [
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Beranda has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial",
+          "note": "Static scan, not an interaction"
+        },
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Deal board has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Invoice list has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Pengaturan has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Invoice detail has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial",
+          "note": "Added in Phase 2B; scanned after the share section has loaded"
+        },
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Invoice detail with the regenerate confirmation open has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial",
+          "note": "Added in Phase 2B"
+        },
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Add Deal dialog: correct role, accessible name, and a working focus trap",
+          "kind": "partial",
+          "note": "Dialog-scoped scan plus the focus trap; already ran, now listed here"
+        },
+        {
+          "file": "e2e/public/invoice.spec.ts",
+          "title": "valid share link renders recipient-safe invoice content and PDF action",
+          "kind": "partial",
+          "note": "Includes the axe scan of the public /i/ page; already ran, now listed here"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Deal detail has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial",
+          "note": "Added 2026-10-11; reached from the board card's menu"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Deal detail of an invoiced deal has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Deal detail with the WhatsApp number repair form open has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial",
+          "note": "The error state after Buka WhatsApp on an unusable number"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Invoice detail with the WhatsApp number repair form open has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Invoice detail with an expired share link has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Pengaturan with field errors showing has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "the English interface has no automatically-detectable serious/critical a11y violations on the main pages",
+          "kind": "partial",
+          "note": "Language switched with the Settings button; Settings, Home, Deals, Invoices and invoice detail scanned in English; html lang checked"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Beranda in the phone layout has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial",
+          "note": "Desktop Chromium at 390x844: the app's phone layout, not a phone"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Deal board in the phone layout has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Invoice list in the phone layout has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Pengaturan in the phone layout has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "Invoice detail in the phone layout has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "the Add Deal dialog in the phone layout has no automatically-detectable serious/critical a11y violations",
+          "kind": "partial"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "a deal can be added, found and opened with the keyboard alone, and the dialog keeps the focus inside",
+          "kind": "partial",
+          "note": "Keyboard only (Tab, Enter, typing): top-bar + Deal, the dialog's fields in order, forward focus wrap, save, the card menu, Lihat detail. An interaction, but it does not make the action real: the action is the scan"
+        },
+        {
+          "file": "e2e/smoke/accessibility-states.spec.ts",
+          "title": "control: the scan reports a field without a label and low-contrast text",
+          "kind": "partial",
+          "note": "The scan helper's own control, on synthetic content"
+        }
+      ],
+      "followUp": "Stays partial by rule: an axe scan is rendering evidence, not an interaction. Widened 2026-10-11 to deal detail, the repair, expired-share and Settings-error states, the English interface and the phone layout; zero serious or critical findings, nothing excluded. Not scanned: the regenerate/revoke confirmations in the phone layout, the public page in English. Screen-reader behaviour is not automated at all (MAN-A11Y-01)",
+      "evidence": "Zero Routine Phase 2B, 2026-10-08; release-readiness follow-up 2026-10-11"
+    },
+    {
+      "id": "A11Y-02",
+      "domain": "accessibility",
+      "route": "/deal (dialog)",
+      "action": "Add-deal dialog focus trap and naming",
+      "persona": "keyboard user",
+      "preconditions": "Dialog open",
+      "interaction": "Tab / Shift+Tab through the dialog",
+      "expected": "Focus stays inside; correct role and name",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium"
+      ],
+      "priority": "P1",
+      "status": "automated_real_interaction",
+      "tests": [
+        {
+          "file": "e2e/smoke/accessibility.spec.ts",
+          "title": "Add Deal dialog: correct role, accessible name, and a working focus trap",
+          "kind": "real"
+        }
+      ]
+    },
+    {
+      "id": "A11Y-03",
+      "domain": "accessibility",
+      "route": "/invoice/[id]",
+      "action": "Screen-reader use of the due-date field and status actions",
+      "persona": "screen-reader user",
+      "preconditions": "",
+      "interaction": "VoiceOver/TalkBack: reach the due-date field, open picker, hear the saved state",
+      "expected": "Label announced, picker reachable, 'Tersimpan' announced",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "manual: VoiceOver iOS, TalkBack Android"
+      ],
+      "priority": "P2",
+      "status": "manual_pending",
+      "manualCheck": "MAN-A11Y-01"
+    },
+    {
+      "id": "A11Y-04",
+      "domain": "accessibility",
+      "route": "all",
+      "action": "Reduced-motion preference respected",
+      "persona": "motion-sensitive user",
+      "preconditions": "prefers-reduced-motion: reduce",
+      "interaction": "Open and close the account menu and the add-deal dialog, go to an invoice through the nav, Tandai lunas",
+      "expected": "Every control works, and after each step no animation or transition on the page lasts longer than 0.01 ms (document.getAnimations() and computed durations of every element)",
+      "persisted": "n/a",
+      "alternates": "",
+      "scope": [
+        "chromium",
+        "chromium-mobile"
+      ],
+      "priority": "P2",
+      "status": "automated_partial",
+      "evidence": "One-shot autopilot 2026-10-11 (Phase 2); reclassified in the release-readiness follow-up 2026-10-11",
+      "tests": [
+        {
+          "file": "e2e/smoke/reduced-motion.spec.ts",
+          "title": "opening the account menu and the add-deal dialog, and marking an invoice paid, all work with no motion",
+          "kind": "partial",
+          "note": "Context option reducedMotion: 'reduce'. Real clicks and taps, and motion measured from the browser (end and cancel events, running animations, computed durations of every element). Partial by rule on two counts: the preference is switched by Playwright's media emulation, not by the OS setting a person uses, and the outcome is read from styles and events with page.evaluate rather than seen"
+        },
+        {
+          "file": "e2e/smoke/reduced-motion.spec.ts",
+          "title": "control: with no motion preference the account menu animates and buttons have transitions",
+          "kind": "partial",
+          "note": "The measurement's own control: without the preference it reports the menu's 200 ms animation and transitions of at least 150 ms"
+        }
+      ],
+      "followUp": "Reclassified from automated_real_interaction on 2026-10-11 (review of the borderline claim the one-shot autopilot disclosed). The rule asks for the control a person uses and a user-observable outcome; here the preference is emulated and 'nothing moves' is inferred from computed durations and animation events. The measurement has a negative control and found no defect: one global rule (globals.css) cuts every animation and transition to 0.01 ms, sets iteration count 1 and scroll-behavior auto, and the app has no script-driven motion. Not exercised: the Beranda loading skeletons and the reminder spinner (present only while loading), and a real device with the OS setting on"
+    }
+  ],
+  "exceptions": [
+    {
+      "actions": [
+        "INV-DUE-03",
+        "INV-DUE-02"
+      ],
+      "category": "physical_device",
+      "manualCheck": "MAN-DUE-01",
+      "reason": "Choosing a date happens inside the OS/browser date picker, which is native UI outside the page: Playwright can show that the picker opens (INV-DUE-02, Chromium desktop and 390px emulation) but cannot drive or observe a choice in it, and emulation is not a phone.",
+      "blocksRelease": true,
+      "releaseEvidence": "MAN-DUE-01 logged PASS in MANUAL-UAT.md for the release candidate on staging, on a real Android Chrome phone and a real iPhone Safari (plus the desktop targets of the device matrix).",
+      "futureAutomation": {
+        "exists": true,
+        "strategy": "A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built."
+      }
+    },
+    {
+      "actions": [
+        "AUTH-03"
+      ],
+      "category": "third_party_auth",
+      "manualCheck": "MAN-AUTH-01",
+      "reason": "The round trip runs on Google's own sign-in pages with a real Google account. The suite sends no traffic to Google and stores no Google credential; tests sign in through a seeded database session, and AUTH-02 automates the entry only up to Auth.js's redirect, which is read and never followed.",
+      "blocksRelease": true,
+      "releaseEvidence": "MAN-AUTH-01 (sign-in and sign-out) logged PASS on staging for the release candidate; it is step 1 of MAN-REL-01. The recorded 2026-09-30 run covers sign-in only, on an older commit.",
+      "futureAutomation": {
+        "exists": false,
+        "strategy": "Not planned: it would need a stored Google test credential and automated traffic to Google's sign-in pages, which this project rules out. Stays a per-release manual check."
+      }
+    },
+    {
+      "actions": [
+        "DEAL-CREATE-07"
+      ],
+      "category": "physical_device",
+      "manualCheck": "MAN-DEAL-01",
+      "reason": "The deadline field is a native date input. On desktop it is typed with the keyboard and that path is driven for real (desktop Chromium, since 2026-10-11); on a phone the only way in is the OS date picker, which has the same limit as INV-DUE-03. The other optional fields (contact name, payment terms) are driven for real in both projects.",
+      "blocksRelease": false,
+      "releaseEvidence": "The create-validation journeys green in CI on the release head. MAN-DEAL-01 run on a phone and logged; if it was not run, the release PR says so.",
+      "futureAutomation": {
+        "exists": true,
+        "strategy": "A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built."
+      }
+    },
+    {
+      "actions": [
+        "INV-WA-01",
+        "INV-WA-02",
+        "HOME-03"
+      ],
+      "category": "physical_device",
+      "manualCheck": "MAN-WA-01",
+      "reason": "The hand-off to the WhatsApp app, and popup blocking in real phone and in-app browsers, happen outside the browser under test. The suite answers wa.me from a local stub so nothing reaches WhatsApp. Automated for real: the message and link the app builds, exactly one tab, no Referer, and the fallback under a real Chromium popup blocker.",
+      "blocksRelease": false,
+      "releaseEvidence": "The automated journeys green in CI on the release head. MAN-WA-01 run on Android Chrome and iPhone Safari and logged; if it was not run, the release PR says so.",
+      "futureAutomation": {
+        "exists": true,
+        "strategy": "A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built. The WhatsApp app itself would stay manual either way."
+      }
+    },
+    {
+      "actions": [
+        "INV-PDF-01",
+        "PUB-05"
+      ],
+      "category": "physical_device",
+      "manualCheck": "MAN-PDF-01",
+      "reason": "How a phone's browser hands a downloaded PDF to its viewer or its downloads is OS behaviour outside the page. Automated for real: the click, the download and the PDF's text for owner and recipient, in desktop and 390px Chromium.",
+      "blocksRelease": false,
+      "releaseEvidence": "The pdf-download journeys green in CI on the release head. MAN-PDF-01 run on a phone and logged; if it was not run, the release PR says so.",
+      "futureAutomation": {
+        "exists": true,
+        "strategy": "A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built."
+      }
+    },
+    {
+      "actions": [
+        "SHARE-05"
+      ],
+      "category": "physical_device",
+      "manualCheck": "MAN-SHARE-01",
+      "reason": "Clipboard permission and the copy confirmation on real phone browsers differ from desktop Chromium, where the test grants clipboard access to its own context. Automated for real on desktop Chromium only.",
+      "blocksRelease": false,
+      "releaseEvidence": "The share-copy journey green in CI on the release head. MAN-SHARE-01 run on a phone and logged; if it was not run, the release PR says so.",
+      "futureAutomation": {
+        "exists": true,
+        "strategy": "A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built."
+      }
+    },
+    {
+      "actions": [
+        "A11Y-01"
+      ],
+      "category": "partial_by_rule",
+      "reason": "An axe scan is rendering evidence, not an interaction, so the classification rules cap this action at partial however many pages are scanned. Since 2026-10-11 the scans cover deal detail, the repair, expired-share and Settings-error states, the English interface and the phone layout (390px, desktop Chromium), plus one keyboard-only journey. No scan operates a screen reader.",
+      "blocksRelease": false,
+      "releaseEvidence": "CI job e2e-a11y green on the release head (it runs on every PR and push; it includes e2e/smoke/accessibility-states.spec.ts). No manual sign-off.",
+      "futureAutomation": {
+        "exists": false,
+        "strategy": "It cannot become automated_real_interaction under the current rules. Screen-reader behaviour is MAN-A11Y-01 (P2), on real devices."
+      }
+    },
+    {
+      "actions": [
+        "DEAL-CREATE-08",
+        "DEAL-CREATE-09",
+        "DEAL-CREATE-12",
+        "DEAL-STAGE-06",
+        "DEAL-INV-03"
+      ],
+      "category": "partial_by_rule",
+      "reason": "A lost answer, a dropped connection or a gateway page cannot be produced on purpose by the app or the test server, so each test injects exactly that one failure with page.route, which the classification rules cap at partial. Everything around it is real: the click, the page's own bounded wait, the retry with the same Idempotency-Key, and the stored rows (read with page.request). In the 'stored but never answered' cases the write itself reaches the real server (route.fetch). DEAL-CREATE-12 has no UI step at all: it sends concurrent and late repeats straight to the real API and database, which no click can time. (#53, #54 review)",
+      "blocksRelease": false,
+      "releaseEvidence": "CI e2e-critical green on the release head (e2e/deals/server-errors.spec.ts is @critical, chromium and chromium-mobile). No manual sign-off.",
+      "futureAutomation": {
+        "exists": false,
+        "strategy": "It cannot become automated_real_interaction under the current rules without a network-fault proxy in front of the test server; none is planned."
+      }
+    },
+    {
+      "actions": [
+        "DEAL-EDIT-01"
+      ],
+      "category": "physical_device",
+      "manualCheck": "MAN-DEAL-02",
+      "reason": "The edit dialog is driven for real on desktop Chromium and the 390 px Chromium project (and runs under WebKit 390 px emulation), but a real phone's keyboard, viewport resizing and native date picker cannot be driven from Playwright.",
+      "blocksRelease": false,
+      "releaseEvidence": "The deal-edit journeys green in CI on the release head. MAN-DEAL-02 run on a physical iPhone and Android phone and logged; if it was not run, the release PR says so.",
+      "futureAutomation": {
+        "exists": true,
+        "strategy": "A hosted real-device service or a scripted emulator lane (JOURNEY-BACKLOG.md, 'Device automation strategy'). Chris has not chosen one; nothing is built."
+      }
+    },
+    {
+      "actions": [
+        "AUTH-10"
+      ],
+      "category": "third_party_auth",
+      "manualCheck": "MAN-AUTH-02",
+      "reason": "The refusal happens in Auth.js's signIn callback during a real Google OAuth callback, which the suite never performs (no Google traffic, no stored Google credential). The callback's decision is unit-tested (src/auth.test.ts); the hosted round trip, and that no User row is left behind, need a real uninvited Google account.",
+      "blocksRelease": true,
+      "releaseEvidence": "MAN-AUTH-02 logged PASS on staging for the release candidate, with the environment's allowlist configured by Chris.",
+      "futureAutomation": {
+        "exists": false,
+        "strategy": "Not planned, for the same reason as AUTH-03 (MAN-AUTH-01)."
+      }
+    }
+  ],
+  "findings": [
+    {
+      "id": "FIND-01",
+      "severity": "medium",
+      "summary": "'Tandai terlambat' on a DUE invoice with no past due date stores OVERDUE, but the chip immediately re-derives to Terkirim (deriveInvoiceDisplayStatus). The person asked for 'Terlambat' and sees 'Terkirim'.",
+      "status": "fixed: PR #34 (into staging; not yet on main/Production). Chris's decision 2026-10-09: overdue is never set by hand. 'Tandai terlambat' is removed from invoice detail and SENT/DUE -> OVERDUE from the status contract (the API answers 409), so the contradiction can no longer be created; an invoice shown as overdue also no longer offers 'Tandai jatuh tempo'. INV-STATUS-05 is re-inventoried as not applicable. Regression: e2e/invoices/status-lifecycle.spec.ts (a DUE invoice offers only Tandai lunas), e2e/invoices/status-consistency.spec.ts, src/lib/invoices.test.ts, invoice-detail-client.test.tsx. Stored rows are not rewritten: a legacy stored OVERDUE that is not past due still reads Terkirim and stays payable.",
+      "actions": [
+        "INV-STATUS-05",
+        "INV-STATUS-02",
+        "INV-STATUS-06"
+      ]
+    },
+    {
+      "id": "FIND-02",
+      "severity": "high",
+      "summary": "Clicking/tapping the visible empty due-date field does not open the date picker (opacity-0 native input; Chromium opens only from the invisible icon edge). Production report 2026-10-03.",
+      "status": "fixed: PR #26 (merge b51fba1, into staging 2026-10-04; not yet on main/Production). Regression: e2e/invoices/due-date-integrity.spec.ts picker tests (INV-DUE-02). Real Android/iOS verification (MAN-DUE-01) still pending.",
+      "actions": [
+        "INV-DUE-02",
+        "INV-DUE-03"
+      ]
+    },
+    {
+      "id": "FIND-03",
+      "severity": "high",
+      "summary": "Desktop keyboard entry of a due date saves a year-0002 date as soon as the first year digit is typed (Chromium emits 0002-mm-dd, the DateField commits every change, and PATCH /api/invoices/:id returns 200). The owner's invoice detail page then throws 'Expected an ISO yyyy-mm-dd date, received: 2-mm-dd' into the route error boundary ('Gagal memuat.') on every load, so the field that could fix it is unreachable. The list, Beranda, deal detail, public page and public PDF still render.",
+      "status": "fixed: PR #26 (merge b51fba1, into staging 2026-10-04; not yet on main/Production). Regression: e2e/invoices/due-date-integrity.spec.ts keyboard, legacy-row and API tests (INV-DUE-04). The read-only Production count of out-of-range Invoice.dueDate / Deal.deadline has not been run (needs Chris); legacy rows elsewhere (list, Beranda, public page, PDF) still render the raw date.",
+      "actions": [
+        "INV-DUE-04"
+      ]
+    },
+    {
+      "id": "FIND-04",
+      "severity": "medium",
+      "summary": "Blocked-popup detection never works: invoice detail (sendWhatsApp) and the Beranda queue (openReminder) call window.open(href, '_blank', 'noopener,noreferrer') and treat a null return as 'blocked', but the HTML spec makes window.open() return null whenever noopener is set. So after WhatsApp opens normally, a 'Buka WhatsApp' fallback link still appears (a second click opens a second chat), and a really blocked popup is indistinguishable.",
+      "status": "fixed: PR #29 (merge ac53043, into staging 2026-10-07; not yet on main/Production). Both surfaces now open a blank tab on the click (src/lib/whatsapp-popup.ts), cut its opener and navigate it without a Referer, so null from window.open means a real block. Regression: e2e/home/follow-up-queue.spec.ts and e2e/invoices/overdue-invoice.spec.ts (popup opened -> one tab, no fallback), e2e/whatsapp/popup-blocker.spec.ts (real Chromium blocker -> fallback, no tab). Real phones and the WhatsApp app stay MAN-WA-01",
+      "actions": [
+        "HOME-03",
+        "INV-WA-02"
+      ]
+    },
+    {
+      "id": "FIND-05",
+      "severity": "medium",
+      "summary": "Beranda 'Kirim pengingat' always rotated the invoice's share token (POST /api/invoices/:id/share -> createOrRegenerateShare), while invoice detail reuses the active link. A link the brand already received returned 404 after a reminder from Beranda (verified 2026-10-04 with a session-less context).",
+      "status": "fixed: PR #30 (merge e498ad5, into staging 2026-10-07; not yet on main/Production). Chris's decision 2026-10-07: a reminder reuses a usable active link and creates one only when none is usable; only explicit Regenerate rotates. Beranda now calls POST /api/invoices/:id/share/ensure (ensureShare in src/lib/invoice-share.ts): reuse when unexpired and the path is recoverable, without extending the expiry. Regression: e2e/invoices/reminder-share-link.spec.ts (reuse, repeat, no share, expired, Regenerate still rotates) and src/lib/invoice-share.test.ts.",
+      "actions": [
+        "HOME-03",
+        "SHARE-02"
+      ]
+    },
+    {
+      "id": "FIND-06",
+      "severity": "low",
+      "summary": "The invoice list groups and labels by stored status, while Beranda and invoice detail derive OVERDUE from the Jakarta due date. A SENT invoice due yesterday shows 'Telat 1 hari' on Beranda and 'Terlambat' on detail, but sits under Terkirim with a TERKIRIM chip in the list.",
+      "status": "fixed: PR #34 (into staging; not yet on main/Production). Chris's decision 2026-10-09: one displayed-status rule everywhere. The invoice list now groups and labels by deriveInvoiceDisplayStatus(), the function Beranda and invoice detail already used. Regression: e2e/invoices/status-consistency.spec.ts (list, detail and Beranda agree for stored SENT and stored DUE due yesterday; due today / in 7 / in 8 days are not overdue; DRAFT and PAID unmoved) and src/components/invoices/invoice-list.test.tsx.",
+      "actions": [
+        "INV-STATUS-06",
+        "INV-LIST-01"
+      ]
+    },
+    {
+      "id": "FIND-07",
+      "severity": "medium",
+      "summary": "Invoice detail treated an expired share as active: the share section read 'Tautan aktif sampai <past date>.' and Kirim lewat WhatsApp / Kirim pengingat sent that expired link, which shows the recipient 'Tautan ini sudah tidak berlaku.' Cause: getShareState reported any existing row as active, and sendWhatsApp reused the loaded link without checking expiry. Verified 2026-10-07 on the expired-share fixture (expiry 1 Jan 2020).",
+      "status": "fixed: PR #31 (squash merge 979c3ec, into staging 2026-10-08; not yet on main/Production). Chris's decision 2026-10-07: an expired share is never shown as active and never sent; invoice detail sends through the same ensure-share contract as Beranda. getShareState now reports inactive / active / expired (one expiry rule, no path for an expired share); invoice detail shows an expired state with Buat tautan baru (ID + EN) and its send asks POST /api/invoices/:id/share/ensure. Regression: e2e/invoices/expired-share.spec.ts, src/lib/invoice-share.test.ts, invoice-detail-client.test.tsx.",
+      "actions": [
+        "INV-STATUS-06",
+        "INV-WA-01",
+        "SHARE-01",
+        "SHARE-02"
+      ]
+    },
+    {
+      "id": "FIND-08",
+      "severity": "low",
+      "summary": "The recipient's invoice page and PDF printed 'Jatuh tempo' only inside the payment-terms block, so an invoice whose deal had no payment terms showed the recipient no due date at all, even though the owner set one and it appears on the owner's page, the list, Beranda and in WhatsApp messages. buildInvoiceDocumentModel built the terms block only when payment terms existed. Noticed 2026-10-08 while writing the INV-DUE-05 journey.",
+      "status": "fixed: PR #35 (into staging; not yet on main/Production). Chris's decision 2026-10-09: a due date is shown to the recipient whenever it exists, with or without payment terms, and no payment-terms text is invented. Payment terms and the due date are now independent in the canonical document model, which the recipient page and both PDFs render. Regression: e2e/public/due-date-without-terms.spec.ts (recipient page, reload, clicked recipient and owner PDFs, Asia/Jakarta and Pacific/Honolulu browsers) and the four-combination tests in src/components/documents/invoice-document/.",
+      "actions": [
+        "INV-DUE-05",
+        "PUB-01",
+        "PUB-05",
+        "PUB-06"
+      ]
+    },
+    {
+      "id": "FIND-09",
+      "severity": "low",
+      "summary": "The invoice document (recipient page and both PDFs) prints 'Tanggal terbit' as the UTC calendar day of Invoice.createdAt (formatDateLong formats in UTC). An invoice created between 00:00 and 06:59 Asia/Jakarta therefore shows the previous day as its issue date. Seen 2026-10-10 04:00 WIB while running the FIND-08 journey: an invoice created that morning printed '9 Oktober 2026'. Due dates are not affected (stored as UTC midnight of the calendar date).",
+      "status": "open: not changed in the FIND-08 PR (out of its scope). Needs a product decision (print the Asia/Jakarta calendar day, or keep). No browser test asserts either behaviour.",
+      "actions": [
+        "PUB-01",
+        "INV-PDF-01"
+      ]
+    },
+    {
+      "id": "FIND-10",
+      "severity": "high",
+      "summary": "Any change to a deal that did not itself name a stage moved the deal back to Masuk and wrote a '<stage> → Masuk' entry into its history: saving the contact name on deal detail, and repairing the WhatsApp number on deal detail, on invoice detail (Simpan & kirim) or in the Beranda queue. Cause: dealPatchSchema was dealInputSchema.partial(), and zod's partial() keeps the create schema's status default ('MASUK'), so every PATCH /api/deals/:id without a status carried status MASUK. The page kept showing the old stage until its next load. The schema line dates from the M1 slice (65393b6, 2026-07-14, on main). The first screen that sent such a PATCH was the Beranda queue repair (7633904, 2026-08-09); the contact name and the deal-detail repair came with T-17 (f696973, 2026-08-23), which also introduced the stage history. All of it is on main/Production. Found 2026-10-11 by the first DEAL-DETAIL-02 journey (stage read after a reload on a Nego deal); the earlier unit test used a deal already at Masuk and the contact-repair journey did not read the stage.",
+      "status": "fixed: fix/deal-patch-keeps-stage-2026-10-11 (into staging; not yet on main/Production). The patch schema now has no status default, so a patch changes only what it names. Regression: src/lib/deal-validation.test.ts, src/lib/deals.test.ts (every non-Masuk stage x four patch shapes), e2e/deals/patch-keeps-stage.spec.ts (contact name on a Nego deal; number repaired from invoice detail on an Invoice deal), e2e/deals/contact-repair.spec.ts (stage and history asserted). The Beranda queue's repair has no browser regression (HOME-04 stays partial); it is covered at repository level by src/lib/deals.test.ts. Stored rows are not repaired: deals already moved to Masuk this way stay there. A deal reset since T-17 has a '→ Masuk' history entry at the time of the edit; a Beranda repair between 2026-08-09 and T-17 left no history entry, so a count of such transitions is a lower bound. That read-only Production count needs Chris. Still open in the same schema, not reached by any screen: a PATCH with feeIdr null or '' stores 0, and deadline null stores 1970-01-01 (z.coerce).",
+      "actions": [
+        "DEAL-DETAIL-02",
+        "DEAL-DETAIL-03",
+        "INV-WA-03",
+        "HOME-04"
+      ]
+    },
+    {
+      "id": "FIND-11",
+      "severity": "low",
+      "summary": "A saved contact name cannot be removed on deal detail. Emptying the field and pressing Simpan sends an empty PATCH body (contactName || undefined), the page answers 'Nama kontak disimpan', and the old name is put back in the field and is still there after a reload. Verified in the browser 2026-10-11.",
+      "status": "open, triaged 2026-10-11: recommended P3 (low), fix after the release, not a release blocker. Nothing is lost or corrupted and nothing is shown to a recipient; the cost is a wrong name the owner cannot remove and a 'Nama kontak disimpan' message that is not true. Recommended behaviour: an emptied field clears the name (send contactName: null and accept null in dealPatchSchema), with a browser regression test asserting the cleared value after reload. Repro: deal detail of any deal with a contact name -> empty 'Nama kontak' -> Simpan -> 'Nama kontak disimpan' -> the old name is back in the field and after a reload. Not changed here (outside this work's scope). No browser test asserts either behaviour.",
+      "actions": [
+        "DEAL-DETAIL-02"
+      ]
+    },
+    {
+      "id": "FIND-12",
+      "severity": "medium",
+      "summary": "The route error card's Coba lagi never recovered from a failed server render. src/app/(app)/error.tsx called reset(), which in this Next.js version (16.3) only re-renders what the browser already holds, i.e. the same failure; the documented way to ask the server again is retry(). After the cause was gone the button still left 'Gagal memuat.' on screen and sent no request; only a manual reload helped. Found 2026-10-11 by the first NAV-08 journey, the first test to make a server component really fail and then recover.",
+      "status": "fixed: fix/route-error-retry-2026-10-11 (into staging; not yet on main/Production). error.tsx now uses the retry prop. Regression: e2e/smoke/route-error-retry.spec.ts (both tests) and src/app/(app)/error.test.tsx.",
+      "actions": [
+        "NAV-08"
+      ]
+    }
+  ]
+}

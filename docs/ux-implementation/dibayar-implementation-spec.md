@@ -488,7 +488,7 @@ One module renders both `/i/:token` and the PDF. Same fields, same order, same t
 | Scope | One line: description + amount | deal scope + invoice amount | Scope empty → description reads `Jasa kerja sama konten` |
 | Total | `Total`, amount in serif at display size | invoice | — |
 | Tax | **unchanged from current behaviour** | existing | Unchanged |
-| Terms (`Syarat pembayaran`) | Terms text, due date | deal + invoice | Terms empty → block omitted; due date empty → line omitted |
+| Terms (`Syarat pembayaran`) | Terms text, due date | deal + invoice | Terms and due date are independent (FIND-08, Chris 2026-10-09): terms empty → heading and terms text omitted, the `Jatuh tempo` line still shown; due date empty → that line omitted; both empty → block omitted |
 | Bank (`Pembayaran ke`) | Bank name, account number, account holder | Settings | Any missing → block renders with `—` for the missing line and a visible line `Detail rekening belum lengkap.` This must be visible: an invoice with no payable account is a real problem for the brand, not something to hide |
 | Footer | `Dokumen ini dibuat otomatis. Hubungi pengirim untuk pertanyaan.` | constant | — |
 

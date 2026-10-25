@@ -25,6 +25,48 @@ export type FixtureManifest = {
   brands: Record<string, string>;
   invoices: { sent: string; paid: string };
   shareTokens: { active: string; expired: string; invalid: string };
+  // IDs for the opt-in follow-up overlay (applyFollowUpStates() in
+  // e2e/support/reseed.ts). Always listed here, but the rows only exist in
+  // the database after the overlay is applied on top of a fresh seed.
+  followUp: {
+    deals: {
+      overdueStored: string;
+      overdueSent: string;
+      dueToday: string;
+      dueWindowEdge: string;
+      dueOutsideWindow: string;
+      invalidContact: string;
+    };
+    invoices: {
+      overdueStored: string;
+      overdueSent: string;
+      dueToday: string;
+      dueWindowEdge: string;
+      dueOutsideWindow: string;
+    };
+    dueOffsetDays: {
+      overdueStored: number;
+      overdueSent: number;
+      dueToday: number;
+      dueWindowEdge: number;
+      dueOutsideWindow: number;
+    };
+    invalidContactWa: string;
+    // Only a real (expired) share after applyFollowUpExpiredShare().
+    expiredShareToken: string;
+    brands: Record<string, string>;
+  };
+  // IDs for the opt-in income overlay (applyIncomeBoundaries()); the rows
+  // exist only after it is applied on top of a fresh seed.
+  incomeBoundaries: { draft: string; previousMonth: string; monthStart: string; nextMonth: string };
+  // Rows of the opt-in status-consistency overlay (applyStatusConsistency());
+  // they exist only after it is applied on top of the follow-up overlay.
+  statusConsistency: {
+    rows: Record<
+      "dueOverdue" | "legacyOverdueFuture" | "legacyOverdueNoDate" | "draftPastDue" | "paidPastDue",
+      { id: string; number: string; brand: string; status: string; dueOffsetDays: number | null }
+    >;
+  };
 };
 
 const manifestPath = path.resolve(".hermes-runtime/e2e-fixtures/fixtures.json");

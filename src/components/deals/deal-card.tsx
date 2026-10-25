@@ -24,6 +24,7 @@ export function DealCard({
   isSaving,
   onStageChange,
   onCreateInvoice,
+  onEdit,
 }: {
   deal: DealRecord;
   language: Language;
@@ -33,10 +34,12 @@ export function DealCard({
   isSaving: boolean;
   onStageChange: (dealId: string, status: DealRecord["status"]) => void;
   onCreateInvoice: (dealId: string) => void;
+  onEdit: (dealId: string) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const actionsButtonRef = useRef<HTMLButtonElement>(null);
   const canCreateInvoice = deal.status === "INVOICE" && !hasInvoice;
   const stageIndex = PIPELINE_STAGES.findIndex((stage) => stage.value === deal.status);
   const previousStage = stageIndex > 0 ? PIPELINE_STAGES[stageIndex - 1] : null;
@@ -83,6 +86,7 @@ export function DealCard({
         <h4 className="min-w-0 truncate font-semibold text-ink">{deal.brand}</h4>
         <div ref={menuRef} className="relative shrink-0">
           <button
+            ref={actionsButtonRef}
             type="button"
             aria-haspopup="true"
             aria-expanded={menuOpen}
@@ -156,6 +160,22 @@ export function DealCard({
                     {isSaving ? t("dashboard.saving") : t("dashboard.createInvoice")}
                   </button>
                 ) : null}
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={isSaving}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    // The menu item disappears with the menu. Focus moves to
+                    // the card's ⋮ button first, so the edit dialog returns
+                    // focus there when it closes.
+                    actionsButtonRef.current?.focus();
+                    onEdit(deal.id);
+                  }}
+                  className="flex h-11 w-full items-center rounded-md px-3 text-left text-[13px] font-semibold text-ink disabled:cursor-wait disabled:opacity-60"
+                >
+                  {t("deal.edit")}
+                </button>
                 <Link
                   href={`/deal/${deal.id}`}
                   role="menuitem"

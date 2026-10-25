@@ -27,9 +27,19 @@
     "test:e2e:headed": "playwright test -c playwright.e2e.config.ts --project=chromium --headed",
     "test:e2e:ui": "playwright test -c playwright.e2e.config.ts --ui",
     "test:cron-guard": "node --test scripts/cron-guard.test.mjs",
+    "test:snapshot-db": "tsx --env-file-if-exists=.env.local --test scripts/invoice-snapshot-db.test.ts",
+    "coverage:journeys": "node scripts/journey-coverage.mjs check",
+    "coverage:journeys:report": "node scripts/journey-coverage.mjs report",
+    "test:journey-coverage": "node --test scripts/journey-coverage.test.mjs",
+    "coverage:capabilities": "node scripts/capability-coverage.mjs check",
+    "coverage:capabilities:report": "node scripts/capability-coverage.mjs report",
+    "test:capability-coverage": "node --test scripts/capability-coverage.test.mjs",
+    "audit:completeness:probe": "npm run e2e:build && playwright test -c playwright.completeness.config.ts",
     "test:diagnostics-selftest": "node --test e2e/support/diagnostics-selftest.test.mjs",
     "test:lint-wrapper": "node --test scripts/lint.test.mjs",
     "test:vercel-ignore-build": "node --test scripts/vercel-ignore-build.test.mjs",
+    "test:impeccable-launcher": "node --test scripts/impeccable-launcher.test.mjs",
+    "test:git-safeguards": "node --test scripts/git-safeguards.test.mjs scripts/git-backup.test.mjs",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -37,12 +47,12 @@
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "@react-pdf/renderer": "^4.5.1",
-    "next": "16.3.3",
+    "next": "16.4.2",
     "next-auth": "^5.0.0-beta.32",
     "pg": "^8.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
@@ -56,7 +66,7 @@
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.3",
     "eslint": "^9",
-    "eslint-config-next": "16.3.3",
+    "eslint-config-next": "16.4.2",
     "jsdom": "^29.1.1",
     "prisma": "^7.9.1",
     "tailwindcss": "^4",
@@ -66,11 +76,11 @@
   },
   "overrides": {
     "browserslist": "4.28.7",
-    "fast-uri": "3.1.6",
+    "fast-uri": "3.1.9",
     "js-yaml": "4.3.2",
     "nanoid": "3.3.18",
     "mysql2": "3.23.1",
     "deepmerge-ts": "8.0.2",
-    "sharp": "0.35.4"
+    "sharp": "0.35.5"
   }
 }

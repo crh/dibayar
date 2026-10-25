@@ -50,6 +50,10 @@ Application directories:
 - `prisma/` — PostgreSQL datasource and Prisma generator configuration
 - `src/generated/prisma/` — generated Prisma client output; ignored by Git
 
+## Impeccable design skill
+
+The project-scoped Impeccable skill (`.claude/skills/impeccable/`) may only **read** `PRODUCT.md` and `DESIGN.md`; both stay authoritative and hand-maintained. Never run `/impeccable init`, `/impeccable document`, a redesign flow, or a documenter subagent, and keep its hooks off. Rules and engine-trust procedure: `docs/tooling/IMPECCABLE.md`.
+
 ## Development commands
 
 Verified local commands from `package.json`:

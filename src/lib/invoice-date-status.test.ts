@@ -102,6 +102,11 @@ describe("deriveInvoiceDisplayStatus", () => {
     expect(deriveInvoiceDisplayStatus(due, new Date("2026-07-19T16:59:00.000Z"))).toBe("DUE");
   });
 
+  it("keeps a stored OVERDUE as OVERDUE when its due date really is past", () => {
+    const overdue = invoice({ status: "OVERDUE", dueDate: new Date("2026-07-18T00:00:00.000Z") });
+    expect(deriveInvoiceDisplayStatus(overdue, new Date("2026-07-19T00:00:00.000Z"))).toBe("OVERDUE");
+  });
+
   it("falls back to SENT if stored OVERDUE no longer holds against the due date", () => {
     const stale = invoice({ status: "OVERDUE", dueDate: new Date("2026-08-01T00:00:00.000Z") });
     expect(deriveInvoiceDisplayStatus(stale, new Date("2026-07-19T00:00:00.000Z"))).toBe("SENT");

@@ -43,6 +43,7 @@ function renderBoard(deals: DealRecord[] = [makeDeal()]) {
       stageFilter={null}
       onStageChange={onStageChange}
       onCreateInvoice={onCreateInvoice}
+      onEdit={vi.fn()}
     />,
   );
   return { onStageChange, onCreateInvoice };
@@ -119,6 +120,7 @@ describe("DealBoard empty-stage collapse (T-16)", () => {
         stageFilter="DIBAYAR"
         onStageChange={onStageChange}
         onCreateInvoice={onCreateInvoice}
+      onEdit={vi.fn()}
       />,
     );
 
