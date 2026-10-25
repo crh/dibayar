@@ -1091,3 +1091,34 @@ Starting state verified fresh: `main` = `origin/main` = `a60dfdf`, no open PRs, 
 - Review: 4 Codex threads (2 per PR), all valid, fixed with tests, resolved. WebKit 390 px emulation: 48/48 over two repeats after two test-side fixes.
 - Merged: #62 → `63b9e3c`, #63 → `3e410da` (exact-head merges, required checks green). Migration applied to Neon `staging` by the Vercel build (log); alias serves `3e410da`. `main`/Production untouched.
 - Not run: physical-device checks, hosted signed-in smoke, Neon staging row counts, FIND-10 Production query. #55 left open for MAN-DEAL-02. Receipt `docs/receipts/DIBAYAR-DECISION-A-SNAPSHOT-AND-DEAL-EDIT-2026-10-18.md`.
+
+## 2026-10-25 — PR #67 recovery hardening (no Production change)
+
+- Start: `main` `308a339`, `staging` `4108523`, PR #67 Draft, Production `dpl_GdBz1…`. No drift since 2026-10-20.
+- Vendor docs:
+  - Hobby Instant Rollback reaches only the immediately previous deployment, which after the release is `dpl_GdBz1…`: no pilot allowlist.
+  - `vercel deploy --prod --skip-domain` + `vercel promote` gives an instant, no-rebuild recovery target.
+  - Neon restores from another branch need a root source, so `backup-preprod-20261019` (a child) is not a documented restore source; a snapshot one-step restore is.
+- Built `hotfix/secure-recovery-baseline-2026-10-25` = `308a339` + #68 + #69 + the `4209e83` test fix (`5938814`). Pushed (no Vercel deployment); CI dispatch 40177453189: all five jobs green.
+- Local rehearsal on the disposable DB:
+  - 12 → 14 migrations;
+  - the recovery app's E2E on 14 migrations: 103 passed / 0 failed;
+  - `scripts/recovery-compat-probe.ts` 9/9;
+  - the release `e2e:critical` afterwards: 334 / 0 failed;
+  - logical restore to the 12-migration snapshot: ~2 s, the release client cannot write there, and the recovery app runs (see the receipt).
+- New: `src/lib/migration-rollback-compat.test.ts` (13 tests).
+- New advisories (2026-10-22) on `next` 16.3.8 and `zod`: preconditions are absent; PR #70 patches to `next` 16.4.2 (0 vulnerabilities), not merged.
+- Production baseline smoke 2026-10-25 08:37Z: PASS (anonymous). `PILOT_ALLOWED_EMAILS` is still Config.
+- Not done: merge, deploy, promote, restore, env change, Neon action. Receipts:
+  - `docs/receipts/DIBAYAR-RECOVERY-HARDENING-2026-10-25.md`;
+  - `…/DIBAYAR-PR67-RELEASE-READINESS-2026-10-25.md`;
+  - `…/DIBAYAR-PR67-OWNER-ACTIONS.md`;
+  - the revised runbook.
+
+## 2026-10-25 — Track A: PR #70 merged into staging; recovery candidate re-cut (no Production change)
+
+- PR #70 merged into `staging` → `d3bb433` (next 16.4.2, zod 4.6.7, fast-uri 3.1.9); `npm audit --omit=dev` 0. Dev-only `vite`/`vitest` findings deferred to a post-release chore PR.
+- PR #67 head `d3bb433`: CI 40185815387 / 40185818426 (4 required jobs) and Journey coverage (full) 40185818349 green; unit 1245/1245, e2e-critical 334/28 skipped.
+- Recovery candidate `hotfix/secure-recovery-baseline-2026-10-25` @ `5149670` (+ PR #70): local E2E on 14-migration DB 103/0 failed ×2, probe 9/9, sentinel snapshot unchanged; CI dispatch 40186820122 all five jobs green.
+- Observed: `PILOT_ALLOWED_EMAILS` now `sensitive`; live Production `dpl_4ZKa6…` (owner redeploy of `308a339`, 10:36Z).
+- Receipt: `docs/receipts/DIBAYAR-TRACK-A-FINAL-2026-10-25.md`. Engineering READY FOR FINAL RELEASE GATE; focused UAT re-run on `d3bb433` required.
