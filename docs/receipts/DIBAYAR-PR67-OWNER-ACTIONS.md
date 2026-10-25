@@ -12,7 +12,7 @@ Rules for every step:
 - Each Production action needs its own authorization phrase (runbook §1.2). Approving one approves nothing else.
 - If a screen or output does not match what is written here, stop and ask. Do not improvise.
 
-Release head at the time of writing: `41085231cf386acb8e0309b83d61086b5a49ef92`. Production: `main` `308a339`, `dpl_GdBz1swMWc7sEfL6psnpRVRWX6m5`.
+Release head at the time of writing: `41085231cf386acb8e0309b83d61086b5a49ef92` (superseded 2026-10-25 by `d3bb4336afea2ee4def35169ad178c7427a166ba`, PR #70 merged; see `DIBAYAR-TRACK-A-FINAL-2026-10-25.md`). Production: `main` `308a339`, `dpl_4ZKa6srWazYvCW6vC1Go5baEcDx4`.
 
 ---
 
@@ -83,15 +83,15 @@ Release head at the time of writing: `41085231cf386acb8e0309b83d61086b5a49ef92`.
 
 ## 6. Build the staged secure recovery deployment (before the merge)
 
-- **Reason:** after the release, Hobby's Instant Rollback can only go back to `dpl_GdBz1…`, which lets every Google account sign in. A staged build of `hotfix/secure-recovery-baseline-2026-10-25` gives an instant recovery target that keeps the allowlist.
+- **Reason:** after the release, Hobby's Instant Rollback can only go back to `dpl_4ZKa6…`, which lets every Google account sign in. A staged build of `hotfix/secure-recovery-baseline-2026-10-25` gives an instant recovery target that keeps the allowlist.
 - **Prerequisite:** step 2 is done, and step 1 is decided. With (A), Claude Code re-cuts the candidate with the same bump and gives you the new SHA.
 - **Authorization phrase:** `I authorize a staged Production build (vercel deploy --prod --skip-domain) of hotfix/secure-recovery-baseline-2026-10-25 at <full SHA>. It runs prisma migrate deploy against Production (expected: no pending migrations) and must not take the production domain.`
 - **Steps:** runbook §3.0, "Build it before the merge", then the 5 read-only checks. The most important checks:
-  - `dibayar.vercel.app` still points at `dpl_GdBz1…`;
+  - `dibayar.vercel.app` still points at `dpl_4ZKa6…`;
   - `autoAssignCustomDomains` is still `true`;
   - the build log shows `No pending migrations to apply` and no `Applying`.
 - **Risk:** this is a Production build. The migration step is a no-op (12 vs 12) and was rehearsed locally; the domain must not move.
-  - If the domain moves anyway, promote `dpl_GdBz1swMWc7sEfL6psnpRVRWX6m5` back. Same code plus the allowlist and patches, so this is low impact, but it is an incident to log.
+  - If the domain moves anyway, promote `dpl_4ZKa6srWazYvCW6vC1Go5baEcDx4` back. Same code plus the allowlist and patches, so this is low impact, but it is an incident to log.
   - If `--skip-domain` is unavailable on Hobby, do not continue. Accept the insecure Instant Rollback in writing instead (step 8).
 - **Expected evidence:** the `dpl_…` ID, the output of the 5 checks, and the time, in a PR #67 comment.
 - **Separate authorization:** yes (phrase above).
@@ -115,7 +115,7 @@ Release head at the time of writing: `41085231cf386acb8e0309b83d61086b5a49ef92`.
 - **Wording to post in PR #67:**
 
   > Recovery acceptance for PR #67 at `<SHA>`:
-  > - Application recovery is the staged deployment `<dpl_id>` (or, if absent, I accept that Instant Rollback to `dpl_GdBz1…` opens sign-in to every Google account until a fix is deployed).
+  > - Application recovery is the staged deployment `<dpl_id>` (or, if absent, I accept that Instant Rollback to `dpl_4ZKa6…` opens sign-in to every Google account until a fix is deployed).
   > - Database restore source is snapshot `<name>` taken at `<time>`.
   > - I accept unknown restore downtime, and the loss of every write after that snapshot if I ever restore: sessions, new creators, deals, invoices, share links (recipients would get 404) and snapshots made since.
   > - I will not restore without the runbook §4.4 gates and a separate restore authorization.

@@ -1114,3 +1114,11 @@ Starting state verified fresh: `main` = `origin/main` = `a60dfdf`, no open PRs, 
   - `…/DIBAYAR-PR67-RELEASE-READINESS-2026-10-25.md`;
   - `…/DIBAYAR-PR67-OWNER-ACTIONS.md`;
   - the revised runbook.
+
+## 2026-10-25 — Track A: PR #70 merged into staging; recovery candidate re-cut (no Production change)
+
+- PR #70 merged into `staging` → `d3bb433` (next 16.4.2, zod 4.6.7, fast-uri 3.1.9); `npm audit --omit=dev` 0. Dev-only `vite`/`vitest` findings deferred to a post-release chore PR.
+- PR #67 head `d3bb433`: CI 40185815387 / 40185818426 (4 required jobs) and Journey coverage (full) 40185818349 green; unit 1245/1245, e2e-critical 334/28 skipped.
+- Recovery candidate `hotfix/secure-recovery-baseline-2026-10-25` @ `5149670` (+ PR #70): local E2E on 14-migration DB 103/0 failed ×2, probe 9/9, sentinel snapshot unchanged; CI dispatch 40186820122 all five jobs green.
+- Observed: `PILOT_ALLOWED_EMAILS` now `sensitive`; live Production `dpl_4ZKa6…` (owner redeploy of `308a339`, 10:36Z).
+- Receipt: `docs/receipts/DIBAYAR-TRACK-A-FINAL-2026-10-25.md`. Engineering READY FOR FINAL RELEASE GATE; focused UAT re-run on `d3bb433` required.

@@ -8,7 +8,7 @@ Companion receipts: `docs/receipts/DIBAYAR-PRODUCTION-RECOVERY-READINESS-2026-10
 
 ### What changed on 2026-10-25 (read this first)
 
-1. **The application recovery target is no longer the old Production deployment.** Vercel Hobby's Instant Rollback can only return to the *immediately previous* Production deployment (VENDOR-DOC). After the release, that is `dpl_GdBz1…` (`308a339`), which has **no pilot allowlist** and the pre-#68 `next`. The preferred application recovery is now a **staged secure recovery deployment** (§3.0): branch `hotfix/secure-recovery-baseline-2026-10-25` = `308a339` + PR #68 + PR #69 (+ a test-only clock fix). Chris builds it as a staged Production deployment *before* the merge, and an incident promotes it instantly, with no rebuild and no migration. TESTED-LOCAL against the 14-migration release schema: 103 E2E passed / 11 skipped by design / 0 failed, including pilot allow/deny, recipient link and PDF, and cross-owner denial.
+1. **The application recovery target is no longer the old Production deployment.** Vercel Hobby's Instant Rollback can only return to the *immediately previous* Production deployment (VENDOR-DOC). After the release, that is `dpl_4ZKa6…` (`308a339`), which has **no pilot allowlist** and the pre-#68 `next`. The preferred application recovery is now a **staged secure recovery deployment** (§3.0): branch `hotfix/secure-recovery-baseline-2026-10-25` = `308a339` + PR #68 + PR #69 (+ a test-only clock fix). Chris builds it as a staged Production deployment *before* the merge, and an incident promotes it instantly, with no rebuild and no migration. TESTED-LOCAL against the 14-migration release schema: 103 E2E passed / 11 skipped by design / 0 failed, including pilot allow/deny, recipient link and PDF, and cross-owner denial.
 2. **Restoring `main` from the child branch `backup-preprod-20261019` is not a documented Neon operation.** Neon's restore-from-another-branch requires a *root* source branch, and the backup was created as a child of `main` (VENDOR-DOC). The documented in-place restore that keeps the connection string is a **Neon snapshot** (Free plan: 1 manual snapshot). The pre-release backup is therefore now a snapshot of `main` **plus** a data+schema child branch (§4.3, §5 item 8).
 3. **The Vercel Deployment Protection containment was checked against vendor docs.** "All Deployments" with Vercel Authentication is available on Hobby. It blocks *every* public visitor, including recipients' `/i/…` links and the Google OAuth callback for creators. It is a full outage switch, not a rollback (§2.1).
 
@@ -20,8 +20,8 @@ Companion receipts: `docs/receipts/DIBAYAR-PRODUCTION-RECOVERY-READINESS-2026-10
 |---|---|---|
 | Release PR | #67 `staging` → `main`, **Draft**, head `41085231cf386acb8e0309b83d61086b5a49ef92` | OBSERVED (`gh pr view 67`, 2026-10-20 22:40Z) |
 | Production code | `main` = `308a339e7de817aa37378d263d51f25c78ea4f09` (PR #23 merge, 2026-10-03) | OBSERVED (`git fetch`) |
-| Live Production deployment | `dpl_GdBz1swMWc7sEfL6psnpRVRWX6m5`, `https://dibayar-2c7u9sbjh-kenji-iwakura.vercel.app`, built from `main` @ `308a339`, created 2026-10-19 16:27:22 WIB, Ready, aliased to `dibayar.vercel.app` | OBSERVED (`vercel ls --prod`, `vercel inspect`, build log `Cloning … Commit: 308a339`) |
-| Previous Production deployment | `dpl_54LBdY2Di8sgdjahifpAi5W27AuP`, `https://dibayar-ibjl0qdqi-kenji-iwakura.vercel.app`, also `308a339`, created 2026-10-03 07:27 WIB, Ready | OBSERVED |
+| Live Production deployment | `dpl_4ZKa6srWazYvCW6vC1Go5baEcDx4`, `https://dibayar-2lohasl7h-kenji-iwakura.vercel.app`, built from `main` @ `308a339`, created 2026-10-25 17:36:34 WIB (owner redeploy of `dpl_GdBz1…`), Ready, aliased to `dibayar.vercel.app` | OBSERVED (`vercel ls --prod`, `vercel inspect`, build log `Cloning … Commit: 308a339`) |
+| Previous Production deployment | `dpl_GdBz1swMWc7sEfL6psnpRVRWX6m5`, `https://dibayar-2c7u9sbjh-kenji-iwakura.vercel.app`, also `308a339`, created 2026-10-19 16:27:22 WIB, Ready (the only Hobby Instant Rollback target until the release; then `dpl_4ZKa6…` becomes it) | OBSERVED 2026-10-25 10:46Z (Vercel API) |
 | Build runs migrations | `vercel.json` → `scripts/vercel-build.sh` → `npx prisma migrate deploy` when `DATABASE_URL` is set, then `next build` | OBSERVED (`origin/staging`) |
 | Production DB variable | runtime and build both use `DATABASE_URL` (static **Secret**, Production scope, created ~64 days ago); the Neon-integration `DATABASE_URL_*` Config vars are **not** what Production reads | OBSERVED (`vercel env ls production`, `src/lib/prisma.ts`, `scripts/vercel-build.sh`) |
 | Which Neon branch that secret points at | `main` (`br-still-darkness-aobvo77q`), endpoint `ep-nameless-salad-aoa0saz5`. Chris reported this endpoint on 2026-10-25; the repository records it as `main`'s endpoint | **CLEARED 2026-10-25** (OWNER-REPORTED, corroborated): the host check via `vercel env pull` was not completed; the §4.1 compute wake-up check showed `main` Active and `backup-preprod-20261019` and `staging` Suspended after a Production sign-in |
@@ -29,10 +29,11 @@ Companion receipts: `docs/receipts/DIBAYAR-PRODUCTION-RECOVERY-READINESS-2026-10
 | Neon recovery branch | `backup-preprod-20261019`, parent `main`, data + schema, Expires Never, created 2026-10-20 11:06:27 (console time) | OWNER-REPORTED (preflight receipt); not re-observed |
 | Neon plan | Free; history retention 6 h | OWNER-REPORTED (preflight receipt) |
 | Re-check 2026-10-25 08:30Z | no drift: `main` `308a339`, `staging` `4108523`, PR #67 Draft/CLEAN, live Production `dpl_GdBz1…`, no rollback in progress | OBSERVED (`git fetch`, `gh pr view 67`, `vercel ls --prod`, `vercel inspect`, `vercel rollback status`) |
+| Re-check 2026-10-25 10:46Z (Track A) | live Production is now `dpl_4ZKa6srWazYvCW6vC1Go5baEcDx4` (`dibayar-2lohasl7h-kenji-iwakura.vercel.app`), an owner redeploy at 10:36:34Z of `dpl_GdBz1…` (same `main` @ `308a339`, no pilot gate), made 17 s after `PILOT_ALLOWED_EMAILS` became `sensitive`. It replaces `dpl_GdBz1…` everywhere in this runbook as the live deployment and the insecure Instant Rollback target. `staging` = `d3bb433` (PR #70 merged) |
 | Vercel rollback on Hobby | Instant Rollback reaches only the immediately previous Production deployment; after a rollback, auto-assignment of production domains is turned off until a deployment is promoted | VENDOR-DOC (`vercel.com/docs/instant-rollback`) |
 | Staged production deployment | `vercel deploy --prod --skip-domain` builds a Production deployment without assigning the domain; `vercel promote <id>` later makes it current **without a rebuild**; a deployment that was promoted once cannot be promoted again | VENDOR-DOC (`docs/cli/deploying-from-cli`, `docs/deployments/promoting-a-deployment`). Not exercised on this project |
 | Project protection and domain assignment | `ssoProtection.deploymentType = prod_deployment_urls_and_all_previews` (Standard Protection: generated deployment URLs need a Vercel login, `dibayar.vercel.app` is public); `autoAssignCustomDomains = true` | OBSERVED (Vercel project API, read-only, 2026-10-25) |
-| Secure recovery candidate | `hotfix/secure-recovery-baseline-2026-10-25` @ `59388146acc8935c898bdd3de5cfb69562ada6d7` (12 migrations, `prisma/` identical to `main`) | OBSERVED (pushed 2026-10-25; no Vercel deployment created, because `vercel.json` disables Git deployments for `hotfix/*`) |
+| Secure recovery candidate | `hotfix/secure-recovery-baseline-2026-10-25` @ `514967059c1ecd44b529a7962ba4d79b6a3c48e4` (12 migrations, `prisma/` identical to `main`) | OBSERVED (pushed 2026-10-25; no Vercel deployment created, because `vercel.json` disables Git deployments for `hotfix/*`) |
 | Neon restore rules | restore from another branch needs a **root** source branch; a snapshot one-step restore keeps branch name and connection string (branch ID changes; the old branch is kept as `<name> (old)`); restores briefly interrupt connections; Free plan: 6 h history, 1 manual snapshot, 10 branches | VENDOR-DOC (`neon.com/docs/introduction/branch-restore`, `/docs/guides/backup-restore`, `/docs/introduction/plans`) |
 
 ---
@@ -131,7 +132,7 @@ Prefer, in this order:
 
 1. **Forward hotfix** (`hotfix/*` → `main`), if the fix is small and fast. This keeps everything. Time: CI (~20 min for `e2e-critical` on the release head, OBSERVED run 39181004556) plus a ~1 min Vercel build plus Chris's merge.
 2. **Promote the staged secure recovery deployment** (§3.0), if users are being harmed now. Instant, no rebuild, no migration; keeps the pilot allowlist and the #68 dependency patches. Prerequisite: Chris built it before the merge (§5 item 9). Consequences: the Decision A and idempotency bullets below apply; the pilot-allowlist and `next` bullets do not.
-3. **Vercel Instant Rollback** to `dpl_GdBz1swMWc7sEfL6psnpRVRWX6m5` (§3.2): **insecure fallback** only if (2) does not exist or fails, and only with the explicit acceptance in the phrase (§1.2).
+3. **Vercel Instant Rollback** to `dpl_4ZKa6srWazYvCW6vC1Go5baEcDx4` (§3.2): **insecure fallback** only if (2) does not exist or fails, and only with the explicit acceptance in the phrase (§1.2).
 
 Accept these consequences of (3) explicitly before choosing it:
 
@@ -185,12 +186,13 @@ A restore from backup is a **separate, high-risk decision** (§4). Before propos
 
 ### 3.0 Secure recovery deployment (preferred; prepared before the merge)
 
-**What it is.** Branch `hotfix/secure-recovery-baseline-2026-10-25` @ `59388146acc8935c898bdd3de5cfb69562ada6d7`:
+**What it is.** Branch `hotfix/secure-recovery-baseline-2026-10-25` @ `514967059c1ecd44b529a7962ba4d79b6a3c48e4`:
 
 - `308a339`, the code Production runs today;
 - \+ PR #68: `next` 16.3.8, `sharp` 0.35.5, `fast-uri` 3.1.8 and `source-map-js`;
 - \+ PR #69: the pilot allowlist, unchanged;
 - \+ `4209e83`: a test-only clock fix.
+- \+ PR #70 (2026-10-25, `5149670`): `next` 16.4.2, `zod` 4.6.7, `fast-uri` 3.1.9, the same dependency set as `staging` `d3bb433`. Re-tested in `DIBAYAR-TRACK-A-FINAL-2026-10-25.md`.
 
 It ships `main`'s 12 migrations, so it runs on both the 12-migration (pre-release or restored) schema and the 14-migration release schema.
 
@@ -234,7 +236,7 @@ It captures the environment values as they are at build time. Build it **after**
 # the hotfix/* ref (INFERRED; check the build log line in step 4).
 git clone --no-tags https://github.com/crh/dibayar.git dibayar-recovery-build
 cd dibayar-recovery-build
-git checkout --detach 59388146acc8935c898bdd3de5cfb69562ada6d7
+git checkout --detach 514967059c1ecd44b529a7962ba4d79b6a3c48e4
 vercel link --yes --project dibayar --scope kenji-iwakura
 vercel deploy --prod --skip-domain --scope kenji-iwakura   # prints the deployment URL
 ```
@@ -267,7 +269,7 @@ A staged deployment can be promoted only once. After use, build a new one.
 
 | | Value | Label |
 |---|---|---|
-| Known-good target after release | `dpl_GdBz1swMWc7sEfL6psnpRVRWX6m5` (`dibayar-2c7u9sbjh-kenji-iwakura.vercel.app`, `308a339`) | OBSERVED; it is the current live Production deployment |
+| Known-good target after release | `dpl_4ZKa6srWazYvCW6vC1Go5baEcDx4` (`dibayar-2lohasl7h-kenji-iwakura.vercel.app`, `308a339`) | OBSERVED; it is the current live Production deployment |
 | Fallback target | `dpl_54LBdY2Di8sgdjahifpAi5W27AuP` (`dibayar-ibjl0qdqi…`, `308a339`) | OBSERVED, Ready |
 | "Known good" basis | serving Production since 2026-10-19; anonymous smoke 4/4 PASS and DB-reaching `404` probe on 2026-10-25 08:37Z | OBSERVED (anonymous checks only; no signed-in check recorded) |
 | Rollback actually exercised on this project | never | OBSERVED (`DEPLOYMENT.md` §Rollback "not yet verified"). A deployment that exists is not a proven rollback |
@@ -287,9 +289,9 @@ A staged deployment can be promoted only once. After use, build a new one.
 2. Find the row `dibayar-2c7u9sbjh` / commit `308a339`.
 3. Open its "⋯" menu and choose the action Vercel labels **Instant Rollback** (or **Promote**).
 4. The confirmation dialog is the **irreversible boundary**. Check the deployment ID and commit in the dialog before you confirm.
-5. VENDOR-DOC (2026-10-25, not observed): on the Hobby plan Instant Rollback offers only the immediately previous Production deployment. After the release that is exactly `dpl_GdBz1…`, the insecure one. If the UI offers something else, stop.
+5. VENDOR-DOC (2026-10-25, not observed): on the Hobby plan Instant Rollback offers only the immediately previous Production deployment. After the release that is exactly `dpl_4ZKa6…`, the insecure one. If the UI offers something else, stop.
 
-**Option B, CLI** (same effect; Chris's terminal): `vercel rollback dpl_GdBz1swMWc7sEfL6psnpRVRWX6m5 --scope kenji-iwakura`, then `vercel rollback status dibayar`.
+**Option B, CLI** (same effect; Chris's terminal): `vercel rollback dpl_4ZKa6srWazYvCW6vC1Go5baEcDx4 --scope kenji-iwakura`, then `vercel rollback status dibayar`.
 
 **After a rollback** (INFERRED vendor behaviour, verify in UI): Vercel stops auto-assigning the Production domain to new `main` deployments until the rollback is undone or a deployment is promoted. Any later hotfix merge therefore builds but does **not** go live on its own. Plan the roll-forward as an explicit promote, which needs its own authorization.
 
@@ -297,10 +299,10 @@ A staged deployment can be promoted only once. After use, build a new one.
 
 ### 3.3 Before and after checks
 
-Run each before the release (on `dpl_GdBz1…`, to establish the baseline) and after any rollback:
+Run each before the release (on `dpl_4ZKa6…`, to establish the baseline) and after any rollback:
 
 1. `node scripts/smoke-deployment.mjs --env production --url https://dibayar.vercel.app` → all PASS. Record a Deployment Verification Record.
-   - **Baseline taken 2026-10-25 08:37:55Z on `dpl_GdBz1…` (OBSERVED):** 4/4 PASS. HSTS, CSP and `X-Frame-Options: DENY` were present.
+   - **Baseline taken 2026-10-25 08:37:55Z on `dpl_4ZKa6…` (OBSERVED):** 4/4 PASS. HSTS, CSP and `X-Frame-Options: DENY` were present.
 2. Database reachable, anonymous and read-only. The script does not check this.
    - Run `T=$(node -e 'console.log(require("crypto").randomBytes(32).toString("base64url"))'); curl -s -o /dev/null -w '%{http_code}\n' "https://dibayar.vercel.app/i/$T"` → `404`.
    - Repeat with `/api/public/invoices/$T/pdf` → `404`.
@@ -310,7 +312,7 @@ Run each before the release (on `dpl_GdBz1…`, to establish the baseline) and a
 3. `vercel inspect https://dibayar.vercel.app` → `id` equals the intended `dpl_…`.
 4. Google sign-in:
    - On the release build **and on the secure recovery deployment (§3.0)**: allowed gets in, denied stays out.
-   - On `308a339` (`dpl_GdBz1…`, insecure fallback): allowlisted **and** non-listed accounts both get in. This is the expected regression; record it.
+   - On `308a339` (`dpl_4ZKa6…`, insecure fallback): allowlisted **and** non-listed accounts both get in. This is the expected regression; record it.
 5. Owner pages: Beranda, deal detail and invoice detail render for Chris's account.
 6. Owner APIs: no 5xx in Vercel runtime logs for `/api/*` during the check (status codes only).
 7. Invoice render and PDF: owner PDF downloads; one recipient `/i/<token>` and its PDF return 200; a revoked token returns the same 404 as an unknown one.
@@ -507,7 +509,7 @@ Re-run the FIND-10 query (`docs/receipts/sql/DIBAYAR-FIND-10-IMPACT-READONLY-202
 | Trigger | Action |
 |---|---|
 | Production build failed | no rollback needed (old deployment serves); §2.5 if any migration row is unfinished |
-| Smoke FAIL, or 5xx on core owner pages for 2+ consecutive checks over 10 min | §2.3: hotfix if fast, otherwise promote the secure recovery deployment (§3.0, Chris phrase); Instant Rollback to `dpl_GdBz1…` only as the accepted insecure fallback |
+| Smoke FAIL, or 5xx on core owner pages for 2+ consecutive checks over 10 min | §2.3: hotfix if fast, otherwise promote the secure recovery deployment (§3.0, Chris phrase); Instant Rollback to `dpl_4ZKa6…` only as the accepted insecure fallback |
 | Allowlisted sign-in fails for everyone, denied works | §2.4 (env fix + redeploy), **not** rollback |
 | Denied account can sign in | containment: Chris empties or corrects `PILOT_ALLOWED_EMAILS` and redeploys (fails closed), or, for an active leak, Deployment Protection "All Deployments" (§2.1); then hotfix. The secure recovery deployment has the same gate code, so promoting it only helps if the cause is the release's other code. Never Instant-Rollback (opens sign-in to all) |
 | Recipient links or PDFs 404/500 for active tokens | app issue → §2.3 |
