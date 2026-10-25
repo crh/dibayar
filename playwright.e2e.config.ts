@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { E2E_OWNER_SESSION_TOKEN } from "./e2e/support/fixture-ids";
+import { E2E_OWNER_SESSION_TOKEN, E2E_PILOT_ALLOWED_EMAILS } from "./e2e/support/fixture-ids";
 
 // Journey/E2E layer for real user flows -- URL, App Router navigation,
 // History API, auth, cross-component interaction. Deliberately separate
@@ -124,6 +124,11 @@ export default defineConfig({
     : {
         // next start auto-loads .env.local itself, same as next build/dev.
         command: `npm run start -- --hostname 127.0.0.1 --port ${port}`,
+        // The suite always runs with the pilot gate enforced (src/lib/
+        // pilot-access.ts): only the two invited fixture owners are on the
+        // allowlist, the uninvited fixture user is not. Overrides any value
+        // in .env.local.
+        env: { ...process.env, PILOT_ACCESS_MODE: "allowlist", PILOT_ALLOWED_EMAILS: E2E_PILOT_ALLOWED_EMAILS },
         url: baseURL,
         reuseExistingServer: !process.env.CI,
         timeout: 120_000,

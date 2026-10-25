@@ -32,6 +32,13 @@ describe("(app) layout auth guard", () => {
     ).rejects.toThrow("REDIRECT:/api/auth/signin?callbackUrl=%2F");
   });
 
+  it("sends a session denied by the pilot gate to the access page, not into the app", async () => {
+    mockedAuth.mockResolvedValue({ expires: "2099-01-01T00:00:00.000Z", pilotAccessDenied: true } as never);
+
+    await expect(AppLayout({ children: <div>secret</div> })).rejects.toThrow("REDIRECT:/akses-terbatas");
+    expect(mockedGetUserLanguage).not.toHaveBeenCalled();
+  });
+
   it("renders children inside the app shell when a session exists", async () => {
     mockedAuth.mockResolvedValue({
       user: { id: "user-1" },

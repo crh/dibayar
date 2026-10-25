@@ -296,7 +296,8 @@ Promotion, branching, and which branch deploys where are defined in
 below: merging to `main` auto-deploys Production, so a `staging -> main` (or
 `hotfix/* -> main`) merge is a Production deployment and needs Chris's explicit
 authorization. Required variables per environment are `DATABASE_URL`,
-`AUTH_SECRET`, `AUTH_GOOGLE_ID`, and `AUTH_GOOGLE_SECRET`, configured in the
+`AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, and (since the
+restricted pilot, 2026-10-18) `PILOT_ALLOWED_EMAILS`, configured in the
 approved Vercel environment, never in source control.
 
 ## Where environment values come from
@@ -307,6 +308,8 @@ approved Vercel environment, never in source control.
 | `AUTH_SECRET` | Generate locally with `openssl rand -base64 48` | A distinct value per environment, stored as a sensitive Vercel variable. Never commit or paste it into chat. |
 | `AUTH_GOOGLE_ID` | Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client IDs | Create a **Web application** client. This is the client ID, not the secret. |
 | `AUTH_GOOGLE_SECRET` | Same Google Cloud OAuth Web application | Store only in Vercel as a sensitive value. |
+| `PILOT_ALLOWED_EMAILS` | Chris: the Google emails of invited pilot creators, comma-separated | Server-only (never `NEXT_PUBLIC_*`), sensitive, one value per environment. **Unset, empty or malformed denies every creator sign-in and every existing session** (`src/lib/pilot-access.ts`); recipient `/i/[token]` links and their PDF are not affected. Read at request time, but a Vercel env change only reaches a deployment built after it, so redeploy (or promote a new build) after editing. The repository is public: never put a real address in source, a PR, an issue, a log or a receipt. |
+| `PILOT_ACCESS_MODE` | Optional | `allowlist` (default) or `open`. `open` lets every Google account in and is for local development only; it is ignored on Vercel Production (`VERCEL_ENV=production`), which then denies everyone. Leave unset on staging and Production. |
 
 Google OAuth redirect URIs — exactly three long-lived entries (strategy and
 rationale: `docs/DEVELOPMENT-WORKFLOW.md`, "Google OAuth redirect strategy"):
