@@ -61,7 +61,7 @@ Labels as in the runbook: OBSERVED, OWNER-REPORTED, INFERRED, UNVERIFIED, TESTED
 
 `prisma/` is identical to `main` (`git diff --quiet 308a339 HEAD -- prisma/`). Pushing it created no Vercel deployment (`vercel.json`: `"**": false`; `vercel ls` unchanged). It is a recovery artifact for a staged Production build (runbook §3.0), not a hotfix PR.
 
-### 3.2 `chore/recovery-hardening-2026-10-25` (PR into `staging`, not merged)
+### 3.2 `chore/recovery-hardening-2026-10-25` (PR #71 into `staging`, Draft, not merged)
 
 - `scripts/recovery-compat-probe.ts`: the database-level recovery checks (F4). It uses the same guardrails as `scripts/e2e-fixtures.ts`: only `127.0.0.1:55432/dibayar_test`, `E2E_FIXTURE_CONFIRM=non-production`, and its own probe user, removed at the end. The immutability check counts only the trigger's own refusal; an unrelated error fails it. Run:
 
@@ -83,7 +83,7 @@ Refreshed via `gh api -X PATCH` (`gh pr edit` fails silently in this repo). It n
 
 ### 3.4 `chore/security-deps-2026-10-25` @ `f9bcee0` (PR #70 into `staging`, Draft, not merged)
 
-`next` 16.3.8 → **16.4.2** (patched; published 2026-10-15, older than 16.4.3 of 2026-10-23), `eslint-config-next` → 16.4.2, `zod` `^4.4.3` → `^4.6.7`, `overrides.fast-uri` 3.1.8 → 3.1.9; `sharp` stays 0.35.5. `npm audit --omit=dev`: **0 vulnerabilities**. Local gates: lint 0 errors (same pre-existing warning), typecheck clean, Vitest 94 files **1245/1245**, `npm run build` (Turbopack, Next.js 16.4.2) green. Browser suites: PR #70's own CI (run 40179308245); not run locally, because the local runner was in use for the rehearsal.
+`next` 16.3.8 → **16.4.2** (patched; published 2026-10-15, older than 16.4.3 of 2026-10-23), `eslint-config-next` → 16.4.2, `zod` `^4.4.3` → `^4.6.7`, `overrides.fast-uri` 3.1.8 → 3.1.9; `sharp` stays 0.35.5. `npm audit --omit=dev`: **0 vulnerabilities**. Local gates: lint 0 errors (same pre-existing warning), typecheck clean, Vitest 94 files **1245/1245**, `npm run build` (Turbopack, Next.js 16.4.2) green. Browser suites, PR #70 CI run 40179308245 on `f9bcee0`, **all required jobs success**: unit 1245/1245; e2e-critical 334 passed / 28 skipped; e2e-a11y 29 / 1 skipped; ux-audit 69 + 9. These are the same counts as on `4108523`. e2e-cross-browser was skipped, as on every PR.
 
 It is a minor `next` upgrade and therefore a new release head if merged: Chris's decision (owner actions §1). If it lands, the recovery candidate must be re-cut with the same versions and re-tested.
 

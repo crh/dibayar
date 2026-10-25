@@ -32,7 +32,7 @@ Release head at the time of writing: `41085231cf386acb8e0309b83d61086b5a49ef92`.
   - (A) Merge PR #70 (`chore/security-deps-2026-10-25`) into `staging`. This bumps `next` to 16.4.2, `zod` to 4.6.7 and `fast-uri` to 3.1.9; the patched tree audits to 0 vulnerabilities. It is a new release head: CI and the F2 rows apply to the new SHA, and the recovery candidate gets the same bump.
   - (B) Release `4108523` as is, then patch.
 - **Risk:**
-  - (A): `next` 16.3 → 16.4 is a minor upgrade. It is tested locally (hardening receipt §3.4), but the CI run on the PR is the gate.
+  - (A): `next` 16.3 → 16.4 is a minor upgrade. PR #70's CI (40179308245) passed every required job with the same counts as the release head. A new head still needs the F2 P0 rows rerun, or their carry-over justified.
   - (B): advisories with unmet preconditions remain until the follow-up.
 - **Expected evidence:** a PR #67 comment, "Dependencies: (A) …" or "(B) … accepted until <date>".
 - **Separate authorization:** no Production action. Merging into `staging` is yours (it deploys the staging environment).

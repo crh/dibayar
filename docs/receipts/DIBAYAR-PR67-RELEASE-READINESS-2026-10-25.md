@@ -24,7 +24,7 @@ Status words: **PASS** (cited evidence), **FAIL**, **BLOCKED**, **UNVERIFIED**, 
 | G8 | Production baseline smoke | **PASS** (for 2026-10-25) | `scripts/smoke-deployment.mjs --env production`: 4/4 PASS at 08:37:55Z; anonymous unknown-token `/i/` and PDF → 404 (DB reached, no 500); HSTS, CSP, `X-Frame-Options` present | Repeat on merge day (owner actions §9) |
 | G9 | Manual UAT (F2) | **OWNER ACTION REQUIRED** | Owner-reported only: 2026-10-19 PR comments ("allowlisted can sign in, excluded denied"; "1 is done"). No SHA, device, OS, browser, language or time recorded. `docs/testing/MANUAL-UAT.md` has no `4108523` rows. Timeline and template in §F2 | Fill in the rows or accept the gaps in writing |
 | G10 | Pilot configuration | **FAIL** (type) / PASS (presence, scope, mode) | `vercel env ls production` (2026-10-25): `PILOT_ALLOWED_EMAILS` present, Production + Preview, type **Config**; `PILOT_ACCESS_MODE` absent | Re-add as Sensitive (owner actions §2) |
-| G11 | Dependency audit | **FAIL** (preconditions unmet) | `npm audit --omit=dev` on the `4108523` lockfile: `next` 16.3.8 (GHSA-2464, GHSA-673q critical; GHSA-p3m5 high; published 2026-10-22), `zod` 4.4.3 (GHSA-mrhx high), `fast-uri` 3.1.8 (moderate). No Server Actions, `use cache`, `next/image` or `z.array` in `src/`; `sharp` 0.35.5 is the vendor workaround for GHSA-2464 (hardening receipt §3.4) | Chris chooses: patch first (PR #70, 0 vulnerabilities, local gates green, CI on the PR) or release and patch next |
+| G11 | Dependency audit | **FAIL** (preconditions unmet) | `npm audit --omit=dev` on the `4108523` lockfile: `next` 16.3.8 (GHSA-2464, GHSA-673q critical; GHSA-p3m5 high; published 2026-10-22), `zod` 4.4.3 (GHSA-mrhx high), `fast-uri` 3.1.8 (moderate). No Server Actions, `use cache`, `next/image` or `z.array` in `src/`; `sharp` 0.35.5 is the vendor workaround for GHSA-2464 (hardening receipt §3.4) | Chris chooses: patch first (PR #70 @ `f9bcee0`: 0 vulnerabilities; CI 40179308245 all required jobs green with the same counts as the release head) or release and patch next |
 | G12 | Product decisions #56, #57; issue hygiene | **OWNER ACTION REQUIRED** | #56, #57, #65, #66 OPEN (`gh issue view`, 2026-10-25); #68, #69 merged into `staging` | §C |
 | G13 | RTO/RPO risk acceptance | **OWNER ACTION REQUIRED** | RTO UNKNOWN (no restore ever run); RPO = time since the G7 snapshot | Wording in owner actions §8 |
 | G14 | Release authorization | **OWNER ACTION REQUIRED** | none given | Release phrase, runbook §1.2 |
@@ -114,7 +114,7 @@ Read-only on Production and hosted services:
 Writes, all outside Production:
 
 - the push of `hotfix/secure-recovery-baseline-2026-10-25` (no Vercel deployment created; verified with `vercel ls`) and a CI `workflow_dispatch` on it;
-- the docs/probe PR and the dependency PR into `staging` (not merged);
+- the docs/probe PR #71 and the dependency PR #70 into `staging` (both Draft, not merged);
 - PR #67 description.
 
 The only database writes went to the approved local disposable DB, with synthetic data.
